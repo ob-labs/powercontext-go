@@ -54,12 +54,12 @@ func TestReviewApproveCommitsCandidateArtifactAndLineage(t *testing.T) {
 	}
 	evidence := contentSource(t, "review-evidence", "ground truth", nil)
 	var sourceRef sqlstore.StoredSource
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var addErr error
 		sourceRef, addErr = sources.Add(ctx, tx, "scope-review", evidence)
 		return addErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	proposal, err := experience.NewContent("situation", "action", "outcome", "lesson")
 	if err != nil {
@@ -75,10 +75,10 @@ func TestReviewApproveCommitsCandidateArtifactAndLineage(t *testing.T) {
 		t.Fatalf("candidate = %#v", candidate)
 	}
 	var proposalPayload []byte
-	if err := database.SQLDB().QueryRowContext(ctx, `SELECT proposal FROM pc_artifact_candidate_versions
+	if queryErr := database.SQLDB().QueryRowContext(ctx, `SELECT proposal FROM pc_artifact_candidate_versions
         WHERE scope_id = ? AND candidate_id = ? AND version = 1`,
-		"scope-review", candidate.ID()).Scan(&proposalPayload); err != nil {
-		t.Fatal(err)
+		"scope-review", candidate.ID()).Scan(&proposalPayload); queryErr != nil {
+		t.Fatal(queryErr)
 	}
 	wantProposal := `{"situation":"situation","action":"action","outcome":"outcome","lesson":"lesson"}`
 	if string(proposalPayload) != wantProposal {
@@ -133,20 +133,20 @@ func TestReviewApprovalRollsBackWhenProjectionFails(t *testing.T) {
 	}
 	evidence := contentSource(t, "review-evidence", "ground truth", nil)
 	var sourceRef sqlstore.StoredSource
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var addErr error
 		sourceRef, addErr = sources.Add(ctx, tx, "scope-review", evidence)
 		return addErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	proposal, _ := experience.NewContent("s", "a", "o", "l")
 	candidate, err := service.ProposeExperience(ctx, proposal, []source.Ref{sourceRef.Ref}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Approve(ctx, candidate.ID(), 1); err == nil || err.Error() != "index replacement failed" {
-		t.Fatalf("approval error = %v", err)
+	if _, approveErr := service.Approve(ctx, candidate.ID(), 1); approveErr == nil || approveErr.Error() != "index replacement failed" {
+		t.Fatalf("approval error = %v", approveErr)
 	}
 	current, err := service.Get(ctx, candidate.ID())
 	if err != nil {

@@ -94,9 +94,9 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		},
 	}
 	for name, values := range required {
-		payload, err := os.ReadFile(filepath.Join(workflows, name))
-		if err != nil {
-			t.Fatal(err)
+		payload, readErr := os.ReadFile(filepath.Join(workflows, name))
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
 		contents := string(payload)
 		for _, value := range values {

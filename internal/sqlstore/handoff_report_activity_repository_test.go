@@ -51,8 +51,8 @@ func TestActivityRepositoryIsIdempotentAndRejectsPayloadConflicts(t *testing.T) 
 	}
 	const pythonPayload = `{"agent":null,"event_id":"event-1","evidence_refs":[],"observed_at":"2026-08-05T10:00:00Z","occurred_at":"2026-08-05T09:00:00Z","project_id":"project-1","schema":"powercontext.handoff-report-activity.v1","scope_id":null,"session_id":null,"source":"git_commit","source_event_id":"event-1","source_ref":null,"summary":null,"time_basis":"source_reported","title":null,"trust":"untrusted_observation","vcs_context":null}`
 	var payload string
-	if err := database.SQLDB().QueryRowContext(t.Context(), "SELECT payload FROM pc_handoff_report_activities WHERE event_id = ?", "event-1").Scan(&payload); err != nil {
-		t.Fatal(err)
+	if queryErr := database.SQLDB().QueryRowContext(t.Context(), "SELECT payload FROM pc_handoff_report_activities WHERE event_id = ?", "event-1").Scan(&payload); queryErr != nil {
+		t.Fatal(queryErr)
 	}
 	if payload != pythonPayload {
 		t.Fatalf("stored payload = %s\nwant Python payload = %s", payload, pythonPayload)
@@ -61,8 +61,8 @@ func TestActivityRepositoryIsIdempotentAndRejectsPayloadConflicts(t *testing.T) 
 	different := "different"
 	conflicting := activityRepositoryEvent(t, "event-1", "project-1", handoffreport.ActivityGitCommit, "event-1", now, &occurred, handoffreport.TimeSourceReported, &different)
 	err = database.Transaction(t.Context(), func(tx DBTX) error {
-		_, err := store.recordActivity(t.Context(), tx, conflicting)
-		return err
+		_, recordErr := store.recordActivity(t.Context(), tx, conflicting)
+		return recordErr
 	})
 	var conflict *handoffreport.ActivityEventConflictError
 	if !errors.As(err, &conflict) || conflict.Source != handoffreport.ActivityGitCommit || conflict.SourceEventID != "event-1" {
@@ -428,8 +428,8 @@ func openActivityRepository(t *testing.T) (*Database, *HandoffReportStore) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Error(err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Error(closeErr)
 		}
 	})
 	store, err := NewHandoffReportStore(database, SQLiteDialect)

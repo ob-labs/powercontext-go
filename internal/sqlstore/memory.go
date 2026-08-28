@@ -126,17 +126,17 @@ func (r *MemoryRepository) Projections(ctx context.Context, ref artifact.Ref) ([
 			if err != nil {
 				return errors.Join(err, closeRows(rows))
 			}
-			projection, err := memory.NewProjection(entry, searchable, nil, nil)
-			if err != nil {
-				return errors.Join(err, closeRows(rows))
+			projection, projectionErr := memory.NewProjection(entry, searchable, nil, nil)
+			if projectionErr != nil {
+				return errors.Join(projectionErr, closeRows(rows))
 			}
 			projections = append(projections, projection)
 		}
-		if err := rows.Close(); err != nil {
-			return err
+		if closeErr := rows.Close(); closeErr != nil {
+			return closeErr
 		}
-		if err := rows.Err(); err != nil {
-			return err
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return rowsErr
 		}
 		projections, err = r.index.Hydrate(ctx, tx, r.scopeID, projections)
 		if err != nil {

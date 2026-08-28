@@ -237,8 +237,8 @@ func TestMemoryServiceRejectsStaleBaseBeforePreparingAWrite(t *testing.T) {
 	}
 	entries, _ := service.Entries(ctx, *first)
 	revision := memory.NewEntryInput(&entries[0], "fact", "two", nil, nil, nil)
-	if _, err := service.Remember(ctx, first, nil, nil, []memory.EntryInput{revision}, memory.RememberAppend); err != nil {
-		t.Fatal(err)
+	if _, rememberErr := service.Remember(ctx, first, nil, nil, []memory.EntryInput{revision}, memory.RememberAppend); rememberErr != nil {
+		t.Fatal(rememberErr)
 	}
 	_, err = service.PlanRemember(ctx, first, nil, nil, []memory.EntryInput{input}, memory.RememberAppend)
 	var conflict *artifact.RevisionConflictError

@@ -251,15 +251,15 @@ func projectSkillTo(
 		return "", err
 	}
 	destination = filepath.Clean(absolute)
-	if err := validateAgentProjection(content, destination, agentKind); err != nil {
-		return "", err
+	if validationErr := validateAgentProjection(content, destination, agentKind); validationErr != nil {
+		return "", validationErr
 	}
 	if pathExists(destination) {
 		return "", &os.PathError{Op: "project", Path: destination, Err: fs.ErrExist}
 	}
 	parent := filepath.Dir(destination)
-	if err := os.MkdirAll(parent, 0o750); err != nil {
-		return "", err
+	if mkdirErr := os.MkdirAll(parent, 0o750); mkdirErr != nil {
+		return "", mkdirErr
 	}
 	temporary, err := os.MkdirTemp(parent, ".powercontext-skill-")
 	if err != nil {
@@ -267,22 +267,22 @@ func projectSkillTo(
 	}
 	defer func() { _ = os.RemoveAll(temporary) }()
 	staging := filepath.Join(temporary, "projection")
-	if err := os.Mkdir(staging, 0o750); err != nil {
-		return "", err
+	if mkdirErr := os.Mkdir(staging, 0o750); mkdirErr != nil {
+		return "", mkdirErr
 	}
 	skillText, err := projectionMarkdown(ref, content)
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(staging, "SKILL.md"), []byte(skillText), 0o600); err != nil {
-		return "", err
+	if writeErr := os.WriteFile(filepath.Join(staging, "SKILL.md"), []byte(skillText), 0o600); writeErr != nil {
+		return "", writeErr
 	}
 	manifest, err := projectionManifest(ref, agentKind, skillText)
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(staging, "powercontext.json"), manifest, 0o600); err != nil {
-		return "", err
+	if writeErr := os.WriteFile(filepath.Join(staging, "powercontext.json"), manifest, 0o600); writeErr != nil {
+		return "", writeErr
 	}
 	if err := os.Rename(staging, destination); err != nil {
 		return "", err
@@ -454,8 +454,8 @@ func projectionIsIntact(packagePath string, ref artifact.Ref, agentKind AgentKin
 		return false
 	}
 	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		info, infoErr := entry.Info()
+		if infoErr != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			return false
 		}
 	}

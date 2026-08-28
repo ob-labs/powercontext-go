@@ -105,11 +105,11 @@ func decodeMemoryEntryColumns(
 	}
 	var previousID *string
 	if previous != nil {
-		text, ok := previous.(string)
-		if !ok {
+		previousText, previousOK := previous.(string)
+		if !previousOK {
 			return memory.EntryVersion{}, &InvalidStoredColumnError{Column: "previous_version_id", Expected: "a string or null"}
 		}
-		previousID = &text
+		previousID = &previousText
 	}
 	sourceBytes, err := storedBytes(sourcePayload, "memory payload")
 	if err != nil {

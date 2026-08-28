@@ -51,24 +51,25 @@ func archiveTree(root, output string, timestamp time.Time) (returnErr error) {
 		if walkErr != nil {
 			return walkErr
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return infoErr
 		}
 		link := ""
 		if info.Mode()&os.ModeSymlink != 0 {
-			link, err = os.Readlink(path)
-			if err != nil {
-				return err
+			var readlinkErr error
+			link, readlinkErr = os.Readlink(path)
+			if readlinkErr != nil {
+				return readlinkErr
 			}
 		}
-		header, err := tar.FileInfoHeader(info, link)
-		if err != nil {
-			return err
+		header, headerErr := tar.FileInfoHeader(info, link)
+		if headerErr != nil {
+			return headerErr
 		}
-		relative, err := filepath.Rel(parent, path)
-		if err != nil {
-			return err
+		relative, relativeErr := filepath.Rel(parent, path)
+		if relativeErr != nil {
+			return relativeErr
 		}
 		header.Name = filepath.ToSlash(relative)
 		if info.IsDir() {
@@ -82,15 +83,15 @@ func archiveTree(root, output string, timestamp time.Time) (returnErr error) {
 		header.ChangeTime = time.Time{}
 		header.Uid, header.Gid = 0, 0
 		header.Uname, header.Gname = "root", "root"
-		if err := tarWriter.WriteHeader(header); err != nil {
-			return err
+		if headerErr := tarWriter.WriteHeader(header); headerErr != nil {
+			return headerErr
 		}
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		input, err := os.Open(path)
-		if err != nil {
-			return err
+		input, openErr := os.Open(path)
+		if openErr != nil {
+			return openErr
 		}
 		_, copyErr := io.Copy(tarWriter, input)
 		closeErr := input.Close()

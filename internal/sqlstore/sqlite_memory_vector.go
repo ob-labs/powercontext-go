@@ -213,8 +213,8 @@ func (i *SQLiteMemoryVectorIndex) Search(
 		return memory.SearchChannels{}, err
 	}
 	var total int64
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pc_memory_vector_entries").Scan(&total); err != nil {
-		return memory.SearchChannels{}, err
+	if countErr := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pc_memory_vector_entries").Scan(&total); countErr != nil {
+		return memory.SearchChannels{}, countErr
 	}
 	if total == 0 || len(request.Memories) == 0 {
 		return memory.SearchChannels{}, nil

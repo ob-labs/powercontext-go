@@ -70,8 +70,8 @@ func (r StatisticsRepository) Inventory(
 	for artifactRows.Next() {
 		var family string
 		var total any
-		if err := artifactRows.Scan(&family, &total); err != nil {
-			return stats.InventoryCounts{}, errors.Join(err, closeRows(artifactRows))
+		if scanErr := artifactRows.Scan(&family, &total); scanErr != nil {
+			return stats.InventoryCounts{}, errors.Join(scanErr, closeRows(artifactRows))
 		}
 		count, ok := integer(total)
 		if !ok || count < 0 {
@@ -80,8 +80,8 @@ func (r StatisticsRepository) Inventory(
 		}
 		result.Artifacts = append(result.Artifacts, stats.ArtifactCountRow{Family: family, Total: count})
 	}
-	if err := closeRows(artifactRows); err != nil {
-		return stats.InventoryCounts{}, err
+	if rowsErr := closeRows(artifactRows); rowsErr != nil {
+		return stats.InventoryCounts{}, rowsErr
 	}
 
 	candidateRows, err := db.QueryContext(ctx, `SELECT family, status, COUNT(*) FROM pc_artifact_candidate_heads

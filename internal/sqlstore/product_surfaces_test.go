@@ -40,8 +40,8 @@ func TestExternalSkillReplacementIsScopedAtomicAndDeterministic(t *testing.T) {
 	}
 	first := externalRegistration(t, "friendly-python", "/workspace/friendly-python", "a")
 	second := externalRegistration(t, "piglet", "/workspace/piglet", "b")
-	if _, err := store.Replace(ctx, []string{"codex"}, "workstation-1", []skill.Registration{second, first}); err != nil {
-		t.Fatal(err)
+	if _, replaceErr := store.Replace(ctx, []string{"codex"}, "workstation-1", []skill.Registration{second, first}); replaceErr != nil {
+		t.Fatal(replaceErr)
 	}
 	listed, err := store.List(ctx)
 	if err != nil {
@@ -55,7 +55,7 @@ func TestExternalSkillReplacementIsScopedAtomicAndDeterministic(t *testing.T) {
 	// replacement deletes first, so this also proves the surrounding transaction
 	// restores the preceding projection on insert failure.
 	conflict := externalRegistration(t, "conflict", first.Locator(), "c")
-	if _, err := store.Replace(ctx, []string{"codex"}, "workstation-1", []skill.Registration{first, conflict}); err == nil {
+	if _, replaceErr := store.Replace(ctx, []string{"codex"}, "workstation-1", []skill.Registration{first, conflict}); replaceErr == nil {
 		t.Fatal("expected binding conflict")
 	}
 	listed, err = store.List(ctx)
@@ -90,11 +90,11 @@ func TestExternalSkillReplacementAtomicallyCoversAllAgentProviders(t *testing.T)
 		t, "claude_code", "claude-review", "/workspace/claude-review", "b",
 	)
 	providers := []string{"codex", "claude_code"}
-	if _, err := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex, claude}); err != nil {
-		t.Fatal(err)
+	if _, replaceErr := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex, claude}); replaceErr != nil {
+		t.Fatal(replaceErr)
 	}
-	if _, err := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex}); err != nil {
-		t.Fatal(err)
+	if _, replaceErr := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex}); replaceErr != nil {
+		t.Fatal(replaceErr)
 	}
 	listed, err := store.List(ctx)
 	if err != nil {
@@ -134,8 +134,8 @@ func TestHandoffBackendUsesArtifactCASAndDomainNotFound(t *testing.T) {
 	if err != nil || !found || latest.Ref() != created.Ref() {
 		t.Fatalf("latest = %#v, %v, %v", latest, found, err)
 	}
-	if _, err := backend.Revise(ctx, created, draft); err != nil {
-		t.Fatal(err)
+	if _, reviseErr := backend.Revise(ctx, created, draft); reviseErr != nil {
+		t.Fatal(reviseErr)
 	}
 	revisions, err := backend.Revisions(ctx, "handoff-1")
 	if err != nil || len(revisions) != 2 {
@@ -165,28 +165,28 @@ func TestScopedStatisticsPreservesIncompleteUsageAndRecallProfile(t *testing.T) 
 	}
 	date := time.Date(2026, time.August, 17, 0, 0, 0, 0, time.UTC)
 	input, output := int64(11), int64(7)
-	if err := service.Record(ctx, stats.MemoryExtraction, stats.Generation,
-		inference.Usage{Requests: 1, InputTokens: &input, OutputTokens: &output}, date); err != nil {
-		t.Fatal(err)
+	if recordErr := service.Record(ctx, stats.MemoryExtraction, stats.Generation,
+		inference.Usage{Requests: 1, InputTokens: &input, OutputTokens: &output}, date); recordErr != nil {
+		t.Fatal(recordErr)
 	}
 	output2 := int64(5)
-	if err := service.Record(ctx, stats.MemoryExtraction, stats.Generation,
-		inference.Usage{Requests: 2, OutputTokens: &output2}, date); err != nil {
-		t.Fatal(err)
+	if recordErr := service.Record(ctx, stats.MemoryExtraction, stats.Generation,
+		inference.Usage{Requests: 2, OutputTokens: &output2}, date); recordErr != nil {
+		t.Fatal(recordErr)
 	}
 	measurement, _ := stats.NewRecallTokenMeasurement(profile, true, true, 100, 40)
-	if err := service.RecordRecall(ctx, measurement, date); err != nil {
-		t.Fatal(err)
+	if recordErr := service.RecordRecall(ctx, measurement, date); recordErr != nil {
+		t.Fatal(recordErr)
 	}
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO pc_source_journal_heads (scope_id, position) VALUES (?, ?)`, "scope-a", 5); err != nil {
-			return err
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		if _, insertErr := tx.ExecContext(ctx, `INSERT INTO pc_source_journal_heads (scope_id, position) VALUES (?, ?)`, "scope-a", 5); insertErr != nil {
+			return insertErr
 		}
 		cursor := sqlstore.SourceCursorRepository{}
-		_, err := cursor.Save(ctx, tx, "scope-a", trigger.SourceWindowName, source.NewCursor(3), nil)
-		return err
-	}); err != nil {
-		t.Fatal(err)
+		_, saveErr := cursor.Save(ctx, tx, "scope-a", trigger.SourceWindowName, source.NewCursor(3), nil)
+		return saveErr
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 
 	overview, err := service.Overview(ctx, stats.Today, date.Add(12*time.Hour))

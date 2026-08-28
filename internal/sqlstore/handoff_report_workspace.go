@@ -131,9 +131,9 @@ func (s *HandoffReportStore) attachWorkspaceBinding(ctx context.Context, tx DBTX
 		if !found {
 			return handoffreport.WorkspaceBinding{}, workspaceConflict(id, expected, nil, "workspace binding record is missing")
 		}
-		current, err := decodeWorkspaceRow(row)
-		if err != nil {
-			return handoffreport.WorkspaceBinding{}, err
+		current, decodeErr := decodeWorkspaceRow(row)
+		if decodeErr != nil {
+			return handoffreport.WorkspaceBinding{}, decodeErr
 		}
 		if current.Version() != *expected {
 			return handoffreport.WorkspaceBinding{}, workspaceConflict(id, expected, intPointer(current.Version()), "")

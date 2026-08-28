@@ -74,8 +74,8 @@ func TestServiceFreezesExactHeadsAndBuildsCanonicalReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(encoded, &payload); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(encoded, &payload); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
 	if payload["generated_at"] != "2026-08-06T00:00:00Z" {
 		t.Fatalf("generated_at = %#v", payload["generated_at"])
@@ -92,8 +92,8 @@ func TestServiceFreezesExactHeadsAndBuildsCanonicalReport(t *testing.T) {
 	var fixture struct {
 		Report map[string]any `json:"report"`
 	}
-	if err := json.Unmarshal(fixtureBytes, &fixture); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(fixtureBytes, &fixture); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
 	if !reflect.DeepEqual(payload, fixture.Report) {
 		t.Fatalf("Go report JSON differs from frozen Python report\nGo: %#v\nPython: %#v", payload, fixture.Report)
@@ -242,8 +242,8 @@ func TestDigestFieldsStayStableWhenReportIsRevalidated(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantSelection, wantReport := report.SelectionDigest(), report.ReportDigest()
-	if err := report.Validate(); err != nil {
-		t.Fatal(err)
+	if validationErr := report.Validate(); validationErr != nil {
+		t.Fatal(validationErr)
 	}
 	selection, err := handoffreport.SelectionDigest(report)
 	if err != nil {

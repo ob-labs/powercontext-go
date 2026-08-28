@@ -123,8 +123,8 @@ func TestSQLiteVecEmbeddedExtensionAndVec0Schema(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Errorf("close database: %v", err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
 		}
 	})
 	profile, err := memory.NewEmbeddingProfile("profile", "model", 3, "unit")
@@ -168,8 +168,8 @@ func TestSQLiteVec0ReplaceHydrateAndSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Errorf("close database: %v", err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
 		}
 	})
 	profile, err := memory.NewEmbeddingProfile("profile", "model", 3, "unit")

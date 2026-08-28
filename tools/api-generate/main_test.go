@@ -181,8 +181,8 @@ components:
 	}
 
 	outputPath := filepath.Join(t.TempDir(), "powercontext_contract_validation_gen.go")
-	if err := generateContractValidation(specification, outputPath); err != nil {
-		t.Fatal(err)
+	if generateErr := generateContractValidation(specification, outputPath); generateErr != nil {
+		t.Fatal(generateErr)
 	}
 	generated, err := os.ReadFile(outputPath)
 	if err != nil {

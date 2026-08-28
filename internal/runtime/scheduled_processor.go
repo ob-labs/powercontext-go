@@ -133,9 +133,9 @@ func (p *ScheduledProcessor) process(
 				continue
 			}
 			lease, releaseLease := p.runtime.scopes.lease(scope)
-			if err := p.runtime.resolveScope(ctx); err != nil {
+			if resolveErr := p.runtime.resolveScope(ctx); resolveErr != nil {
 				releaseLease()
-				p.notify(ctx, ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: err})
+				p.notify(ctx, ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: resolveErr})
 				continue
 			}
 			var release func()

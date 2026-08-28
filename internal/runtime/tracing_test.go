@@ -122,8 +122,8 @@ func TestMemoryReadStagesAreBoundedAndNestedWithinOneScopedOperation(t *testing.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := lifecycle.Close(context.Background()); err != nil {
-			t.Error(err)
+		if closeErr := lifecycle.Close(context.Background()); closeErr != nil {
+			t.Error(closeErr)
 		}
 	})
 	backend := &advancingSearchBackend{revisions: searchMemoryRevisions(t, 1)}

@@ -140,7 +140,7 @@ func decodeIntervalTrigger(object *pickleObject) (time.Time, time.Duration, erro
 	if !ok || version != 2 {
 		return time.Time{}, 0, invalidState("unsupported IntervalTrigger state version")
 	}
-	if _, ok := state["timezone"].(pickleUTC); !ok {
+	if _, timezoneOK := state["timezone"].(pickleUTC); !timezoneOK {
 		return time.Time{}, 0, invalidState("IntervalTrigger timezone is not UTC")
 	}
 	start, ok := state["start_date"].(time.Time)

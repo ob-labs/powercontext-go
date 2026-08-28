@@ -362,8 +362,8 @@ func (h *Handler) GetHandoffReport(ctx context.Context, req *v1.GetHandoffReport
 		if renderErr != nil {
 			return nil, renderErr
 		}
-		if err := enforceHandoffReportSize(report, len([]byte(markdown))); err != nil {
-			return nil, err
+		if sizeErr := enforceHandoffReportSize(report, len([]byte(markdown))); sizeErr != nil {
+			return nil, sizeErr
 		}
 		return &v1.GetHandoffReportOKTextMarkdownHeaders{
 			CacheControl:                 v1.NewOptGetHandoffReportOKCacheControl(v1.GetHandoffReportOKCacheControlNoStore),

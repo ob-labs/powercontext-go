@@ -157,8 +157,8 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	if err != nil {
 		return packageResult{}, err
 	}
-	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
-		return packageResult{}, err
+	if mkdirErr := os.MkdirAll(outputDirectory, 0o755); mkdirErr != nil {
+		return packageResult{}, mkdirErr
 	}
 	temporary, err := os.MkdirTemp(outputDirectory, ".powercontext-release-")
 	if err != nil {
@@ -174,15 +174,15 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	archivePath := filepath.Join(outputDirectory, artifactName+".tar.gz")
 	sbomPath := filepath.Join(outputDirectory, artifactName+".spdx.json")
 	for _, releasePath := range []string{archivePath, sbomPath} {
-		if _, err := os.Stat(releasePath); err == nil {
+		if _, statErr := os.Stat(releasePath); statErr == nil {
 			return packageResult{}, fmt.Errorf("refusing to replace existing release file %q", filepath.Base(releasePath))
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return packageResult{}, err
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return packageResult{}, statErr
 		}
 	}
 	root := filepath.Join(temporary, artifactName)
-	if err := stageRelease(repository, root, options, facts); err != nil {
-		return packageResult{}, err
+	if stageErr := stageRelease(repository, root, options, facts); stageErr != nil {
+		return packageResult{}, stageErr
 	}
 
 	onnxPayload := ""
@@ -194,34 +194,34 @@ func packageRelease(options packageOptions) (packageResult, error) {
 		return packageResult{}, err
 	}
 	manifest := newBuildManifest(options, buildTime, facts, oracle, nativeRecords)
-	if err := writeJSON(filepath.Join(root, "BUILD-INFO.json"), manifest); err != nil {
-		return packageResult{}, err
+	if writeErr := writeJSON(filepath.Join(root, "BUILD-INFO.json"), manifest); writeErr != nil {
+		return packageResult{}, writeErr
 	}
 	dependencies, notices, err := collectLicenses(options.Binary, repository, options.Edition, assets)
 	if err != nil {
 		return packageResult{}, err
 	}
-	if err := writeJSON(filepath.Join(root, "DEPENDENCIES.json"), dependencies); err != nil {
-		return packageResult{}, err
+	if writeErr := writeJSON(filepath.Join(root, "DEPENDENCIES.json"), dependencies); writeErr != nil {
+		return packageResult{}, writeErr
 	}
-	if err := os.WriteFile(filepath.Join(root, "THIRD-PARTY-LICENSES.txt"), notices, 0o644); err != nil {
-		return packageResult{}, err
+	if writeErr := os.WriteFile(filepath.Join(root, "THIRD-PARTY-LICENSES.txt"), notices, 0o644); writeErr != nil {
+		return packageResult{}, writeErr
 	}
 
 	temporarySBOM := filepath.Join(temporary, artifactName+".spdx.json")
-	if err := generateSBOM(options.Syft, root, temporarySBOM, assets.Syft.Version, buildTime); err != nil {
-		return packageResult{}, err
+	if generateErr := generateSBOM(options.Syft, root, temporarySBOM, assets.Syft.Version, buildTime); generateErr != nil {
+		return packageResult{}, generateErr
 	}
-	if err := copyRegularFile(temporarySBOM, filepath.Join(root, "SBOM.spdx.json"), 0o644); err != nil {
-		return packageResult{}, err
+	if copyErr := copyRegularFile(temporarySBOM, filepath.Join(root, "SBOM.spdx.json"), 0o644); copyErr != nil {
+		return packageResult{}, copyErr
 	}
-	if err := writeTreeChecksums(root); err != nil {
-		return packageResult{}, err
+	if checksumErr := writeTreeChecksums(root); checksumErr != nil {
+		return packageResult{}, checksumErr
 	}
 
 	temporaryArchive := filepath.Join(temporary, artifactName+".tar.gz")
-	if err := archiveTree(root, temporaryArchive, buildTime); err != nil {
-		return packageResult{}, err
+	if archiveErr := archiveTree(root, temporaryArchive, buildTime); archiveErr != nil {
+		return packageResult{}, archiveErr
 	}
 	archiveHash, _, err := hashFile(temporaryArchive)
 	if err != nil {
@@ -231,12 +231,12 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	if err != nil {
 		return packageResult{}, err
 	}
-	if err := os.Rename(temporaryArchive, archivePath); err != nil {
-		return packageResult{}, err
+	if renameErr := os.Rename(temporaryArchive, archivePath); renameErr != nil {
+		return packageResult{}, renameErr
 	}
-	if err := os.Rename(temporarySBOM, sbomPath); err != nil {
+	if renameErr := os.Rename(temporarySBOM, sbomPath); renameErr != nil {
 		_ = os.Remove(archivePath)
-		return packageResult{}, err
+		return packageResult{}, renameErr
 	}
 	return packageResult{
 		Archive: filepath.Base(archivePath), ArchiveHash: archiveHash,
@@ -286,8 +286,8 @@ func writeImageMetadata(options packageOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(output, 0o755); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(output, 0o755); mkdirErr != nil {
+		return mkdirErr
 	}
 	entries, err := os.ReadDir(output)
 	if err != nil {
@@ -301,18 +301,18 @@ func writeImageMetadata(options packageOptions) error {
 		return err
 	}
 	manifest := newBuildManifest(options, buildTime, facts, oracle, nativeRecords)
-	if err := writeJSON(filepath.Join(output, "BUILD-INFO.json"), manifest); err != nil {
-		return err
+	if writeErr := writeJSON(filepath.Join(output, "BUILD-INFO.json"), manifest); writeErr != nil {
+		return writeErr
 	}
 	dependencies, notices, err := collectLicenses(options.Binary, repository, options.Edition, assets)
 	if err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(output, "DEPENDENCIES.json"), dependencies); err != nil {
-		return err
+	if writeErr := writeJSON(filepath.Join(output, "DEPENDENCIES.json"), dependencies); writeErr != nil {
+		return writeErr
 	}
-	if err := os.WriteFile(filepath.Join(output, "THIRD-PARTY-LICENSES.txt"), notices, 0o644); err != nil {
-		return err
+	if writeErr := os.WriteFile(filepath.Join(output, "THIRD-PARTY-LICENSES.txt"), notices, 0o644); writeErr != nil {
+		return writeErr
 	}
 	return writeTreeChecksums(output)
 }

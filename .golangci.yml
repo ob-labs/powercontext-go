@@ -24,9 +24,14 @@ linters:
     - bodyclose
     - durationcheck
     - errcheck
+    - govet
     - ineffassign
     - wastedassign
     - whitespace
+  settings:
+    govet:
+      enable:
+        - shadow
   exclusions:
     generated: strict
 

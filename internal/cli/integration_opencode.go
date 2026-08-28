@@ -55,8 +55,8 @@ func newSetupOpenCodeCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return errors.New("OpenCode CLI is not installed or is not on PATH")
 			}
-			if _, err := openCodeVersion(command.Context(), state.system, executable); err != nil {
-				return err
+			if _, versionErr := openCodeVersion(command.Context(), state.system, executable); versionErr != nil {
+				return versionErr
 			}
 			dataDirectory, err := prepareDataDirectory()
 			if err != nil {
@@ -66,22 +66,22 @@ func newSetupOpenCodeCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := requireCompleteOpenCodePlugin(pluginPath); err != nil {
-				return err
+			if pluginErr := requireCompleteOpenCodePlugin(pluginPath); pluginErr != nil {
+				return pluginErr
 			}
 			configDirectory, err := openCodeConfigDirectory(command.Context(), state.system, executable)
 			if err != nil {
 				return err
 			}
 			skillPath := filepath.Join(configDirectory, "skills", "project-context")
-			if err := requireReplaceableOpenCodeSkill(skillPath); err != nil {
-				return err
+			if skillErr := requireReplaceableOpenCodeSkill(skillPath); skillErr != nil {
+				return skillErr
 			}
-			if _, err := state.system.Run(command.Context(), executable, "plugin", pluginPath, "--global", "--force"); err != nil {
-				return err
+			if _, installErr := state.system.Run(command.Context(), executable, "plugin", pluginPath, "--global", "--force"); installErr != nil {
+				return installErr
 			}
-			if err := installOpenCodeSkill(filepath.Join(pluginPath, "skills", "project-context"), skillPath); err != nil {
-				return err
+			if installErr := installOpenCodeSkill(filepath.Join(pluginPath, "skills", "project-context"), skillPath); installErr != nil {
+				return installErr
 			}
 			result := map[string]string{
 				"plugin": openCodePluginName, "plugin_path": pluginPath, "skill_path": skillPath, "data_dir": dataDirectory,
@@ -180,7 +180,7 @@ func materializeOpenCodeCheckout(
 	parent := filepath.Join(
 		dataDirectory, "checkouts", "opencode", hex.EncodeToString(sourceHash[:8]), hex.EncodeToString(refHash[:8]),
 	)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	if mkdirErr := os.MkdirAll(parent, 0o755); mkdirErr != nil {
 		return "", errors.New("cannot create OpenCode checkout directory")
 	}
 	staging, err := os.MkdirTemp(parent, ".checkout-")
@@ -188,7 +188,7 @@ func materializeOpenCodeCheckout(
 		return "", errors.New("cannot create OpenCode checkout staging directory")
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
-	if _, err := commands.Run(ctx, "git", "clone", "--depth", "1", "--branch", ref, cloneURL, staging); err != nil {
+	if _, cloneErr := commands.Run(ctx, "git", "clone", "--depth", "1", "--branch", ref, cloneURL, staging); cloneErr != nil {
 		return "", errors.New("failed to clone the GitHub source")
 	}
 	commitOutput, err := commands.Run(ctx, "git", "-C", staging, "rev-parse", "--verify", "HEAD")

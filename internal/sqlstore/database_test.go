@@ -50,8 +50,8 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Error(err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Error(closeErr)
 		}
 	})
 
@@ -72,11 +72,11 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 		"pc_recall_token_daily",
 	} {
 		var found string
-		err := database.SQLDB().QueryRowContext(ctx,
+		queryErr := database.SQLDB().QueryRowContext(ctx,
 			"SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", name,
 		).Scan(&found)
-		if err != nil {
-			t.Fatalf("schema %s: %v", name, err)
+		if queryErr != nil {
+			t.Fatalf("schema %s: %v", name, queryErr)
 		}
 	}
 
@@ -85,8 +85,8 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := first.Close(); err != nil {
-			t.Errorf("close first SQL connection: %v", err)
+		if closeErr := first.Close(); closeErr != nil {
+			t.Errorf("close first SQL connection: %v", closeErr)
 		}
 	}()
 	second, err := database.SQLDB().Conn(ctx)
@@ -94,8 +94,8 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := second.Close(); err != nil {
-			t.Errorf("close second SQL connection: %v", err)
+		if closeErr := second.Close(); closeErr != nil {
+			t.Errorf("close second SQL connection: %v", closeErr)
 		}
 	}()
 	for index, connection := range []*sql.Conn{first, second} {
@@ -119,8 +119,8 @@ func TestDatabaseCloseRejectsNewTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := database.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	err = database.Transaction(context.Background(), func(sqlstore.DBTX) error { return nil })
 	var closed *sqlstore.DatabaseClosedError

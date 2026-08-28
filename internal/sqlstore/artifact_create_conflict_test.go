@@ -107,8 +107,8 @@ func TestArtifactCreateIntegrityNormalizesOnlyCommittedLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Errorf("close database: %v", err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
 		}
 	})
 	repository, err := NewArtifactRepository(SQLiteDialect, ExperienceArtifactCodec())

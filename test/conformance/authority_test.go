@@ -42,8 +42,8 @@ func TestPythonSQLiteAuthorityCanBeReadAndExtendedByGo(t *testing.T) {
 		t.Fatalf("authority fixture SHA-256 = %s, want %s", got, authoritySHA256)
 	}
 	working := filepath.Join(t.TempDir(), "authority.db")
-	if err := os.WriteFile(working, contents, 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(working, contents, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 
 	ctx := context.Background()
@@ -67,12 +67,12 @@ func TestPythonSQLiteAuthorityCanBeReadAndExtendedByGo(t *testing.T) {
 	}
 	pythonRef, _ := source.NewRef("content", "capture-python-1")
 	var stored sqlstore.StoredSource
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var getErr error
 		stored, getErr = sources.Get(ctx, tx, oracleScope, pythonRef)
 		return getErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	pythonSource, ok := stored.Value.(source.ContentSource)
 	if !ok || pythonSource.Content() != "Use one atomic café composition boundary." || stored.JournalPosition != 1 {
@@ -107,17 +107,17 @@ func TestPythonSQLiteAuthorityCanBeReadAndExtendedByGo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		value, addErr := sources.Add(ctx, tx, oracleScope, goSource)
 		if addErr == nil && value.JournalPosition != 2 {
 			return fmt.Errorf("Go Source journal position = %d, want 2", value.JournalPosition)
 		}
 		return addErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
-	if err := database.Close(ctx); err != nil {
-		t.Fatal(err)
+	if closeErr := database.Close(ctx); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 
 	python := os.Getenv("POWERCONTEXT_ORACLE_PYTHON")

@@ -191,8 +191,8 @@ func (r *CandidateRepository) Revise(
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireProposal(current.Family(), proposal); err != nil {
-		return nil, err
+	if proposalErr := r.requireProposal(current.Family(), proposal); proposalErr != nil {
+		return nil, proposalErr
 	}
 	revised, err := review.NewCandidate(
 		candidateID, current.Version()+1, current.Family(), review.Pending, proposal,
@@ -201,8 +201,8 @@ func (r *CandidateRepository) Revise(
 	if err != nil {
 		return nil, err
 	}
-	if err := r.insertVersion(ctx, db, scopeID, revised); err != nil {
-		return nil, err
+	if insertErr := r.insertVersion(ctx, db, scopeID, revised); insertErr != nil {
+		return nil, insertErr
 	}
 	result, err := db.ExecContext(ctx, `UPDATE pc_artifact_candidate_heads SET version = ?
         WHERE scope_id = ? AND candidate_id = ? AND version = ? AND status = ?`,

@@ -262,8 +262,8 @@ func PrepareRejudge(dataset Dataset, options RejudgeOptions) (RejudgeManifest, e
 	if err != nil {
 		return RejudgeManifest{}, err
 	}
-	if err := validateSourceObservations(selected, observations); err != nil {
-		return RejudgeManifest{}, err
+	if validationErr := validateSourceObservations(selected, observations); validationErr != nil {
+		return RejudgeManifest{}, validationErr
 	}
 	configuration, ok := sourceManifest["configuration"].(map[string]any)
 	if !ok {

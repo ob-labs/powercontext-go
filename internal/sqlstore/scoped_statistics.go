@@ -79,30 +79,34 @@ func (s *ScopedStatistics) Overview(ctx context.Context, period stats.Period, as
 	var usage []stats.StoredModelUsage
 	var recall []stats.StoredRecallTokenUsage
 	err = s.database.Transaction(ctx, func(tx DBTX) error {
-		var err error
-		inventory, err = s.repository.Inventory(ctx, tx, s.scopeID)
-		if err != nil {
-			return err
+		var inventoryErr error
+		inventory, inventoryErr = s.repository.Inventory(ctx, tx, s.scopeID)
+		if inventoryErr != nil {
+			return inventoryErr
 		}
-		inventory.MemoryEntries, err = s.repository.MemoryEntryStates(ctx, tx, s.scopeID, s.memoryArtifactID, s.artifacts)
-		if err != nil {
-			return err
+		var memoryErr error
+		inventory.MemoryEntries, memoryErr = s.repository.MemoryEntryStates(ctx, tx, s.scopeID, s.memoryArtifactID, s.artifacts)
+		if memoryErr != nil {
+			return memoryErr
 		}
-		cursor, found, err := s.cursors.Load(ctx, tx, s.scopeID, trigger.SourceWindowName)
-		if err != nil {
-			return err
+		cursor, found, cursorErr := s.cursors.Load(ctx, tx, s.scopeID, trigger.SourceWindowName)
+		if cursorErr != nil {
+			return cursorErr
 		}
 		if found {
 			processed = cursor.Cursor.Sequence()
 		}
-		usage, err = s.repository.Usage(ctx, tx, s.scopeID, resolved.StartDate(), resolved.EndDate())
-		if err != nil {
-			return err
+		var usageErr error
+		usage, usageErr = s.repository.Usage(ctx, tx, s.scopeID, resolved.StartDate(), resolved.EndDate())
+		if usageErr != nil {
+			return usageErr
 		}
 		if s.estimator != nil {
-			recall, err = s.repository.RecallUsage(ctx, tx, s.scopeID, resolved.StartDate(), resolved.EndDate(), *s.estimator)
+			var recallErr error
+			recall, recallErr = s.repository.RecallUsage(ctx, tx, s.scopeID, resolved.StartDate(), resolved.EndDate(), *s.estimator)
+			return recallErr
 		}
-		return err
+		return nil
 	})
 	if err != nil {
 		return stats.Statistics{}, err
