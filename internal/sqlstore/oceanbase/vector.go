@@ -197,7 +197,7 @@ func (i *MemoryVectorIndex) Search(
 	if err != nil {
 		return memory.SearchChannels{}, err
 	}
-	defer func() { returnErr = errors.Join(returnErr, closeRows(rows)) }()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	hits := make([]memory.ChannelHit, 0)
 	for rows.Next() {
 		var artifactID, entryID, versionID, text string

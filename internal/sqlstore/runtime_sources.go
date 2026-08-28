@@ -65,7 +65,7 @@ func (b *RuntimeSourceBackend) Capture(
 // Entries returns a stable decoded snapshot of one scoped Source journal.
 func (b *RuntimeSourceBackend) Entries(ctx context.Context, scopeID string) ([]source.JournalEntry, error) {
 	var stored []StoredSource
-	err := b.database.Transaction(ctx, func(tx DBTX) (returnErr error) {
+	err := b.database.Transaction(ctx, func(tx DBTX) error {
 		var listErr error
 		stored, listErr = b.repository.List(ctx, tx, scopeID, 0, nil)
 		return listErr
