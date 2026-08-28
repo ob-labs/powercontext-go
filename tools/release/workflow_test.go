@@ -295,3 +295,29 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 		}
 	}
 }
+
+func TestMakefileDeclaresStrictDiscoverableExecution(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	for _, required := range []string{
+		"SHELL := bash",
+		".SHELLFLAGS := -euo pipefail -c",
+		".DEFAULT_GOAL := help",
+		".DELETE_ON_ERROR:",
+		".SUFFIXES:",
+		"MAKEFLAGS += --no-builtin-rules",
+		"help: ## Show supported development, verification, and release commands.",
+		"lint: lint-tools ##",
+		"check: module-check fmt-check vet ##",
+		"build-all: ##",
+		"governance-check: ##",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("Makefile is missing %q", required)
+		}
+	}
+}
