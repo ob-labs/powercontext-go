@@ -21,10 +21,11 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/ob-labs/powercontext-go/inference"
 	openai "github.com/openai/openai-go/v3"
 	openaiBedrock "github.com/openai/openai-go/v3/bedrock"
 	"github.com/openai/openai-go/v3/option"
+
+	"github.com/ob-labs/powercontext-go/inference"
 )
 
 type BedrockMantleConfig struct {

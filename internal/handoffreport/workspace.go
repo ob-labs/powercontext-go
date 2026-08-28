@@ -54,6 +54,7 @@ func (v WorkspaceBinding) Version() int                 { return v.version }
 func (v WorkspaceBinding) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"schema": "powercontext.workspace-binding.v1", "workspace_instance_id": v.workspaceInstanceID, "project_id": v.projectID, "repository_ref": v.repositoryRef, "state": v.state, "confirmed_at": JSONTimestampText(v.confirmedAt), "version": v.version})
 }
+
 func (v *WorkspaceBinding) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Schema      string                `json:"schema"`

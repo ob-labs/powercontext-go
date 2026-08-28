@@ -23,6 +23,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/mattn/go-sqlite3"
+
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 )

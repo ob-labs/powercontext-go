@@ -247,7 +247,7 @@ func (a *WorkApplication) capture(ctx context.Context, scope string, kind work.K
 	if err != nil {
 		return work.SourceReceipt{}, err
 	}
-	schema := ""
+	var schema string
 	switch value := record.(type) {
 	case work.Contract:
 		schema = value.Schema()

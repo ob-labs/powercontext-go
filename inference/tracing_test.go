@@ -19,10 +19,11 @@ import (
 	"strings"
 	"testing"
 
-	servertracing "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+
+	servertracing "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 )
 
 func TestInferenceSpanRecordsNoModelContent(t *testing.T) {

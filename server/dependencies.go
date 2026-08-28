@@ -20,6 +20,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 	"github.com/ob-labs/powercontext-go/artifact/handoff"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
@@ -27,7 +29,6 @@ import (
 	"github.com/ob-labs/powercontext-go/inference"
 	"github.com/ob-labs/powercontext-go/internal/modelprovider"
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Dependencies are deliberate extension points for deterministic tests and

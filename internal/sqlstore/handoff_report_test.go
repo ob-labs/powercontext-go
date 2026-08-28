@@ -363,6 +363,7 @@ func reportProject(t *testing.T, id, key string, version int, state handoffrepor
 	}
 	return value
 }
+
 func reportWorkstream(t *testing.T, scope, project string, version int, state handoffreport.CatalogState) handoffreport.WorkstreamDescriptor {
 	t.Helper()
 	value, err := handoffreport.NewWorkstreamDescriptor(scope, project, nil, "Workstream", handoffreport.WorkstreamFeature, state, nil, nil, version)
@@ -371,6 +372,7 @@ func reportWorkstream(t *testing.T, scope, project string, version int, state ha
 	}
 	return value
 }
+
 func reportActivity(t *testing.T, id, project, sourceID string, observed, occurred time.Time, title *string) handoffreport.ActivityEvent {
 	t.Helper()
 	value, err := handoffreport.NewActivityEvent(handoffreport.ActivityEventInput{EventID: id, ProjectID: project, Source: handoffreport.ActivityGitCommit, SourceEventID: sourceID, OccurredAt: &occurred, ObservedAt: observed.UTC(), TimeBasis: handoffreport.TimeSourceReported, Title: title})
@@ -379,6 +381,7 @@ func reportActivity(t *testing.T, id, project, sourceID string, observed, occurr
 	}
 	return value
 }
+
 func reportTime(day int) time.Time {
 	return time.Date(2026, time.August, day, 10, 0, 0, 123456000, time.UTC)
 }

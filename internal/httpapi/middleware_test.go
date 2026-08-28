@@ -25,8 +25,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"go.opentelemetry.io/otel/trace"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
 func TestValidJSONUnicodeDistinguishesSurrogateEscapes(t *testing.T) {

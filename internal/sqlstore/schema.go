@@ -21,8 +21,10 @@ import (
 	"strings"
 )
 
-var cursorIdentifierPattern = regexp.MustCompile(`\bcursor\b`)
-var varcharIdentityPattern = regexp.MustCompile(`\bVARCHAR\(([0-9]+)\)`)
+var (
+	cursorIdentifierPattern = regexp.MustCompile(`\bcursor\b`)
+	varcharIdentityPattern  = regexp.MustCompile(`\bVARCHAR\(([0-9]+)\)`)
+)
 
 // quoteCursorIdentifier preserves the frozen column name while making SQL
 // valid on OceanBase, where CURSOR is reserved. Backtick identifiers are also

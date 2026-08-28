@@ -37,6 +37,7 @@ func (NoExperienceIndex) Initialize(context.Context, DBTX) error { return nil }
 func (NoExperienceIndex) Replace(context.Context, DBTX, string, experience.Experience) error {
 	return nil
 }
+
 func (NoExperienceIndex) Search(
 	context.Context,
 	DBTX,

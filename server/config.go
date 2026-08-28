@@ -99,8 +99,10 @@ type LoggingConfig struct {
 	Access bool
 }
 
-type MetricsConfig struct{ Enabled bool }
-type TracingConfig struct{ Enabled bool }
+type (
+	MetricsConfig struct{ Enabled bool }
+	TracingConfig struct{ Enabled bool }
+)
 
 type RuntimeConfig struct {
 	ScopeCacheSize               int

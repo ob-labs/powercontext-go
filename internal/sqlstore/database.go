@@ -30,6 +30,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/mattn/go-sqlite3"
+
 	embeddedseekdb "github.com/ob-labs/powercontext-go/internal/sqlstore/seekdb"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore/sqlitevec"
 )

@@ -36,6 +36,7 @@ func NewExternalReference(kind ExternalReferenceKind, provider, externalID strin
 	}
 	return value, nil
 }
+
 func (v ExternalReference) Validate() error {
 	if !validExternalKind(v.kind) {
 		return fieldError("kind", "has an unsupported value")
@@ -58,9 +59,11 @@ func (v ExternalReference) URL() *string                { return cloneString(v.u
 func (v ExternalReference) key() string {
 	return string(v.kind) + "\x00" + v.provider + "\x00" + v.externalID + "\x00" + optionalKey(v.url)
 }
+
 func (v ExternalReference) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"kind": v.kind, "provider": v.provider, "external_id": v.externalID, "url": v.url})
 }
+
 func (v *ExternalReference) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Kind       ExternalReferenceKind `json:"kind"`
@@ -119,6 +122,7 @@ func (v RepositoryRef) Subpath() *string             { return cloneString(v.subp
 func (v RepositoryRef) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"provider": v.provider, "repository_id": v.repositoryID, "normalized_remote": v.normalizedRemote, "subpath": v.subpath})
 }
+
 func (v *RepositoryRef) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Provider         RepositoryProvider `json:"provider"`
@@ -155,6 +159,7 @@ func NewProjectDescriptor(projectID, projectKey, title string, description *stri
 	}
 	return value, nil
 }
+
 func (v ProjectDescriptor) Validate() error {
 	for _, item := range []struct {
 		name, value string
@@ -196,6 +201,7 @@ func (v ProjectDescriptor) Schema() string             { return ProjectSchemaVer
 func (v ProjectDescriptor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"schema": ProjectSchemaVersion, "project_id": v.projectID, "project_key": v.projectKey, "title": v.title, "description": v.description, "default_locale": v.defaultLocale, "timezone": v.timezone, "catalog_state": v.catalogState, "version": v.version})
 }
+
 func (v *ProjectDescriptor) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Schema        string       `json:"schema"`
@@ -246,6 +252,7 @@ func NewWorkstreamDescriptor(scopeID, projectID string, key *string, title strin
 	}
 	return value, nil
 }
+
 func (v WorkstreamDescriptor) Validate() error {
 	if err := requireText("scope_id", v.scopeID, MaxScopeIDLength); err != nil {
 		return err
@@ -309,6 +316,7 @@ func (v WorkstreamDescriptor) Schema() string                    { return Workst
 func (v WorkstreamDescriptor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"schema": WorkstreamSchemaVersion, "scope_id": v.scopeID, "project_id": v.projectID, "key": v.key, "title": v.title, "kind": v.kind, "catalog_state": v.catalogState, "external_refs": v.externalRefs, "labels": v.labels, "version": v.version})
 }
+
 func (v *WorkstreamDescriptor) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Schema       string              `json:"schema"`

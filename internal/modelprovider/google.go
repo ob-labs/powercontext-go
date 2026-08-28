@@ -20,8 +20,9 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/ob-labs/powercontext-go/inference"
 	"google.golang.org/genai"
+
+	"github.com/ob-labs/powercontext-go/inference"
 )
 
 type GoogleBackend uint8

@@ -45,6 +45,7 @@ type WorkstreamReport struct {
 func (v WorkstreamReport) Workstream() WorkstreamDescriptor { return v.workstream }
 func (v WorkstreamReport) Continuity() work.Continuity      { return v.continuity }
 func (v WorkstreamReport) HandoffRef() *artifact.Ref        { return cloneArtifactRef(v.handoffRef) }
+
 func (v WorkstreamReport) Content() *handoff.Content {
 	if v.content == nil {
 		return nil
@@ -57,6 +58,7 @@ func (v WorkstreamReport) HandoffHistoryTruncated() bool { return v.handoffHisto
 func (v WorkstreamReport) HandoffHistory() []HandoffRevisionSummary {
 	return slices.Clone(v.handoffHistory)
 }
+
 func (v WorkstreamReport) EvidenceChecks() ([]handoff.EvidenceCheck, bool) {
 	if !v.evidenceChecked {
 		return nil, false

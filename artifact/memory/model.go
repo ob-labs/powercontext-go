@@ -190,8 +190,10 @@ func (c Content) Changes() []Change {
 	return result
 }
 
-type Memory = artifact.Artifact[Content]
-type Draft = artifact.Draft[Content]
+type (
+	Memory = artifact.Artifact[Content]
+	Draft  = artifact.Draft[Content]
+)
 
 func NewDraft(content Content, sources []source.Ref, artifacts []artifact.Ref) (Draft, error) {
 	return artifact.NewDraft(Family, content, sources, artifacts)

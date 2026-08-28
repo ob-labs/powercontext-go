@@ -53,6 +53,7 @@ The standard build uses CGO and statically embeds the same sqlite-vec 0.1.9
 
 ```sh
 make check
+make lint
 make contract-test
 make unit-test
 make e2e-test
@@ -76,6 +77,7 @@ SQLite remains the zero-dependency default.
 Useful verification targets:
 
 ```sh
+make lint-fix
 make license-check
 make pi-test
 make docs-test
@@ -84,6 +86,10 @@ make test-full TOKENIZERS_LIB_DIR=/path/to/tokenizers/lib
 POWERCONTEXT_TEST_OCEANBASE_URL='mysql+aoceanbase://root%40tenant:password@127.0.0.1:2881/powercontext?charset=utf8mb4' \
   make test-oceanbase-live
 ```
+
+The lint targets install the pinned `golangci-lint` release under
+`.tools/bin`; its embedded gofmt, gofumpt, and goimports versions are therefore
+the same locally and in CI. No mutable global linter installation is used.
 
 If a newly added source file is missing the standard Apache-2.0 header, repair
 all eligible files and immediately recheck them with one command:

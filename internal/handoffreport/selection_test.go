@@ -172,12 +172,15 @@ func (r *selectionReader) Latest(_ context.Context, scope string) (handoff.Hando
 	}
 	return *values[index], true, nil
 }
+
 func (*selectionReader) Get(context.Context, string, artifact.Ref) (handoff.Handoff, error) {
 	panic("unexpected exact read")
 }
+
 func (*selectionReader) Revisions(context.Context, string) ([]handoff.Handoff, error) {
 	panic("unexpected revisions read")
 }
+
 func (*selectionReader) CheckEvidence(context.Context, string, artifact.Ref) ([]handoff.EvidenceCheck, error) {
 	panic("unexpected evidence read")
 }
@@ -190,16 +193,20 @@ type selectionBackend struct {
 func (*selectionBackend) Create(context.Context, string, handoff.ArtifactDraft) (handoff.Handoff, error) {
 	panic("unexpected create")
 }
+
 func (*selectionBackend) Revise(context.Context, handoff.Handoff, handoff.ArtifactDraft) (handoff.Handoff, error) {
 	panic("unexpected revise")
 }
+
 func (b *selectionBackend) Get(_ context.Context, ref artifact.Ref) (handoff.Handoff, error) {
 	b.references = append(b.references, ref)
 	return b.value, nil
 }
+
 func (b *selectionBackend) Latest(context.Context, string) (handoff.Handoff, bool, error) {
 	return b.value, true, nil
 }
+
 func (b *selectionBackend) Revisions(context.Context, string) ([]handoff.Handoff, error) {
 	return []handoff.Handoff{b.value}, nil
 }
@@ -209,6 +216,7 @@ type selectionResolver struct{}
 func (selectionResolver) Resolve(context.Context, handoff.Citation) (handoff.Evidence, error) {
 	panic("unexpected resolve")
 }
+
 func (selectionResolver) Validate(context.Context, handoff.Citation) error {
 	panic("unexpected validation")
 }
