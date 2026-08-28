@@ -12,8 +12,9 @@ development line.
 | Earlier commits, snapshots, and downstream forks | No |
 
 This policy will be updated when the project publishes its first supported
-release. Until then, users should reproduce a suspected vulnerability against
-the latest `main` commit before reporting it when that is safe and practical.
+release. Reports should identify the commit that was tested. When it is safe
+and practical, also state whether the issue reproduces on the latest `main`,
+but do not delay a report or perform unsafe verification solely to do so.
 
 ## Reporting a Vulnerability
 
@@ -36,10 +37,10 @@ Use synthetic or redacted examples. Never include real credentials, API
 tokens, private Source or Memory content, customer data, database contents, or
 unredacted sensitive local paths in a report or proof of concept.
 
-If the issue is in a third-party dependency, report it to that project's
-maintainers as well. Submit a private report here when the dependency issue is
-exploitable through PowerContext Go or requires a repository-specific
-mitigation.
+If the issue is in a third-party dependency, follow that project's security
+policy and use its confidential reporting channel as well. Submit a private
+report here when the dependency issue is exploitable through PowerContext Go
+or requires a repository-specific mitigation.
 
 ## What to Expect
 
@@ -60,8 +61,10 @@ not currently operate a vulnerability-reward or bug-bounty program.
 
 ## Coordinated Disclosure
 
-Keep the report and all related technical details confidential until
-maintainers confirm that affected users have a reasonable repair or mitigation
-path and agree on a disclosure date. Maintainers will use GitHub Security
+Keep the report and all related technical details confidential while
+maintainers validate the issue and prepare a reasonable repair or mitigation
+path. The reporter and maintainers should coordinate a disclosure date; if
+they cannot agree on timing, they should communicate before disclosure so
+affected users can be protected. Maintainers will use GitHub Security
 Advisories for private collaboration and publication when an advisory is
 appropriate.
