@@ -82,10 +82,6 @@ func runJSONCommand(
 	return result, nil
 }
 
-func runProcessCommand(parent context.Context, executable string, arguments ...string) ([]byte, error) {
-	return runProcessCommandWithEnvironment(parent, nil, executable, arguments...)
-}
-
 func runProcessCommandWithEnvironment(
 	parent context.Context,
 	environment map[string]string,

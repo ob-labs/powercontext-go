@@ -18,7 +18,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
@@ -201,23 +200,4 @@ func nullableText(value *string) any {
 		return nil
 	}
 	return *value
-}
-
-func validateMemoryEntryAnchor(ref artifact.Ref, item memory.ManifestEntry, version memory.EntryVersion) error {
-	if version.MemoryArtifactID != ref.ID() || version.EntryID != item.EntryID() ||
-		version.EntryVersionID != item.EntryVersionID() || version.EntryContentHash != item.EntryContentHash() {
-		return &memory.InvalidCitationError{Code: "cross-identity"}
-	}
-	hash, err := memory.EntryContentHash(version.Kind, version.Text, version.Sources, version.Artifacts)
-	if err != nil {
-		return err
-	}
-	if hash != item.EntryContentHash() {
-		return &memory.InvalidCitationError{Code: "hash-mismatch"}
-	}
-	return nil
-}
-
-func memoryEntryIdentity(entry memory.EntryVersion) string {
-	return fmt.Sprintf("%s/%s@%s", entry.MemoryArtifactID, entry.EntryID, entry.EntryVersionID)
 }
