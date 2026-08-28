@@ -41,9 +41,22 @@ func TestBareMakeKeepsGenerateAsDefaultGoal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make dry-run failed: %v\n%s", err, output)
 	}
-	if first := strings.SplitN(string(output), "\n", 2)[0]; !strings.Contains(first, "generate ./openapi") {
+	if first := firstGeneratedCommand(string(output)); !strings.Contains(first, "generate ./openapi") {
 		t.Fatalf("bare make first command = %q, want generate default goal", first)
 	}
+}
+
+func firstGeneratedCommand(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, "make") && (strings.Contains(line, "Entering directory") ||
+			strings.Contains(line, "Leaving directory")) {
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			return line
+		}
+	}
+	return ""
 }
 
 func TestLintToolInstallUsesProjectSelectedGoVersion(t *testing.T) {

@@ -1,5 +1,5 @@
 GO ?= go
-GOFMT ?= $(GO) tool gofmt
+GOFMT ?= gofmt
 GOCACHE ?=
 GOMODCACHE ?=
 PNPM ?= pnpm
