@@ -23,9 +23,11 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	package-standard package-full clean
 
-$(GOLANGCI_LINT_STAMP):
+$(GOLANGCI_LINT): Makefile
 	@mkdir -p "$(TOOLS_BIN)"
 	GOBIN="$(TOOLS_BIN)" $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+$(GOLANGCI_LINT_STAMP): $(GOLANGCI_LINT)
 	@$(RM) $(TOOLS_BIN)/.golangci-lint-*
 	@touch "$@"
 
