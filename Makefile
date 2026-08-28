@@ -10,6 +10,11 @@ GOLANGCI_LINT_VERSION := v2.13.1
 GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
 GOLANGCI_LINT_STAMP := $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)
 
+COVERAGE_DIR ?= coverage
+COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
+COVERAGE_SUMMARY ?= $(COVERAGE_DIR)/summary.txt
+COVERAGE_MINIMUM ?= 16.0
+
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
 VERSION ?= devel
@@ -17,7 +22,7 @@ COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
 
-.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all \
+.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all coverage coverage-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -92,6 +97,24 @@ test-sqlite:
 
 test-race:
 	CGO_ENABLED=1 $(GO) test -race ./...
+
+coverage:
+	@mkdir -p "$(COVERAGE_DIR)"
+	CGO_ENABLED=1 $(GO) test -race -covermode=atomic -coverprofile="$(COVERAGE_PROFILE)" ./...
+	$(GO) tool cover -func="$(COVERAGE_PROFILE)" > "$(COVERAGE_SUMMARY)"
+	@tail -n 1 "$(COVERAGE_SUMMARY)"
+	@$(MAKE) coverage-check
+
+coverage-check:
+	@test -s "$(COVERAGE_SUMMARY)" || { echo 'coverage summary is missing or empty' >&2; exit 2; }
+	@actual=$$(awk 'END { value = $$3; sub(/%$$/, "", value); print value }' "$(COVERAGE_SUMMARY)"); \
+		test -n "$$actual" || { echo 'coverage total could not be parsed' >&2; exit 2; }; \
+		if awk -v actual="$$actual" -v minimum="$(COVERAGE_MINIMUM)" 'BEGIN { exit !((actual + 0) >= (minimum + 0)) }'; then \
+			printf 'coverage %s%% meets minimum %s%%\n' "$$actual" "$(COVERAGE_MINIMUM)"; \
+		else \
+			printf 'coverage %s%% is below minimum %s%%\n' "$$actual" "$(COVERAGE_MINIMUM)" >&2; \
+			exit 1; \
+		fi
 
 test-full:
 	@test -d "$(TOKENIZERS_LIB_DIR)" || { echo 'TOKENIZERS_LIB_DIR must contain libtokenizers.a' >&2; exit 2; }
