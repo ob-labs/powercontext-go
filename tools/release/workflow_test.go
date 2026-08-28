@@ -37,8 +37,9 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
-		"migration-gates.yml": true,
-		"provider-smoke.yml":  true,
+		"migration-gates.yml":  true,
+		"provider-smoke.yml":   true,
+		"windows-contract.yml": true,
 	}
 	paths, err := filepath.Glob(filepath.Join(workflows, "*.yml"))
 	if err != nil {
@@ -75,6 +76,11 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
 			"TestRealProviderSmoke", "timeout-minutes: 10",
+		},
+		"windows-contract.yml": {
+			"name: Windows contract checkout", "runs-on: windows-2025", "timeout-minutes: 10",
+			"Verify LF attributes and frozen fixture hashes", "Get-FileHash -Algorithm SHA256",
+			"git check-attr eol", "git diff --exit-code",
 		},
 		"e2e-harness.yml": {
 			"name: E2E harness", "validate:", "acceptance:", "database: [sqlite, oceanbase]",

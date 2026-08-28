@@ -21,6 +21,7 @@ Two Go-specific workflows extend, rather than replace, that Python topology:
 | --- | --- |
 | `migration-gates.yml` | Reusable PR assurance called by `master.yml`: frozen Python Oracle regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, live OceanBase, host adapters, evaluation, and four-platform standard/Full builds. |
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
+| `windows-contract.yml` | Windows checkout-only contract guard: verifies LF attributes, frozen fixture SHA-256 values, and generated-contract cleanliness without claiming Windows binary support. |
 
 The committed `test/conformance/testdata/python-v0.0.2` baseline remains immutable. Pull requests execute the pinned
 Python Oracle to prove that regenerated portable fixtures, database interoperability, and HTTP behavior still match;
