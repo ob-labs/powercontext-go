@@ -53,6 +53,17 @@ type issueConfig struct {
 	ContactLinks       []any `yaml:"contact_links"`
 }
 
+type workflowContract struct {
+	Permissions map[string]any         `yaml:"permissions"`
+	Jobs        map[string]workflowJob `yaml:"jobs"`
+}
+
+type workflowJob struct {
+	Uses           string         `yaml:"uses"`
+	TimeoutMinutes *int           `yaml:"timeout-minutes"`
+	Permissions    map[string]any `yaml:"permissions"`
+}
+
 func main() {
 	root := flag.String("root", ".", "repository root")
 	flag.Parse()
@@ -94,7 +105,10 @@ func checkRepository(root string) error {
 	}); err != nil {
 		return err
 	}
-	return checkIssueConfig(root)
+	if err := checkIssueConfig(root); err != nil {
+		return err
+	}
+	return checkWorkflowContracts(root)
 }
 
 func requirePhrases(root, name string, phrases []string) error {
@@ -177,6 +191,50 @@ func checkIssueConfig(root string) error {
 	}
 	if config.ContactLinks == nil {
 		return fmt.Errorf("%s must declare contact_links, even when empty", name)
+	}
+	return nil
+}
+
+func checkWorkflowContracts(root string) error {
+	patterns := []string{
+		filepath.Join(root, ".github", "workflows", "*.yml"),
+		filepath.Join(root, ".github", "workflows", "*.yaml"),
+	}
+	var paths []string
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return fmt.Errorf("enumerate workflows: %w", err)
+		}
+		paths = append(paths, matches...)
+	}
+	if len(paths) == 0 {
+		return errors.New(".github/workflows must contain at least one workflow")
+	}
+	for _, path := range paths {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read workflow %s: %w", filepath.Base(path), err)
+		}
+		var document any
+		if err := yaml.UnmarshalStrict(contents, &document); err != nil {
+			return fmt.Errorf("workflow %s is invalid YAML: %w", filepath.Base(path), err)
+		}
+		var workflow workflowContract
+		if err := yaml.Unmarshal(contents, &workflow); err != nil {
+			return fmt.Errorf("workflow %s cannot be inspected: %w", filepath.Base(path), err)
+		}
+		if len(workflow.Jobs) == 0 {
+			return fmt.Errorf("workflow %s must define jobs", filepath.Base(path))
+		}
+		for name, job := range workflow.Jobs {
+			if workflow.Permissions == nil && job.Permissions == nil {
+				return fmt.Errorf("workflow %s job %s must declare least-privilege permissions", filepath.Base(path), name)
+			}
+			if job.Uses == "" && (job.TimeoutMinutes == nil || *job.TimeoutMinutes <= 0) {
+				return fmt.Errorf("workflow %s job %s must declare a positive timeout-minutes", filepath.Base(path), name)
+			}
+		}
 	}
 	return nil
 }

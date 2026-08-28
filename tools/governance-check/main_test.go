@@ -46,6 +46,20 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			},
 			wantError: "duplicate field ID",
 		},
+		{
+			name: "workflow job without timeout",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflow(false))
+			},
+			wantError: "timeout-minutes",
+		},
+		{
+			name: "workflow job without permissions",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflowWithoutPermissions())
+			},
+			wantError: "least-privilege permissions",
+		},
 	}
 
 	for _, test := range tests {
@@ -84,6 +98,7 @@ func writeGovernanceFixture(t *testing.T) string {
 		"problem", "outcome", "scope", "non_goals", "evidence", "alternatives", "confirmations",
 	}))
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/config.yml", "blank_issues_enabled: false\ncontact_links: []\n")
+	writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflow(true))
 	return root
 }
 
@@ -102,6 +117,33 @@ func validIssueForm(name string, ids []string) string {
 		builder.WriteString("  - type: textarea\n    id: " + id + "\n    validations:\n      required: true\n")
 	}
 	return builder.String()
+}
+
+func validWorkflow(includeTimeout bool) string {
+	lines := []string{
+		"name: CI",
+		"permissions:",
+		"  contents: read",
+		"jobs:",
+		"  test:",
+		"    runs-on: ubuntu-24.04",
+	}
+	if includeTimeout {
+		lines = append(lines, "    timeout-minutes: 10")
+	}
+	lines = append(lines, "    steps: []")
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func validWorkflowWithoutPermissions() string {
+	return strings.Join([]string{
+		"name: CI",
+		"jobs:",
+		"  test:",
+		"    runs-on: ubuntu-24.04",
+		"    timeout-minutes: 10",
+		"    steps: []",
+	}, "\n") + "\n"
 }
 
 func writeFixtureFile(t *testing.T, root, name, contents string) {
