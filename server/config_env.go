@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 )
 

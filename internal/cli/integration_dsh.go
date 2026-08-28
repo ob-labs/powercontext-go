@@ -73,6 +73,7 @@ func newSetupDSHCommand(state *commandState) *cobra.Command {
 	command.Flags().StringVar(&ref, "ref", defaultMarketplaceRef, "Git ref used for a remote source.")
 	return command
 }
+
 func runDSHDiagnostics(ctx context.Context, commands systemCommandExecutor) map[string]diagnostic {
 	executable, err := dshExecutable(commands, runtime.GOOS)
 	if err != nil {
@@ -101,6 +102,7 @@ func runDSHDiagnostics(ctx context.Context, commands systemCommandExecutor) map[
 	}
 	return map[string]diagnostic{"dsh": {OK: true, Status: "ok", Detail: executable}, "plugin": plugin}
 }
+
 func dshExecutable(commands systemCommandExecutor, goos string) (string, error) {
 	if goos == "windows" {
 		if executable, err := commands.LookPath("dsh.cmd"); err == nil {
@@ -115,17 +117,11 @@ func resolveDSHPlugin(
 	commands systemCommandExecutor,
 	source, ref, dataDirectory string,
 ) (string, error) {
-	_, local, err := normalizeMarketplaceSource(source)
+	root, local, err := normalizeMarketplaceSource(source)
 	if err != nil {
 		return "", err
 	}
-	root := source
-	if local {
-		root, _, err = normalizeMarketplaceSource(source)
-		if err != nil {
-			return "", err
-		}
-	} else {
+	if !local {
 		if ref == "" || ref == "." || ref == ".." || strings.ContainsRune(ref, '\x00') {
 			return "", errors.New("invalid DeepSeek Harness ref")
 		}

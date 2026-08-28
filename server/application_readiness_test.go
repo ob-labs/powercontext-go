@@ -28,13 +28,14 @@ import (
 	"testing"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/ob-labs/powercontext-go/inference"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	servermetrics "github.com/ob-labs/powercontext-go/internal/observability/metrics"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestConfiguredReadinessIncludesRuntimeAndConfiguredInference(t *testing.T) {

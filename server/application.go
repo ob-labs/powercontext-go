@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"sync"
 
+	"go.opentelemetry.io/otel/trace"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
@@ -28,7 +30,6 @@ import (
 	servermetrics "github.com/ob-labs/powercontext-go/internal/observability/metrics"
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/internal/webui"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Application is one fully assembled Runtime and its shared endpoint adapter.

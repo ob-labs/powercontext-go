@@ -66,6 +66,7 @@ func (c ReceiverChecks) Authorization() ReadinessCheckStatus { return c.authoriz
 func (c ReceiverChecks) AllConfirmed() bool {
 	return c.liveState == LiveStateConfirmed && c.capability == ReadinessConfirmed && c.authorization == ReadinessConfirmed
 }
+
 func (c ReceiverChecks) Validate() error {
 	if c.liveState != LiveStateConfirmed && c.liveState != LiveStateMismatch && c.liveState != LiveStateNotChecked {
 		return &InvalidError{Field: "receiver_checks.live_state", Detail: "has an unsupported value"}

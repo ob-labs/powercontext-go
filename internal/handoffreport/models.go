@@ -24,9 +24,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/ob-labs/powercontext-go/artifact"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/ob-labs/powercontext-go/artifact"
 )
 
 const (
@@ -162,7 +163,9 @@ type ActivityPage struct {
 
 func NormalizeSortText(value string) string { return cases.Fold().String(norm.NFC.String(value)) }
 func UTCText(value time.Time) string        { return value.UTC().Format("2006-01-02T15:04:05.000000Z") }
-func TimestampText(value time.Time) string  { return value.Format("2006-01-02T15:04:05.000000Z07:00") }
+
+func TimestampText(value time.Time) string { return value.Format("2006-01-02T15:04:05.000000Z07:00") }
+
 func JSONTimestampText(value time.Time) string {
 	value = value.Truncate(time.Microsecond)
 	layout := "2006-01-02T15:04:05"
@@ -263,6 +266,7 @@ func normalizeRepositoryRemote(value *string) (*string, error) {
 	result := strings.ToLower(parsed.Scheme) + "://" + host + "/" + strings.Join(parts, "/")
 	return &result, nil
 }
+
 func normalizeRepositorySubpath(value *string) (*string, error) {
 	if value == nil {
 		return nil, nil
@@ -295,24 +299,29 @@ func requireText(field, value string, max int) error {
 	}
 	return nil
 }
+
 func requireOptionalText(field string, value *string, max int) error {
 	if value == nil {
 		return nil
 	}
 	return requireText(field, *value, max)
 }
+
 func fieldError(field, detail string) error {
 	return &CatalogArgumentError{Field: field, Detail: detail}
 }
+
 func invalidActivity(field, detail string) error {
 	return &InvalidActivityEventError{Field: field, Detail: detail}
 }
+
 func activityField(err error) error {
 	if e, ok := err.(*CatalogArgumentError); ok {
 		return invalidActivity(e.Field, e.Detail)
 	}
 	return err
 }
+
 func cloneString(value *string) *string {
 	if value == nil {
 		return nil
@@ -320,6 +329,7 @@ func cloneString(value *string) *string {
 	copy := *value
 	return &copy
 }
+
 func cloneTime(value *time.Time) *time.Time {
 	if value == nil {
 		return nil
@@ -327,6 +337,7 @@ func cloneTime(value *time.Time) *time.Time {
 	copy := *value
 	return &copy
 }
+
 func cloneExternal(value *ExternalReference) *ExternalReference {
 	if value == nil {
 		return nil
@@ -335,6 +346,7 @@ func cloneExternal(value *ExternalReference) *ExternalReference {
 	copy.url = cloneString(value.url)
 	return &copy
 }
+
 func cloneAgent(value *ActivityAgent) *ActivityAgent {
 	if value == nil {
 		return nil
@@ -344,6 +356,7 @@ func cloneAgent(value *ActivityAgent) *ActivityAgent {
 	copy.label = cloneString(value.label)
 	return &copy
 }
+
 func cloneVCS(value *ActivityVCSContext) *ActivityVCSContext {
 	if value == nil {
 		return nil
@@ -353,6 +366,7 @@ func cloneVCS(value *ActivityVCSContext) *ActivityVCSContext {
 	copy.headRevision = cloneString(value.headRevision)
 	return &copy
 }
+
 func cloneArtifactRef(value *artifact.Ref) *artifact.Ref {
 	if value == nil {
 		return nil
@@ -360,41 +374,50 @@ func cloneArtifactRef(value *artifact.Ref) *artifact.Ref {
 	copy := *value
 	return &copy
 }
+
 func optionalKey(value *string) string {
 	if value == nil {
 		return "\x00"
 	}
 	return *value
 }
+
 func timeTextPtr(value *time.Time) any {
 	if value == nil {
 		return nil
 	}
 	return TimestampText(*value)
 }
+
 func artifactRefMap(value *artifact.Ref) any {
 	if value == nil {
 		return nil
 	}
 	return map[string]any{"family": value.Family(), "artifact_id": value.ID(), "revision": value.Revision()}
 }
+
 func decodeStrict(data []byte, value any) error {
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(value)
 }
+
 func validExternalKind(v ExternalReferenceKind) bool {
 	return slices.Contains([]ExternalReferenceKind{ExternalIssue, ExternalTask, ExternalPullRequest, ExternalBranch, ExternalFeature, ExternalRelease, ExternalProgram, ExternalOther}, v)
 }
+
 func validRepositoryProvider(v RepositoryProvider) bool {
 	return slices.Contains([]RepositoryProvider{RepositoryGitHub, RepositoryGitLab, RepositoryLocal, RepositoryOther}, v)
 }
+
 func validWorkstreamKind(v WorkstreamKind) bool {
 	return slices.Contains([]WorkstreamKind{WorkstreamFeature, WorkstreamBug, WorkstreamRefactor, WorkstreamOperations, WorkstreamResearch, WorkstreamOther}, v)
 }
+
 func validActivitySource(v ActivitySource) bool {
 	return slices.Contains([]ActivitySource{ActivityHandoffObservation, ActivityGitCommit, ActivityGitWorktree, ActivityCodingSession, ActivityOther}, v)
 }
+
 func validTimeBasis(v TimeBasis) bool {
 	return slices.Contains([]TimeBasis{TimeSourceReported, TimeHostObserved, TimeFirstSeen, TimeCurrentOnly, TimeUnknown}, v)
 }

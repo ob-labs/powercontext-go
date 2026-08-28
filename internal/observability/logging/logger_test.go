@@ -23,8 +23,9 @@ import (
 	"testing"
 	"time"
 
-	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"go.opentelemetry.io/otel/trace"
+
+	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 )
 
 func TestJSONLoggerEmitsOnlyOperationalFields(t *testing.T) {

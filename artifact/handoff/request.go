@@ -74,6 +74,7 @@ func (a Activate) Clone() Activate {
 	a.evidence = slices.Clone(a.evidence)
 	return a
 }
+
 func (a Activate) Validate() error {
 	if _, err := source.NewRef(a.boundarySource.Type(), a.boundarySource.ID()); err != nil {
 		return err
@@ -99,6 +100,7 @@ func (a Activate) Validate() error {
 	}
 	return nil
 }
+
 func (a Activate) ActionEvidence() []Citation {
 	boundary := SourceCitation{ref: a.boundarySource}
 	result := []Citation{boundary}

@@ -46,6 +46,7 @@ func (adapter) Name() string { return "capture" }
 func (a adapter) Resolve(_ context.Context, value input) (capturedSource, error) {
 	return capturedSource{name: value.name}, nil
 }
+
 func (adapter) Read(_ context.Context, value capturedSource) (string, error) {
 	return "read:" + value.name, nil
 }
@@ -65,6 +66,7 @@ func (b *backend) Get(_ context.Context, value source.Value) (source.Value, erro
 	}
 	return nil, &source.NotFoundError{Source: value}
 }
+
 func (b *backend) List(context.Context) ([]source.Value, error) {
 	return append([]source.Value(nil), b.values...), nil
 }

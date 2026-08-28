@@ -295,6 +295,7 @@ func (f failingExperienceIndex) Replace(
 ) error {
 	return f.failure
 }
+
 func (f failingExperienceIndex) Search(
 	context.Context,
 	sqlstore.DBTX,

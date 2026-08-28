@@ -300,6 +300,7 @@ func (r *reportReader) Latest(_ context.Context, scope string) (handoff.Handoff,
 	}
 	return *value, true, nil
 }
+
 func (r *reportReader) Get(_ context.Context, scope string, ref artifact.Ref) (handoff.Handoff, error) {
 	r.exactReads++
 	value := r.values[scope]
@@ -308,6 +309,7 @@ func (r *reportReader) Get(_ context.Context, scope string, ref artifact.Ref) (h
 	}
 	return *value, nil
 }
+
 func (r *reportReader) Revisions(_ context.Context, scope string) ([]handoff.Handoff, error) {
 	if values, ok := r.histories[scope]; ok {
 		return append([]handoff.Handoff(nil), values...), nil
@@ -318,6 +320,7 @@ func (r *reportReader) Revisions(_ context.Context, scope string) ([]handoff.Han
 	}
 	return []handoff.Handoff{*value}, nil
 }
+
 func (r *reportReader) CheckEvidence(context.Context, string, artifact.Ref) ([]handoff.EvidenceCheck, error) {
 	r.evidenceReads++
 	if r.evidenceUnavailable {
@@ -338,12 +341,15 @@ func (r *alternatingReader) Latest(context.Context, string) (handoff.Handoff, bo
 	}
 	return r.two, true, nil
 }
+
 func (*alternatingReader) Get(context.Context, string, artifact.Ref) (handoff.Handoff, error) {
 	panic("unexpected exact read")
 }
+
 func (*alternatingReader) Revisions(context.Context, string) ([]handoff.Handoff, error) {
 	return nil, nil
 }
+
 func (*alternatingReader) CheckEvidence(context.Context, string, artifact.Ref) ([]handoff.EvidenceCheck, error) {
 	return nil, nil
 }
@@ -356,6 +362,7 @@ func domainProject(t *testing.T) handoffreport.ProjectDescriptor {
 	}
 	return value
 }
+
 func domainWorkstream(t *testing.T, scope string) handoffreport.WorkstreamDescriptor {
 	t.Helper()
 	value, err := handoffreport.NewWorkstreamDescriptor(scope, "prj-1", nil, "Report", handoffreport.WorkstreamFeature, handoffreport.CatalogIncluded, nil, nil, 1)
@@ -364,6 +371,7 @@ func domainWorkstream(t *testing.T, scope string) handoffreport.WorkstreamDescri
 	}
 	return value
 }
+
 func domainActivity(t *testing.T, id, scope string, occurred time.Time) handoffreport.ActivityEvent {
 	t.Helper()
 	value, err := handoffreport.NewActivityEvent(handoffreport.ActivityEventInput{EventID: id, ProjectID: "prj-1", ScopeID: &scope, Source: handoffreport.ActivityCodingSession, SourceEventID: "source-" + id, OccurredAt: &occurred, ObservedAt: occurred.Add(time.Hour).UTC(), TimeBasis: handoffreport.TimeSourceReported})
@@ -372,6 +380,7 @@ func domainActivity(t *testing.T, id, scope string, occurred time.Time) handoffr
 	}
 	return value
 }
+
 func reportHandoff(t *testing.T, revision int64) handoff.Handoff {
 	return reportHandoffRevision(t, revision, "Implement the report.", "Add the API.")
 }

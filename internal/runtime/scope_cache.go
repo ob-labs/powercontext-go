@@ -23,8 +23,10 @@ import (
 
 const DefaultScopeCacheSize = 128
 
-type ScopeCacheObserver func(cached, active int)
-type ScopeEvictor func(scopeID string)
+type (
+	ScopeCacheObserver func(cached, active int)
+	ScopeEvictor       func(scopeID string)
+)
 
 type RuntimeOptions struct {
 	ScopeCacheSize int

@@ -19,9 +19,10 @@ import (
 	"strings"
 	"testing"
 
-	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 )
 
 func TestRuntimeStageSpansInheritApplicationContextWithoutRawScope(t *testing.T) {

@@ -213,6 +213,7 @@ func scanActivity(scanner rowScanner) (activityRow, error) {
 	row.payload, err = reportPayload(payload)
 	return row, err
 }
+
 func decodeActivityRow(row activityRow) (handoffreport.StoredActivity, error) {
 	if row.cursor < 1 {
 		return handoffreport.StoredActivity{}, invalidStoredActivity("cursor", "must be a positive integer")
@@ -233,6 +234,7 @@ func decodeActivityRow(row activityRow) (handoffreport.StoredActivity, error) {
 	}
 	return handoffreport.StoredActivity{Event: event, Cursor: row.cursor}, nil
 }
+
 func idempotentActivity(row activityRow, candidate []byte) (handoffreport.StoredActivity, error) {
 	existingSemantic, err := semanticActivityPayload(row.payload)
 	if err != nil {

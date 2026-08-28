@@ -33,14 +33,19 @@ type InvalidJobStateError struct{ Detail string }
 
 func (e *InvalidJobStateError) Error() string { return "invalid APScheduler job state: " + e.Detail }
 
-type pickleTuple []any
-type pickleGlobal struct{ module, name string }
-type pickleObject struct {
-	class pickleGlobal
-	state map[string]any
-}
-type pickleTimedelta struct{ days, seconds, microseconds int64 }
-type pickleUTC struct{}
+type (
+	pickleTuple  []any
+	pickleGlobal struct{ module, name string }
+	pickleObject struct {
+		class pickleGlobal
+		state map[string]any
+	}
+)
+
+type (
+	pickleTimedelta struct{ days, seconds, microseconds int64 }
+	pickleUTC       struct{}
+)
 
 type pickleParser struct {
 	data     []byte
@@ -540,9 +545,11 @@ func (d pickleTimedelta) duration() (time.Duration, error) {
 	}
 	return time.Duration(micros) * time.Microsecond, nil
 }
+
 func allowedGlobal(value pickleGlobal) bool {
 	return value == (pickleGlobal{"apscheduler.triggers.interval", "IntervalTrigger"}) || value == (pickleGlobal{"datetime", "timezone"}) || value == (pickleGlobal{"datetime", "timedelta"}) || value == (pickleGlobal{"datetime", "datetime"})
 }
+
 func exactKeys(value map[string]any, keys []string) bool {
 	if len(value) != len(keys) {
 		return false

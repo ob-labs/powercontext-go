@@ -200,9 +200,11 @@ func (o GenerationOutput) Disposition() Disposition     { return o.disposition }
 func (o GenerationOutput) NextAction() *GenerationStatement {
 	return cloneGenerationStatement(o.nextAction)
 }
+
 func (o GenerationOutput) Omissions() []GenerationOmission {
 	return cloneGenerationOmissions(o.omissions)
 }
+
 func (o GenerationOutput) Validate() error {
 	if o.disposition != Continuable && o.disposition != Blocked && o.disposition != Complete {
 		return fmt.Errorf("invalid Handoff generation disposition %q", o.disposition)

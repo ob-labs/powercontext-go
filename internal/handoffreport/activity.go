@@ -46,9 +46,11 @@ func (v ActivityAgent) Validate() error {
 	}
 	return nil
 }
+
 func (v ActivityAgent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"provider": v.provider, "label": v.label})
 }
+
 func (v *ActivityAgent) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Provider *string `json:"provider"`
@@ -87,9 +89,11 @@ func (v ActivityVCSContext) Validate() error {
 	}
 	return nil
 }
+
 func (v ActivityVCSContext) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]any{"branch": v.branch, "head_revision": v.headRevision})
 }
+
 func (v *ActivityVCSContext) UnmarshalJSON(data []byte) error {
 	var dto struct {
 		Branch       *string `json:"branch"`
@@ -244,6 +248,7 @@ func (v ActivityEvent) Validate() error {
 	})
 	return err
 }
+
 func (v ActivityEvent) EffectivePeriodTime() *time.Time {
 	switch v.timeBasis {
 	case TimeSourceReported:
@@ -255,6 +260,7 @@ func (v ActivityEvent) EffectivePeriodTime() *time.Time {
 		return nil
 	}
 }
+
 func (v ActivityEvent) MarshalJSON() ([]byte, error) {
 	if err := v.Validate(); err != nil {
 		return nil, err

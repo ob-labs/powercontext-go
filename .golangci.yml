@@ -14,7 +14,28 @@
 
 version: "2"
 
-# Keep this file intentionally minimal until a golangci-lint release is pinned
-# by CI and the release toolchain.
 run:
   timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - durationcheck
+    - ineffassign
+    - wastedassign
+    - whitespace
+  exclusions:
+    generated: strict
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ob-labs/powercontext-go
+  exclusions:
+    generated: strict

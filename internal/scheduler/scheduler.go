@@ -460,6 +460,7 @@ func claimOwner(path string) error {
 	liveOwners.paths[path] = struct{}{}
 	return nil
 }
+
 func releaseOwner(path string) {
 	liveOwners.Lock()
 	delete(liveOwners.paths, path)
@@ -480,6 +481,7 @@ func storedFloat(value any) (float64, bool) {
 	}
 	return result, !math.IsNaN(result) && !math.IsInf(result, 0)
 }
+
 func storedBlob(value any) ([]byte, bool) {
 	switch typed := value.(type) {
 	case []byte:

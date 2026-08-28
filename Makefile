@@ -6,6 +6,15 @@ PNPM ?= pnpm
 UV ?= uv
 LICENSE_EYE ?= $(GO) run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
 
+TOOLS_BIN := $(CURDIR)/.tools/bin
+GOLANGCI_LINT_VERSION := v2.13.1
+GOLANGCI_LINT_VERSION_TEXT := $(patsubst v%,%,$(GOLANGCI_LINT_VERSION))
+GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
+PROJECT_GO_TOOLCHAIN = $(shell $(GO) env GOVERSION)
+GOLANGCI_LINT_STAMP = $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+
+.DEFAULT_GOAL := generate
+
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
 VERSION ?= devel
@@ -13,11 +22,30 @@ COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
 
-.PHONY: generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet \
+.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	package-standard package-full clean
+
+$(GOLANGCI_LINT): Makefile go.mod
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+$(GOLANGCI_LINT_STAMP): $(GOLANGCI_LINT)
+	@"$(GOLANGCI_LINT)" --version | grep -q "version $(GOLANGCI_LINT_VERSION_TEXT) "
+	@$(RM) $(TOOLS_BIN)/.golangci-lint-*
+	@touch "$@"
+
+lint-tools: $(GOLANGCI_LINT_STAMP)
+
+lint: lint-tools
+	"$(GOLANGCI_LINT)" run
+
+lint-fix: lint-tools
+	"$(GOLANGCI_LINT)" fmt
+	"$(GOLANGCI_LINT)" run --fix
 
 generate:
 	$(GO) generate ./openapi
@@ -44,12 +72,13 @@ license-fix:
 	$(LICENSE_EYE) -c .licenserc.yaml header fix
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 
-fmt:
+fmt: lint-tools
 	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
+	"$(GOLANGCI_LINT)" fmt
 
-fmt-check:
-	@files="$$(gofmt -l $$(find . -name '*.go' -not -path './vendor/*'))"; \
-	if [ -n "$$files" ]; then printf '%s\n' "$$files"; exit 1; fi
+fmt-check: lint-tools
+	@$(GOFMT) -l $$(find . -name '*.go' -not -path './vendor/*') >/dev/null
+	"$(GOLANGCI_LINT)" fmt --diff
 
 vet:
 	$(GO) vet ./...

@@ -22,9 +22,10 @@ import (
 	"os"
 	"unicode/utf8"
 
+	"github.com/spf13/cobra"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	pcclient "github.com/ob-labs/powercontext-go/client"
-	"github.com/spf13/cobra"
 )
 
 func newCandidateCommand(state *commandState) *cobra.Command {

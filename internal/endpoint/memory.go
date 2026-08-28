@@ -343,5 +343,7 @@ func decodeMetadata(value v1.OptNilCaptureContentSourceRequestMetadata) (map[str
 	return result, nil
 }
 
-var _ SourceOperations = (*runtime.SourceApplication)(nil)
-var _ MemoryOperations = (*runtime.MemoryApplication)(nil)
+var (
+	_ SourceOperations = (*runtime.SourceApplication)(nil)
+	_ MemoryOperations = (*runtime.MemoryApplication)(nil)
+)

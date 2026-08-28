@@ -47,6 +47,7 @@ func (s SnapshotSource) SourceName() string { return s.name }
 func (SnapshotSource) SourceMaterialization() source.Materialization {
 	return source.Captured
 }
+
 func (SnapshotSource) SourceDescription() (string, bool) {
 	return "Exact external Skill snapshot captured by an explicit managed import or fork.", true
 }
@@ -68,6 +69,7 @@ func (SnapshotSourceAdapter) Resolve(_ context.Context, value SnapshotCapture) (
 		name: "ext_skill_" + hex.EncodeToString(digest[:]), snapshot: value.Snapshot, mode: value.Mode,
 	}, nil
 }
+
 func (SnapshotSourceAdapter) Read(_ context.Context, value SnapshotSource) (SnapshotCapture, error) {
 	return SnapshotCapture{Snapshot: value.snapshot, Mode: value.mode}, nil
 }
