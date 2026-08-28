@@ -9,6 +9,7 @@ TOOLS_BIN := $(CURDIR)/.tools/bin
 GOLANGCI_LINT_VERSION := v2.13.1
 GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
 GOLANGCI_LINT_STAMP := $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)
+PROJECT_GO_TOOLCHAIN = $(shell $(GO) env GOVERSION)
 
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
@@ -25,7 +26,8 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 
 $(GOLANGCI_LINT): Makefile
 	@mkdir -p "$(TOOLS_BIN)"
-	GOBIN="$(TOOLS_BIN)" $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 $(GOLANGCI_LINT_STAMP): $(GOLANGCI_LINT)
 	@$(RM) $(TOOLS_BIN)/.golangci-lint-*

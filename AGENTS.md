@@ -130,3 +130,7 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When `go install module@version` provisions a repository-local tool, run the
+  install with the project-selected `go env GOVERSION` as the minimum
+  `GOTOOLCHAIN`. Verify from an older bootstrap Go release that the installed
+  binary can process the module's declared Go version.
