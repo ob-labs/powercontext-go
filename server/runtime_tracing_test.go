@@ -53,7 +53,7 @@ func TestRuntimeStageSpansInheritApplicationContextWithoutRawScope(t *testing.T)
 		}
 		serialized := strings.Builder{}
 		for _, attribute := range stage.Attributes() {
-			serialized.WriteString(attribute.Value.Emit())
+			serialized.WriteString(attribute.Value.String())
 		}
 		if strings.Contains(serialized.String(), "private-scope") {
 			t.Fatalf("%s leaked raw Scope: %s", name, serialized.String())
