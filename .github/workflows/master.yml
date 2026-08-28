@@ -44,6 +44,23 @@ jobs:
       - name: Build every package with readonly modules
         run: make build-all
 
+  portable-sdk:
+    name: portable-sdk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Cross-build the portable public SDK
+        run: make portable-sdk
+
   coverage:
     name: coverage
     runs-on: ubuntu-24.04

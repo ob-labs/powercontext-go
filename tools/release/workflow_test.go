@@ -62,7 +62,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	required := map[string][]string{
 		"master.yml": {
 			"name: Main", "quality:", "run: make check", "run: make contract-test",
-			"tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
+			"portable-sdk:", "run: make portable-sdk", "tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
 		"migration-gates.yml": {
@@ -314,6 +314,10 @@ func TestMakefileDeclaresStrictDiscoverableExecution(t *testing.T) {
 		"lint: lint-tools ##",
 		"check: module-check fmt-check vet ##",
 		"build-all: ##",
+		"portable-sdk: ##",
+		"./openapi/...",
+		"linux/arm64 darwin/amd64 darwin/arm64",
+		"$(GO) build -mod=readonly $(PORTABLE_SDK_PACKAGES) || exit 1",
 		"governance-check: ##",
 	} {
 		if !strings.Contains(contents, required) {

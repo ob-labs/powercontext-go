@@ -22,6 +22,9 @@ COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
 COVERAGE_SUMMARY ?= $(COVERAGE_DIR)/summary.txt
 COVERAGE_MINIMUM ?= 16.0
 
+PORTABLE_SDK_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...
+PORTABLE_SDK_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
 VERSION ?= devel
@@ -29,7 +32,7 @@ COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
 
-.PHONY: help lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all portable-sdk coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -91,6 +94,11 @@ vet: ## Run Go vet across all packages.
 
 build-all: ## Build all Go packages with readonly module resolution.
 	$(GO) build -mod=readonly ./...
+
+portable-sdk: ## Cross-build the deliberate public SDK packages without CGO.
+	@for target in $(PORTABLE_SDK_TARGETS); do \
+		GOOS=$${target%/*} GOARCH=$${target#*/} CGO_ENABLED=0 $(GO) build -mod=readonly $(PORTABLE_SDK_PACKAGES) || exit 1; \
+	done
 
 test: unit-test e2e-test ## Run the standard unit and end-to-end suites.
 
