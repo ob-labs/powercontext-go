@@ -15,11 +15,12 @@ counterpart or enforces a Go release constraint that does not exist in Python.
 | `release.yml` | `release.yml` | GitHub binary assets and GHCR replace PyPI; release verification and documentation deployment keep the same gates. |
 | `release-verify.yml` | `release-verify.yml` | Verification exercises published Go archives and image digests instead of Python distributions. |
 
-Two Go-specific workflows extend, rather than replace, that Python topology:
+Three Go-specific workflows extend, rather than replace, that Python topology:
 
 | Go workflow | Purpose |
 | --- | --- |
 | `migration-gates.yml` | Reusable PR assurance called by `master.yml`: frozen Python Oracle regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, live OceanBase, host adapters, evaluation, and four-platform standard/Full builds. |
+| `codeql.yml` | Go CodeQL analysis on pull requests, pushes to `main`, a weekly schedule, and manual dispatch. Pull request runs check out the exact submitted head commit before the explicit Go build. |
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
 
 The committed `test/conformance/testdata/python-v0.0.2` baseline remains immutable. Pull requests execute the pinned
