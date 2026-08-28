@@ -358,7 +358,11 @@ func TestHandoffReportTableNamesUseIsolatedPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close Handoff Report schema rows: %v", err)
+		}
+	}()
 	var names []string
 	for rows.Next() {
 		var name string

@@ -84,12 +84,20 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer first.Close()
+	defer func() {
+		if err := first.Close(); err != nil {
+			t.Errorf("close first SQL connection: %v", err)
+		}
+	}()
 	second, err := database.SQLDB().Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer second.Close()
+	defer func() {
+		if err := second.Close(); err != nil {
+			t.Errorf("close second SQL connection: %v", err)
+		}
+	}()
 	for index, connection := range []*sql.Conn{first, second} {
 		var foreignKeys, busyTimeout int
 		if err := connection.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {

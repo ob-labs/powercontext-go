@@ -277,7 +277,7 @@ func readRejudgeObservations(path string) (map[string]RejudgeObservation, error)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	result := make(map[string]RejudgeObservation)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64<<10), maxObservationBytes)

@@ -70,7 +70,11 @@ func TestReviewRevisionAppendsImmutableFamilyTypedCandidateVersion(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close Candidate version rows: %v", err)
+		}
+	}()
 	var versions []int64
 	var proposals []string
 	for rows.Next() {

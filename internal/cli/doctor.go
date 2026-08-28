@@ -138,7 +138,7 @@ func requestDiagnostic(ctx context.Context, client *http.Client, serverURL, path
 	if err != nil {
 		return diagnostic{Status: "failed", Detail: "cannot reach " + serverURL}
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if !readiness && response.StatusCode != http.StatusOK {
 		return diagnostic{Status: "failed", Detail: fmt.Sprintf("liveness returned HTTP %d", response.StatusCode)}
 	}

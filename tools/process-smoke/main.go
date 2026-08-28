@@ -113,7 +113,7 @@ func run(ctx context.Context, opts options) error {
 	if err != nil {
 		return fmt.Errorf("create smoke directory: %w", err)
 	}
-	defer os.RemoveAll(root) // best-effort cleanup of isolated, disposable state
+	defer func() { _ = os.RemoveAll(root) }() // best-effort cleanup of isolated, disposable state
 
 	baseEnvironment := isolatedEnvironment(os.Environ(), filepath.Join(root, "home"))
 	firstLog := filepath.Join(root, "server-public.log")
@@ -131,7 +131,7 @@ func run(ctx context.Context, opts options) error {
 		if err != nil {
 			return err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
 			return fmt.Errorf("default Handoff Report route returned HTTP %d", response.StatusCode)
 		}
@@ -182,7 +182,7 @@ func run(ctx context.Context, opts options) error {
 		if err != nil {
 			return err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusNotFound {
 			return fmt.Errorf("disabled Handoff Report route returned HTTP %d", response.StatusCode)
 		}
@@ -421,7 +421,7 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 	return nil
 }
 
-func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) error {
+func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) (returnErr error) {
 	httpClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}
 	if token != "" {
 		httpClient.Transport = bearerTransport{token: token, next: http.DefaultTransport}
@@ -433,7 +433,11 @@ func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) error
 	if err != nil {
 		return fmt.Errorf("connect MCP: %w", err)
 	}
-	defer session.Close()
+	defer func() {
+		if closeErr := session.Close(); closeErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("close MCP session: %w", closeErr))
+		}
+	}()
 	tools, err := session.ListTools(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("list MCP tools: %w", err)

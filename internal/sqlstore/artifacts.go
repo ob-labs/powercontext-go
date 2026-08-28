@@ -260,7 +260,7 @@ func (r *ArtifactRepository) Revisions(
 	ctx context.Context,
 	db DBTX,
 	scopeID, family, artifactID string,
-) ([]artifact.Snapshot, error) {
+) (result []artifact.Snapshot, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return nil, err
 	}
@@ -273,8 +273,8 @@ func (r *ArtifactRepository) Revisions(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make([]artifact.Snapshot, 0)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make([]artifact.Snapshot, 0)
 	for rows.Next() {
 		row, err := scanArtifact(rows)
 		if err != nil {
@@ -432,13 +432,11 @@ func loadLineage(ctx context.Context, db DBTX, scopeID string, ref artifact.Ref)
 	for sourceRows.Next() {
 		var sourceType, sourceID string
 		if err := sourceRows.Scan(&sourceType, &sourceID); err != nil {
-			sourceRows.Close()
-			return artifact.Lineage{}, err
+			return artifact.Lineage{}, errors.Join(err, closeRows(sourceRows))
 		}
 		value, err := source.NewRef(sourceType, sourceID)
 		if err != nil {
-			sourceRows.Close()
-			return artifact.Lineage{}, err
+			return artifact.Lineage{}, errors.Join(err, closeRows(sourceRows))
 		}
 		sources = append(sources, value)
 	}
@@ -461,18 +459,16 @@ func loadLineage(ctx context.Context, db DBTX, scopeID string, ref artifact.Ref)
 		var family, artifactID string
 		var revision any
 		if err := artifactRows.Scan(&family, &artifactID, &revision); err != nil {
-			artifactRows.Close()
-			return artifact.Lineage{}, err
+			return artifact.Lineage{}, errors.Join(err, closeRows(artifactRows))
 		}
 		decodedRevision, ok := integer(revision)
 		if !ok {
-			artifactRows.Close()
-			return artifact.Lineage{}, &InvalidStoredColumnError{Column: "upstream_revision", Expected: "an integer"}
+			columnErr := &InvalidStoredColumnError{Column: "upstream_revision", Expected: "an integer"}
+			return artifact.Lineage{}, errors.Join(columnErr, closeRows(artifactRows))
 		}
 		value, err := artifact.NewRef(family, artifactID, decodedRevision)
 		if err != nil {
-			artifactRows.Close()
-			return artifact.Lineage{}, err
+			return artifact.Lineage{}, errors.Join(err, closeRows(artifactRows))
 		}
 		artifacts = append(artifacts, value)
 	}

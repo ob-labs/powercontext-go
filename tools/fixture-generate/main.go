@@ -315,7 +315,7 @@ func testsInFile(root, path string) ([]testCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	relative, err := filepath.Rel(root, path)
 	if err != nil {
 		return nil, err

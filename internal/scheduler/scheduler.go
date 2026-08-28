@@ -264,13 +264,13 @@ type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-func loadJobs(ctx context.Context, db queryer, path string) (map[JobKind]Job, error) {
+func loadJobs(ctx context.Context, db queryer, path string) (result map[JobKind]Job, returnErr error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, next_run_time, job_state FROM powercontext_scheduler_jobs ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make(map[JobKind]Job, 2)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make(map[JobKind]Job, 2)
 	for rows.Next() {
 		var id string
 		var nextValue, blobValue any

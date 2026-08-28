@@ -268,7 +268,7 @@ func (s *HandoffReportStore) activityHighWatermark(ctx context.Context, tx DBTX,
 	return value, nil
 }
 
-func (s *HandoffReportStore) listActivityRows(ctx context.Context, tx DBTX, projectID string, start, end *time.Time, sources []handoffreport.ActivitySource, after int64, through *int64, limit int) ([]handoffreport.StoredActivity, error) {
+func (s *HandoffReportStore) listActivityRows(ctx context.Context, tx DBTX, projectID string, start, end *time.Time, sources []handoffreport.ActivitySource, after int64, through *int64, limit int) (result []handoffreport.StoredActivity, returnErr error) {
 	if err := reportIdentifier("project_id", projectID, handoffreport.MaxReportIDLength); err != nil {
 		return nil, activityRepositoryError(err)
 	}
@@ -319,8 +319,8 @@ func (s *HandoffReportStore) listActivityRows(ctx context.Context, tx DBTX, proj
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := []handoffreport.StoredActivity{}
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = []handoffreport.StoredActivity{}
 	for rows.Next() {
 		row, err := scanActivity(rows)
 		if err != nil {

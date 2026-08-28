@@ -62,7 +62,7 @@ func (MemoryFTSIndex) Search(
 	db sqlstore.DBTX,
 	scopeID string,
 	request memory.SearchRequest,
-) (memory.SearchChannels, error) {
+) (channels memory.SearchChannels, returnErr error) {
 	request = request.Clone()
 	if request.Mode != memory.SearchFTS && request.Mode != memory.SearchHybrid {
 		return memory.SearchChannels{}, nil
@@ -96,7 +96,7 @@ func (MemoryFTSIndex) Search(
 	if err != nil {
 		return memory.SearchChannels{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, closeRows(rows)) }()
 	hits := make([]memory.ChannelHit, 0)
 	for rows.Next() {
 		var artifactID, entryID, versionID, text string
@@ -120,7 +120,8 @@ func (MemoryFTSIndex) Search(
 	if err := rows.Err(); err != nil {
 		return memory.SearchChannels{}, err
 	}
-	return memory.SearchChannels{FTS: hits}, nil
+	channels = memory.SearchChannels{FTS: hits}
+	return channels, nil
 }
 
 func (MemoryFTSIndex) VectorComplete(context.Context, sqlstore.DBTX, string, []artifact.Ref, memory.EmbeddingProfile) (bool, error) {
@@ -176,7 +177,7 @@ func (ExperienceFTSIndex) Search(
 	db sqlstore.DBTX,
 	scopeID, query string,
 	limit int,
-) ([]experience.SearchHit, error) {
+) (hits []experience.SearchHit, returnErr error) {
 	analyzed := memory.AnalyzeText(query)
 	if analyzed == "" {
 		return []experience.SearchHit{}, nil
@@ -193,8 +194,8 @@ func (ExperienceFTSIndex) Search(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	hits := make([]experience.SearchHit, 0, limit)
+	defer func() { returnErr = errors.Join(returnErr, closeRows(rows)) }()
+	hits = make([]experience.SearchHit, 0, limit)
 	for rows.Next() {
 		var artifactID string
 		var revision int64

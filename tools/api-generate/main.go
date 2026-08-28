@@ -60,10 +60,9 @@ func run(specification, target, packageName, clientInvoker string) error {
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if _, err := temporary.Write(generatedInput); err != nil {
-		temporary.Close()
-		return err
+		return errors.Join(err, temporary.Close())
 	}
 	if err := temporary.Close(); err != nil {
 		return err

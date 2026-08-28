@@ -147,7 +147,7 @@ func (i *MemoryVectorIndex) Search(
 	db sqlstore.DBTX,
 	scopeID string,
 	request memory.SearchRequest,
-) (memory.SearchChannels, error) {
+) (channels memory.SearchChannels, returnErr error) {
 	request = request.Clone()
 	if request.Mode != memory.SearchVector && request.Mode != memory.SearchHybrid {
 		return memory.SearchChannels{}, nil
@@ -197,7 +197,7 @@ func (i *MemoryVectorIndex) Search(
 	if err != nil {
 		return memory.SearchChannels{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, closeRows(rows)) }()
 	hits := make([]memory.ChannelHit, 0)
 	for rows.Next() {
 		var artifactID, entryID, versionID, text string
@@ -226,7 +226,8 @@ func (i *MemoryVectorIndex) Search(
 	if err := rows.Err(); err != nil {
 		return memory.SearchChannels{}, err
 	}
-	return memory.SearchChannels{Vector: hits}, nil
+	channels = memory.SearchChannels{Vector: hits}
+	return channels, nil
 }
 
 func (i *MemoryVectorIndex) VectorComplete(
@@ -263,8 +264,7 @@ func (i *MemoryVectorIndex) VectorComplete(
 			var identity headIdentity
 			var embeddingHash string
 			if err := actualRows.Scan(&identity.entryID, &identity.versionID, &identity.contentHash, &embeddingHash); err != nil {
-				actualRows.Close()
-				return false, err
+				return false, errors.Join(err, closeRows(actualRows))
 			}
 			actual[identity] = embeddingHash
 		}
@@ -342,8 +342,7 @@ func scanHeadIdentitySet(rows *sql.Rows) (map[headIdentity]struct{}, error) {
 	for rows.Next() {
 		var identity headIdentity
 		if err := rows.Scan(&identity.entryID, &identity.versionID, &identity.contentHash); err != nil {
-			rows.Close()
-			return nil, err
+			return nil, errors.Join(err, closeRows(rows))
 		}
 		result[identity] = struct{}{}
 	}

@@ -85,7 +85,7 @@ func (c providerHTTPClient) postJSON(ctx context.Context, path string, input, ou
 		}
 		return inference.WrapUnavailableError(operation, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	limited := io.LimitReader(response.Body, maxProviderResponseBytes+1)
 	body, readErr := io.ReadAll(limited)

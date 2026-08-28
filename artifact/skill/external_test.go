@@ -273,7 +273,9 @@ func TestRegistryRefreshesProjectionAndChecksLiveAvailability(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := file.WriteString("Changed.\n"); err != nil {
-		file.Close()
+		if closeErr := file.Close(); closeErr != nil {
+			t.Errorf("close changed Skill manifest: %v", closeErr)
+		}
 		t.Fatal(err)
 	}
 	if err := file.Close(); err != nil {

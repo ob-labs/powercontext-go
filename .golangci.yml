@@ -23,6 +23,7 @@ linters:
   enable:
     - bodyclose
     - durationcheck
+    - errcheck
     - ineffassign
     - wastedassign
     - whitespace

@@ -16,6 +16,7 @@ package sqlstore
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ob-labs/powercontext-go/artifact/handoff"
 )
@@ -24,14 +25,14 @@ import (
 // the authority behind scope-centric Handoff Report discovery.
 func HandoffScopeIDs(ctx context.Context, database *Database) ([]string, error) {
 	var result []string
-	err := database.Transaction(ctx, func(tx DBTX) error {
+	err := database.Transaction(ctx, func(tx DBTX) (returnErr error) {
 		rows, err := tx.QueryContext(ctx,
 			"SELECT DISTINCT scope_id FROM pc_artifact_heads WHERE family = ? ORDER BY scope_id", handoff.Family,
 		)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 		for rows.Next() {
 			var scope string
 			if err := rows.Scan(&scope); err != nil {

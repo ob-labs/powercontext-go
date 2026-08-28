@@ -284,12 +284,20 @@ type storedJobRow struct {
 func storedRows(t *testing.T, path string) []storedJobRow {
 	t.Helper()
 	db := openSidecar(t, path)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close scheduler database: %v", err)
+		}
+	}()
 	rows, err := db.Query(`SELECT id, next_run_time, job_state FROM powercontext_scheduler_jobs ORDER BY id`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close scheduler rows: %v", err)
+		}
+	}()
 	var result []storedJobRow
 	for rows.Next() {
 		var row storedJobRow

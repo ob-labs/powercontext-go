@@ -46,7 +46,11 @@ func TestSQLiteExperienceIndexUpgradesLegacyArtifactHeadsIdempotently(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close migrated artifact-head rows: %v", err)
+		}
+	}()
 	count := 0
 	for rows.Next() {
 		var position, notNull, primaryKey int
