@@ -67,6 +67,21 @@ source / artifact / trigger / inference
 - Do not introduce `pkg`, `src`, `common`, `utils`, `helpers`, or global
   `models`, `services`, and `repositories` packages.
 
+## Mandatory Modern Go skill
+
+- At the start of every agent session in this repository, load and follow the
+  installed `use-modern-go` skill from
+  `https://github.com/JetBrains/go-modern-guidelines` before performing
+  repository work.
+- Before analyzing, reviewing, writing, modifying, fixing, or refactoring Go
+  code, run the skill's `list` command for each relevant Go file or the
+  repository's resolved Go version, and read the complete unfiltered output.
+  Follow every applicable returned guideline.
+- Use the skill's `explain` command only for specific guideline IDs that need
+  further evaluation. If the skill is unavailable, cannot be loaded, or its
+  wrapper fails, stop before changing Go code and report the blocker instead
+  of relying on remembered guidance.
+
 ## Go conventions
 
 - Put `context.Context` first on every operation that can block or perform I/O.
