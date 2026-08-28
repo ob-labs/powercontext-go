@@ -5,6 +5,7 @@ GOMODCACHE ?=
 PNPM ?= pnpm
 UV ?= uv
 LICENSE_EYE ?= $(GO) run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
+LICENSE_DEPENDENCY_OUTPUT ?= coverage/dependencies.json
 
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
@@ -18,7 +19,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 PORTABLE_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...
 PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet \
+.PHONY: generate check-generated module-check contract-test license-check license-fix license-dependencies fmt fmt-check vet \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -48,6 +49,10 @@ license-check:
 license-fix:
 	$(LICENSE_EYE) -c .licenserc.yaml header fix
 	$(LICENSE_EYE) -c .licenserc.yaml header check
+
+license-dependencies: build
+	@$(RM) "$(LICENSE_DEPENDENCY_OUTPUT)"
+	$(GO) run ./tools/release licenses -binary bin/powercontext -edition standard -output "$(LICENSE_DEPENDENCY_OUTPUT)"
 
 fmt:
 	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')

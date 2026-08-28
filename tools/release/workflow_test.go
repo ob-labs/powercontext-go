@@ -61,7 +61,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	required := map[string][]string{
 		"master.yml": {
 			"name: Main", "quality:", "run: make check", "run: make contract-test",
-			"tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
+			"license-dependencies:", "run: make license-dependencies", "tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
 		"migration-gates.yml": {

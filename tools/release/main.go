@@ -23,7 +23,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fatal(errors.New("usage: release <asset|package|metadata|checksum|verify> [flags]"))
+		fatal(errors.New("usage: release <asset|package|metadata|checksum|licenses|verify> [flags]"))
 	}
 	var err error
 	switch os.Args[1] {
@@ -35,6 +35,8 @@ func main() {
 		err = runMetadata(os.Args[2:])
 	case "checksum":
 		err = runChecksum(os.Args[2:])
+	case "licenses":
+		err = runLicenseInventory(os.Args[2:], os.Stdout)
 	case "verify":
 		err = runVerify(os.Args[2:])
 	default:
