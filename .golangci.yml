@@ -26,6 +26,7 @@ linters:
     - errcheck
     - govet
     - ineffassign
+    - misspell
     - staticcheck
     - unused
     - wastedassign
