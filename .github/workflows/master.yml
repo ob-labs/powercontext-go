@@ -27,6 +27,23 @@ jobs:
       - name: Run the pinned lint policy
         run: make lint
 
+  go-compat:
+    name: go-compat
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Build every package with readonly modules
+        run: make build-all
+
   quality:
     runs-on: ubuntu-latest
     steps:

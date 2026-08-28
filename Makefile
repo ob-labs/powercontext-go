@@ -17,7 +17,7 @@ COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
 
-.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet \
+.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -73,6 +73,9 @@ fmt-check: lint-tools
 
 vet:
 	$(GO) vet ./...
+
+build-all:
+	$(GO) build -mod=readonly ./...
 
 test: unit-test e2e-test
 
