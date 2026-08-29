@@ -44,17 +44,18 @@ func newServerRunCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{
 		Use: "run", Short: "Run the HTTP and MCP service in the foreground.", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			config, err := server.LoadConfig()
-			if err != nil {
-				return err
-			}
+			override := server.HTTPConfigOverride{}
 			if command.Flags().Changed("host") {
-				config.HTTP.Host = host
+				override.Host = new(host)
 			}
 			if command.Flags().Changed("port") {
-				config.HTTP.Port = port
+				override.Port = new(port)
 			}
-			if err := config.Validate(); err != nil {
+			config, err := server.LoadConfigWithHTTPOverride(override)
+			if err != nil {
+				if _, ok := errors.AsType[*server.UnauthenticatedNonLoopbackBindError](err); ok {
+					return usageError(err)
+				}
 				return err
 			}
 			runner := state.serverRun

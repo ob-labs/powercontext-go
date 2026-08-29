@@ -26,9 +26,20 @@ import (
 
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
+	"github.com/ob-labs/powercontext-go/internal/transportpolicy"
 )
 
 var externalSkillTargetIDPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+// UnauthenticatedNonLoopbackBindError reports a Server bind that would expose
+// unauthenticated HTTP or MCP traffic outside the local machine.
+type UnauthenticatedNonLoopbackBindError struct{}
+
+func (*UnauthenticatedNonLoopbackBindError) Error() string {
+	return "server: refusing to bind an unauthenticated Server to a non-loopback address; " +
+		"enable authentication, keep the bind on loopback, or set " +
+		"POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true to opt in"
+}
 
 func (c ProcessConfig) Validate() error {
 	if strings.TrimSpace(c.HTTP.Host) == "" || c.HTTP.Port < 1 || c.HTTP.Port > 65_535 {
@@ -39,6 +50,9 @@ func (c ProcessConfig) Validate() error {
 	}
 	if c.Auth.Enabled && c.Auth.Token == "" {
 		return errors.New("server: bearer token is required when authentication is enabled")
+	}
+	if !c.Auth.Enabled && !c.AllowUnauthenticatedNonLoopback && !transportpolicy.IsLoopbackHost(c.HTTP.Host) {
+		return &UnauthenticatedNonLoopbackBindError{}
 	}
 	if err := validateDashboard(c.Dashboard); err != nil {
 		return err

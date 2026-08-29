@@ -33,24 +33,32 @@ const (
 // ProcessConfig is the validated process-owned configuration. Domain packages
 // intentionally never read it or inspect the environment.
 type ProcessConfig struct {
-	HTTP           HTTPConfig
-	MCP            MCPConfig
-	Auth           AuthConfig
-	Dashboard      DashboardConfig
-	Logging        LoggingConfig
-	Metrics        MetricsConfig
-	Tracing        TracingConfig
-	Runtime        RuntimeConfig
-	Database       DatabaseConfig
-	HandoffReport  HandoffReportConfig
-	Inference      InferenceConfig
-	ExternalSkills ExternalSkillsConfig
-	SchedulerPath  string
+	HTTP                            HTTPConfig
+	MCP                             MCPConfig
+	Auth                            AuthConfig
+	AllowUnauthenticatedNonLoopback bool
+	Dashboard                       DashboardConfig
+	Logging                         LoggingConfig
+	Metrics                         MetricsConfig
+	Tracing                         TracingConfig
+	Runtime                         RuntimeConfig
+	Database                        DatabaseConfig
+	HandoffReport                   HandoffReportConfig
+	Inference                       InferenceConfig
+	ExternalSkills                  ExternalSkillsConfig
+	SchedulerPath                   string
 }
 
 type HTTPConfig struct {
 	Host string
 	Port int
+}
+
+// HTTPConfigOverride contains only command-line values that were explicitly
+// provided and must be merged before ProcessConfig validation.
+type HTTPConfigOverride struct {
+	Host *string
+	Port *int
 }
 
 func (c HTTPConfig) Address() string { return net.JoinHostPort(c.Host, strconv.Itoa(c.Port)) }

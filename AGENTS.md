@@ -227,3 +227,7 @@ source / artifact / trigger / inference
   the final RoundTripper. Verify an unsafe override fails before the underlying
   transport runs, and allow an HTTP-labelled non-loopback route only when the
   caller supplies the client and explicitly vouches for transport security.
+- When a cross-field security policy depends on environment values plus CLI
+  overrides, merge every explicit override before the final validation. Verify
+  both directions: a safe override repairs an unsafe environment value, and an
+  unsafe override cannot replace a safe environment value without failing.

@@ -46,3 +46,9 @@ The binary itself does not require a Python runtime. Codex, Claude Code, Bub,
 Hermes, and LangGraph retain host-native Python adapters; DSH, OpenClaw,
 OpenCode, and Pi retain TypeScript adapters. Each adapter is isolated from the
 Go implementation and calls the Go Server over HTTP or MCP.
+
+The container images bind `0.0.0.0:8000` and declare the explicit
+controlled-network opt-in required for a published port. That opt-in does not
+provide authentication or encryption. Before exposing a container outside a
+controlled network, enable `POWERCONTEXT_SERVER_AUTH_ENABLED`, configure a
+strong `POWERCONTEXT_SERVER_AUTH_TOKEN`, and terminate TLS in front of it.

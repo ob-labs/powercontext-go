@@ -77,6 +77,13 @@ requires the native tokenizer and ONNX Runtime assets described in
 The same installation guide documents the optional native seekDB profile;
 SQLite remains the zero-dependency default.
 
+Plain HTTP is trusted only on loopback (`localhost`, `::1`, or any address in
+`127.0.0.0/8`). The Server refuses an unauthenticated non-loopback bind by
+default. For remote access, enable bearer authentication and terminate TLS in
+front of the Server; controlled networks or deployments with upstream TLS may
+instead opt in explicitly with
+`POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true`.
+
 Useful verification targets:
 
 ```sh

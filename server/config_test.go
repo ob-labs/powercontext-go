@@ -353,6 +353,72 @@ func TestLoadConfigRequiresBearerTokenWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestLoadConfigRejectsUnauthenticatedNonLoopbackBind(t *testing.T) {
+	t.Setenv(PowerContextHomeEnv, t.TempDir())
+	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
+	t.Setenv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK", "false")
+	_, err := LoadConfig()
+	if _, ok := errors.AsType[*UnauthenticatedNonLoopbackBindError](err); !ok {
+		t.Fatalf("LoadConfig() error = %v, want UnauthenticatedNonLoopbackBindError", err)
+	}
+}
+
+func TestLoadConfigAllowsAuthenticatedNonLoopbackBind(t *testing.T) {
+	t.Setenv(PowerContextHomeEnv, t.TempDir())
+	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "true")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_TOKEN", "server-secret")
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.HTTP.Host != "0.0.0.0" {
+		t.Fatalf("HTTP host = %q", config.HTTP.Host)
+	}
+}
+
+func TestLoadConfigAllowsExplicitUnauthenticatedNonLoopbackBind(t *testing.T) {
+	t.Setenv(PowerContextHomeEnv, t.TempDir())
+	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
+	t.Setenv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK", "true")
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !config.AllowUnauthenticatedNonLoopback {
+		t.Fatal("explicit unauthenticated non-loopback opt-in was not retained")
+	}
+}
+
+func TestLoadConfigWithHTTPOverrideValidatesFinalBind(t *testing.T) {
+	t.Run("safe override repairs unsafe environment", func(t *testing.T) {
+		t.Setenv(PowerContextHomeEnv, t.TempDir())
+		t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
+		t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
+		t.Setenv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK", "false")
+		config, err := LoadConfigWithHTTPOverride(HTTPConfigOverride{Host: new("127.0.0.2")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.HTTP.Host != "127.0.0.2" {
+			t.Fatalf("HTTP host = %q, want loopback override", config.HTTP.Host)
+		}
+	})
+
+	t.Run("unsafe override replaces safe environment", func(t *testing.T) {
+		t.Setenv(PowerContextHomeEnv, t.TempDir())
+		t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "127.0.0.1")
+		t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
+		t.Setenv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK", "false")
+		_, err := LoadConfigWithHTTPOverride(HTTPConfigOverride{Host: new("0.0.0.0")})
+		if _, ok := errors.AsType[*UnauthenticatedNonLoopbackBindError](err); !ok {
+			t.Fatalf("LoadConfigWithHTTPOverride() error = %v, want UnauthenticatedNonLoopbackBindError", err)
+		}
+	})
+}
+
 func TestLoadConfigNormalizesLoggingSettings(t *testing.T) {
 	t.Setenv(PowerContextHomeEnv, t.TempDir())
 	t.Setenv("POWERCONTEXT_SERVER_LOGGING_LEVEL", "warning")
