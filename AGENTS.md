@@ -227,3 +227,10 @@ source / artifact / trigger / inference
   the final RoundTripper. Verify an unsafe override fails before the underlying
   transport runs, and allow an HTTP-labelled non-loopback route only when the
   caller supplies the client and explicitly vouches for transport security.
+- When a shared policy is vendored into isolated adapters that cannot import
+  it, align every copy in the same change and pin each copy with a drift guard
+  that drives the shared test vectors through the adapter's production entry
+  point. Pair environment-dependent behavioral probes with always-on
+  source-structure assertions so the guard still fires where an adapter
+  dependency is unavailable, and verify the guard by reverting one vendored
+  copy and watching it fail.
