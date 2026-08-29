@@ -152,6 +152,29 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When defining or changing LF checkout rules, enumerate every tracked
+  byte-sensitive executable, module manifest or checksum, prompt, schema,
+  dataset, fixture, and generated-contract format, including extensionless
+  files. Verify representative paths with `git check-attr eol` and raw
+  working-tree bytes in a fresh `core.autocrlf=true` checkout so clean-filter
+  normalization cannot hide CRLF.
+- When Make recipes enable Bash nounset or pipefail globally, expand optional
+  environment variables in preflight guards with explicit defaults and run
+  real failed-pipeline and missing-variable probes on every supported Make
+  runtime; source-text checks alone do not prove the execution contract.
+- When a governance parser exempts a GitHub Actions reusable-workflow caller
+  from ordinary-job requirements, require a nonblank `uses` reference and
+  reject every keyword outside GitHub's supported caller-job set. Verify the
+  rule with fixtures for a valid caller, a blank reference, `timeout-minutes`,
+  and ordinary-only fields such as `runs-on` or `steps`.
+- When a repository gate mirrors an external structured schema, validate every
+  supported variant's required attributes and keep a valid fixture plus a
+  failing mutant for each variant boundary. Recheck the assumptions against
+  the current official schema before changing the validator.
+- When blank Issues are disabled, inventory every supported request class and
+  provide a distinct validated form or contact route for each. Verify that the
+  chooser routes bounded features separately from compatibility-sensitive
+  contract or platform proposals.
 - When `go install module@version` provisions a repository-local tool, run the
   install with the project-selected `go env GOVERSION` as the minimum
   `GOTOOLCHAIN`. Verify from an older bootstrap Go release that the installed
@@ -174,6 +197,10 @@ source / artifact / trigger / inference
   pull request's own semantic changes. Verify the base is an ancestor of the
   new Head and reconcile GitHub, REST, and local diff file counts before using
   prior tests, comments, or CI as evidence.
+- When integrating branches changes or removes a Go test path, remove helpers
+  that no remaining test calls. Verify the affected packages with both their
+  focused tests and the pinned lint policy so dead integration residue cannot
+  survive a green test run.
 - When a Go function retains an outer error value, do not redeclare `err` in a
   nested short declaration. Use operation-specific names and verify the change
   with the pinned `make lint` policy, including `govet` shadow analysis.

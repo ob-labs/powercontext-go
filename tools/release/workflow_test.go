@@ -17,6 +17,7 @@ package main
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -37,9 +38,10 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
-		"codeql.yml":          true,
-		"migration-gates.yml": true,
-		"provider-smoke.yml":  true,
+		"codeql.yml":           true,
+		"migration-gates.yml":  true,
+		"provider-smoke.yml":   true,
+		"windows-contract.yml": true,
 	}
 	paths, err := filepath.Glob(filepath.Join(workflows, "*.yml"))
 	if err != nil {
@@ -85,6 +87,11 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
 			"TestRealProviderSmoke", "timeout-minutes: 10",
 		},
+		"windows-contract.yml": {
+			"name: Windows contract checkout", "runs-on: windows-2025", "timeout-minutes: 10",
+			"Verify LF attributes and frozen fixture hashes", "Get-FileHash -Algorithm SHA256",
+			"git check-attr eol", "git diff --exit-code",
+		},
 		"e2e-harness.yml": {
 			"name: E2E harness", "validate:", "acceptance:", "database: [sqlite, oceanbase]",
 			"make harness-compose-acceptance", "Scan acceptance evidence",
@@ -120,6 +127,35 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	if strings.Contains(string(e2eHarness), "continue-on-error:") {
 		t.Error("e2e-harness.yml must not suppress acceptance or evidence failures")
+	}
+}
+
+func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	paths := []string{
+		".gitattributes",
+		"go.mod",
+		"go.sum",
+		"openapi/powercontext.yaml",
+		"artifact/memory/prompts/conversation.txt",
+		"artifact/memory/prompts/extraction.schema.json",
+		"evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl",
+		"api/v1/oas_client_gen.go",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			command := exec.CommandContext(t.Context(), "git", "check-attr", "eol", "--", path)
+			command.Dir = repository
+			output, err := command.Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.TrimSpace(string(output))
+			want := path + ": eol: lf"
+			if got != want {
+				t.Fatalf("checkout attribute = %q, want %q", got, want)
+			}
+		})
 	}
 }
 

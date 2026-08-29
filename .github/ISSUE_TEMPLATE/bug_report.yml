@@ -1,0 +1,73 @@
+name: Bug report
+description: Report reproducible incorrect behavior or a regression
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Provide observable evidence and remove credentials, private Source or Memory content, and unrelated logs.
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current behavior
+      description: What happened, including the public command, API, adapter, or workflow surface involved?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What observable result should have occurred instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest deterministic sequence that reproduces the problem.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Include bounded logs, errors, response status, or failing assertions. State when a path was skipped.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include PowerContext Go commit/version, Go version, OS/architecture, database, and relevant adapter.
+      placeholder: |
+        PowerContext Go: commit or version
+        Go: go version
+        OS/architecture:
+        Database/profile:
+        Adapter or client:
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and pull requests for the same problem.
+          required: true
+        - label: I removed credentials, private content, and unbounded logs from this report.
+          required: true
+        - label: I identified any skipped or unavailable verification instead of reporting it as passing.
+          required: true

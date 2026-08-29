@@ -6,7 +6,7 @@ counterpart or enforces a Go release constraint that does not exist in Python.
 
 | Python workflow | Go workflow | Deliberate adaptation |
 | --- | --- | --- |
-| `master.yml` | `master.yml` | Pinned lint and formatting, an independent Go 1.27 readonly package build with explicit SQLite development headers, race-enabled atomic coverage, built-binary dependency-license evidence, Go module verification, vet, generated transport contracts, Go tests, and the same Pi package replace Python lock, prek, and interpreter tests. |
+| `master.yml` | `master.yml` | Pinned lint and formatting, an independent Go 1.27 readonly package build with explicit SQLite development headers, race-enabled atomic coverage, built-binary dependency-license evidence, machine-checked contribution contracts, Go module verification, vet, generated transport contracts, Go tests, and the same Pi package replace Python lock, prek, and interpreter tests. |
 | `e2e-harness.yml` | `e2e-harness.yml` | The same validate/SQLite/OceanBase/evidence lifecycle drives the Go process and live OceanBase acceptance tests. |
 | `license-check.yml` | `license-check.yml` | Both call SkyWalking Eyes 0.8.0 directly. `make license-check` and `make license-fix` remain local entry points. |
 | `deploy-docs.yml` | `deploy-docs.yml` | Both build locked Zensical documentation and deploy GitHub Pages. |
@@ -15,13 +15,14 @@ counterpart or enforces a Go release constraint that does not exist in Python.
 | `release.yml` | `release.yml` | GitHub binary assets and GHCR replace PyPI; release verification and documentation deployment keep the same gates. |
 | `release-verify.yml` | `release-verify.yml` | Verification exercises published Go archives and image digests instead of Python distributions. |
 
-Three Go-specific workflows extend, rather than replace, that Python topology:
+Four Go-specific workflows extend, rather than replace, that Python topology:
 
 | Go workflow | Purpose |
 | --- | --- |
 | `migration-gates.yml` | Reusable PR assurance called by `master.yml`: frozen Python Oracle regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, live OceanBase, host adapters, evaluation, four-platform standard/Full builds, and CGO-disabled portable SDK cross-builds. |
 | `codeql.yml` | Go CodeQL analysis on pull requests, pushes to `main`, a weekly schedule, and manual dispatch. Pull request runs check out the exact submitted head commit before the explicit Go build. |
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
+| `windows-contract.yml` | Windows checkout-only contract guard: verifies LF attributes, frozen fixture SHA-256 values, and generated-contract cleanliness without claiming Windows binary support. |
 
 The committed `test/conformance/testdata/python-v0.0.2` baseline remains immutable. Pull requests execute the pinned
 Python Oracle to prove that regenerated portable fixtures, database interoperability, and HTTP behavior still match;
