@@ -38,6 +38,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
+		"codeql.yml":           true,
 		"migration-gates.yml":  true,
 		"provider-smoke.yml":   true,
 		"windows-contract.yml": true,
@@ -62,7 +63,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	required := map[string][]string{
 		"master.yml": {
-			"name: Main", "quality:", "run: make check", "run: make contract-test",
+			"name: Main", "go-compat:", "quality:", "run: make check", "run: make contract-test",
 			"tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
@@ -73,6 +74,13 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
 			"OceanBase live compatibility", "Standard (", "Full build tags (",
 			"Host adapters", "Evaluation control plane and console",
+		},
+		"codeql.yml": {
+			"name: CodeQL", "pull_request:", "push:", "branches: [main]", "schedule:", "workflow_dispatch:",
+			"security-events: write", "persist-credentials: false",
+			"github/codeql-action/init@", "build-mode: manual",
+			"CGO_ENABLED=1 go build -tags sqlite_fts5 ./...",
+			"github/codeql-action/analyze@",
 		},
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
@@ -145,6 +153,63 @@ func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
 				t.Fatalf("checkout attribute = %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+func TestGoCompatibilityJobUsesLocalReadonlyBuild(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  go-compat:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define go-compat before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: go-compat",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make build-all",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("go-compat job is missing %q", value)
+		}
+	}
+}
+
+func TestCoverageJobUsesRaceAtomicEvidenceContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  coverage:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define coverage before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: coverage",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make coverage",
+		"if: always()",
+		"coverage/coverage.out",
+		"coverage/summary.txt",
+		"if-no-files-found: warn",
+		"retention-days: 14",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("coverage job is missing %q", value)
+		}
 	}
 }
 
