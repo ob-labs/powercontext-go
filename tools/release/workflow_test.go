@@ -161,6 +161,65 @@ func TestMigrationQualityRunsModuleInventory(t *testing.T) {
 	t.Fatal("migration-gates.yml quality job does not execute make module-inventory")
 }
 
+func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Name           string            `yaml:"name"`
+			RunsOn         string            `yaml:"runs-on"`
+			TimeoutMinutes int               `yaml:"timeout-minutes"`
+			Env            map[string]string `yaml:"env"`
+			Steps          []struct {
+				Name string `yaml:"name"`
+				Uses string `yaml:"uses"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["generated-consumers"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no generated-consumers job")
+	}
+	if job.Name != "Generated consumers" || job.RunsOn != "ubuntu-24.04" || job.TimeoutMinutes != 20 {
+		t.Fatalf(
+			"generated-consumers job identity = (%q, %q, %d), want (%q, %q, %d)",
+			job.Name, job.RunsOn, job.TimeoutMinutes,
+			"Generated consumers", "ubuntu-24.04", 20,
+		)
+	}
+	if job.Env["GOTOOLCHAIN"] != "local" || job.Env["GOFLAGS"] != "-mod=readonly" {
+		t.Fatalf("generated-consumers job Go environment = %#v", job.Env)
+	}
+	wantSteps := []struct {
+		name string
+		uses string
+		run  string
+	}{
+		{name: "Check out", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
+		{name: "Set up the Go environment", uses: "./.github/actions/setup-go-env"},
+		{name: "Generate and test fresh Go consumers", run: "make generated-consumers"},
+	}
+	if len(job.Steps) != len(wantSteps) {
+		t.Fatalf("generated-consumers step count = %d, want %d", len(job.Steps), len(wantSteps))
+	}
+	for index, want := range wantSteps {
+		got := job.Steps[index]
+		if got.Name != want.name || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
+			t.Fatalf(
+				"generated-consumers step %d = (%q, %q, %q), want (%q, %q, %q)",
+				index, got.Name, got.Uses, strings.TrimSpace(got.Run), want.name, want.uses, want.run,
+			)
+		}
+	}
+}
+
 func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	paths := []string{

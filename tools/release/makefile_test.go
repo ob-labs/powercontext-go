@@ -38,7 +38,7 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "generated-consumers", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
@@ -177,6 +177,19 @@ func TestDownstreamCompatDisablesGoTestCaching(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "test -count=1 -mod=readonly ./...") {
 		t.Fatalf("make downstream-compat can reuse a cached external-Server result:\n%s", output)
+	}
+}
+
+func TestGeneratedConsumersTargetRunsFreshConsumerVerification(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "generated-consumers", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make generated-consumers dry-run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "go test -count=1 ./tools/generated-consumers") {
+		t.Fatalf("make generated-consumers does not run the uncached fresh-consumer check:\n%s", output)
 	}
 }
 

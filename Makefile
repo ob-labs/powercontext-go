@@ -45,7 +45,7 @@ MODULE_INVENTORY := test/module-inventory.json
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
-	check-portable downstream-compat package-standard package-full clean
+	check-portable generated-consumers downstream-compat package-standard package-full clean
 
 help: ## Show supported development, verification, and release commands.
 	@awk 'BEGIN { FS = ":.*##"; print "Supported targets:" } /^[[:alnum:]_-]+:.*##/ { printf "  %-28s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -78,6 +78,9 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 	$(GO) run ./tools/mcp-schema-generate
 	$(GO) run ./tools/traceability-generate -check
 	git diff --exit-code -- openapi api/v1 client/invoker_gen.go internal/mcpapi/schemas_gen.go integrations/dsh/plugins/powercontext/src/operations.generated.ts
+
+generated-consumers: ## Generate and test fresh Go consumers from public generator CLIs.
+	GOWORK=off $(GO) test -count=1 ./tools/generated-consumers
 
 module-check: ## Verify tidy readonly module metadata and checksums.
 	$(GO) mod tidy -diff
