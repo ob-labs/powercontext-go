@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 622,
-  "pending_case_count": 137,
+  "mapped_case_count": 638,
+  "pending_case_count": 121,
   "entries": [
     {
       "python": {
@@ -12273,8 +12273,15 @@
         "line": 87
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "test/transport/policy_test.go",
+          "test": "TestSharedLoopbackHostVectors"
+        }
+      ]
     },
     {
       "python": {
@@ -12283,8 +12290,15 @@
         "line": 92
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "test/transport/policy_test.go",
+          "test": "TestSharedLoopbackHostVectors"
+        }
+      ]
     },
     {
       "python": {
@@ -12293,8 +12307,15 @@
         "line": 96
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "test/transport/policy_test.go",
+          "test": "TestSharedPlaintextURLVectors"
+        }
+      ]
     },
     {
       "python": {
@@ -12303,8 +12324,15 @@
         "line": 106
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        }
+      ]
     },
     {
       "python": {
@@ -12313,8 +12341,20 @@
         "line": 115
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientAllowsLoopbackPlaintext"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientSendsBearerAndPreservesCallerHTTPClient"
+        }
+      ]
     },
     {
       "python": {
@@ -12323,8 +12363,20 @@
         "line": 119
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
+        }
+      ]
     },
     {
       "python": {
@@ -12333,8 +12385,20 @@
         "line": 128
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
+        }
+      ]
     },
     {
       "python": {
@@ -12343,8 +12407,15 @@
         "line": 135
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientAllowsLoopbackPlaintext"
+        }
+      ]
     },
     {
       "python": {
@@ -12353,8 +12424,15 @@
         "line": 140
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientAllowsExplicitlyTrustedCallerTransport"
+        }
+      ]
     },
     {
       "python": {
@@ -12363,8 +12441,20 @@
         "line": 157
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
+        }
+      ]
     },
     {
       "python": {
@@ -12373,8 +12463,20 @@
         "line": 172
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
+        }
+      ]
     },
     {
       "python": {
@@ -12383,8 +12485,15 @@
         "line": 183
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/config_test.go",
+          "test": "TestLoadConfigRejectsUnauthenticatedNonLoopbackBind"
+        }
+      ]
     },
     {
       "python": {
@@ -12393,8 +12502,15 @@
         "line": 191
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/config_test.go",
+          "test": "TestLoadConfigAllowsAuthenticatedNonLoopbackBind"
+        }
+      ]
     },
     {
       "python": {
@@ -12403,8 +12519,15 @@
         "line": 199
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/config_test.go",
+          "test": "TestLoadConfigAllowsExplicitUnauthenticatedNonLoopbackBind"
+        }
+      ]
     },
     {
       "python": {
@@ -12413,8 +12536,35 @@
         "line": 209
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "test/transport/policy_test.go",
+          "test": "TestSharedLoopbackHostVectors"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/codex/tests/test_contract.py",
+          "test": "test_codex_settings_accept_shared_loopback_hosts"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/codex/tests/test_contract.py",
+          "test": "test_codex_settings_reject_shared_non_loopback_plaintext_hosts"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/claude-code/tests/test_contract.py",
+          "test": "test_settings_accept_shared_loopback_hosts"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/claude-code/tests/test_contract.py",
+          "test": "test_settings_reject_shared_non_loopback_plaintext_hosts"
+        }
+      ]
     },
     {
       "python": {
@@ -12423,8 +12573,35 @@
         "line": 215
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "test/transport/policy_test.go",
+          "test": "TestSharedPlaintextURLVectors"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/codex/tests/test_contract.py",
+          "test": "test_codex_settings_accept_shared_loopback_hosts"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/codex/tests/test_contract.py",
+          "test": "test_codex_settings_reject_shared_non_loopback_plaintext_hosts"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/claude-code/tests/test_contract.py",
+          "test": "test_settings_accept_shared_loopback_hosts"
+        },
+        {
+          "kind": "py",
+          "file": "integrations/claude-code/tests/test_contract.py",
+          "test": "test_settings_reject_shared_non_loopback_plaintext_hosts"
+        }
+      ]
     }
   ]
 }
