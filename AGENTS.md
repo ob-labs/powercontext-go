@@ -135,3 +135,7 @@ source / artifact / trigger / inference
   reject every keyword outside GitHub's supported caller-job set. Verify the
   rule with fixtures for a valid caller, a blank reference, `timeout-minutes`,
   and ordinary-only fields such as `runs-on` or `steps`.
+- When a repository gate mirrors an external structured schema, validate every
+  supported variant's required attributes and keep a valid fixture plus a
+  failing mutant for each variant boundary. Recheck the assumptions against
+  the current official schema before changing the validator.

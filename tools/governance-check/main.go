@@ -26,7 +26,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var goDirective = regexp.MustCompile(`(?m)^go[ \t]+1\.27\.0\r?$`)
+var (
+	goDirective  = regexp.MustCompile(`(?m)^go[ \t]+1\.27\.0\r?$`)
+	issueFieldID = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+)
 
 type issueForm struct {
 	Name        string         `yaml:"name"`
@@ -38,14 +41,39 @@ type issueControl struct {
 	Type       string `yaml:"type"`
 	ID         string `yaml:"id"`
 	Attributes struct {
-		Options []struct {
-			Label    string `yaml:"label"`
-			Required bool   `yaml:"required"`
-		} `yaml:"options"`
+		Label   string        `yaml:"label"`
+		Value   string        `yaml:"value"`
+		Options []issueOption `yaml:"options"`
 	} `yaml:"attributes"`
 	Validations struct {
 		Required bool `yaml:"required"`
 	} `yaml:"validations"`
+}
+
+type issueOption struct {
+	Value      string
+	Label      string
+	Required   bool
+	isCheckbox bool
+}
+
+func (option *issueOption) UnmarshalYAML(unmarshal func(any) error) error {
+	var value string
+	if err := unmarshal(&value); err == nil {
+		option.Value = value
+		return nil
+	}
+	var checkbox struct {
+		Label    string `yaml:"label"`
+		Required bool   `yaml:"required"`
+	}
+	if err := unmarshal(&checkbox); err != nil {
+		return err
+	}
+	option.Label = checkbox.Label
+	option.Required = checkbox.Required
+	option.isCheckbox = true
+	return nil
 }
 
 type issueConfig struct {
@@ -144,6 +172,9 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 	seen := make(map[string]struct{})
 	for _, control := range form.Body {
 		if control.Type == "markdown" {
+			if strings.TrimSpace(control.Attributes.Value) == "" {
+				return fmt.Errorf("%s markdown element must define a value", name)
+			}
 			continue
 		}
 		if control.Type != "textarea" && control.Type != "input" && control.Type != "dropdown" && control.Type != "checkboxes" {
@@ -151,6 +182,12 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 		}
 		if control.ID == "" {
 			return fmt.Errorf("%s contains a field without an ID", name)
+		}
+		if !issueFieldID.MatchString(control.ID) {
+			return fmt.Errorf("%s contains invalid field ID %q", name, control.ID)
+		}
+		if strings.TrimSpace(control.Attributes.Label) == "" {
+			return fmt.Errorf("%s field %q must define a label", name, control.ID)
 		}
 		if _, exists := seen[control.ID]; exists {
 			return fmt.Errorf("%s contains duplicate field ID %q", name, control.ID)
@@ -161,9 +198,24 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 				return fmt.Errorf("%s checkboxes field %q must define options", name, control.ID)
 			}
 			for _, option := range control.Attributes.Options {
-				if strings.TrimSpace(option.Label) == "" || !option.Required {
+				if !option.isCheckbox || strings.TrimSpace(option.Label) == "" || !option.Required {
 					return fmt.Errorf("%s checkboxes field %q must require every labeled option", name, control.ID)
 				}
+			}
+		} else if control.Type == "dropdown" {
+			if len(control.Attributes.Options) == 0 {
+				return fmt.Errorf("%s dropdown field %q must define options", name, control.ID)
+			}
+			seenOptions := make(map[string]struct{}, len(control.Attributes.Options))
+			for _, option := range control.Attributes.Options {
+				value := strings.TrimSpace(option.Value)
+				if option.isCheckbox || value == "" {
+					return fmt.Errorf("%s dropdown field %q must define non-empty text options", name, control.ID)
+				}
+				if _, exists := seenOptions[value]; exists {
+					return fmt.Errorf("%s dropdown field %q contains duplicate option %q", name, control.ID, value)
+				}
+				seenOptions[value] = struct{}{}
 			}
 		} else if !control.Validations.Required {
 			return fmt.Errorf("%s field %q must be required", name, control.ID)

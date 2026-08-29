@@ -90,6 +90,67 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			},
 			wantError: "reusable-workflow caller keywords",
 		},
+		{
+			name: "valid dropdown",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", `
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - High
+    validations:
+      required: true
+`)
+			},
+		},
+		{
+			name: "missing field label",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", "      label: current_behavior\n", "")
+			},
+			wantError: "must define a label",
+		},
+		{
+			name: "missing markdown value",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", "      value: Provide bounded evidence.\n", "")
+			},
+			wantError: "markdown element must define a value",
+		},
+		{
+			name: "invalid field ID",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", `
+  - type: textarea
+    id: invalid id
+    attributes:
+      label: Invalid ID
+    validations:
+      required: true
+`)
+			},
+			wantError: "contains invalid field ID",
+		},
+		{
+			name: "duplicate dropdown option",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", `
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - Low
+    validations:
+      required: true
+`)
+			},
+			wantError: "contains duplicate option",
+		},
 	}
 
 	for _, test := range tests {
@@ -142,9 +203,13 @@ func validPullRequestTemplate(includeRelationship bool) string {
 
 func validIssueForm(name string, ids []string) string {
 	var builder strings.Builder
-	builder.WriteString("name: " + name + "\ndescription: Evidence-bearing form\nbody:\n")
+	builder.WriteString("name: " + name + "\ndescription: Evidence-bearing form\nbody:\n  - type: markdown\n    attributes:\n      value: Provide bounded evidence.\n")
 	for _, id := range ids {
-		builder.WriteString("  - type: textarea\n    id: " + id + "\n    validations:\n      required: true\n")
+		if id == "confirmations" {
+			builder.WriteString("  - type: checkboxes\n    id: confirmations\n    attributes:\n      label: Confirmations\n      options:\n        - label: I verified the report.\n          required: true\n")
+			continue
+		}
+		builder.WriteString("  - type: textarea\n    id: " + id + "\n    attributes:\n      label: " + id + "\n    validations:\n      required: true\n")
 	}
 	return builder.String()
 }
@@ -191,6 +256,34 @@ func reusableWorkflowCallerWithReference(reference string, extraLines ...string)
 	}
 	lines = append(lines, extraLines...)
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func appendFixtureFile(t *testing.T, root, name, contents string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(existing, contents...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func replaceFixtureText(t *testing.T, root, name, old, replacement string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(contents), old, replacement, 1)
+	if updated == string(contents) {
+		t.Fatalf("%s does not contain %q", name, old)
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeFixtureFile(t *testing.T, root, name, contents string) {
