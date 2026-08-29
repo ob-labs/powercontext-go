@@ -23,6 +23,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/mattn/go-sqlite3"
+
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 )
@@ -106,8 +107,8 @@ func TestArtifactCreateIntegrityNormalizesOnlyCommittedLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Errorf("close database: %v", err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
 		}
 	})
 	repository, err := NewArtifactRepository(SQLiteDialect, ExperienceArtifactCodec())

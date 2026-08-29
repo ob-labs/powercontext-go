@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	pcclient "github.com/ob-labs/powercontext-go/client"
 )
@@ -104,15 +105,15 @@ func run(ctx context.Context, opts options) error {
 	if err != nil {
 		return fmt.Errorf("resolve binary: %w", err)
 	}
-	if err := verifyVersion(ctx, binary, opts.version); err != nil {
-		return err
+	if versionErr := verifyVersion(ctx, binary, opts.version); versionErr != nil {
+		return versionErr
 	}
 
 	root, err := os.MkdirTemp("", "powercontext-release-")
 	if err != nil {
 		return fmt.Errorf("create smoke directory: %w", err)
 	}
-	defer os.RemoveAll(root) // best-effort cleanup of isolated, disposable state
+	defer func() { _ = os.RemoveAll(root) }() // best-effort cleanup of isolated, disposable state
 
 	baseEnvironment := isolatedEnvironment(os.Environ(), filepath.Join(root, "home"))
 	firstLog := filepath.Join(root, "server-public.log")
@@ -130,7 +131,7 @@ func run(ctx context.Context, opts options) error {
 		if err != nil {
 			return err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusOK {
 			return fmt.Errorf("default Handoff Report route returned HTTP %d", response.StatusCode)
 		}
@@ -181,7 +182,7 @@ func run(ctx context.Context, opts options) error {
 		if err != nil {
 			return err
 		}
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode != http.StatusNotFound {
 			return fmt.Errorf("disabled Handoff Report route returned HTTP %d", response.StatusCode)
 		}
@@ -387,18 +388,18 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 		return fmt.Errorf("Go Client readiness response is %T", readiness)
 	}
 	if remember {
-		result, err := api.RememberMemory(ctx, &v1.RememberMemoryRequest{
+		result, rememberErr := api.RememberMemory(ctx, &v1.RememberMemoryRequest{
 			ScopeID: smokeScope, Kind: "fact", Text: smokeText,
 		})
-		if err != nil {
-			return fmt.Errorf("remember through Go Client: %w", err)
+		if rememberErr != nil {
+			return fmt.Errorf("remember through Go Client: %w", rememberErr)
 		}
-		mutation, ok := result.(*v1.MemoryMutationResponseHeaders)
-		if !ok {
+		mutation, mutationOK := result.(*v1.MemoryMutationResponseHeaders)
+		if !mutationOK {
 			return fmt.Errorf("remember response is %T", result)
 		}
-		entry, ok := mutation.Response.Entry.Get()
-		if !ok || entry.Text != smokeText {
+		entry, entryOK := mutation.Response.Entry.Get()
+		if !entryOK || entry.Text != smokeText {
 			return errors.New("remember did not return the exact Memory entry")
 		}
 	}
@@ -420,7 +421,7 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 	return nil
 }
 
-func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) error {
+func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) (returnErr error) {
 	httpClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}
 	if token != "" {
 		httpClient.Transport = bearerTransport{token: token, next: http.DefaultTransport}
@@ -432,7 +433,11 @@ func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) error
 	if err != nil {
 		return fmt.Errorf("connect MCP: %w", err)
 	}
-	defer session.Close()
+	defer func() {
+		if closeErr := session.Close(); closeErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("close MCP session: %w", closeErr))
+		}
+	}()
 	tools, err := session.ListTools(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("list MCP tools: %w", err)

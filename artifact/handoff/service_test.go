@@ -110,8 +110,8 @@ func TestHandoffServiceDraftCanBeCorrectedBeforeTemporaryHandoffFinalized(t *tes
 		prepared.Content().State()[0].Text() != "Error mapping changed." {
 		t.Fatalf("prepared Handoff = %#v", prepared)
 	}
-	if _, found, err := backend.Latest(context.Background(), "handoff"); err != nil || found {
-		t.Fatalf("latest after finalize = found:%t err:%v, want empty", found, err)
+	if _, found, latestErr := backend.Latest(context.Background(), "handoff"); latestErr != nil || found {
+		t.Fatalf("latest after finalize = found:%t err:%v, want empty", found, latestErr)
 	}
 	draftHuman, err := Render(corrected, Human)
 	if err != nil {
@@ -186,8 +186,8 @@ func TestHandoffServiceStalePreparedCannotReplaceNewerMilestone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Commit(context.Background(), first); err != nil {
-		t.Fatal(err)
+	if _, commitErr := service.Commit(context.Background(), first); commitErr != nil {
+		t.Fatal(commitErr)
 	}
 	sessionA, err := service.Finalize(context.Background(), serviceDraft(t, "Session A state."))
 	if err != nil {

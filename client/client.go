@@ -26,12 +26,13 @@ import (
 	"strings"
 	"time"
 
-	v1 "github.com/ob-labs/powercontext-go/api/v1"
-	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"github.com/ogen-go/ogen/ogenerrors"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
+	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 )
 
 const DefaultTimeout = 10 * time.Second
@@ -348,7 +349,7 @@ func AsServerError(response any) (*ServerError, bool) {
 	if value, ok := response.(*ServerError); ok && value != nil {
 		return value, true
 	}
-	status := 0
+	var status int
 	switch response.(type) {
 	case *v1.UnauthorizedHeaders:
 		status = http.StatusUnauthorized

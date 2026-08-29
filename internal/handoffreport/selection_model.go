@@ -34,6 +34,7 @@ func NewSelectionEntry(scopeID string, revision int, status SelectionStatus, ref
 	}
 	return value, nil
 }
+
 func (v SelectionEntry) Validate() error {
 	if err := requireText("scope_id", v.scopeID, MaxScopeIDLength); err != nil {
 		return err

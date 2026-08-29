@@ -63,6 +63,7 @@ func (s ContentSource) SourceName() string { return s.name }
 func (s ContentSource) SourceMaterialization() Materialization {
 	return s.materialization
 }
+
 func (s ContentSource) SourceDescription() (string, bool) {
 	if s.description == nil {
 		return "", false
@@ -117,6 +118,7 @@ func (ContentAdapter) Resolve(_ context.Context, value ContentCapture) (ContentS
 		metadata:        metadata,
 	}, nil
 }
+
 func (ContentAdapter) Read(_ context.Context, value ContentSource) (ContentCapture, error) {
 	return NewContentCapture(value.name, value.content, value.metadata)
 }

@@ -296,7 +296,7 @@ func decodeIncubationOutput(encoded []byte) (IncubationOutput, error) {
 			return IncubationOutput{}, err
 		}
 		var evidenceIDs []string
-		if err := json.Unmarshal(evidenceRaw, &evidenceIDs); err != nil || evidenceIDs == nil {
+		if unmarshalErr := json.Unmarshal(evidenceRaw, &evidenceIDs); unmarshalErr != nil || evidenceIDs == nil {
 			return IncubationOutput{}, fmt.Errorf("Experience candidate evidence is invalid")
 		}
 		candidate, err := NewIncubationCandidate(proposal, evidenceIDs)

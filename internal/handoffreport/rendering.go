@@ -245,6 +245,7 @@ func renderAgent(value *ActivityAgent, labels map[string]string) string {
 	}
 	return strings.Join(values, " / ")
 }
+
 func renderVCS(value *ActivityVCSContext, labels map[string]string) string {
 	if value == nil {
 		return labels["none"]
@@ -258,12 +259,14 @@ func renderVCS(value *ActivityVCSContext, labels map[string]string) string {
 	}
 	return strings.Join(values, " / ")
 }
+
 func optionalReference(value *ExternalReference, labels map[string]string) string {
 	if value == nil {
 		return labels["none"]
 	}
 	return renderReference(*value)
 }
+
 func renderReference(value ExternalReference) string {
 	values := []string{codeSpan(string(value.Kind())), codeSpan(value.Provider()), codeSpan(value.ExternalID())}
 	if target := value.URL(); target != nil {
@@ -271,18 +274,21 @@ func renderReference(value ExternalReference) string {
 	}
 	return strings.Join(values, " / ")
 }
+
 func optionalText(value *string, labels map[string]string) string {
 	if value == nil {
 		return labels["none"]
 	}
 	return markdownText(*value)
 }
+
 func optionalCode(value *string, labels map[string]string) string {
 	if value == nil {
 		return labels["none"]
 	}
 	return codeSpan(*value)
 }
+
 func optionalTimestamp(value *time.Time, labels map[string]string) string {
 	if value == nil {
 		return labels["none"]
@@ -315,6 +321,7 @@ func collapseLines(value string) string {
 	}
 	return builder.String()
 }
+
 func markdownText(value string) string {
 	value = pythonHTMLEscape(collapseLines(value))
 	var builder strings.Builder
@@ -326,6 +333,7 @@ func markdownText(value string) string {
 	}
 	return builder.String()
 }
+
 func codeSpan(value string) string {
 	value = pythonHTMLEscape(collapseLines(value))
 	maxRun, current := 0, 0
@@ -345,10 +353,12 @@ func codeSpan(value string) string {
 	}
 	return delimiter + value + delimiter
 }
+
 func pythonHTMLEscape(value string) string {
 	escaped := html.EscapeString(value)
 	return strings.ReplaceAll(escaped, "&#39;", "&#x27;")
 }
+
 func yamlString(value string) string {
 	encoded, err := marshalUnescaped(value)
 	if err != nil {
@@ -356,6 +366,7 @@ func yamlString(value string) string {
 	}
 	return string(encoded)
 }
+
 func pythonISOTime(value time.Time) string {
 	_, offset := value.Zone()
 	sign := "+"
@@ -370,6 +381,7 @@ func pythonISOTime(value time.Time) string {
 	}
 	return fmt.Sprintf("%s%s%02d:%02d", base, sign, hours, minutes)
 }
+
 func orNone(value, fallback string) string {
 	if value == "" {
 		return fallback

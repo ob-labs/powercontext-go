@@ -18,7 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"io"
 	"os"
@@ -56,8 +56,8 @@ func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	var manifest dependencyManifest
-	if err := json.Unmarshal(contents, &manifest); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(contents, &manifest); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	if manifest.SchemaVersion != 1 || len(manifest.Modules) != result.GoModules || len(manifest.Native) != result.NativeDependencies {
 		t.Fatalf("license manifest = %#v", manifest)
@@ -359,11 +359,20 @@ func TestArchiveTreeIsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			t.Errorf("close deterministic release archive: %v", closeErr)
+		}
+	}()
 	gzipReader, err := gzip.NewReader(file)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		if err := gzipReader.Close(); err != nil {
+			t.Errorf("close deterministic release archive reader: %v", err)
+		}
+	}()
 	tarReader := tar.NewReader(gzipReader)
 	for {
 		header, err := tarReader.Next()
@@ -397,12 +406,20 @@ func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			t.Errorf("close release archive: %v", closeErr)
+		}
+	}()
 	compressed, err := gzip.NewReader(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer compressed.Close()
+	defer func() {
+		if err := compressed.Close(); err != nil {
+			t.Errorf("close release archive reader: %v", err)
+		}
+	}()
 	reader := tar.NewReader(compressed)
 	found := false
 	for {

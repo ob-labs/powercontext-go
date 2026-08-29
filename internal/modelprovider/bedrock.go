@@ -33,6 +33,7 @@ import (
 	bedrocktypes "github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/aws/smithy-go/auth/bearer"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
+
 	"github.com/ob-labs/powercontext-go/inference"
 )
 

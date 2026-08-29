@@ -103,8 +103,8 @@ func (s *HandoffReportStore) recordActivity(ctx context.Context, tx DBTX, event 
 	if err != nil {
 		return handoffreport.StoredActivity{}, err
 	}
-	if err := s.reserveActivityWriter(ctx, tx, event.ProjectID()); err != nil {
-		return handoffreport.StoredActivity{}, err
+	if reserveErr := s.reserveActivityWriter(ctx, tx, event.ProjectID()); reserveErr != nil {
+		return handoffreport.StoredActivity{}, reserveErr
 	}
 	existing, found, err := s.findActivityByIdentity(ctx, tx, event.Source(), event.SourceEventID())
 	if err != nil {
@@ -125,8 +125,8 @@ func (s *HandoffReportStore) recordActivity(ctx context.Context, tx DBTX, event 
 		return handoffreport.StoredActivity{}, fmt.Errorf("Handoff Report Activity cursor allocator is missing")
 	}
 	var cursor int64
-	if err := tx.QueryRowContext(ctx, quoteCursorIdentifier("SELECT cursor FROM pc_handoff_report_activity_heads WHERE project_id = ?"), event.ProjectID()).Scan(&cursor); err != nil {
-		return handoffreport.StoredActivity{}, err
+	if scanErr := tx.QueryRowContext(ctx, quoteCursorIdentifier("SELECT cursor FROM pc_handoff_report_activity_heads WHERE project_id = ?"), event.ProjectID()).Scan(&cursor); scanErr != nil {
+		return handoffreport.StoredActivity{}, scanErr
 	}
 	if cursor < 1 {
 		return handoffreport.StoredActivity{}, fmt.Errorf("invalid Handoff Report Activity cursor")
@@ -144,8 +144,8 @@ func (s *HandoffReportStore) recordActivity(ctx context.Context, tx DBTX, event 
         occurred_at, observed_at, period_at, time_basis, payload
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), event.ProjectID(), cursor, event.EventID(), reportNullableString(event.ScopeID()), event.Source(), event.SourceEventID(), occurred, handoffreport.UTCText(event.ObservedAt()), period, event.TimeBasis(), string(payload))
 	if err != nil {
-		existing, found, findErr := s.findActivityByIdentity(ctx, tx, event.Source(), event.SourceEventID())
-		if findErr == nil && found {
+		existing, retryFound, findErr := s.findActivityByIdentity(ctx, tx, event.Source(), event.SourceEventID())
+		if findErr == nil && retryFound {
 			return idempotentActivity(existing, payload)
 		}
 		return handoffreport.StoredActivity{}, err
@@ -213,6 +213,7 @@ func scanActivity(scanner rowScanner) (activityRow, error) {
 	row.payload, err = reportPayload(payload)
 	return row, err
 }
+
 func decodeActivityRow(row activityRow) (handoffreport.StoredActivity, error) {
 	if row.cursor < 1 {
 		return handoffreport.StoredActivity{}, invalidStoredActivity("cursor", "must be a positive integer")
@@ -233,6 +234,7 @@ func decodeActivityRow(row activityRow) (handoffreport.StoredActivity, error) {
 	}
 	return handoffreport.StoredActivity{Event: event, Cursor: row.cursor}, nil
 }
+
 func idempotentActivity(row activityRow, candidate []byte) (handoffreport.StoredActivity, error) {
 	existingSemantic, err := semanticActivityPayload(row.payload)
 	if err != nil {
@@ -266,7 +268,7 @@ func (s *HandoffReportStore) activityHighWatermark(ctx context.Context, tx DBTX,
 	return value, nil
 }
 
-func (s *HandoffReportStore) listActivityRows(ctx context.Context, tx DBTX, projectID string, start, end *time.Time, sources []handoffreport.ActivitySource, after int64, through *int64, limit int) ([]handoffreport.StoredActivity, error) {
+func (s *HandoffReportStore) listActivityRows(ctx context.Context, tx DBTX, projectID string, start, end *time.Time, sources []handoffreport.ActivitySource, after int64, through *int64, limit int) (result []handoffreport.StoredActivity, returnErr error) {
 	if err := reportIdentifier("project_id", projectID, handoffreport.MaxReportIDLength); err != nil {
 		return nil, activityRepositoryError(err)
 	}
@@ -317,8 +319,8 @@ func (s *HandoffReportStore) listActivityRows(ctx context.Context, tx DBTX, proj
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := []handoffreport.StoredActivity{}
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = []handoffreport.StoredActivity{}
 	for rows.Next() {
 		row, err := scanActivity(rows)
 		if err != nil {

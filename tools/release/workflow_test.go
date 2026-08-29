@@ -37,6 +37,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
+		"codeql.yml":          true,
 		"migration-gates.yml": true,
 		"provider-smoke.yml":  true,
 	}
@@ -60,8 +61,8 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	required := map[string][]string{
 		"master.yml": {
-			"name: Main", "quality:", "run: make check", "run: make contract-test",
-			"license-dependencies:", "run: make license-dependencies", "tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
+			"name: Main", "go-compat:", "license-dependencies:", "quality:", "run: make check", "run: make contract-test",
+			"run: make license-dependencies", "tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
 		"migration-gates.yml": {
@@ -71,6 +72,13 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
 			"OceanBase live compatibility", "Standard (", "Full build tags (",
 			"Host adapters", "Evaluation control plane and console",
+		},
+		"codeql.yml": {
+			"name: CodeQL", "pull_request:", "push:", "branches: [main]", "schedule:", "workflow_dispatch:",
+			"security-events: write", "persist-credentials: false",
+			"github/codeql-action/init@", "build-mode: manual",
+			"CGO_ENABLED=1 go build -tags sqlite_fts5 ./...",
+			"github/codeql-action/analyze@",
 		},
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
@@ -94,9 +102,9 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		},
 	}
 	for name, values := range required {
-		payload, err := os.ReadFile(filepath.Join(workflows, name))
-		if err != nil {
-			t.Fatal(err)
+		payload, readErr := os.ReadFile(filepath.Join(workflows, name))
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
 		contents := string(payload)
 		for _, value := range values {
@@ -114,19 +122,76 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 }
 
+func TestGoCompatibilityJobUsesLocalReadonlyBuild(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  go-compat:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define go-compat before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: go-compat",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make build-all",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("go-compat job is missing %q", value)
+		}
+	}
+}
+
+func TestCoverageJobUsesRaceAtomicEvidenceContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  coverage:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define coverage before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: coverage",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make coverage",
+		"if: always()",
+		"coverage/coverage.out",
+		"coverage/summary.txt",
+		"if-no-files-found: warn",
+		"retention-days: 14",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("coverage job is missing %q", value)
+		}
+	}
+}
+
 func TestCIThirdPartyExecutablesUseImmutableReferences(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	actionUse := regexp.MustCompile(
-		"(?m)^[\\t ]*(?:-[\\t ]*)?uses:[\\t ]+([^@\\s]+)@([^\\s#]+)([^\\r\\n]*)$",
+		`(?m)^[\t ]*(?:-[\t ]*)?uses:[\t ]+([^@\s]+)@([^\s#]+)([^\r\n]*)$`,
 	)
 	containerUse := regexp.MustCompile(
-		"(?m)^[\\t ]*(?:container|image|[A-Z][A-Z0-9_]*_IMAGE):[\\t ]+([^\\s#]+)",
+		`(?m)^[\t ]*(?:container|image|[A-Z][A-Z0-9_]*_IMAGE):[\t ]+([^\s#]+)`,
 	)
 	dockerActionUse := regexp.MustCompile(
-		"(?m)^[\\t ]*(?:-[\\t ]*)?uses:[\\t ]+docker://([^\\s#]+)",
+		`(?m)^[\t ]*(?:-[\t ]*)?uses:[\t ]+docker://([^\s#]+)`,
 	)
 	commit := regexp.MustCompile("^[0-9a-f]{40}$")
-	containerDigest := regexp.MustCompile("^[^@\\s]+@sha256:[0-9a-f]{64}$")
+	containerDigest := regexp.MustCompile(`^[^@\s]+@sha256:[0-9a-f]{64}$`)
 	staticContainerReferences := 0
 
 	err := filepath.WalkDir(filepath.Join(repository, ".github"), func(path string, entry fs.DirEntry, walkErr error) error {

@@ -136,8 +136,8 @@ func ingestConversation(
 			"benchmark": "locomo", "dataset_sha256": dataset.SHA256(),
 			"sample_id": conversation.SampleID(), "session_id": session.ID(), "date_time": session.DateTime(),
 		}
-		if _, err := operations.Capture(ctx, scopeID, session.ID(), RenderSession(conversation, session), metadata); err != nil {
-			return ConversationIngestion{}, err
+		if _, captureErr := operations.Capture(ctx, scopeID, session.ID(), RenderSession(conversation, session), metadata); captureErr != nil {
+			return ConversationIngestion{}, captureErr
 		}
 	}
 	page, err := operations.List(ctx, scopeID)
@@ -154,11 +154,11 @@ func ingestConversation(
 	cursor := int64(-1)
 	for {
 		flushStarted := time.Now()
-		flush, retries, err := retryTransient(ctx, attempts, func(ctx context.Context) (pcruntime.MemoryFlushResult, error) {
+		flush, retries, flushErr := retryTransient(ctx, attempts, func(ctx context.Context) (pcruntime.MemoryFlushResult, error) {
 			return operations.Flush(ctx, scopeID)
 		})
-		if err != nil {
-			return ConversationIngestion{}, err
+		if flushErr != nil {
+			return ConversationIngestion{}, flushErr
 		}
 		result.transientRetries += retries
 		if cursor < 0 {

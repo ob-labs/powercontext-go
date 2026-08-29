@@ -195,9 +195,11 @@ func initialMemoryCommit(t *testing.T, artifactID string) memory.Commit {
 type failingMemoryIndex struct{ failure error }
 
 func (f failingMemoryIndex) Capabilities() memory.Capabilities { return memory.Capabilities{FTS: true} }
+
 func (f failingMemoryIndex) Initialize(context.Context, sqlstore.DBTX) error {
 	return nil
 }
+
 func (f failingMemoryIndex) Replace(
 	context.Context,
 	sqlstore.DBTX,
@@ -207,6 +209,7 @@ func (f failingMemoryIndex) Replace(
 ) error {
 	return f.failure
 }
+
 func (f failingMemoryIndex) Search(
 	context.Context,
 	sqlstore.DBTX,
@@ -215,6 +218,7 @@ func (f failingMemoryIndex) Search(
 ) (memory.SearchChannels, error) {
 	return memory.SearchChannels{}, f.failure
 }
+
 func (f failingMemoryIndex) VectorComplete(
 	context.Context,
 	sqlstore.DBTX,
@@ -224,6 +228,7 @@ func (f failingMemoryIndex) VectorComplete(
 ) (bool, error) {
 	return false, f.failure
 }
+
 func (f failingMemoryIndex) Hydrate(
 	_ context.Context,
 	_ sqlstore.DBTX,

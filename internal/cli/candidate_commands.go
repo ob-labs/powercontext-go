@@ -22,9 +22,10 @@ import (
 	"os"
 	"unicode/utf8"
 
+	"github.com/spf13/cobra"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	pcclient "github.com/ob-labs/powercontext-go/client"
-	"github.com/spf13/cobra"
 )
 
 func newCandidateCommand(state *commandState) *cobra.Command {
@@ -269,7 +270,7 @@ func resolveInstructions(inline, path string) (string, error) {
 	if err != nil {
 		return "", errors.New("cannot read --instructions-file")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	const maximum = 1 << 20
 	content, err := io.ReadAll(io.LimitReader(file, maximum+1))
 	if err != nil || len(content) > maximum || !utf8.Valid(content) {

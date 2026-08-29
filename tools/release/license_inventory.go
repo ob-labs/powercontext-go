@@ -15,7 +15,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"flag"
 	"io"
@@ -44,8 +45,8 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 	flags.StringVar(&options.Edition, "edition", "standard", "standard or full")
 	flags.StringVar(&options.Output, "output", "", "new dependency-license manifest path")
 	flags.StringVar(&options.Repository, "repository", ".", "repository root")
-	if err := flags.Parse(arguments); err != nil {
-		return err
+	if parseErr := flags.Parse(arguments); parseErr != nil {
+		return parseErr
 	}
 	if flags.NArg() != 0 || options.Binary == "" || options.Output == "" ||
 		(options.Edition != "standard" && options.Edition != "full") {
@@ -63,18 +64,24 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	encoded, err := json.MarshalIndent(manifest, "", "  ")
+	encoded, err := json.Marshal(&manifest, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
 	encoded = append(encoded, '\n')
-	if err := os.MkdirAll(filepath.Dir(options.Output), 0o755); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(filepath.Dir(options.Output), 0o755); mkdirErr != nil {
+		return mkdirErr
 	}
-	if err := writeNewFile(options.Output, encoded, 0o644); err != nil {
-		return err
+	if writeErr := writeNewFile(options.Output, encoded, 0o644); writeErr != nil {
+		return writeErr
 	}
-	return json.NewEncoder(output).Encode(licenseInventoryResult{
+	result, err := json.Marshal(&licenseInventoryResult{
 		GoModules: len(manifest.Modules), NativeDependencies: len(manifest.Native), Output: filepath.Base(options.Output),
 	})
+	if err != nil {
+		return err
+	}
+	result = append(result, '\n')
+	_, err = output.Write(result)
+	return err
 }

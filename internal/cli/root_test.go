@@ -147,8 +147,8 @@ func TestRepeatedReferenceFlagPreservesComma(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := command.ParseFlags([]string{"--source-ref", "content/a,b"}); err != nil {
-		t.Fatal(err)
+	if parseErr := command.ParseFlags([]string{"--source-ref", "content/a,b"}); parseErr != nil {
+		t.Fatal(parseErr)
 	}
 	values, err := command.Flags().GetStringArray("source-ref")
 	if err != nil {

@@ -21,10 +21,11 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ogen-go/ogen/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
 // Server owns an isolated Prometheus registry for one PowerContext process.

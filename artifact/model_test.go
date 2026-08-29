@@ -60,9 +60,11 @@ type memoryCatalog struct{}
 func (memoryCatalog) Get(_ context.Context, value artifact.Artifact[string]) (artifact.Artifact[string], error) {
 	return value, nil
 }
+
 func (memoryCatalog) Latest(_ context.Context, value artifact.Artifact[string]) (artifact.Artifact[string], error) {
 	return value, nil
 }
+
 func (memoryCatalog) Revisions(_ context.Context, value artifact.Artifact[string]) ([]artifact.Artifact[string], error) {
 	return []artifact.Artifact[string]{value}, nil
 }
@@ -72,6 +74,7 @@ type memoryStore struct{}
 func (memoryStore) Add(_ context.Context, draft artifact.Draft[string]) (artifact.Artifact[string], error) {
 	return artifact.New("new", 1, draft)
 }
+
 func (memoryStore) Revise(_ context.Context, current artifact.Artifact[string], draft artifact.Draft[string]) (artifact.Artifact[string], error) {
 	return artifact.New(current.ID(), current.Revision()+1, draft)
 }

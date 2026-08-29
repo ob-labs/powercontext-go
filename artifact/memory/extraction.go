@@ -523,7 +523,7 @@ func decodeExtractionCandidate(encoded []byte) (ExtractionCandidate, error) {
 		return ExtractionCandidate{}, fmt.Errorf("Memory extraction candidate evidence is missing")
 	}
 	var evidenceIDs []string
-	if err := json.Unmarshal(evidenceRaw, &evidenceIDs); err != nil || evidenceIDs == nil {
+	if unmarshalErr := json.Unmarshal(evidenceRaw, &evidenceIDs); unmarshalErr != nil || evidenceIDs == nil {
 		return ExtractionCandidate{}, fmt.Errorf("Memory extraction candidate evidence is invalid")
 	}
 	entryID, err := decodeOptionalString(fields, "entry_id")

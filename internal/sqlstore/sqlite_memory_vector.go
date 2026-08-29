@@ -127,8 +127,7 @@ func (i *SQLiteMemoryVectorIndex) Replace(
 	for rows.Next() {
 		var vectorID int64
 		if err := rows.Scan(&vectorID); err != nil {
-			rows.Close()
-			return err
+			return errors.Join(err, closeRows(rows))
 		}
 		vectorIDs = append(vectorIDs, vectorID)
 	}
@@ -190,7 +189,7 @@ func (i *SQLiteMemoryVectorIndex) Search(
 	db DBTX,
 	scopeID string,
 	request memory.SearchRequest,
-) (memory.SearchChannels, error) {
+) (channels memory.SearchChannels, returnErr error) {
 	request = request.Clone()
 	if request.Mode != memory.SearchVector && request.Mode != memory.SearchHybrid {
 		return memory.SearchChannels{}, nil
@@ -214,8 +213,8 @@ func (i *SQLiteMemoryVectorIndex) Search(
 		return memory.SearchChannels{}, err
 	}
 	var total int64
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pc_memory_vector_entries").Scan(&total); err != nil {
-		return memory.SearchChannels{}, err
+	if countErr := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pc_memory_vector_entries").Scan(&total); countErr != nil {
+		return memory.SearchChannels{}, countErr
 	}
 	if total == 0 || len(request.Memories) == 0 {
 		return memory.SearchChannels{}, nil
@@ -251,7 +250,7 @@ func (i *SQLiteMemoryVectorIndex) Search(
 	if err != nil {
 		return memory.SearchChannels{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	hits := make([]memory.ChannelHit, 0)
 	for rows.Next() {
 		var artifactID, entryID, versionID, text string
@@ -280,7 +279,8 @@ func (i *SQLiteMemoryVectorIndex) Search(
 	if err := rows.Err(); err != nil {
 		return memory.SearchChannels{}, err
 	}
-	return memory.SearchChannels{Vector: hits}, nil
+	channels = memory.SearchChannels{Vector: hits}
+	return channels, nil
 }
 
 func (i *SQLiteMemoryVectorIndex) VectorComplete(
@@ -325,8 +325,7 @@ func (i *SQLiteMemoryVectorIndex) VectorComplete(
 				&value.vectorID, &identity.entryID, &identity.versionID,
 				&identity.contentHash, &value.embeddingHash,
 			); err != nil {
-				metadataRows.Close()
-				return false, err
+				return false, errors.Join(err, closeRows(metadataRows))
 			}
 			actual[identity] = value
 		}
@@ -425,8 +424,7 @@ func scanSQLiteHeadIdentities(rows *sql.Rows) (map[sqliteHeadIdentity]struct{}, 
 	for rows.Next() {
 		var identity sqliteHeadIdentity
 		if err := rows.Scan(&identity.entryID, &identity.versionID, &identity.contentHash); err != nil {
-			rows.Close()
-			return nil, err
+			return nil, errors.Join(err, closeRows(rows))
 		}
 		result[identity] = struct{}{}
 	}

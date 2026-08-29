@@ -41,20 +41,20 @@ func TestHandoffReportSchemaIsOptInAndCatalogRevisionsAreAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	project := reportProject(t, "prj-1", "one", 1, handoffreport.CatalogIncluded)
-	if _, err := store.CreateProject(ctx, project, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, createErr := store.CreateProject(ctx, project, reportTime(1)); createErr != nil {
+		t.Fatal(createErr)
 	}
 	workstream := reportWorkstream(t, "scope-a", "prj-1", 1, handoffreport.CatalogIncluded)
-	if _, err := store.RegisterWorkstream(ctx, workstream, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, registerErr := store.RegisterWorkstream(ctx, workstream, reportTime(1)); registerErr != nil {
+		t.Fatal(registerErr)
 	}
 	updated := reportProject(t, "prj-1", "one", 2, handoffreport.CatalogArchived)
-	if _, err := store.UpdateProject(ctx, updated, 1, reportTime(2)); err != nil {
-		t.Fatal(err)
+	if _, updateErr := store.UpdateProject(ctx, updated, 1, reportTime(2)); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	page, err := store.ListProjects(ctx, nil, 50, false)
 	if err != nil {
@@ -68,8 +68,8 @@ func TestHandoffReportSchemaIsOptInAndCatalogRevisionsAreAtomic(t *testing.T) {
 		t.Fatalf("all projects = %#v, %v", page, err)
 	}
 	var revisions int
-	if err := database.SQLDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM pc_handoff_report_project_revisions WHERE project_id = ?", "prj-1").Scan(&revisions); err != nil {
-		t.Fatal(err)
+	if queryErr := database.SQLDB().QueryRowContext(ctx, "SELECT COUNT(*) FROM pc_handoff_report_project_revisions WHERE project_id = ?", "prj-1").Scan(&revisions); queryErr != nil {
+		t.Fatal(queryErr)
 	}
 	if revisions != 2 {
 		t.Fatalf("revision count = %d", revisions)
@@ -81,16 +81,16 @@ func TestHandoffReportSchemaIsOptInAndCatalogRevisionsAreAtomic(t *testing.T) {
 		t.Fatalf("expected current version 2 conflict, got %v", err)
 	}
 	var version int
-	if err := database.SQLDB().QueryRowContext(ctx, "SELECT version FROM pc_handoff_report_projects WHERE project_id = ?", "prj-1").Scan(&version); err != nil {
-		t.Fatal(err)
+	if queryErr := database.SQLDB().QueryRowContext(ctx, "SELECT version FROM pc_handoff_report_projects WHERE project_id = ?", "prj-1").Scan(&version); queryErr != nil {
+		t.Fatal(queryErr)
 	}
 	if version != 2 {
 		t.Fatalf("failed CAS changed project version to %d", version)
 	}
 
 	updatedWorkstream := reportWorkstream(t, "scope-a", "prj-1", 2, handoffreport.CatalogIncluded)
-	if _, err := store.UpdateWorkstream(ctx, updatedWorkstream, 1, reportTime(2)); err != nil {
-		t.Fatal(err)
+	if _, updateErr := store.UpdateWorkstream(ctx, updatedWorkstream, 1, reportTime(2)); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	staleWorkstream := reportWorkstream(t, "scope-a", "prj-1", 2, handoffreport.CatalogArchived)
 	_, err = store.UpdateWorkstream(ctx, staleWorkstream, 1, reportTime(3))
@@ -114,16 +114,16 @@ func TestHandoffReportCatalogCreatesProjectsAndResolvesScopeMembership(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	project := reportProject(t, "prj-1", "powercontext", 1, handoffreport.CatalogIncluded)
-	if _, err := store.CreateProject(ctx, project, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, createErr := store.CreateProject(ctx, project, reportTime(1)); createErr != nil {
+		t.Fatal(createErr)
 	}
 	workstream := reportWorkstream(t, "scope-report", project.ProjectID(), 1, handoffreport.CatalogIncluded)
-	if _, err := store.RegisterWorkstream(ctx, workstream, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, registerErr := store.RegisterWorkstream(ctx, workstream, reportTime(1)); registerErr != nil {
+		t.Fatal(registerErr)
 	}
 	gotProject, err := store.GetProject(ctx, project.ProjectID())
 	if err != nil || !reflect.DeepEqual(gotProject, project) {
@@ -143,12 +143,12 @@ func TestHandoffReportCatalogEnforcesProjectWorkstreamAndScopeUniqueness(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	first := reportProject(t, "prj-1", "same-key", 1, handoffreport.CatalogIncluded)
-	if _, err := store.CreateProject(ctx, first, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, createErr := store.CreateProject(ctx, first, reportTime(1)); createErr != nil {
+		t.Fatal(createErr)
 	}
 	_, err = store.CreateProject(ctx, reportProject(t, "prj-2", "same-key", 1, handoffreport.CatalogIncluded), reportTime(1))
 	var projectConflict *handoffreport.ProjectConflictError
@@ -161,8 +161,8 @@ func TestHandoffReportCatalogEnforcesProjectWorkstreamAndScopeUniqueness(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.RegisterWorkstream(ctx, firstWorkstream, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, registerErr := store.RegisterWorkstream(ctx, firstWorkstream, reportTime(1)); registerErr != nil {
+		t.Fatal(registerErr)
 	}
 	duplicateKey, err := handoffreport.NewWorkstreamDescriptor("scope-2", first.ProjectID(), &key, "Duplicate", handoffreport.WorkstreamFeature, handoffreport.CatalogIncluded, nil, nil, 1)
 	if err != nil {
@@ -175,8 +175,8 @@ func TestHandoffReportCatalogEnforcesProjectWorkstreamAndScopeUniqueness(t *test
 	}
 
 	second := reportProject(t, "prj-2", "second-key", 1, handoffreport.CatalogIncluded)
-	if _, err := store.CreateProject(ctx, second, reportTime(1)); err != nil {
-		t.Fatal(err)
+	if _, createErr := store.CreateProject(ctx, second, reportTime(1)); createErr != nil {
+		t.Fatal(createErr)
 	}
 	movedScope := reportWorkstream(t, "scope-1", second.ProjectID(), 1, handoffreport.CatalogIncluded)
 	_, err = store.RegisterWorkstream(ctx, movedScope, reportTime(1))
@@ -194,16 +194,16 @@ func TestHandoffReportCatalogPaginatesAndExcludesArchivedProjectsByDefault(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	for index, id := range []string{"prj-a", "prj-b", "prj-c"} {
-		if _, err := store.CreateProject(ctx, reportProject(t, id, "project-"+id, 1, handoffreport.CatalogIncluded), reportTime(index+1)); err != nil {
-			t.Fatal(err)
+		if _, createErr := store.CreateProject(ctx, reportProject(t, id, "project-"+id, 1, handoffreport.CatalogIncluded), reportTime(index+1)); createErr != nil {
+			t.Fatal(createErr)
 		}
 	}
-	if _, err := store.UpdateProject(ctx, reportProject(t, "prj-b", "project-prj-b", 2, handoffreport.CatalogArchived), 1, reportTime(4)); err != nil {
-		t.Fatal(err)
+	if _, updateErr := store.UpdateProject(ctx, reportProject(t, "prj-b", "project-prj-b", 2, handoffreport.CatalogArchived), 1, reportTime(4)); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	first, err := store.ListProjects(ctx, nil, 1, false)
 	if err != nil || len(first.Items) != 1 || first.Items[0].ProjectID() != "prj-a" || first.NextCursor == nil || *first.NextCursor != "prj-a" {
@@ -224,8 +224,8 @@ func TestHandoffReportActivityIsGloballyIdempotentAndPurgeKeepsCursor(t *testing
 	ctx := context.Background()
 	database := openTestDatabase(t)
 	store, _ := sqlstore.NewHandoffReportStore(database, sqlstore.SQLiteDialect)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	project := reportProject(t, "prj-1", "one", 1, handoffreport.CatalogIncluded)
 	if _, err := store.CreateProject(ctx, project, reportTime(1)); err != nil {
@@ -276,8 +276,8 @@ func TestHandoffReportWorkspaceRequiresDetachBeforeProjectMove(t *testing.T) {
 	ctx := context.Background()
 	database := openTestDatabase(t)
 	store, _ := sqlstore.NewHandoffReportStore(database, sqlstore.SQLiteDialect)
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	for _, value := range []handoffreport.ProjectDescriptor{reportProject(t, "prj-1", "one", 1, handoffreport.CatalogIncluded), reportProject(t, "prj-2", "two", 1, handoffreport.CatalogIncluded)} {
 		if _, err := store.CreateProject(ctx, value, reportTime(1)); err != nil {
@@ -330,8 +330,8 @@ func TestHandoffReportWorkspaceRejectsUnknownProjectAndMissingExactVersion(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	subpath := "."
 	repository, err := handoffreport.NewRepositoryRef(handoffreport.RepositoryLocal, nil, nil, &subpath)
@@ -363,6 +363,7 @@ func reportProject(t *testing.T, id, key string, version int, state handoffrepor
 	}
 	return value
 }
+
 func reportWorkstream(t *testing.T, scope, project string, version int, state handoffreport.CatalogState) handoffreport.WorkstreamDescriptor {
 	t.Helper()
 	value, err := handoffreport.NewWorkstreamDescriptor(scope, project, nil, "Workstream", handoffreport.WorkstreamFeature, state, nil, nil, version)
@@ -371,6 +372,7 @@ func reportWorkstream(t *testing.T, scope, project string, version int, state ha
 	}
 	return value
 }
+
 func reportActivity(t *testing.T, id, project, sourceID string, observed, occurred time.Time, title *string) handoffreport.ActivityEvent {
 	t.Helper()
 	value, err := handoffreport.NewActivityEvent(handoffreport.ActivityEventInput{EventID: id, ProjectID: project, Source: handoffreport.ActivityGitCommit, SourceEventID: sourceID, OccurredAt: &occurred, ObservedAt: observed.UTC(), TimeBasis: handoffreport.TimeSourceReported, Title: title})
@@ -379,6 +381,7 @@ func reportActivity(t *testing.T, id, project, sourceID string, observed, occurr
 	}
 	return value
 }
+
 func reportTime(day int) time.Time {
 	return time.Date(2026, time.August, day, 10, 0, 0, 123456000, time.UTC)
 }

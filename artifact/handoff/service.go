@@ -137,8 +137,8 @@ func (s *Service) Commit(ctx context.Context, prepared Prepared) (Handoff, error
 		}
 		return Handoff{}, &artifact.RevisionConflictError{Requested: requested, Current: currentRef}
 	}
-	if err := s.validateEvidence(ctx, prepared.content); err != nil {
-		return Handoff{}, err
+	if validationErr := s.validateEvidence(ctx, prepared.content); validationErr != nil {
+		return Handoff{}, validationErr
 	}
 	draft, err := NewArtifactDraft(prepared.content, sourceLineage(prepared.content), artifactLineage(prepared.content))
 	if err != nil {

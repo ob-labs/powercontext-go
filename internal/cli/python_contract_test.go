@@ -42,8 +42,11 @@ const pendingCandidateJSON = `{
 
 func TestCLIHelpAndInstalledRoleCommands(t *testing.T) {
 	for _, arguments := range [][]string{
-		{"-h"}, {"--help"}, {"experience", "--help"},
-		{"skill", "--help"}, {"external-skill", "--help"},
+		{"-h"},
+		{"--help"},
+		{"experience", "--help"},
+		{"skill", "--help"},
+		{"external-skill", "--help"},
 	} {
 		stdout, _, err := executeContractCLI(t, nil, arguments...)
 		if err != nil {

@@ -77,6 +77,7 @@ func SelectionEnvelope(report Report) (map[string]any, error) {
 	}
 	return map[string]any{"schema": "powercontext.handoff-report-selection.v1", "project_id": report.project.ProjectID(), "project_revision": report.project.Version(), "normalized_filters": report.normalizedFilters, "normalized_period": report.normalizedPeriod, "selection_consistency": "optimistic_stable", "activity_cursor": report.activityCursor, "baseline_selection": baseline, "end_selection": end, "activity_selection": activity}, nil
 }
+
 func SelectionDigest(report Report) (string, error) {
 	value, err := SelectionEnvelope(report)
 	if err != nil {
@@ -84,6 +85,7 @@ func SelectionDigest(report Report) (string, error) {
 	}
 	return digest(value)
 }
+
 func ReportDigest(report Report) (string, error) {
 	value, err := report.object(false, true)
 	if err != nil {
@@ -91,6 +93,7 @@ func ReportDigest(report Report) (string, error) {
 	}
 	return digest(value)
 }
+
 func FinalizeDigests(report Report) (Report, error) {
 	if err := report.Validate(); err != nil {
 		return Report{}, err
@@ -110,6 +113,7 @@ func FinalizeDigests(report Report) (Report, error) {
 	}
 	return report, nil
 }
+
 func digest(value any) (string, error) {
 	encoded, err := CanonicalJSONBytes(value)
 	if err != nil {
@@ -216,6 +220,7 @@ func normalizeCanonical(value any) (any, error) {
 		return nil, &CanonicalizationError{Code: "unsupported-type", Detail: reflected.Type().String()}
 	}
 }
+
 func stringsContainsFloat(value string) bool {
 	for _, marker := range []string{".", "e", "E"} {
 		if slices.Contains([]byte(value), marker[0]) {
@@ -224,12 +229,14 @@ func stringsContainsFloat(value string) bool {
 	}
 	return false
 }
+
 func canonicalTimePtr(value *time.Time) any {
 	if value == nil {
 		return nil
 	}
 	return UTCText(*value)
 }
+
 func cloneJSONMap(value map[string]any) map[string]any {
 	if value == nil {
 		return nil

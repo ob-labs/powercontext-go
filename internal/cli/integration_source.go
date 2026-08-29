@@ -93,7 +93,7 @@ func refreshIntegrationCheckout(
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	if mkdirErr := os.MkdirAll(parent, 0o755); mkdirErr != nil {
 		return "", errors.New("cannot create integration checkout directory")
 	}
 	target, err = resolvePath(target)
@@ -114,11 +114,11 @@ func refreshIntegrationCheckout(
 			_ = os.RemoveAll(staging)
 		}
 	}()
-	if _, err := commands.Run(ctx, "git", "clone", "--depth", "1", "--branch", ref, cloneURL, staging); err != nil {
+	if _, cloneErr := commands.Run(ctx, "git", "clone", "--depth", "1", "--branch", ref, cloneURL, staging); cloneErr != nil {
 		return "", errors.New("failed to clone the GitHub source")
 	}
-	if err := validate(staging); err != nil {
-		return "", err
+	if validationErr := validate(staging); validationErr != nil {
+		return "", validationErr
 	}
 	backup := ""
 	if _, statErr := os.Lstat(target); statErr == nil {
@@ -126,16 +126,16 @@ func refreshIntegrationCheckout(
 		if err != nil {
 			return "", errors.New("cannot create integration backup path")
 		}
-		if err := os.Remove(backup); err != nil {
-			return "", err
+		if removeErr := os.Remove(backup); removeErr != nil {
+			return "", removeErr
 		}
-		if err := os.Rename(target, backup); err != nil {
+		if renameErr := os.Rename(target, backup); renameErr != nil {
 			return "", errors.New("cannot preserve the previous integration checkout")
 		}
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return "", errors.New("cannot inspect integration checkout")
 	}
-	if err := os.Rename(staging, target); err != nil {
+	if activateErr := os.Rename(staging, target); activateErr != nil {
 		if backup != "" {
 			_ = os.Rename(backup, target)
 		}

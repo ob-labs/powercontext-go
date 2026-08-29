@@ -64,13 +64,13 @@ func TestMemoryFlushArtifactAndCursorCASAreOneTransaction(t *testing.T) {
 	// Install a competing generation after observation. Apply writes Memory
 	// first, then fails cursor CAS; the surrounding transaction must roll both
 	// authoritative Memory and projections back.
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		_, saveErr := (sqlstore.SourceCursorRepository{}).Save(
 			ctx, tx, "scope-flush", trigger.SourceWindowName, source.NewCursor(0), nil,
 		)
 		return saveErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	_, err = store.ApplyWindow(ctx, trigger.SourceWindowName, plan, next, generation)
 	var conflict *sqlstore.GenerationConflictError

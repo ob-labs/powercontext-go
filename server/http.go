@@ -24,6 +24,9 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	"github.com/ob-labs/powercontext-go/internal/httpapi"
@@ -32,8 +35,6 @@ import (
 	servermetrics "github.com/ob-labs/powercontext-go/internal/observability/metrics"
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"github.com/ob-labs/powercontext-go/internal/webui"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type HTTPOptions struct {

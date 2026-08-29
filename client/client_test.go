@@ -28,9 +28,10 @@ import (
 	"time"
 
 	"github.com/go-faster/jx"
-	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
 const capabilitiesJSON = `{"source_types":[],"artifact_families":[],"memory_extraction":false,"experience_generation":false,"managed_skill_generation":false,"external_skill_registry":false,"handoff_generation":false,"search_modes":[],"context_versions":[]}`

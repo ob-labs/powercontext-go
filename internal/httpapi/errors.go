@@ -23,9 +23,10 @@ import (
 	"strconv"
 	"strings"
 
-	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ogen-go/ogen/ogenerrors"
 	"github.com/ogen-go/ogen/validate"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
 var (

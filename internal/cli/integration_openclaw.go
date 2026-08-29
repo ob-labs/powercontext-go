@@ -59,8 +59,8 @@ func newSetupOpenClawCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return errors.New("OpenClaw CLI is not installed or is not on PATH")
 			}
-			if _, err := supportedOpenClawVersion(command.Context(), state.system, executable); err != nil {
-				return err
+			if _, versionErr := supportedOpenClawVersion(command.Context(), state.system, executable); versionErr != nil {
+				return versionErr
 			}
 			normalizedURL, err := normalizeOpenClawServerURL(serverURL)
 			if err != nil {
@@ -77,14 +77,14 @@ func newSetupOpenClawCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := buildOpenClawPlugin(command.Context(), state.system, pluginPath, runtime.GOOS); err != nil {
-				return err
+			if buildErr := buildOpenClawPlugin(command.Context(), state.system, pluginPath, runtime.GOOS); buildErr != nil {
+				return buildErr
 			}
-			if _, err := state.system.Run(command.Context(), executable, "plugins", "install", "--link", "--force", pluginPath); err != nil {
-				return err
+			if _, installErr := state.system.Run(command.Context(), executable, "plugins", "install", "--link", "--force", pluginPath); installErr != nil {
+				return installErr
 			}
-			if err := configureOpenClaw(command.Context(), state.system, executable, normalizedURL, scopeMode); err != nil {
-				return err
+			if configureErr := configureOpenClaw(command.Context(), state.system, executable, normalizedURL, scopeMode); configureErr != nil {
+				return configureErr
 			}
 			result := map[string]string{
 				"plugin": openClawPluginName, "plugin_path": pluginPath, "server_url": normalizedURL,
@@ -248,11 +248,11 @@ func buildOpenClawPlugin(
 	if err != nil {
 		return errors.New("pnpm is not installed or is not on PATH; it is required to build the OpenClaw plugin")
 	}
-	if _, err := commands.RunTimeout(ctx, 10*time.Minute, executable, "--dir", pluginPath, "install", "--frozen-lockfile"); err != nil {
-		return err
+	if _, installErr := commands.RunTimeout(ctx, 10*time.Minute, executable, "--dir", pluginPath, "install", "--frozen-lockfile"); installErr != nil {
+		return installErr
 	}
-	if _, err := commands.RunTimeout(ctx, 10*time.Minute, executable, "--dir", pluginPath, "run", "build"); err != nil {
-		return err
+	if _, buildErr := commands.RunTimeout(ctx, 10*time.Minute, executable, "--dir", pluginPath, "run", "build"); buildErr != nil {
+		return buildErr
 	}
 	info, err := os.Stat(filepath.Join(pluginPath, "dist", "index.js"))
 	if err != nil || !info.Mode().IsRegular() {

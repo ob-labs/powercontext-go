@@ -18,8 +18,9 @@ import (
 	"errors"
 	"os"
 
-	"github.com/ob-labs/powercontext-go/server"
 	"github.com/spf13/cobra"
+
+	"github.com/ob-labs/powercontext-go/server"
 )
 
 const (
@@ -42,6 +43,7 @@ func newSetupCommand(state *commandState) *cobra.Command {
 	)
 	return command
 }
+
 func prepareDataDirectory() (string, error) {
 	directory, err := server.PowerContextDataDir()
 	if err != nil {

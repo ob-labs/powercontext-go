@@ -186,8 +186,8 @@ func Load(path string) (Dataset, error) {
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.UseNumber()
 	var raw []map[string]any
-	if err := decoder.Decode(&raw); err != nil {
-		return Dataset{}, fmt.Errorf("decode LoCoMo dataset: %w", err)
+	if decodeErr := decoder.Decode(&raw); decodeErr != nil {
+		return Dataset{}, fmt.Errorf("decode LoCoMo dataset: %w", decodeErr)
 	}
 	if len(raw) == 0 {
 		return Dataset{}, fmt.Errorf("LoCoMo dataset must be a non-empty JSON array")
@@ -195,9 +195,9 @@ func Load(path string) (Dataset, error) {
 	conversations := make([]Conversation, 0, len(raw))
 	seen := make(map[string]struct{}, len(raw))
 	for index, item := range raw {
-		conversation, err := loadConversation(item, index)
-		if err != nil {
-			return Dataset{}, err
+		conversation, loadErr := loadConversation(item, index)
+		if loadErr != nil {
+			return Dataset{}, loadErr
 		}
 		if _, ok := seen[conversation.sampleID]; ok {
 			return Dataset{}, fmt.Errorf("LoCoMo sample IDs must be unique")
@@ -364,7 +364,7 @@ func loadQuestion(raw map[string]any, sampleID string, index int, dialogueIDs ma
 	var unknown []string
 	for _, reference := range evidence {
 		session, _, _ := strings.Cut(reference, ":")
-		if _, ok := knownSessions[session]; !ok {
+		if _, known := knownSessions[session]; !known {
 			unknown = append(unknown, reference)
 		}
 	}

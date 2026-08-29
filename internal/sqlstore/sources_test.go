@@ -43,22 +43,22 @@ func TestSourceRepositoryPythonPayloadAndIdempotence(t *testing.T) {
 	})
 
 	var first sqlstore.StoredSource
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var addErr error
 		first, addErr = repository.Add(ctx, tx, "scope-a", value)
 		return addErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	if first.JournalPosition != 1 {
 		t.Fatalf("journal position = %d", first.JournalPosition)
 	}
 	var payload []byte
-	if err := database.SQLDB().QueryRowContext(ctx,
+	if queryErr := database.SQLDB().QueryRowContext(ctx,
 		"SELECT payload FROM pc_sources WHERE scope_id = ? AND source_type = ? AND source_id = ?",
 		"scope-a", "content", "capture-1",
-	).Scan(&payload); err != nil {
-		t.Fatal(err)
+	).Scan(&payload); queryErr != nil {
+		t.Fatal(queryErr)
 	}
 	want := `{"name":"capture-1","materialization":"captured","description":null,"content":"hello <world>","metadata":{"a":1,"nested":{"x":"y"}}}`
 	if string(payload) != want {
@@ -66,12 +66,12 @@ func TestSourceRepositoryPythonPayloadAndIdempotence(t *testing.T) {
 	}
 
 	var second sqlstore.StoredSource
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var addErr error
 		second, addErr = repository.Add(ctx, tx, "scope-a", value)
 		return addErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	if second.JournalPosition != 1 {
 		t.Fatalf("idempotent position = %d", second.JournalPosition)
@@ -327,18 +327,18 @@ func TestSourceRepositoryRejectsIndexedIdentityMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := contentSource(t, "indexed", "content", nil)
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		_, addErr := repository.Add(ctx, tx, "scope-a", value)
 		return addErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
-	if _, err := database.SQLDB().ExecContext(ctx,
+	if _, execErr := database.SQLDB().ExecContext(ctx,
 		`UPDATE pc_sources SET payload = ? WHERE scope_id = ? AND source_type = ? AND source_id = ?`,
 		[]byte(`{"name":"decoded","materialization":"captured","description":null,"content":"content","metadata":{}}`),
 		"scope-a", "content", "indexed",
-	); err != nil {
-		t.Fatal(err)
+	); execErr != nil {
+		t.Fatal(execErr)
 	}
 	ref, err := source.NewRef("content", "indexed")
 	if err != nil {
