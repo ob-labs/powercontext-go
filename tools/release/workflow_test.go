@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -334,10 +335,6 @@ func TestPortableSDKMakeTargetStopsOnFirstFailure(t *testing.T) {
 
 func runPortableSDKMake(t *testing.T, failTarget string) ([]string, string, error) {
 	t.Helper()
-	makePath, err := exec.LookPath("make")
-	if err != nil {
-		t.Skip("make is required to verify the portable SDK target")
-	}
 	logPath := filepath.Join(t.TempDir(), "portable-sdk-go.log")
 	args := []string{
 		"--no-print-directory",
@@ -346,17 +343,15 @@ func runPortableSDKMake(t *testing.T, failTarget string) ([]string, string, erro
 		"GOLANGCI_LINT=unused",
 	}
 	if failTarget != "" {
-		args = append(args, ".SHELLFLAGS=-u -o pipefail -c")
+		args = append(args, "SHELLOPTS=nounset:pipefail")
 	}
-	command := exec.CommandContext(t.Context(), makePath, args...)
-	command.Dir = filepath.Clean(filepath.Join("..", ".."))
-	command.Env = append(os.Environ(),
+	environment := append(os.Environ(),
 		"POWERCONTEXT_PORTABLE_GO_HELPER=1",
 		"POWERCONTEXT_PORTABLE_GO_HELPER_BINARY="+filepath.ToSlash(os.Args[0]),
 		"POWERCONTEXT_PORTABLE_GO_LOG="+logPath,
 		"POWERCONTEXT_PORTABLE_GO_FAIL_TARGET="+failTarget,
 	)
-	output, runErr := command.CombinedOutput()
+	output, runErr := runMake(t, environment, "", args...)
 	payload, readErr := os.ReadFile(logPath)
 	if readErr != nil {
 		t.Fatalf("read portable SDK helper log: %v\n%s", readErr, output)
@@ -393,29 +388,130 @@ func runPortableSDKGoHelper(t *testing.T) {
 	}
 }
 
-func TestMakefileDeclaresStrictDiscoverableExecution(t *testing.T) {
-	repository := filepath.Clean(filepath.Join("..", ".."))
-	payload, err := os.ReadFile(filepath.Join(repository, "Makefile"))
+func TestMakefileDefaultGoalListsSupportedTargets(t *testing.T) {
+	defaultOutput, err := runMake(t, nil, "", "--no-print-directory")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("run default Make goal: %v\n%s", err, defaultOutput)
 	}
-	contents := string(payload)
-	for _, required := range []string{
-		"SHELL := bash",
-		".SHELLFLAGS := -euo pipefail -c",
-		".DEFAULT_GOAL := help",
-		".DELETE_ON_ERROR:",
-		".SUFFIXES:",
-		"MAKEFLAGS += --no-builtin-rules",
-		"help: ## Show supported development, verification, and release commands.",
-		"lint: lint-tools ##",
-		"check: module-check fmt-check vet ##",
-		"build-all: ##",
-		"portable-sdk: ##",
-		"governance-check: ##",
-	} {
-		if !strings.Contains(contents, required) {
-			t.Errorf("Makefile is missing %q", required)
+	helpOutput, err := runMake(t, nil, "", "--no-print-directory", "help")
+	if err != nil {
+		t.Fatalf("run Make help goal: %v\n%s", err, helpOutput)
+	}
+	if defaultOutput != helpOutput {
+		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
+	}
+	for _, target := range []string{"lint", "check", "portable-sdk", "test", "build", "package-full", "governance-check"} {
+		if !strings.Contains(helpOutput, "  "+target+" ") {
+			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
 	}
+}
+
+func TestMakefileRejectsFailedPipelines(t *testing.T) {
+	const probe = `.PHONY: strict-shell-probe
+strict-shell-probe:
+	@false | true
+	@printf 'strict shell did not stop\n'
+`
+	output, err := runMake(
+		t,
+		nil,
+		probe,
+		"--no-print-directory",
+		"-f", "Makefile",
+		"-f", "-",
+		"strict-shell-probe",
+	)
+	if err == nil {
+		t.Fatalf("failed pipeline did not stop Make\n%s", output)
+	}
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
+		t.Fatalf("run strict Make probe: %v\n%s", err, output)
+	}
+	if strings.Contains(output, "strict shell did not stop") {
+		t.Fatalf("Make continued after a failed pipeline\n%s", output)
+	}
+}
+
+func TestMakefileMissingCredentialTargetsKeepActionableErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		target    string
+		variables []string
+		want      string
+	}{
+		{
+			name:      "OceanBase URL",
+			target:    "test-oceanbase-live",
+			variables: []string{"POWERCONTEXT_TEST_OCEANBASE_URL"},
+			want:      "POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database",
+		},
+		{
+			name:   "real provider model",
+			target: "real-provider-test",
+			variables: []string{
+				"POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL",
+				"POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL",
+			},
+			want: "set at least one POWERCONTEXT_REAL_SMOKE_*_MODEL variable",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			output, err := runMake(
+				t,
+				environmentWithout(test.variables...),
+				"",
+				"--no-print-directory",
+				test.target,
+			)
+			if err == nil {
+				t.Fatalf("make %s succeeded without required configuration\n%s", test.target, output)
+			}
+			if _, ok := errors.AsType[*exec.ExitError](err); !ok {
+				t.Fatalf("run make %s: %v\n%s", test.target, err, output)
+			}
+			if !strings.Contains(output, test.want) {
+				t.Errorf("make %s output is missing %q\n%s", test.target, test.want, output)
+			}
+			if strings.Contains(output, "unbound variable") {
+				t.Errorf("make %s exposed a shell nounset error instead of the target guidance\n%s", test.target, output)
+			}
+		})
+	}
+}
+
+func runMake(t *testing.T, environment []string, stdin string, arguments ...string) (string, error) {
+	t.Helper()
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", arguments...)
+	command.Dir = repository
+	command.Env = environment
+	if stdin != "" {
+		command.Stdin = strings.NewReader(stdin)
+	}
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func environmentWithout(names ...string) []string {
+	environment := os.Environ()
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		excluded := false
+		for _, candidate := range names {
+			if strings.EqualFold(name, candidate) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }

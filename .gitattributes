@@ -1,6 +1,7 @@
 # Every supported source and contract text format is checked out with LF so
 # frozen hashes and generated-contract diff checks are independent of a
 # contributor's core.autocrlf setting. Binary fixtures are never transformed.
+.gitattributes text eol=lf
 *.c text eol=lf
 *.css text eol=lf
 *.go text eol=lf
@@ -18,6 +19,7 @@
 *.yaml text eol=lf
 *.yml text eol=lf
 Dockerfile text eol=lf
+Makefile text eol=lf
 
 *.db binary
 *.db-shm binary
