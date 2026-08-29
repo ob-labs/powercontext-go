@@ -167,10 +167,12 @@ source / artifact / trigger / inference
   reject every keyword outside GitHub's supported caller-job set. Verify the
   rule with fixtures for a valid caller, a blank reference, `timeout-minutes`,
   and ordinary-only fields such as `runs-on` or `steps`.
-- When a repository gate mirrors an external structured schema, validate every
-  supported variant's required attributes and keep a valid fixture plus a
-  failing mutant for each variant boundary. Recheck the assumptions against
-  the current official schema before changing the validator.
+- When a repository gate reads a versioned structured contract or mirrors an
+  external schema, reject duplicate and unknown fields, validate compound
+  identifiers by their exact segment shape, and check executable workflow
+  steps by the complete required operation rather than substring presence.
+  Keep a valid fixture plus a failing mutant for each boundary, and recheck the
+  assumptions against the current official schema before changing the gate.
 - When blank Issues are disabled, inventory every supported request class and
   provide a distinct validated form or contact route for each. Verify that the
   chooser routes bounded features separately from compatibility-sensitive

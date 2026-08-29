@@ -15,12 +15,13 @@
 package conformance_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
 	"gopkg.in/yaml.v2"
 )
@@ -45,7 +46,51 @@ type parityContract struct {
 	ActiveParityTarget  string `json:"active_parity_target"`
 }
 
-var commitSHA256Pattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var commitSHA1Pattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func TestParityContractRejectsMalformedRepositorySlug(t *testing.T) {
+	for _, slug := range []string{"oceanbase/powercontext/extra", "oceanbase/\tpowercontext"} {
+		if validGitHubRepositorySlug(slug) {
+			t.Errorf("accepted malformed GitHub repository slug %q", slug)
+		}
+	}
+}
+
+func TestParityContractRejectsAmbiguousJSON(t *testing.T) {
+	contents, err := os.ReadFile("parity-contract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name   string
+		mutant string
+	}{
+		{
+			name:   "duplicate member",
+			mutant: strings.Replace(string(contents), `"schema_version": 1,`, `"schema_version": 999, "schema_version": 1,`, 1),
+		},
+		{
+			name:   "unknown member",
+			mutant: strings.Replace(string(contents), `"schema_version": 1,`, `"schema_version": 1, "future_semantics": true,`, 1),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.mutant == string(contents) {
+				t.Fatal("mutant construction did not change the parity contract")
+			}
+			if _, err := decodeParityContract([]byte(test.mutant)); err == nil {
+				t.Error("accepted ambiguous parity contract JSON")
+			}
+		})
+	}
+}
+
+func TestFrozenOracleWorkflowRejectsNonVerifyingIdentityStep(t *testing.T) {
+	if validOracleIdentityCommand("echo "+oracleCommit, oracleCommit) {
+		t.Error("accepted an Oracle identity step that only prints the expected commit")
+	}
+}
 
 func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 	contract := readParityContract(t)
@@ -57,8 +102,7 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 
 	// Concept 1: the upstream repository identity.
 	slug := contract.Upstream.Repository
-	owner, name, split := strings.Cut(slug, "/")
-	if !split || owner == "" || name == "" || strings.ContainsRune(slug, ' ') {
+	if !validGitHubRepositorySlug(slug) {
 		t.Fatalf("upstream repository %q is not a GitHub owner/name slug", slug)
 	}
 	if want := "https://github.com/" + slug; contract.Upstream.URL != want {
@@ -70,7 +114,7 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 
 	// Concept 2: the frozen release Oracle.
 	oracle := contract.FrozenReleaseOracle.Commit
-	if !commitSHA256Pattern.MatchString(oracle) {
+	if !commitSHA1Pattern.MatchString(oracle) {
 		t.Fatalf("frozen release Oracle commit %q is not a 40-hex SHA-1", oracle)
 	}
 	if oracle != oracleCommit {
@@ -96,7 +140,7 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 
 	// Concept 3: the exact target SHA and its recorded test inventory.
 	target := contract.ExactTargetSHA
-	if !commitSHA256Pattern.MatchString(target) {
+	if !commitSHA1Pattern.MatchString(target) {
 		t.Fatalf("exact target SHA %q is not a 40-hex SHA-1", target)
 	}
 	if target == oracle {
@@ -108,7 +152,7 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 
 	// Concept 4: the active parity target.
 	active := contract.ActiveParityTarget
-	if !commitSHA256Pattern.MatchString(active) {
+	if !commitSHA1Pattern.MatchString(active) {
 		t.Fatalf("active parity target %q is not a 40-hex SHA-1", active)
 	}
 	if active == oracle {
@@ -156,7 +200,7 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			}
 		case "Verify Oracle identity":
 			verify = step.Name
-			if !strings.Contains(step.Run, contract.FrozenReleaseOracle.Commit) {
+			if !validOracleIdentityCommand(step.Run, contract.FrozenReleaseOracle.Commit) {
 				t.Errorf("Verify Oracle identity step does not pin the contract frozen Oracle %q", contract.FrozenReleaseOracle.Commit)
 			}
 		}
@@ -175,9 +219,28 @@ func readParityContract(t *testing.T) parityContract {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var contract parityContract
-	if err := json.Unmarshal(contents, &contract); err != nil {
+	contract, err := decodeParityContract(contents)
+	if err != nil {
 		t.Fatal(err)
 	}
 	return contract
+}
+
+func decodeParityContract(contents []byte) (parityContract, error) {
+	var contract parityContract
+	if err := json.Unmarshal(contents, &contract, json.RejectUnknownMembers(true)); err != nil {
+		return parityContract{}, err
+	}
+	return contract, nil
+}
+
+func validGitHubRepositorySlug(slug string) bool {
+	owner, name, split := strings.Cut(slug, "/")
+	return split && owner != "" && name != "" && !strings.ContainsRune(name, '/') &&
+		strings.IndexFunc(slug, unicode.IsSpace) < 0
+}
+
+func validOracleIdentityCommand(command, commit string) bool {
+	want := `test "$(git -C _oracle rev-parse HEAD)" = ` + commit
+	return strings.TrimSpace(command) == want
 }
