@@ -21,6 +21,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -46,6 +47,10 @@ func newServerRunCommand(state *commandState) *cobra.Command {
 		RunE: func(command *cobra.Command, _ []string) error {
 			override := server.HTTPConfigOverride{}
 			if command.Flags().Changed("host") {
+				trimmedHost := strings.TrimSpace(host)
+				if trimmedHost == "" || host != trimmedHost {
+					return usageError(errors.New("server: --host must be a non-empty trimmed value"))
+				}
 				override.Host = new(host)
 			}
 			if command.Flags().Changed("port") {

@@ -236,6 +236,28 @@ func TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride(t *testing.T
 	}
 }
 
+func TestServerCommandRejectsBlankHostOverride(t *testing.T) {
+	for _, host := range []string{"", " "} {
+		t.Run(fmt.Sprintf("host=%q", host), func(t *testing.T) {
+			called := false
+			runner := func(context.Context, *commandState, server.ProcessConfig) error {
+				called = true
+				return nil
+			}
+			var stdout, stderr bytes.Buffer
+			command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+			command.SetArgs([]string{"server", "run", "--host", host})
+			err := command.ExecuteContext(context.Background())
+			if err == nil || ExitCode(err) != 2 {
+				t.Fatalf("server run --host error = %v, exit = %d, want usage failure", err, ExitCode(err))
+			}
+			if called {
+				t.Fatal("server runner was called for a blank host")
+			}
+		})
+	}
+}
+
 func TestServerCommandLoopbackOverrideRepairsUnsafeEnvironment(t *testing.T) {
 	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
 	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
