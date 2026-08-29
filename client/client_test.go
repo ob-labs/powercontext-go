@@ -222,14 +222,25 @@ func TestClientRejectsPlaintextNonLoopbackByDefault(t *testing.T) {
 		return response(http.StatusOK, capabilitiesJSON), nil
 	})}
 	for _, test := range []struct {
-		name    string
-		options Options
+		name      string
+		serverURL string
+		options   Options
 	}{
-		{name: "owned transport without token"},
-		{name: "owned transport with token", options: Options{BearerToken: "probe-token"}},
-		{name: "caller transport without token", options: Options{HTTPClient: callerTransport}},
+		{name: "owned transport without token", serverURL: "http://memory.example"},
+		{name: "private network host", serverURL: "http://192.168.1.10:8000"},
 		{
-			name: "caller transport with token",
+			name:      "owned transport with token",
+			serverURL: "http://memory.example",
+			options:   Options{BearerToken: "probe-token"},
+		},
+		{
+			name:      "caller transport without token",
+			serverURL: "http://memory.example",
+			options:   Options{HTTPClient: callerTransport},
+		},
+		{
+			name:      "caller transport with token",
+			serverURL: "http://memory.example",
 			options: Options{
 				BearerToken: "probe-token",
 				HTTPClient:  callerTransport,
@@ -237,9 +248,45 @@ func TestClientRejectsPlaintextNonLoopbackByDefault(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := New("http://memory.example", test.options)
+			_, err := New(test.serverURL, test.options)
 			if err == nil || !IsConfigurationError(err) {
 				t.Fatalf("New() error = %v, want configuration error", err)
+			}
+		})
+	}
+}
+
+func TestClientAllowsLoopbackPlaintext(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name        string
+		serverURL   string
+		bearerToken string
+	}{
+		{name: "IPv4 loopback with bearer", serverURL: "http://127.0.0.1:8000", bearerToken: "probe-token"},
+		{name: "localhost loopback", serverURL: "http://localhost:8000"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var authorization string
+			client, err := New(test.serverURL, Options{
+				BearerToken: test.bearerToken,
+				HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+					authorization = request.Header.Get("Authorization")
+					return response(http.StatusOK, capabilitiesJSON), nil
+				})},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := client.GetCapabilities(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			wantAuthorization := ""
+			if test.bearerToken != "" {
+				wantAuthorization = "Bearer " + test.bearerToken
+			}
+			if authorization != wantAuthorization {
+				t.Fatalf("Authorization = %q, want %q", authorization, wantAuthorization)
 			}
 		})
 	}
@@ -277,8 +324,11 @@ func TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL(t *testing.
 
 func TestClientAllowsExplicitlyTrustedCallerTransport(t *testing.T) {
 	t.Parallel()
+	var authorization string
 	client, err := New("http://memory.example", Options{
-		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		BearerToken: "probe-token",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			authorization = request.Header.Get("Authorization")
 			return response(http.StatusOK, capabilitiesJSON), nil
 		})},
 		TrustTransportSecurity: true,
@@ -288,6 +338,9 @@ func TestClientAllowsExplicitlyTrustedCallerTransport(t *testing.T) {
 	}
 	if _, err := client.GetCapabilities(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+	if authorization != "Bearer probe-token" {
+		t.Fatalf("Authorization = %q, want %q", authorization, "Bearer probe-token")
 	}
 }
 

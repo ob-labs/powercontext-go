@@ -94,13 +94,98 @@
       "mode": "go-port",
       "reason": "Shared loopback/plaintext transport policy across Client, CLI, and Server; the Go port of this policy is WP2.",
       "cases": {
+        "test_loopback_hosts_are_recognized": {
+          "evidence": [
+            "go:test/transport/policy_test.go#TestSharedLoopbackHostVectors"
+          ]
+        },
+        "test_non_loopback_hosts_are_rejected": {
+          "evidence": [
+            "go:test/transport/policy_test.go#TestSharedLoopbackHostVectors"
+          ]
+        },
+        "test_plaintext_non_loopback_detects_only_remote_http": {
+          "evidence": [
+            "go:test/transport/policy_test.go#TestSharedPlaintextURLVectors"
+          ]
+        },
+        "test_client_settings_reject_non_loopback_plaintext_urls": {
+          "evidence": [
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+          ]
+        },
+        "test_client_settings_accept_loopback_or_tls_urls": {
+          "evidence": [
+            "go:client/client_test.go#TestClientAllowsLoopbackPlaintext",
+            "go:client/client_test.go#TestClientSendsBearerAndPreservesCallerHTTPClient"
+          ]
+        },
+        "test_client_refuses_requests_over_non_loopback_plaintext": {
+          "evidence": [
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+          ]
+        },
+        "test_client_refuses_a_bearer_token_over_non_loopback_plaintext": {
+          "evidence": [
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+          ]
+        },
+        "test_client_allows_a_bearer_token_over_loopback_plaintext": {
+          "evidence": [
+            "go:client/client_test.go#TestClientAllowsLoopbackPlaintext"
+          ]
+        },
+        "test_client_allows_a_trusted_caller_supplied_transport": {
+          "evidence": [
+            "go:client/client_test.go#TestClientAllowsExplicitlyTrustedCallerTransport"
+          ]
+        },
+        "test_client_refuses_a_bearer_token_over_an_untrusted_caller_supplied_transport": {
+          "evidence": [
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+          ]
+        },
+        "test_client_refuses_an_unauthenticated_untrusted_non_loopback_transport": {
+          "evidence": [
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+          ]
+        },
+        "test_server_rejects_an_unauthenticated_non_loopback_bind": {
+          "evidence": [
+            "go:server/config_test.go#TestLoadConfigRejectsUnauthenticatedNonLoopbackBind"
+          ]
+        },
+        "test_server_allows_a_non_loopback_bind_with_authentication": {
+          "evidence": [
+            "go:server/config_test.go#TestLoadConfigAllowsAuthenticatedNonLoopbackBind"
+          ]
+        },
+        "test_server_allows_a_non_loopback_bind_with_an_explicit_opt_in": {
+          "evidence": [
+            "go:server/config_test.go#TestLoadConfigAllowsExplicitUnauthenticatedNonLoopbackBind"
+          ]
+        },
         "test_vendored_plugin_shares_the_loopback_host_set": {
           "mode": "cross-layer",
-          "reason": "Asserts retained plugins share the core loopback host set; crosses the Go core and retained adapters."
+          "reason": "Asserts retained plugins share the core loopback host set; crosses the Go core and retained adapters.",
+          "evidence": [
+            "go:test/transport/policy_test.go#TestSharedLoopbackHostVectors",
+            "py:integrations/codex/tests/test_contract.py#test_codex_settings_accept_shared_loopback_hosts",
+            "py:integrations/codex/tests/test_contract.py#test_codex_settings_reject_shared_non_loopback_plaintext_hosts",
+            "py:integrations/claude-code/tests/test_contract.py#test_settings_accept_shared_loopback_hosts",
+            "py:integrations/claude-code/tests/test_contract.py#test_settings_reject_shared_non_loopback_plaintext_hosts"
+          ]
         },
         "test_vendored_plugin_matches_the_shared_plaintext_policy": {
           "mode": "cross-layer",
-          "reason": "Asserts retained plugins match the core plaintext policy; crosses the Go core and retained adapters."
+          "reason": "Asserts retained plugins match the core plaintext policy; crosses the Go core and retained adapters.",
+          "evidence": [
+            "go:test/transport/policy_test.go#TestSharedPlaintextURLVectors",
+            "py:integrations/codex/tests/test_contract.py#test_codex_settings_accept_shared_loopback_hosts",
+            "py:integrations/codex/tests/test_contract.py#test_codex_settings_reject_shared_non_loopback_plaintext_hosts",
+            "py:integrations/claude-code/tests/test_contract.py#test_settings_accept_shared_loopback_hosts",
+            "py:integrations/claude-code/tests/test_contract.py#test_settings_reject_shared_non_loopback_plaintext_hosts"
+          ]
         }
       }
     }
