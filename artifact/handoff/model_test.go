@@ -105,8 +105,8 @@ func TestHandoffValuesAreImmutableAfterValidation(t *testing.T) {
 	returnedState[0] = Statement{}
 	returnedCitations := content.State()[0].Citations()
 	returnedCitations[0] = nil
-	if err := content.Validate(); err != nil || content.State()[0].Text() != "claim" || len(content.State()[0].Citations()) != 1 {
-		t.Fatalf("Content changed through an input or accessor copy: %v", err)
+	if validationErr := content.Validate(); validationErr != nil || content.State()[0].Text() != "claim" || len(content.State()[0].Citations()) != 1 {
+		t.Fatalf("Content changed through an input or accessor copy: %v", validationErr)
 	}
 
 	base, err := artifact.NewRef(Family, "handoff", 1)
@@ -261,7 +261,7 @@ func TestHandoffResolutionRequiresOneEvidenceCheckPerStatement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewResolved("project", content, PreparedSelection, nil, nil, nil); err == nil {
+	if _, resolveErr := NewResolved("project", content, PreparedSelection, nil, nil, nil); resolveErr == nil {
 		t.Fatal("resolved Handoff without its statement evidence check was accepted")
 	}
 	index := 0

@@ -40,6 +40,7 @@ func (c SourceCitation) Validate() error {
 	_, err := source.NewRef(c.ref.Type(), c.ref.ID())
 	return err
 }
+
 func (c SourceCitation) citationKey() string {
 	return "source\x00" + c.ref.Type() + "\x00" + c.ref.ID()
 }
@@ -79,6 +80,7 @@ func (c MemoryCitation) Validate() error {
 	_, err := memory.ValidateIdentifier(c.citation.EntryVersionID)
 	return err
 }
+
 func (c MemoryCitation) citationKey() string {
 	return "memory\x00" + c.citation.MemoryRef.String() + "\x00" + c.citation.EntryID + "\x00" + c.citation.EntryVersionID
 }

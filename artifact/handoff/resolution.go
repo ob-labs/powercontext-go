@@ -94,6 +94,7 @@ func (c EvidenceCheck) Claim() Claim                    { return c.claim }
 func (c EvidenceCheck) StateIndex() *int                { return cloneInt(c.stateIndex) }
 func (c EvidenceCheck) Status() EvidenceStatus          { return c.status }
 func (c EvidenceCheck) UnavailableEvidence() []Citation { return slices.Clone(c.unavailableEvidence) }
+
 func (c EvidenceCheck) Validate() error {
 	if c.claim != StateClaim && c.claim != NextActionClaim {
 		return fmt.Errorf("invalid Handoff evidence claim %q", c.claim)

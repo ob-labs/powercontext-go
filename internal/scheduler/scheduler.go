@@ -99,11 +99,11 @@ func Open(ctx context.Context, config Config) (*Scheduler, error) {
 	if err != nil {
 		return nil, &ConfigurationError{Field: "scheduler_path"}
 	}
-	if err := validateConfig(config); err != nil {
-		return nil, err
+	if validationErr := validateConfig(config); validationErr != nil {
+		return nil, validationErr
 	}
-	if err := claimOwner(path); err != nil {
-		return nil, err
+	if claimErr := claimOwner(path); claimErr != nil {
+		return nil, claimErr
 	}
 	claimed := true
 	defer func() {
@@ -112,8 +112,8 @@ func Open(ctx context.Context, config Config) (*Scheduler, error) {
 		}
 	}()
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+	if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o755); mkdirErr != nil {
+		return nil, mkdirErr
 	}
 	dsn := (&url.URL{Scheme: "file", Path: path}).String() + "?_busy_timeout=30000&_foreign_keys=on"
 	db, err := sql.Open("sqlite3", dsn)
@@ -123,11 +123,11 @@ func Open(ctx context.Context, config Config) (*Scheduler, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	cleanup := func(err error) (*Scheduler, error) { _ = db.Close(); return nil, err }
-	if err := db.PingContext(ctx); err != nil {
-		return cleanup(err)
+	if pingErr := db.PingContext(ctx); pingErr != nil {
+		return cleanup(pingErr)
 	}
-	if err := ensureSchema(ctx, db); err != nil {
-		return cleanup(err)
+	if schemaErr := ensureSchema(ctx, db); schemaErr != nil {
+		return cleanup(schemaErr)
 	}
 	clock := config.Clock
 	if clock == nil {
@@ -264,13 +264,13 @@ type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
-func loadJobs(ctx context.Context, db queryer, path string) (map[JobKind]Job, error) {
+func loadJobs(ctx context.Context, db queryer, path string) (result map[JobKind]Job, returnErr error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, next_run_time, job_state FROM powercontext_scheduler_jobs ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make(map[JobKind]Job, 2)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make(map[JobKind]Job, 2)
 	for rows.Next() {
 		var id string
 		var nextValue, blobValue any
@@ -460,6 +460,7 @@ func claimOwner(path string) error {
 	liveOwners.paths[path] = struct{}{}
 	return nil
 }
+
 func releaseOwner(path string) {
 	liveOwners.Lock()
 	delete(liveOwners.paths, path)
@@ -480,6 +481,7 @@ func storedFloat(value any) (float64, bool) {
 	}
 	return result, !math.IsNaN(result) && !math.IsInf(result, 0)
 }
+
 func storedBlob(value any) ([]byte, bool) {
 	switch typed := value.(type) {
 	case []byte:

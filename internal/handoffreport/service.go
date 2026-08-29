@@ -366,6 +366,7 @@ func groupActivities(events []ActivityEvent, workstreams []WorkstreamDescriptor)
 	}
 	return grouped, unassigned
 }
+
 func reportingStatus(omissions []handoff.Omission, checks []handoff.EvidenceCheck, checked, unavailable bool) ReportingStatus {
 	if unavailable {
 		return ReportingEvidenceMissing
@@ -382,6 +383,7 @@ func reportingStatus(omissions []handoff.Omission, checks []handoff.EvidenceChec
 	}
 	return ReportingReported
 }
+
 func activityStatus(events []ActivityEvent) ActivityStatus {
 	if len(events) == 0 {
 		return ActivityNone
@@ -393,6 +395,7 @@ func activityStatus(events []ActivityEvent) ActivityStatus {
 	}
 	return ActivityCurrentOnly
 }
+
 func deriveCoverage(items []WorkstreamReport, unassigned []ActivityEvent, status ActivityCoverageStatus) Coverage {
 	result := Coverage{TotalIncludedWorkstreams: len(items), CatalogMatchedWorkstreams: len(items), SelectedWorkstreams: len(items), UnassignedActivityCount: len(unassigned), UnassignedActivityEvents: len(unassigned), ActivityCoverage: status}
 	for _, item := range items {
@@ -427,6 +430,7 @@ func deriveCoverage(items []WorkstreamReport, unassigned []ActivityEvent, status
 	}
 	return result
 }
+
 func deriveSummary(items []WorkstreamReport) Summary {
 	var result Summary
 	for _, item := range items {
@@ -443,6 +447,7 @@ func deriveSummary(items []WorkstreamReport) Summary {
 	}
 	return result
 }
+
 func cloneComparison(value *PeriodComparison) *PeriodComparison {
 	if value == nil {
 		return nil

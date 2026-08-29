@@ -53,10 +53,12 @@ const (
 	ActivityUnavailable   ActivityCoverageStatus = "unavailable"
 )
 
-type WorkStatus string
-type ActivityStatus string
-type ReportingStatus string
-type HandoffActivityRelation string
+type (
+	WorkStatus              string
+	ActivityStatus          string
+	ReportingStatus         string
+	HandoffActivityRelation string
+)
 
 const (
 	WorkContinuable WorkStatus = "continuable"
@@ -210,6 +212,7 @@ func (v Report) PeriodComparison() *PeriodComparison {
 	copy := *v.periodComparison
 	return &copy
 }
+
 func (v Report) BaselineSelection() ([]SelectionEntry, bool) {
 	return slices.Clone(v.baselineSelection), v.baselinePresent
 }

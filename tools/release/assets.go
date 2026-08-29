@@ -224,7 +224,7 @@ func readBoundedFile(path string, maximum int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	reader := bufio.NewReader(io.LimitReader(file, maximum+1))
 	contents, err := io.ReadAll(reader)
 	if err != nil {

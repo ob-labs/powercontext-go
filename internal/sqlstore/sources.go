@@ -107,8 +107,8 @@ func (r *SourceRepository) Add(
 	if err != nil {
 		return StoredSource{}, &InvalidStoredPayloadError{Kind: "source", Name: codec.name, Issue: "value is not JSON serializable"}
 	}
-	if err := r.lockJournalHead(ctx, db, scopeID); err != nil {
-		return StoredSource{}, err
+	if lockErr := r.lockJournalHead(ctx, db, scopeID); lockErr != nil {
+		return StoredSource{}, lockErr
 	}
 	existing, found, err := r.find(ctx, db, scopeID, ref)
 	if err != nil {
@@ -172,7 +172,7 @@ func (r *SourceRepository) List(
 	scopeID string,
 	after int64,
 	limit *int,
-) ([]StoredSource, error) {
+) (result []StoredSource, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return nil, err
 	}
@@ -193,8 +193,8 @@ func (r *SourceRepository) List(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make([]StoredSource, 0)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make([]StoredSource, 0)
 	for rows.Next() {
 		row, err := scanSource(rows)
 		if err != nil {

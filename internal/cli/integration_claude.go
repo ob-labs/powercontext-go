@@ -149,14 +149,14 @@ func installClaudeCode(
 		}
 	}
 	if marketplace == nil {
-		if _, err := commands.Run(ctx, executable, "plugin", "marketplace", "add", marketplaceSource, "--scope", "user"); err != nil {
-			return claudeSetupResult{}, err
+		if _, runErr := commands.Run(ctx, executable, "plugin", "marketplace", "add", marketplaceSource, "--scope", "user"); runErr != nil {
+			return claudeSetupResult{}, runErr
 		}
 		marketplaceAdded = true
 	}
-	if _, err := commands.Run(ctx, executable, "plugin", "install", claudePluginID, "--scope", "user"); err != nil {
+	if _, runErr := commands.Run(ctx, executable, "plugin", "install", claudePluginID, "--scope", "user"); runErr != nil {
 		rollback()
-		return claudeSetupResult{}, err
+		return claudeSetupResult{}, runErr
 	}
 	pluginAdded = previousPlugin == nil
 	installed, err := runAnyJSONCommand(ctx, commands, executable, "plugin", "list")

@@ -53,13 +53,13 @@ func TestExperienceCandidatesAndCursorCASAreOneTransaction(t *testing.T) {
 	content, _ := experience.NewContent("situation", "action", "outcome", "lesson")
 	plan, _ := experience.NewCandidateInput(content, []source.Ref{stored.Ref})
 
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		_, saveErr := (sqlstore.SourceCursorRepository{}).Save(
 			ctx, tx, "scope-incubation", experience.IncubationCursorName, source.NewCursor(0), nil,
 		)
 		return saveErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	err = store.ApplyWindow(
 		ctx, experience.IncubationCursorName, []string{"cand-1"}, []experience.CandidateInput{plan}, next, generation,

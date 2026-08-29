@@ -125,8 +125,8 @@ func run(pythonRoot, output string, check bool) error {
 		return fmt.Errorf("encode manifest: %w", err)
 	}
 	encoded = append(encoded, '\n')
-	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(output), 0o755); mkdirErr != nil {
+		return fmt.Errorf("create output directory: %w", mkdirErr)
 	}
 	current, err := os.ReadFile(output)
 	if err == nil && bytes.Equal(current, encoded) {
@@ -315,7 +315,7 @@ func testsInFile(root, path string) ([]testCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	relative, err := filepath.Rel(root, path)
 	if err != nil {
 		return nil, err

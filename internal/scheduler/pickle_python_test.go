@@ -36,13 +36,18 @@ func TestPythonSidecarCanBeRewrittenByGoAndRestoredByAPScheduler(t *testing.T) {
 		t.Fatal(err)
 	}
 	working := filepath.Join(t.TempDir(), "scheduler.db")
-	if err := os.WriteFile(working, contents, 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(working, contents, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	database, err := sql.Open("sqlite3", working)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if closeErr := database.Close(); closeErr != nil {
+			t.Errorf("close scheduler database: %v", closeErr)
+		}
+	})
 	rows, err := database.QueryContext(t.Context(), `SELECT id, next_run_time, job_state
 		FROM powercontext_scheduler_jobs ORDER BY id`)
 	if err != nil {
@@ -56,54 +61,62 @@ func TestPythonSidecarCanBeRewrittenByGoAndRestoredByAPScheduler(t *testing.T) {
 	var replacements []replacement
 	for rows.Next() {
 		var row storedJobRow
-		if err := rows.Scan(&row.id, &row.next, &row.blob); err != nil {
-			rows.Close()
-			t.Fatal(err)
+		if scanErr := rows.Scan(&row.id, &row.next, &row.blob); scanErr != nil {
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
+			t.Fatal(scanErr)
 		}
-		decoded, err := decodeJobState(row.blob, row.id, "/powercontext-fixtures/scheduler.db", row.next)
-		if err != nil {
-			rows.Close()
-			t.Fatal(err)
+		decoded, decodeErr := decodeJobState(row.blob, row.id, "/powercontext-fixtures/scheduler.db", row.next)
+		if decodeErr != nil {
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
+			t.Fatal(decodeErr)
 		}
-		rewritten, err := NewJob(decoded.Kind(), working, decoded.Interval(), decoded.StartDate(), decoded.NextRunTime())
-		if err != nil {
-			rows.Close()
-			t.Fatal(err)
+		rewritten, jobErr := NewJob(decoded.Kind(), working, decoded.Interval(), decoded.StartDate(), decoded.NextRunTime())
+		if jobErr != nil {
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
+			t.Fatal(jobErr)
 		}
-		blob, err := encodeJobState(rewritten)
-		if err != nil {
-			rows.Close()
-			t.Fatal(err)
+		blob, encodeErr := encodeJobState(rewritten)
+		if encodeErr != nil {
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
+			t.Fatal(encodeErr)
 		}
 		replacements = append(replacements, replacement{
 			id: rewritten.ID(), next: unixTimestamp(rewritten.NextRunTime()), blob: blob,
 		})
 	}
-	if err := rows.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := rows.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	transaction, err := database.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, value := range replacements {
-		if _, err := transaction.ExecContext(t.Context(), `UPDATE powercontext_scheduler_jobs
-			SET next_run_time = ?, job_state = ? WHERE id = ?`, value.next, value.blob, value.id); err != nil {
+		if _, execErr := transaction.ExecContext(t.Context(), `UPDATE powercontext_scheduler_jobs
+			SET next_run_time = ?, job_state = ? WHERE id = ?`, value.next, value.blob, value.id); execErr != nil {
 			_ = transaction.Rollback()
-			t.Fatal(err)
+			t.Fatal(execErr)
 		}
 	}
-	if err := transaction.Commit(); err != nil {
-		t.Fatal(err)
+	if commitErr := transaction.Commit(); commitErr != nil {
+		t.Fatal(commitErr)
 	}
-	if err := database.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := database.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 
 	script := filepath.Join("..", "..", "test", "conformance", "python_scheduler_fixture.py")
 	command := exec.Command(python, script, "verify", working, "--runtime-path", working)
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("Python rejected the Go-rewritten scheduler sidecar: %v\n%s", err, output)
+	if output, commandErr := command.CombinedOutput(); commandErr != nil {
+		t.Fatalf("Python rejected the Go-rewritten scheduler sidecar: %v\n%s", commandErr, output)
 	}
 }
 

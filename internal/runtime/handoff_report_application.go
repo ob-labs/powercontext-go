@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/handoff"
 	"github.com/ob-labs/powercontext-go/internal/handoffreport"
@@ -212,6 +213,7 @@ func (a *HandoffReportApplication) CreateProject(ctx context.Context, input Crea
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) GetProject(ctx context.Context, id string) (handoffreport.ProjectDescriptor, error) {
 	var result handoffreport.ProjectDescriptor
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -221,6 +223,7 @@ func (a *HandoffReportApplication) GetProject(ctx context.Context, id string) (h
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) UpdateProject(ctx context.Context, value handoffreport.ProjectDescriptor, expected int) (handoffreport.ProjectDescriptor, error) {
 	var result handoffreport.ProjectDescriptor
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -230,6 +233,7 @@ func (a *HandoffReportApplication) UpdateProject(ctx context.Context, value hand
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) ListProjects(ctx context.Context, cursor *string, limit int, archived bool) (handoffreport.Page[handoffreport.ProjectDescriptor], error) {
 	var result handoffreport.Page[handoffreport.ProjectDescriptor]
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -239,6 +243,7 @@ func (a *HandoffReportApplication) ListProjects(ctx context.Context, cursor *str
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) RegisterWorkstream(ctx context.Context, input RegisterHandoffReportWorkstream) (handoffreport.WorkstreamDescriptor, error) {
 	var result handoffreport.WorkstreamDescriptor
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -255,6 +260,7 @@ func (a *HandoffReportApplication) RegisterWorkstream(ctx context.Context, input
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) UpdateWorkstream(ctx context.Context, value handoffreport.WorkstreamDescriptor, expected int) (handoffreport.WorkstreamDescriptor, error) {
 	var result handoffreport.WorkstreamDescriptor
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -264,6 +270,7 @@ func (a *HandoffReportApplication) UpdateWorkstream(ctx context.Context, value h
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) ListWorkstreams(ctx context.Context, project string, cursor *string, limit int, archived bool) (handoffreport.Page[handoffreport.WorkstreamDescriptor], error) {
 	var result handoffreport.Page[handoffreport.WorkstreamDescriptor]
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -290,6 +297,7 @@ func (a *HandoffReportApplication) RecordActivity(ctx context.Context, input Rec
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) ListActivities(ctx context.Context, query HandoffReportActivityList) (handoffreport.ActivityPage, error) {
 	var result handoffreport.ActivityPage
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -299,6 +307,7 @@ func (a *HandoffReportApplication) ListActivities(ctx context.Context, query Han
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) PurgeActivities(ctx context.Context, project string, before time.Time) (int64, error) {
 	var result int64
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -308,6 +317,7 @@ func (a *HandoffReportApplication) PurgeActivities(ctx context.Context, project 
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) GetWorkspaceBinding(ctx context.Context, id string) (handoffreport.WorkspaceBinding, error) {
 	var result handoffreport.WorkspaceBinding
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -317,6 +327,7 @@ func (a *HandoffReportApplication) GetWorkspaceBinding(ctx context.Context, id s
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) AttachWorkspaceBinding(ctx context.Context, id, project string, repository handoffreport.RepositoryRef, expected *int) (handoffreport.WorkspaceBinding, error) {
 	var result handoffreport.WorkspaceBinding
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -326,6 +337,7 @@ func (a *HandoffReportApplication) AttachWorkspaceBinding(ctx context.Context, i
 	})
 	return result, err
 }
+
 func (a *HandoffReportApplication) DetachWorkspaceBinding(ctx context.Context, id string, expected int) (handoffreport.WorkspaceBinding, error) {
 	var result handoffreport.WorkspaceBinding
 	err := a.runtime.Operation(ctx, func(ctx context.Context) error {
@@ -421,6 +433,7 @@ func NewHandoffReportReader(services HandoffServiceFactory) (*HandoffReportReade
 	}
 	return &HandoffReportReader{services: services}, nil
 }
+
 func (r *HandoffReportReader) service(scope string) (*handoff.Service, error) {
 	service, err := r.services(scope)
 	if err != nil {
@@ -431,6 +444,7 @@ func (r *HandoffReportReader) service(scope string) (*handoff.Service, error) {
 	}
 	return service, nil
 }
+
 func (r *HandoffReportReader) Latest(ctx context.Context, scope string) (handoff.Handoff, bool, error) {
 	service, err := r.service(scope)
 	if err != nil {
@@ -438,6 +452,7 @@ func (r *HandoffReportReader) Latest(ctx context.Context, scope string) (handoff
 	}
 	return service.Latest(ctx)
 }
+
 func (r *HandoffReportReader) Get(ctx context.Context, scope string, ref artifact.Ref) (handoff.Handoff, error) {
 	service, err := r.service(scope)
 	if err != nil {
@@ -445,6 +460,7 @@ func (r *HandoffReportReader) Get(ctx context.Context, scope string, ref artifac
 	}
 	return service.Revision(ctx, ref)
 }
+
 func (r *HandoffReportReader) Revisions(ctx context.Context, scope string) ([]handoff.Handoff, error) {
 	service, err := r.service(scope)
 	if err != nil {
@@ -452,6 +468,7 @@ func (r *HandoffReportReader) Revisions(ctx context.Context, scope string) ([]ha
 	}
 	return service.Revisions(ctx)
 }
+
 func (*HandoffReportReader) CheckEvidence(context.Context, string, artifact.Ref) ([]handoff.EvidenceCheck, error) {
 	return nil, &handoffreport.EvidenceCheckUnavailableError{}
 }

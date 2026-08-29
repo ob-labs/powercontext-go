@@ -27,6 +27,7 @@ import (
 
 	"github.com/knights-analytics/hugot"
 	"github.com/knights-analytics/hugot/options"
+
 	"github.com/ob-labs/powercontext-go/inference"
 )
 

@@ -104,8 +104,8 @@ func (a *MemoryApplication) Remember(
 		if err != nil {
 			return err
 		}
-		if err := validateExpectedRevision(a.memoryArtifactID, current, request.ExpectedRevision); err != nil {
-			return err
+		if validationErr := validateExpectedRevision(a.memoryArtifactID, current, request.ExpectedRevision); validationErr != nil {
+			return validationErr
 		}
 		input := memory.NewEntryInput(nil, request.Kind, request.Text, nil, nil, request.Reason)
 		updated, err := service.Remember(ctx, current, nil, nil, []memory.EntryInput{input}, memory.RememberAppend)

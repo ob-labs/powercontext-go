@@ -28,8 +28,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/spf13/cobra"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
 type diagnostic struct {
@@ -137,7 +138,7 @@ func requestDiagnostic(ctx context.Context, client *http.Client, serverURL, path
 	if err != nil {
 		return diagnostic{Status: "failed", Detail: "cannot reach " + serverURL}
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if !readiness && response.StatusCode != http.StatusOK {
 		return diagnostic{Status: "failed", Detail: fmt.Sprintf("liveness returned HTTP %d", response.StatusCode)}
 	}
@@ -204,6 +205,7 @@ func decodeDiagnosticJSON(payload []byte, target any) error {
 	}
 	return nil
 }
+
 func writeDiagnostics(state *commandState, values map[string]diagnostic) error {
 	if state.json {
 		return writeJSON(state.stdout, map[string]any{

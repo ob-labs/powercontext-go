@@ -33,7 +33,7 @@ func readObservationRecords(path string) (map[string]ObservationRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open benchmark observations: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	result := make(map[string]ObservationRecord)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64<<10), maxObservationBytes)
@@ -56,7 +56,7 @@ func readObservationRecords(path string) (map[string]ObservationRecord, error) {
 	return result, nil
 }
 
-func appendJSONLine(path string, value any) error {
+func appendJSONLine(path string, value any) (returnErr error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func appendJSONLine(path string, value any) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { returnErr = errors.Join(returnErr, file.Close()) }()
 	if _, err := file.Write(append(encoded, '\n')); err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func writeFileAtomic(path string, contents []byte) error {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() { _ = os.Remove(temporaryPath) }()
 	if err := temporary.Chmod(0o644); err != nil {
 		_ = temporary.Close()
 		return err

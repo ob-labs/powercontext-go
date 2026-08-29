@@ -74,8 +74,8 @@ func TestHTTPSourceAndMemorySQLiteVerticalSlice(t *testing.T) {
 
 	lifecycle := runtime.New(database)
 	t.Cleanup(func() {
-		if err := lifecycle.Close(context.Background()); err != nil {
-			t.Error(err)
+		if closeErr := lifecycle.Close(context.Background()); closeErr != nil {
+			t.Error(closeErr)
 		}
 	})
 	sourceApp, err := runtime.NewSourceApplication(lifecycle, sourceBackend)
@@ -150,12 +150,12 @@ func TestHTTPSourceAndMemorySQLiteVerticalSlice(t *testing.T) {
 	}
 	externalRoot := filepath.Join(workspaceRoot, "external-skills")
 	externalPackage := filepath.Join(externalRoot, "friendly-go")
-	if err := os.MkdirAll(externalPackage, 0o755); err != nil {
-		t.Fatal(err)
+	if mkdirErr := os.MkdirAll(externalPackage, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
 	}
 	manifestPath := filepath.Join(externalPackage, "SKILL.md")
-	if err := os.WriteFile(manifestPath, []byte("---\nname: friendly-go\ndescription: Use when writing Go.\n---\n\nKeep boundaries explicit.\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(manifestPath, []byte("---\nname: friendly-go\ndescription: Use when writing Go.\n---\n\nKeep boundaries explicit.\n"), 0o644); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	root, err := skill.NewCodexRoot("repository", skill.ProjectScope, externalRoot)
 	if err != nil {
@@ -219,8 +219,8 @@ func TestHTTPSourceAndMemorySQLiteVerticalSlice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := handoffReportStore.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := handoffReportStore.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	handoffReportReader, err := runtime.NewHandoffReportReader(handoffFactory)
 	if err != nil {

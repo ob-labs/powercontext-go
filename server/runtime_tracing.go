@@ -17,9 +17,10 @@ package server
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/trace"
+
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type runtimeStageTracing struct{ provider trace.TracerProvider }

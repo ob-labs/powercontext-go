@@ -328,11 +328,11 @@ func TestOpenCodeRemoteCheckoutFailureLeavesPreviousCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := materializeOpenCodeCheckout(t.Context(), commands, "owner/repo", "master", dataDirectory); err == nil {
+	if _, refreshErr := materializeOpenCodeCheckout(t.Context(), commands, "owner/repo", "master", dataDirectory); refreshErr == nil {
 		t.Fatal("refresh unexpectedly succeeded")
 	}
-	if _, err := os.Stat(filepath.Join(current, filepath.FromSlash(openCodeRelative), "package.json")); err != nil {
-		t.Fatalf("previous immutable checkout was lost: %v", err)
+	if _, statErr := os.Stat(filepath.Join(current, filepath.FromSlash(openCodeRelative), "package.json")); statErr != nil {
+		t.Fatalf("previous immutable checkout was lost: %v", statErr)
 	}
 	entries, err := os.ReadDir(filepath.Dir(current))
 	if err != nil {

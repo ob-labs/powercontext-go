@@ -67,8 +67,10 @@ func (c Content) Description() string  { return c.description }
 func (c Content) Instructions() string { return c.instructions }
 func (c Content) Validation() []string { return slices.Clone(c.validation) }
 
-type Skill = artifact.Artifact[Content]
-type Draft = artifact.Draft[Content]
+type (
+	Skill = artifact.Artifact[Content]
+	Draft = artifact.Draft[Content]
+)
 
 func NewDraft(content Content, sources []source.Ref, artifacts []artifact.Ref) (Draft, error) {
 	return artifact.NewDraft(Family, content, sources, artifacts)

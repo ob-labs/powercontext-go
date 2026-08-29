@@ -200,9 +200,11 @@ func (o GenerationOutput) Disposition() Disposition     { return o.disposition }
 func (o GenerationOutput) NextAction() *GenerationStatement {
 	return cloneGenerationStatement(o.nextAction)
 }
+
 func (o GenerationOutput) Omissions() []GenerationOmission {
 	return cloneGenerationOmissions(o.omissions)
 }
+
 func (o GenerationOutput) Validate() error {
 	if o.disposition != Continuable && o.disposition != Blocked && o.disposition != Complete {
 		return fmt.Errorf("invalid Handoff generation disposition %q", o.disposition)
@@ -254,32 +256,32 @@ func (p *LLMGenerationPipeline) Generate(ctx context.Context, request Generation
 	if err != nil {
 		return Draft{}, err
 	}
-	if err := result.Output.Validate(); err != nil {
+	if validationErr := result.Output.Validate(); validationErr != nil {
 		return Draft{}, inference.NewInvalidOutputError(
 			"handoff-generate", "generator returned an invalid output tree",
 		)
 	}
 	state := make([]Statement, 0, len(result.Output.state))
 	for _, value := range result.Output.state {
-		statement, err := mapGenerationStatement(value, citations)
-		if err != nil {
-			return Draft{}, err
+		statement, mapErr := mapGenerationStatement(value, citations)
+		if mapErr != nil {
+			return Draft{}, mapErr
 		}
 		state = append(state, statement)
 	}
 	var nextAction *Statement
 	if result.Output.nextAction != nil {
-		mapped, err := mapGenerationStatement(*result.Output.nextAction, citations)
-		if err != nil {
-			return Draft{}, err
+		mapped, mapErr := mapGenerationStatement(*result.Output.nextAction, citations)
+		if mapErr != nil {
+			return Draft{}, mapErr
 		}
 		nextAction = &mapped
 	}
 	omissions := make([]Omission, 0, len(result.Output.omissions))
 	for _, value := range result.Output.omissions {
-		mapped, err := mapGenerationOmission(value, citations)
-		if err != nil {
-			return Draft{}, err
+		mapped, mapErr := mapGenerationOmission(value, citations)
+		if mapErr != nil {
+			return Draft{}, mapErr
 		}
 		omissions = append(omissions, mapped)
 	}
@@ -395,14 +397,14 @@ func decodeGenerationOutput(encoded []byte) (GenerationOutput, error) {
 		return GenerationOutput{}, err
 	}
 	var disposition Disposition
-	if err := json.Unmarshal(dispositionRaw, &disposition); err != nil {
+	if unmarshalErr := json.Unmarshal(dispositionRaw, &disposition); unmarshalErr != nil {
 		return GenerationOutput{}, fmt.Errorf("Handoff generation disposition is invalid")
 	}
 	var nextAction *GenerationStatement
 	if raw, exists := fields["next_action"]; exists && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		value, err := decodeGenerationStatement(raw)
-		if err != nil {
-			return GenerationOutput{}, err
+		value, decodeErr := decodeGenerationStatement(raw)
+		if decodeErr != nil {
+			return GenerationOutput{}, decodeErr
 		}
 		nextAction = &value
 	}

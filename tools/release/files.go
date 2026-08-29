@@ -120,8 +120,8 @@ func copyONNXRuntime(source, destination, goos string) error {
 	if goos != "darwin" && goos != "linux" {
 		return fmt.Errorf("unsupported ONNX Runtime release target %q", goos)
 	}
-	if err := os.MkdirAll(destination, 0o755); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(destination, 0o755); mkdirErr != nil {
+		return mkdirErr
 	}
 
 	entries, err := os.ReadDir(root)
@@ -211,7 +211,7 @@ func copyRegularFile(source, destination string, mode os.FileMode) (returnErr er
 	if err != nil {
 		return err
 	}
-	defer input.Close()
+	defer func() { _ = input.Close() }()
 	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 	if err != nil {
 		return err

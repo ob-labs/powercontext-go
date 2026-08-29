@@ -70,7 +70,11 @@ func TestReviewRevisionAppendsImmutableFamilyTypedCandidateVersion(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close Candidate version rows: %v", err)
+		}
+	}()
 	var versions []int64
 	var proposals []string
 	for rows.Next() {
@@ -271,20 +275,20 @@ func TestReviewApprovalRollsBackWhenCandidateStatusUpdateFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, `CREATE TRIGGER pc_test_fail_candidate_approval
+	if _, createTriggerErr := fixture.database.SQLDB().ExecContext(fixture.ctx, `CREATE TRIGGER pc_test_fail_candidate_approval
         BEFORE UPDATE OF status ON pc_artifact_candidate_heads
         WHEN NEW.status = 'approved'
-        BEGIN SELECT RAISE(ABORT, 'injected Candidate status failure'); END`); err != nil {
-		t.Fatal(err)
+		BEGIN SELECT RAISE(ABORT, 'injected Candidate status failure'); END`); createTriggerErr != nil {
+		t.Fatal(createTriggerErr)
 	}
-	if _, err := fixture.service.Approve(fixture.ctx, candidate.ID(), 1); err == nil {
+	if _, approveErr := fixture.service.Approve(fixture.ctx, candidate.ID(), 1); approveErr == nil {
 		t.Fatal("approval unexpectedly survived injected status failure")
 	}
 	assertPendingCandidate(t, fixture.service, candidate.ID())
 	assertArtifactCount(t, fixture.database, fixture.scope, experience.Family, 0)
 
-	if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, `DROP TRIGGER pc_test_fail_candidate_approval`); err != nil {
-		t.Fatal(err)
+	if _, dropTriggerErr := fixture.database.SQLDB().ExecContext(fixture.ctx, `DROP TRIGGER pc_test_fail_candidate_approval`); dropTriggerErr != nil {
+		t.Fatal(dropTriggerErr)
 	}
 	approved, err := fixture.service.Approve(fixture.ctx, candidate.ID(), 1)
 	if err != nil {

@@ -71,8 +71,8 @@ func Open(ctx context.Context, config Config) (*Instance, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(directory), 0o750); err != nil {
-		return nil, err
+	if mkdirErr := os.MkdirAll(filepath.Dir(directory), 0o750); mkdirErr != nil {
+		return nil, mkdirErr
 	}
 	library, err := loadLibrary(config.LibraryPath)
 	if err != nil {

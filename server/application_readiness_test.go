@@ -28,13 +28,14 @@ import (
 	"testing"
 	"time"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/ob-labs/powercontext-go/inference"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	servermetrics "github.com/ob-labs/powercontext-go/internal/observability/metrics"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestConfiguredReadinessIncludesRuntimeAndConfiguredInference(t *testing.T) {
@@ -92,12 +93,12 @@ func TestGenerationReadinessUsesRawMinimalProviderRequest(t *testing.T) {
 
 	var requestBody map[string]any
 	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			return nil, err
+		body, readErr := io.ReadAll(request.Body)
+		if readErr != nil {
+			return nil, readErr
 		}
-		if err := json.Unmarshal(body, &requestBody); err != nil {
-			return nil, err
+		if unmarshalErr := json.Unmarshal(body, &requestBody); unmarshalErr != nil {
+			return nil, unmarshalErr
 		}
 		response := map[string]any{
 			"id": "probe", "object": "chat.completion", "created": 0, "model": "test-model",
@@ -108,9 +109,9 @@ func TestGenerationReadinessUsesRawMinimalProviderRequest(t *testing.T) {
 			}},
 			"usage": map[string]any{"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
 		}
-		encoded, err := json.Marshal(response)
-		if err != nil {
-			return nil, err
+		encoded, marshalErr := json.Marshal(response)
+		if marshalErr != nil {
+			return nil, marshalErr
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,

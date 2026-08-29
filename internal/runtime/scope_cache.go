@@ -23,8 +23,10 @@ import (
 
 const DefaultScopeCacheSize = 128
 
-type ScopeCacheObserver func(cached, active int)
-type ScopeEvictor func(scopeID string)
+type (
+	ScopeCacheObserver func(cached, active int)
+	ScopeEvictor       func(scopeID string)
+)
 
 type RuntimeOptions struct {
 	ScopeCacheSize int
@@ -83,22 +85,6 @@ func (c *scopeCache) lease(key string) (*scopeLease, func()) {
 	lease := &scopeLease{cache: c, entry: entry}
 	var once sync.Once
 	return lease, func() { once.Do(func() { c.release(entry) }) }
-}
-
-func (c *scopeCache) acquire(ctx context.Context, key string) (func(), error) {
-	lease, releaseLease := c.lease(key)
-	releaseToken, err := lease.acquire(ctx)
-	if err != nil {
-		releaseLease()
-		return nil, err
-	}
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			releaseToken()
-			releaseLease()
-		})
-	}, nil
 }
 
 func (l *scopeLease) contended() bool {

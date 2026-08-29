@@ -6,6 +6,20 @@ PNPM ?= pnpm
 UV ?= uv
 LICENSE_EYE ?= $(GO) run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
 
+TOOLS_BIN := $(CURDIR)/.tools/bin
+GOLANGCI_LINT_VERSION := v2.13.1
+GOLANGCI_LINT_VERSION_TEXT := $(patsubst v%,%,$(GOLANGCI_LINT_VERSION))
+GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
+PROJECT_GO_TOOLCHAIN = $(shell $(GO) env GOVERSION)
+GOLANGCI_LINT_STAMP = $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+
+.DEFAULT_GOAL := generate
+
+COVERAGE_DIR ?= coverage
+COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
+COVERAGE_SUMMARY ?= $(COVERAGE_DIR)/summary.txt
+COVERAGE_MINIMUM ?= 16.0
+
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
 VERSION ?= devel
@@ -18,11 +32,30 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 PORTABLE_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...
 PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet \
+.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all coverage coverage-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	check-portable package-standard package-full clean
+
+$(GOLANGCI_LINT): Makefile go.mod
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+$(GOLANGCI_LINT_STAMP): $(GOLANGCI_LINT)
+	@"$(GOLANGCI_LINT)" --version | grep -q "version $(GOLANGCI_LINT_VERSION_TEXT) "
+	@$(RM) $(TOOLS_BIN)/.golangci-lint-*
+	@touch "$@"
+
+lint-tools: $(GOLANGCI_LINT_STAMP)
+
+lint: lint-tools
+	"$(GOLANGCI_LINT)" run
+
+lint-fix: lint-tools
+	"$(GOLANGCI_LINT)" fmt
+	"$(GOLANGCI_LINT)" run --fix
 
 generate:
 	$(GO) generate ./openapi
@@ -49,15 +82,19 @@ license-fix:
 	$(LICENSE_EYE) -c .licenserc.yaml header fix
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 
-fmt:
+fmt: lint-tools
 	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
+	"$(GOLANGCI_LINT)" fmt
 
-fmt-check:
-	@files="$$(gofmt -l $$(find . -name '*.go' -not -path './vendor/*'))"; \
-	if [ -n "$$files" ]; then printf '%s\n' "$$files"; exit 1; fi
+fmt-check: lint-tools
+	@$(GOFMT) -l $$(find . -name '*.go' -not -path './vendor/*') >/dev/null
+	"$(GOLANGCI_LINT)" fmt --diff
 
 vet:
 	$(GO) vet ./...
+
+build-all:
+	$(GO) build -mod=readonly ./...
 
 test: unit-test e2e-test
 
@@ -74,6 +111,32 @@ test-sqlite:
 
 test-race:
 	CGO_ENABLED=1 $(GO) test -race ./...
+
+coverage:
+	@mkdir -p "$(COVERAGE_DIR)"
+	CGO_ENABLED=1 $(GO) test -race -covermode=atomic -coverprofile="$(COVERAGE_PROFILE)" ./...
+	$(GO) tool cover -func="$(COVERAGE_PROFILE)" > "$(COVERAGE_SUMMARY)"
+	@tail -n 1 "$(COVERAGE_SUMMARY)"
+	@$(MAKE) coverage-check
+
+coverage-check:
+	@test -s "$(COVERAGE_SUMMARY)" || { echo 'coverage summary is missing or empty' >&2; exit 2; }
+	@actual=$$(awk 'END { value = $$3; sub(/%$$/, "", value); print value }' "$(COVERAGE_SUMMARY)"); \
+		minimum="$(COVERAGE_MINIMUM)"; \
+		if ! awk -v value="$$actual" 'BEGIN { exit !(value ~ /^[0-9]+([.][0-9]+)?$$/) }'; then \
+			printf 'coverage total must be a non-negative number, got %s\n' "$$actual" >&2; \
+			exit 2; \
+		fi; \
+		if ! awk -v value="$$minimum" 'BEGIN { exit !(value ~ /^[0-9]+([.][0-9]+)?$$/) }'; then \
+			printf 'coverage minimum must be a non-negative number, got %s\n' "$$minimum" >&2; \
+			exit 2; \
+		fi; \
+		if awk -v actual="$$actual" -v minimum="$$minimum" 'BEGIN { exit !((actual + 0) >= (minimum + 0)) }'; then \
+			printf 'coverage %s%% meets minimum %s%%\n' "$$actual" "$$minimum"; \
+		else \
+			printf 'coverage %s%% is below minimum %s%%\n' "$$actual" "$$minimum" >&2; \
+			exit 1; \
+		fi
 
 test-full:
 	@test -d "$(TOKENIZERS_LIB_DIR)" || { echo 'TOKENIZERS_LIB_DIR must contain libtokenizers.a' >&2; exit 2; }

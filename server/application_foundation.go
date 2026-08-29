@@ -19,11 +19,12 @@ import (
 	"errors"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	servermetrics "github.com/ob-labs/powercontext-go/internal/observability/metrics"
 	servertracing "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type applicationFoundation struct {

@@ -74,8 +74,8 @@ func TestServiceFreezesExactHeadsAndBuildsCanonicalReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(encoded, &payload); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(encoded, &payload); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
 	if payload["generated_at"] != "2026-08-06T00:00:00Z" {
 		t.Fatalf("generated_at = %#v", payload["generated_at"])
@@ -92,8 +92,8 @@ func TestServiceFreezesExactHeadsAndBuildsCanonicalReport(t *testing.T) {
 	var fixture struct {
 		Report map[string]any `json:"report"`
 	}
-	if err := json.Unmarshal(fixtureBytes, &fixture); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(fixtureBytes, &fixture); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
 	if !reflect.DeepEqual(payload, fixture.Report) {
 		t.Fatalf("Go report JSON differs from frozen Python report\nGo: %#v\nPython: %#v", payload, fixture.Report)
@@ -242,8 +242,8 @@ func TestDigestFieldsStayStableWhenReportIsRevalidated(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantSelection, wantReport := report.SelectionDigest(), report.ReportDigest()
-	if err := report.Validate(); err != nil {
-		t.Fatal(err)
+	if validationErr := report.Validate(); validationErr != nil {
+		t.Fatal(validationErr)
 	}
 	selection, err := handoffreport.SelectionDigest(report)
 	if err != nil {
@@ -300,6 +300,7 @@ func (r *reportReader) Latest(_ context.Context, scope string) (handoff.Handoff,
 	}
 	return *value, true, nil
 }
+
 func (r *reportReader) Get(_ context.Context, scope string, ref artifact.Ref) (handoff.Handoff, error) {
 	r.exactReads++
 	value := r.values[scope]
@@ -308,6 +309,7 @@ func (r *reportReader) Get(_ context.Context, scope string, ref artifact.Ref) (h
 	}
 	return *value, nil
 }
+
 func (r *reportReader) Revisions(_ context.Context, scope string) ([]handoff.Handoff, error) {
 	if values, ok := r.histories[scope]; ok {
 		return append([]handoff.Handoff(nil), values...), nil
@@ -318,6 +320,7 @@ func (r *reportReader) Revisions(_ context.Context, scope string) ([]handoff.Han
 	}
 	return []handoff.Handoff{*value}, nil
 }
+
 func (r *reportReader) CheckEvidence(context.Context, string, artifact.Ref) ([]handoff.EvidenceCheck, error) {
 	r.evidenceReads++
 	if r.evidenceUnavailable {
@@ -338,12 +341,15 @@ func (r *alternatingReader) Latest(context.Context, string) (handoff.Handoff, bo
 	}
 	return r.two, true, nil
 }
+
 func (*alternatingReader) Get(context.Context, string, artifact.Ref) (handoff.Handoff, error) {
 	panic("unexpected exact read")
 }
+
 func (*alternatingReader) Revisions(context.Context, string) ([]handoff.Handoff, error) {
 	return nil, nil
 }
+
 func (*alternatingReader) CheckEvidence(context.Context, string, artifact.Ref) ([]handoff.EvidenceCheck, error) {
 	return nil, nil
 }
@@ -356,6 +362,7 @@ func domainProject(t *testing.T) handoffreport.ProjectDescriptor {
 	}
 	return value
 }
+
 func domainWorkstream(t *testing.T, scope string) handoffreport.WorkstreamDescriptor {
 	t.Helper()
 	value, err := handoffreport.NewWorkstreamDescriptor(scope, "prj-1", nil, "Report", handoffreport.WorkstreamFeature, handoffreport.CatalogIncluded, nil, nil, 1)
@@ -364,6 +371,7 @@ func domainWorkstream(t *testing.T, scope string) handoffreport.WorkstreamDescri
 	}
 	return value
 }
+
 func domainActivity(t *testing.T, id, scope string, occurred time.Time) handoffreport.ActivityEvent {
 	t.Helper()
 	value, err := handoffreport.NewActivityEvent(handoffreport.ActivityEventInput{EventID: id, ProjectID: "prj-1", ScopeID: &scope, Source: handoffreport.ActivityCodingSession, SourceEventID: "source-" + id, OccurredAt: &occurred, ObservedAt: occurred.Add(time.Hour).UTC(), TimeBasis: handoffreport.TimeSourceReported})
@@ -372,6 +380,7 @@ func domainActivity(t *testing.T, id, scope string, occurred time.Time) handoffr
 	}
 	return value
 }
+
 func reportHandoff(t *testing.T, revision int64) handoff.Handoff {
 	return reportHandoffRevision(t, revision, "Implement the report.", "Add the API.")
 }

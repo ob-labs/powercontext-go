@@ -63,8 +63,10 @@ func (c Content) Action() string    { return c.action }
 func (c Content) Outcome() string   { return c.outcome }
 func (c Content) Lesson() string    { return c.lesson }
 
-type Experience = artifact.Artifact[Content]
-type Draft = artifact.Draft[Content]
+type (
+	Experience = artifact.Artifact[Content]
+	Draft      = artifact.Draft[Content]
+)
 
 func NewDraft(content Content, sources []source.Ref, artifacts []artifact.Ref) (Draft, error) {
 	return artifact.NewDraft(Family, content, sources, artifacts)

@@ -100,10 +100,10 @@ func (a *HandoffApplication) Activate(
 		if err != nil {
 			return err
 		}
-		if err := a.activation.SaveBoundary(
+		if saveErr := a.activation.SaveBoundary(
 			ctx, scope, trigger.HandoffBoundaryName, transition.State(), generation,
-		); err != nil {
-			return err
+		); saveErr != nil {
+			return saveErr
 		}
 		result, err = handoff.NewActivation(
 			handoff.ActivationGenerated,

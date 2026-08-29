@@ -111,8 +111,8 @@ func TestManagedProjectionCanBeInspectedAndSafelyUpdated(t *testing.T) {
 	if got := current.PublishedArtifact(); got == nil || *got != second {
 		t.Fatalf("published current revision = %#v, want %v", got, second)
 	}
-	if _, err := os.Stat(filepath.Join(root, "safe-skill")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("renamed prior projection still exists: %v", err)
+	if _, statErr := os.Stat(filepath.Join(root, "safe-skill")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("renamed prior projection still exists: %v", statErr)
 	}
 	contents, err := os.ReadFile(filepath.Join(current.Destination(), "SKILL.md"))
 	if err != nil || !containsAll(string(contents), "inspect the result") {
@@ -129,8 +129,8 @@ func TestManagedProjectionRefusesModifiedOrForeignContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(published.Destination(), "SKILL.md"), []byte("locally edited\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(filepath.Join(published.Destination(), "SKILL.md"), []byte("locally edited\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	drifted := skill.InspectSkillProjection(ref, content, target)
 	if drifted.State() != skill.ProjectionDrifted {

@@ -128,20 +128,20 @@ func run(root, manifestPath, rulesPath, outputPath string, check bool) error {
 	caseSpecificCount := 0
 	for _, test := range manifest.Tests {
 		sourceFiles[test.File] = struct{}{}
-		rule, ok := rules.Files[test.File]
+		fileRule, ok := rules.Files[test.File]
 		if !ok {
 			return fmt.Errorf("no traceability rule for %s", test.File)
 		}
-		if rule.Mode != "go-port" && rule.Mode != "retained-host" && rule.Mode != "cross-layer" {
-			return fmt.Errorf("%s has invalid mode %q", test.File, rule.Mode)
+		if fileRule.Mode != "go-port" && fileRule.Mode != "retained-host" && fileRule.Mode != "cross-layer" {
+			return fmt.Errorf("%s has invalid mode %q", test.File, fileRule.Mode)
 		}
-		references := rule.SupportingEvidence
+		references := fileRule.SupportingEvidence
 		evidenceLevel := fileSupportingEvidence
-		if len(rule.CaseEvidence) != 0 {
-			references = rule.CaseEvidence
+		if len(fileRule.CaseEvidence) != 0 {
+			references = fileRule.CaseEvidence
 			evidenceLevel = caseSpecificEvidence
 		}
-		if override, ok := rule.Cases[test.Name]; ok {
+		if override, ok := fileRule.Cases[test.Name]; ok {
 			references = override
 			evidenceLevel = caseSpecificEvidence
 		}
@@ -161,7 +161,7 @@ func run(root, manifestPath, rulesPath, outputPath string, check bool) error {
 			caseSpecificCount++
 		}
 		entries = append(entries, entry{
-			Python: test, Mode: rule.Mode, EvidenceLevel: evidenceLevel, Evidence: resolved,
+			Python: test, Mode: fileRule.Mode, EvidenceLevel: evidenceLevel, Evidence: resolved,
 		})
 	}
 	if len(sourceFiles) != manifest.TestFileCount {

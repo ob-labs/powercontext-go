@@ -24,9 +24,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 	"github.com/ob-labs/powercontext-go/server"
-	"github.com/spf13/cobra"
 )
 
 type serverCommandRunner func(context.Context, *commandState, server.ProcessConfig) error

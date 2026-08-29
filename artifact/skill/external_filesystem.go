@@ -119,7 +119,7 @@ func readBounded(path string, maximum int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	content, err := io.ReadAll(io.LimitReader(file, int64(maximum)+1))
 	if err != nil {
 		return nil, err

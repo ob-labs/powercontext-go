@@ -54,8 +54,8 @@ func TestCollectedSchemasAreObjectSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	var root map[string]any
-	if err := json.Unmarshal(jsonSpec, &root); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(jsonSpec, &root); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
 	definitions, err := collect(root)
 	if err != nil {

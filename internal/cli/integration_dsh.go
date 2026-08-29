@@ -48,13 +48,13 @@ func newSetupDSHCommand(state *commandState) *cobra.Command {
 			if err != nil || !bundle.Mode().IsRegular() {
 				return errors.New("PowerContext DSH plugin is missing lib/index.js; build the plugin before setup")
 			}
-			if _, err := state.system.Run(command.Context(), executable, "plugin", "--profile", "web", "add", pluginPath); err != nil {
-				return err
+			if _, runErr := state.system.Run(command.Context(), executable, "plugin", "--profile", "web", "add", pluginPath); runErr != nil {
+				return runErr
 			}
 			checks := runDSHDiagnostics(command.Context(), state.system)
 			if diagnosticsStatus(checks) != "ok" {
-				if err := writeDiagnostics(state, checks); err != nil {
-					return err
+				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
+					return writeErr
 				}
 				return alreadyReported(errors.New("DeepSeek Harness diagnostics did not pass"))
 			}
@@ -73,6 +73,7 @@ func newSetupDSHCommand(state *commandState) *cobra.Command {
 	command.Flags().StringVar(&ref, "ref", defaultMarketplaceRef, "Git ref used for a remote source.")
 	return command
 }
+
 func runDSHDiagnostics(ctx context.Context, commands systemCommandExecutor) map[string]diagnostic {
 	executable, err := dshExecutable(commands, runtime.GOOS)
 	if err != nil {
@@ -101,6 +102,7 @@ func runDSHDiagnostics(ctx context.Context, commands systemCommandExecutor) map[
 	}
 	return map[string]diagnostic{"dsh": {OK: true, Status: "ok", Detail: executable}, "plugin": plugin}
 }
+
 func dshExecutable(commands systemCommandExecutor, goos string) (string, error) {
 	if goos == "windows" {
 		if executable, err := commands.LookPath("dsh.cmd"); err == nil {
@@ -115,17 +117,11 @@ func resolveDSHPlugin(
 	commands systemCommandExecutor,
 	source, ref, dataDirectory string,
 ) (string, error) {
-	_, local, err := normalizeMarketplaceSource(source)
+	root, local, err := normalizeMarketplaceSource(source)
 	if err != nil {
 		return "", err
 	}
-	root := source
-	if local {
-		root, _, err = normalizeMarketplaceSource(source)
-		if err != nil {
-			return "", err
-		}
-	} else {
+	if !local {
 		if ref == "" || ref == "." || ref == ".." || strings.ContainsRune(ref, '\x00') {
 			return "", errors.New("invalid DeepSeek Harness ref")
 		}
@@ -138,22 +134,22 @@ func resolveDSHPlugin(
 		if plugin, ok := findDSHPlugin(root); ok {
 			return plugin, nil
 		}
-		if _, err := os.Lstat(root); err == nil {
-			if err := os.RemoveAll(root); err != nil {
+		if _, statErr := os.Lstat(root); statErr == nil {
+			if removeErr := os.RemoveAll(root); removeErr != nil {
 				return "", errors.New("cannot replace incomplete DSH checkout")
 			}
-		} else if !errors.Is(err, os.ErrNotExist) {
+		} else if !errors.Is(statErr, os.ErrNotExist) {
 			return "", errors.New("cannot inspect DSH checkout")
 		}
-		if err := os.MkdirAll(filepath.Dir(root), 0o755); err != nil {
+		if mkdirErr := os.MkdirAll(filepath.Dir(root), 0o755); mkdirErr != nil {
 			return "", errors.New("cannot create DSH checkout directory")
 		}
 		cloneURL, err := githubCloneURL(source)
 		if err != nil {
 			return "", err
 		}
-		if _, err := commands.Run(ctx, "git", "clone", "--depth", "1", "--branch", ref, cloneURL, root); err != nil {
-			return "", err
+		if _, cloneErr := commands.Run(ctx, "git", "clone", "--depth", "1", "--branch", ref, cloneURL, root); cloneErr != nil {
+			return "", cloneErr
 		}
 	}
 	if plugin, ok := findDSHPlugin(root); ok {
