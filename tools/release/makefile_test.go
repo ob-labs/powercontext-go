@@ -99,16 +99,39 @@ printf '%s|%s|%s|%s\n' "$GOOS" "$GOARCH" "$CGO_ENABLED" "$*" >> "$PORTABLE_CALL_
 	if err != nil {
 		t.Fatal(err)
 	}
-	const arguments = "build ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/..."
-	want := []string{
-		"linux|amd64|0|" + arguments,
-		"linux|arm64|0|" + arguments,
-		"darwin|amd64|0|" + arguments,
-		"darwin|arm64|0|" + arguments,
+	wantTargets := []string{"darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64"}
+	wantPackages := []string{
+		"./api/...",
+		"./artifact/...",
+		"./client/...",
+		"./inference/...",
+		"./openapi/...",
+		"./source/...",
+		"./trigger/...",
 	}
-	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
-	if !slices.Equal(got, want) {
-		t.Fatalf("portable build calls = %q, want %q", got, want)
+	lines := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	gotTargets := make([]string, 0, len(lines))
+	for _, line := range lines {
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) != 4 {
+			t.Fatalf("portable build call %q has %d fields, want 4", line, len(parts))
+		}
+		gotTargets = append(gotTargets, parts[0]+"/"+parts[1])
+		if parts[2] != "0" {
+			t.Errorf("portable build %s/%s CGO_ENABLED = %q, want 0", parts[0], parts[1], parts[2])
+		}
+		arguments := strings.Fields(parts[3])
+		if len(arguments) == 0 || arguments[0] != "build" {
+			t.Fatalf("portable build %s/%s arguments = %q, want build command", parts[0], parts[1], arguments)
+		}
+		gotPackages := slices.Sorted(slices.Values(arguments[1:]))
+		if !slices.Equal(gotPackages, wantPackages) {
+			t.Errorf("portable build %s/%s packages = %q, want %q", parts[0], parts[1], gotPackages, wantPackages)
+		}
+	}
+	gotTargets = slices.Sorted(slices.Values(gotTargets))
+	if !slices.Equal(gotTargets, wantTargets) {
+		t.Fatalf("portable build targets = %q, want %q", gotTargets, wantTargets)
 	}
 }
 
@@ -136,7 +159,7 @@ esac
 
 target="$GOOS/$GOARCH"
 printf '%s\n' "$target" >> "$PORTABLE_CALL_LOG"
-if [ "$target" = "$PORTABLE_FAIL_TARGET" ]; then
+if [ "$(grep -c '^' "$PORTABLE_CALL_LOG")" -eq 2 ]; then
 	exit 23
 fi
 `
@@ -149,7 +172,6 @@ fi
 	command.Env = append(
 		os.Environ(),
 		"PORTABLE_CALL_LOG="+callLog,
-		"PORTABLE_FAIL_TARGET=linux/arm64",
 	)
 	output, err := command.CombinedOutput()
 	if err == nil {
@@ -160,10 +182,9 @@ fi
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	want := []string{"linux/amd64", "linux/arm64"}
 	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
-	if !slices.Equal(got, want) {
-		t.Fatalf("portable build calls after failure = %q, want %q", got, want)
+	if len(got) != 2 {
+		t.Fatalf("portable build calls after second-call failure = %q, want exactly 2 calls", got)
 	}
 }
 
