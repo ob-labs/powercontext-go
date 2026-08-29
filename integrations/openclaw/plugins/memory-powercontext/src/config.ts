@@ -53,6 +53,13 @@ function boundedInteger(value: unknown, fallback: number, min: number, max: numb
     : fallback;
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+  return normalized === "localhost"
+    || normalized === "::1"
+    || /^127(?:\.\d{1,3}){3}$/u.test(normalized);
+}
+
 function normalizeEndpoint(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -63,7 +70,13 @@ function normalizeEndpoint(value: unknown): string | undefined {
   }
   try {
     const parsed = new URL(endpoint);
-    return parsed.username || parsed.password ? undefined : endpoint;
+    if (parsed.username || parsed.password) {
+      return undefined;
+    }
+    if (parsed.protocol === "http:" && !isLoopbackHost(parsed.hostname)) {
+      return undefined;
+    }
+    return endpoint;
   } catch {
     return undefined;
   }

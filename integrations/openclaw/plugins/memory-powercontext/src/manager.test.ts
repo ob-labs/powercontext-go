@@ -42,7 +42,7 @@ describe("PowerContext memory manager", () => {
     } as unknown as PowerContextClient;
     const manager = new PowerContextMemoryManager(
       "main",
-      () => resolvePowerContextConfig(undefined, { endpoint: "http://powercontext.test" }),
+      () => resolvePowerContextConfig(undefined, { endpoint: "https://powercontext.test" }),
       client,
       () => true,
     );
@@ -72,7 +72,7 @@ describe("PowerContext memory manager", () => {
       },
     } as unknown as PowerContextClient;
     const config = resolvePowerContextConfig(undefined, {
-      endpoint: "http://powercontext.test",
+      endpoint: "https://powercontext.test",
       scopeMode: "project",
     });
     const manager = new PowerContextMemoryManager("main", () => config, client, () => true);

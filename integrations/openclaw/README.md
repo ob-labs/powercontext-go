@@ -100,9 +100,9 @@ chmod 600 ~/.openclaw/.env
 openclaw gateway restart
 ```
 
-Do not put credentials in the endpoint. The current configuration accepts both HTTP and HTTPS URLs; use plain HTTP
-only for a trusted loopback Server and use HTTPS for every remote Server. This is an operator security requirement,
-not a restriction currently enforced by the CLI or plugin.
+Do not put credentials in the endpoint. The plugin accepts plain HTTP only for
+loopback hosts, including the complete `127.0.0.0/8` range, and rejects every
+remote HTTP endpoint. Use HTTPS for every remote Server.
 
 ## Verify the installation
 

@@ -55,7 +55,7 @@ def _run(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as http_client:
-            with shared_http_client(http_client):
+            with shared_http_client(http_client, trust_transport_security=True):
                 await scenario()
 
     asyncio.run(driver())

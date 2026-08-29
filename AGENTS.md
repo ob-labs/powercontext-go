@@ -238,3 +238,8 @@ source / artifact / trigger / inference
   overrides, merge every explicit override before the final validation. Verify
   both directions: a safe override repairs an unsafe environment value, and an
   unsafe override cannot replace a safe environment value without failing.
+- When isolated host adapters vendor the same transport policy, drive every
+  configuration and directly constructible client boundary from one shared
+  host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6
+  loopback, remote plaintext rejection, and each explicit trusted-transport
+  exception in the adapter's native test suite.

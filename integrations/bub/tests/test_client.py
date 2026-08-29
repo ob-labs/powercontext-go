@@ -23,6 +23,11 @@ from pathlib import Path
 from types import ModuleType
 from unittest import mock
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
+
 
 def _load_client() -> ModuleType:
     path = Path(__file__).resolve().parents[1] / "src" / "powercontext_bub" / "client.py"
@@ -172,6 +177,20 @@ class ValidationTests(unittest.TestCase):
         for token in ["", " leading", "trailing ", "two words", "token\r\nInjected: yes"]:
             with self.subTest(token=token), self.assertRaises(ValueError):
                 client.PowerContextHTTPClient("http://127.0.0.1:8000", token=token)
+
+    def test_transport_policy_matches_shared_loopback_vectors(self) -> None:
+        for host in _TRANSPORT_VECTORS["loopback"]:
+            with self.subTest(kind="loopback", host=host):
+                client.PowerContextHTTPClient(f"http://{host}:8000")
+        for host in _TRANSPORT_VECTORS["non_loopback"]:
+            with self.subTest(kind="non-loopback", host=host), self.assertRaises(ValueError):
+                client.PowerContextHTTPClient(f"http://{host}:8000")
+
+    def test_explicit_transport_trust_allows_controlled_non_loopback_http(self) -> None:
+        client.PowerContextHTTPClient(
+            "http://memory.example:8000",
+            trust_transport_security=True,
+        )
 
     def test_integer_validation_rejects_bool_and_search_score_examples_are_finite(self) -> None:
         with self.assertRaises(client.InvalidResponseError):

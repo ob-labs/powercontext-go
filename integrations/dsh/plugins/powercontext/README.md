@@ -27,3 +27,6 @@ make js-api-generate-check
 ```
 
 Environment overrides use the `POWERCONTEXT_DSH_` prefix for `BASE_URL`, `AUTHORIZATION`, `SCOPE_ID`, `CAPTURE_PROMPTS`, and `FLUSH_ON_CAPTURE`. `timeoutMs`, `requestTimeoutMs`, `maxBytes`, and `flushMaxCalls` are plugin patch settings. Context returned by recall is labelled as untrusted history. An unavailable Server never blocks normal Harness work. The plugin directory must contain a built `lib/index.js`.
+
+Plain HTTP is accepted only for loopback hosts, including the complete
+`127.0.0.0/8` range. Every remote Server URL must use HTTPS.

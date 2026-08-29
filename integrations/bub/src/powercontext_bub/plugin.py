@@ -72,6 +72,7 @@ class PowerContextSettings(Settings):
     capture_checkpoint_every: int = Field(default=5, ge=1, le=100)
     capture_max_bytes: int = Field(default=8192, ge=512, le=32768)
     capture_log: Path | None = None
+    trust_transport_security: bool = False
 
 
 class PowerContextPlugin:
@@ -91,6 +92,7 @@ class PowerContextPlugin:
                 "base_url": self.base_url,
                 "scope_id": self.scope_id,
                 "timeout": self.settings.timeout,
+                "trust_transport_security": self.settings.trust_transport_security,
                 "capture_sequence": 0,
                 "captured_events": 0,
                 "captured_position": 0,
@@ -300,7 +302,12 @@ class PowerContextPlugin:
 
     def _client(self) -> PowerContextHTTPClient:
         token = None if self.settings.api_token is None else self.settings.api_token.get_secret_value()
-        return PowerContextHTTPClient(self.base_url, token=token, timeout=self.settings.timeout)
+        return PowerContextHTTPClient(
+            self.base_url,
+            token=token,
+            timeout=self.settings.timeout,
+            trust_transport_security=self.settings.trust_transport_security,
+        )
 
     def _write_capture_record(self, *, event: str, status: str, **values: Any) -> None:
         if self.settings.capture_log is None:

@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
@@ -26,7 +27,6 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 from typing_extensions import override
 
 _MCP_CONFIGURATION_PATH = Path(__file__).with_name(".mcp.json")
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _AUTHORIZATION_ENVIRONMENT = {"Authorization": "POWERCONTEXT_CODEX_AUTHORIZATION"}
 
 
@@ -156,13 +156,23 @@ def _http_base_url(mcp_url: str) -> str:
         raise ValueError("PowerContext MCP URL must use HTTP or HTTPS")  # noqa: TRY003
     if parsed.query or parsed.fragment:
         raise ValueError("PowerContext MCP URL must not contain a query or fragment")  # noqa: TRY003
-    if parsed.scheme == "http" and parsed.hostname.lower() not in _LOOPBACK_HOSTS:
+    if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
         raise ValueError("unencrypted PowerContext MCP URLs must be loopback addresses")  # noqa: TRY003
     mcp_path = parsed.path.rstrip("/")
     if not mcp_path.endswith("/mcp"):
         raise ValueError("PowerContext MCP URL path must end with /mcp")  # noqa: TRY003
     base_path = mcp_path.removesuffix("/mcp")
     return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", "")).rstrip("/")
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
 
 
 __all__ = ["CodexPluginSettings"]

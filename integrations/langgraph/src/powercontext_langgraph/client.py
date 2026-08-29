@@ -22,6 +22,7 @@ HTTP operations the adapter consumes.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import math
 from collections.abc import Iterator
@@ -51,7 +52,7 @@ _USER_AGENT = "powercontext-langgraph/0.0.1"
 
 # A shared HTTP client lets a long-running deployment reuse one connection pool across nodes and tools, and lets
 # tests provide an in-process transport. Per-operation clients borrow it and never close it.
-_SHARED_HTTP_CLIENT: ContextVar[httpx.AsyncClient | None] = ContextVar(
+_SHARED_HTTP_CLIENT: ContextVar[tuple[httpx.AsyncClient, bool] | None] = ContextVar(
     "powercontext_langgraph_http_client", default=None
 )
 
@@ -262,7 +263,7 @@ def resolve_config(
     ):
         raise ValueError("PowerContext token must be a non-empty bearer token")
     return ResolvedConfig(
-        base_url=_http_base_url(scope.base_url or resolved_settings.base_url),
+        base_url=_normalize_http_base_url(scope.base_url or resolved_settings.base_url),
         scope_id=resolve_scope_id(scope.scope_id or resolved_settings.scope_id),
         token=token,
         timeout=timeout,
@@ -284,8 +285,10 @@ class PowerContextClient:
         token: str | None = None,
         timeout: float = 10.0,
         http_client: httpx.AsyncClient | None = None,
+        trust_transport_security: bool = False,
     ) -> None:
-        self._base_url = _http_base_url(base_url)
+        transport_trusted = http_client is not None and trust_transport_security
+        self._base_url = _http_base_url(base_url, trust_transport_security=transport_trusted)
         if timeout <= 0:
             raise ValueError("PowerContext timeout must be positive")
         if token is not None and (
@@ -375,19 +378,24 @@ class PowerContextClient:
 def open_client(config: ResolvedConfig) -> PowerContextClient:
     """Open a per-operation client, borrowing a shared pool when installed."""
 
-    return PowerContextClient(
-        config.base_url,
-        token=config.token,
-        timeout=config.timeout,
-        http_client=_SHARED_HTTP_CLIENT.get(),
-    )
+    shared = _SHARED_HTTP_CLIENT.get()
+    if shared is not None:
+        client, trust_transport_security = shared
+        return PowerContextClient(
+            config.base_url,
+            token=config.token,
+            timeout=config.timeout,
+            http_client=client,
+            trust_transport_security=trust_transport_security,
+        )
+    return PowerContextClient(config.base_url, token=config.token, timeout=config.timeout)
 
 
 @contextmanager
-def shared_http_client(client: httpx.AsyncClient) -> Iterator[None]:
-    """Install a shared connection pool for the duration of a block."""
+def shared_http_client(client: httpx.AsyncClient, *, trust_transport_security: bool = False) -> Iterator[None]:
+    """Install a shared connection pool and its explicit transport-security vouch."""
 
-    token = _SHARED_HTTP_CLIENT.set(client)
+    token = _SHARED_HTTP_CLIENT.set((client, trust_transport_security))
     try:
         yield
     finally:
@@ -423,7 +431,7 @@ def _validate(model: type[_WireModel], value: dict[str, Any]):
         ) from error
 
 
-def _http_base_url(value: str) -> str:
+def _normalize_http_base_url(value: str) -> str:
     parsed = urlsplit(value.rstrip("/"))
     if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
         raise ValueError("PowerContext base URL must use HTTP or HTTPS")
@@ -437,6 +445,24 @@ def _http_base_url(value: str) -> str:
             "PowerContext base URL must not contain credentials, query data, or a fragment"
         )
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
+
+
+def _http_base_url(value: str, *, trust_transport_security: bool = False) -> str:
+    normalized = _normalize_http_base_url(value)
+    parsed = urlsplit(normalized)
+    if parsed.scheme == "http" and not trust_transport_security and not _is_loopback_host(parsed.hostname or ""):
+        raise ValueError("unencrypted PowerContext URLs must be loopback addresses")
+    return normalized
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
 
 
 __all__ = [

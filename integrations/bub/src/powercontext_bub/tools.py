@@ -32,6 +32,7 @@ class ToolSettings(TypedDict):
     scope_id: str
     timeout: float
     token: str | None
+    trust_transport_security: bool
 
 
 class SearchInput(BaseModel):
@@ -125,5 +126,8 @@ def _settings(context: Any) -> ToolSettings:
 
 def _client(settings: ToolSettings) -> PowerContextHTTPClient:
     return PowerContextHTTPClient(
-        settings["base_url"], token=settings["token"], timeout=settings["timeout"]
+        settings["base_url"],
+        token=settings["token"],
+        timeout=settings["timeout"],
+        trust_transport_security=settings["trust_transport_security"],
     )

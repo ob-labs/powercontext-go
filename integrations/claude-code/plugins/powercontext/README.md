@@ -16,6 +16,9 @@ The plugin defaults to `http://127.0.0.1:8000`. Its Hook and MCP transport share
 enabled. Prompt capture can be disabled through the plugin's `capture_prompts`
 option or by setting `POWERCONTEXT_CLAUDE_CAPTURE_PROMPTS=false`.
 
+Plain HTTP is accepted only for loopback hosts, including IPv6 `::1` and the
+complete IPv4 `127.0.0.0/8` range. Every remote Server URL must use HTTPS.
+
 The Hook fails open on transport, authentication, contract, and capture errors.
 MCP remains available for explicit Memory maintenance and the inspected
 Handoff lifecycle when the Server is reachable.

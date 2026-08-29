@@ -403,6 +403,25 @@ const OPERATIONS = {
 const OPERATION_IDS = Object.keys(OPERATIONS);
 
 //#endregion
+//#region src/transport.ts
+function isLoopbackHost(hostname) {
+	const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	return normalized === "localhost" || normalized === "::1" || /^127(?:\.\d{1,3}){3}$/.test(normalized);
+}
+function normalizePowerContextBaseUrl(value, name$1) {
+	let url;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error(`${name$1} must be a valid HTTP(S) URL`);
+	}
+	if (!["http:", "https:"].includes(url.protocol)) throw new Error(`${name$1} must use HTTP or HTTPS`);
+	if (url.username || url.password || url.search || url.hash) throw new Error(`${name$1} must not contain credentials, a query, or a fragment`);
+	if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) throw new Error(`${name$1} must use HTTPS outside loopback`);
+	return url.toString().replace(/\/+$/, "");
+}
+
+//#endregion
 //#region src/client.ts
 function combineSignals(signals) {
 	const present$1 = signals.filter(Boolean);
@@ -489,7 +508,7 @@ var PowerContextClient = class {
 	requestTimeoutMs;
 	fetchImpl;
 	constructor(options) {
-		this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+		this.baseUrl = normalizePowerContextBaseUrl(options.baseUrl, "PowerContext base URL");
 		this.authorization = options.authorization;
 		this.requestTimeoutMs = options.requestTimeoutMs;
 		this.fetchImpl = options.fetch ?? fetch;
@@ -975,9 +994,6 @@ function envBoolean(env, name$1) {
 		"off"
 	].includes(value)) return false;
 }
-function stripSlash(url) {
-	return url.replace(/\/+$/, "");
-}
 function optionalText(value) {
 	const trimmed = value?.trim();
 	return trimmed ? trimmed : void 0;
@@ -986,7 +1002,7 @@ function resolveConfig(config = {}, env = process.env) {
 	const maxBytes = config.maxBytes ?? DEFAULTS.maxBytes;
 	if (maxBytes < 512 || maxBytes > 32768) throw new Error("maxBytes must be between 512 and 32768");
 	return {
-		baseUrl: stripSlash(envString(env, "POWERCONTEXT_DSH_BASE_URL") ?? config.baseUrl ?? DEFAULTS.baseUrl),
+		baseUrl: normalizePowerContextBaseUrl(envString(env, "POWERCONTEXT_DSH_BASE_URL") ?? config.baseUrl ?? DEFAULTS.baseUrl, "POWERCONTEXT_DSH_BASE_URL"),
 		authorization: envString(env, "POWERCONTEXT_DSH_AUTHORIZATION") ?? optionalText(config.authorization),
 		scopeId: envString(env, "POWERCONTEXT_DSH_SCOPE_ID") ?? optionalText(config.scopeId),
 		timeoutMs: config.timeoutMs ?? DEFAULTS.timeoutMs,

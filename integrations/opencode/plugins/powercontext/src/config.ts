@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { normalizePowerContextBaseUrl } from './transport.ts'
+
 export interface ResolvedConfig {
   baseUrl: string
   scopeId: string | undefined
@@ -62,23 +64,7 @@ function envInteger(env: NodeJS.ProcessEnv, name: string, fallback: number, mini
 }
 
 function normalizeBaseUrl(value: string): string {
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error('POWERCONTEXT_OPENCODE_BASE_URL must be a valid HTTP(S) URL')
-  }
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error('POWERCONTEXT_OPENCODE_BASE_URL must use HTTP or HTTPS')
-  }
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error('POWERCONTEXT_OPENCODE_BASE_URL must not contain credentials, a query, or a fragment')
-  }
-  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-  if (url.protocol === 'http:' && !loopback) {
-    throw new Error('POWERCONTEXT_OPENCODE_BASE_URL must use HTTPS outside loopback')
-  }
-  return url.toString().replace(/\/+$/, '')
+  return normalizePowerContextBaseUrl(value, 'POWERCONTEXT_OPENCODE_BASE_URL')
 }
 
 export function resolveConfig(env: NodeJS.ProcessEnv = process.env): ResolvedConfig {

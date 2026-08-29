@@ -32,7 +32,7 @@ function createLifecycleHarness() {
   const contextQueries: string[] = [];
   let memoryExtraction = true;
   const config = resolvePowerContextConfig(undefined, {
-    endpoint: "http://powercontext.test",
+    endpoint: "https://powercontext.test",
     scopeMode: "project",
   });
   const client = {

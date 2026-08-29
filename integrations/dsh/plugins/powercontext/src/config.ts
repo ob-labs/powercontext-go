@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { normalizePowerContextBaseUrl } from './transport.ts'
+
 export interface PluginConfig {
   baseUrl?: string
   authorization?: string
@@ -63,10 +65,6 @@ function envBoolean(env: NodeJS.ProcessEnv, name: string): boolean | undefined {
   return undefined
 }
 
-function stripSlash(url: string): string {
-  return url.replace(/\/+$/, '')
-}
-
 function optionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
@@ -81,7 +79,10 @@ export function resolveConfig(
     throw new Error('maxBytes must be between 512 and 32768')
   }
   return {
-    baseUrl: stripSlash(envString(env, 'POWERCONTEXT_DSH_BASE_URL') ?? config.baseUrl ?? DEFAULTS.baseUrl),
+    baseUrl: normalizePowerContextBaseUrl(
+      envString(env, 'POWERCONTEXT_DSH_BASE_URL') ?? config.baseUrl ?? DEFAULTS.baseUrl,
+      'POWERCONTEXT_DSH_BASE_URL',
+    ),
     authorization: envString(env, 'POWERCONTEXT_DSH_AUTHORIZATION') ?? optionalText(config.authorization),
     scopeId: envString(env, 'POWERCONTEXT_DSH_SCOPE_ID') ?? optionalText(config.scopeId),
     timeoutMs: config.timeoutMs ?? DEFAULTS.timeoutMs,
