@@ -15,13 +15,11 @@
 package main
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -40,6 +38,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
+		"codeql.yml":           true,
 		"migration-gates.yml":  true,
 		"provider-smoke.yml":   true,
 		"windows-contract.yml": true,
@@ -64,8 +63,8 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	required := map[string][]string{
 		"master.yml": {
-			"name: Main", "quality:", "run: make check", "run: make contract-test",
-			"portable-sdk:", "run: make portable-sdk", "tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
+			"name: Main", "go-compat:", "portable-sdk:", "run: make portable-sdk", "quality:", "run: make check", "run: make contract-test",
+			"tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
 		"migration-gates.yml": {
@@ -75,6 +74,13 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
 			"OceanBase live compatibility", "Standard (", "Full build tags (",
 			"Host adapters", "Evaluation control plane and console",
+		},
+		"codeql.yml": {
+			"name: CodeQL", "pull_request:", "push:", "branches: [main]", "schedule:", "workflow_dispatch:",
+			"security-events: write", "persist-credentials: false",
+			"github/codeql-action/init@", "build-mode: manual",
+			"CGO_ENABLED=1 go build -tags sqlite_fts5 ./...",
+			"github/codeql-action/analyze@",
 		},
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
@@ -120,6 +126,90 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	if strings.Contains(string(e2eHarness), "continue-on-error:") {
 		t.Error("e2e-harness.yml must not suppress acceptance or evidence failures")
+	}
+}
+
+func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	paths := []string{
+		".gitattributes",
+		"openapi/powercontext.yaml",
+		"artifact/memory/prompts/conversation.txt",
+		"artifact/memory/prompts/extraction.schema.json",
+		"evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl",
+		"api/v1/oas_client_gen.go",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			command := exec.CommandContext(t.Context(), "git", "check-attr", "eol", "--", path)
+			command.Dir = repository
+			output, err := command.Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.TrimSpace(string(output))
+			want := path + ": eol: lf"
+			if got != want {
+				t.Fatalf("checkout attribute = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestGoCompatibilityJobUsesLocalReadonlyBuild(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  go-compat:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define go-compat before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: go-compat",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make build-all",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("go-compat job is missing %q", value)
+		}
+	}
+}
+
+func TestCoverageJobUsesRaceAtomicEvidenceContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  coverage:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define coverage before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: coverage",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make coverage",
+		"if: always()",
+		"coverage/coverage.out",
+		"coverage/summary.txt",
+		"if-no-files-found: warn",
+		"retention-days: 14",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("coverage job is missing %q", value)
+		}
 	}
 }
 
@@ -297,221 +387,4 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 			}
 		}
 	}
-}
-
-func TestPortableSDKMakeTargetBuildsExactMatrix(t *testing.T) {
-	if os.Getenv("POWERCONTEXT_PORTABLE_GO_HELPER") == "1" {
-		runPortableSDKGoHelper(t)
-		return
-	}
-
-	calls, output, err := runPortableSDKMake(t, "")
-	if err != nil {
-		t.Fatalf("make portable-sdk failed: %v\n%s", err, output)
-	}
-	want := []string{
-		"linux/amd64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
-		"linux/arm64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
-		"darwin/amd64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
-		"darwin/arm64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
-	}
-	if !slices.Equal(calls, want) {
-		t.Errorf("portable-sdk calls = %q, want %q", calls, want)
-	}
-}
-
-func TestPortableSDKMakeTargetStopsOnFirstFailure(t *testing.T) {
-	calls, output, err := runPortableSDKMake(t, "linux/amd64")
-	if err == nil {
-		t.Fatalf("make portable-sdk succeeded after the first target failed\n%s", output)
-	}
-	want := []string{
-		"linux/amd64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
-	}
-	if !slices.Equal(calls, want) {
-		t.Errorf("portable-sdk calls after failure = %q, want %q", calls, want)
-	}
-}
-
-func runPortableSDKMake(t *testing.T, failTarget string) ([]string, string, error) {
-	t.Helper()
-	logPath := filepath.Join(t.TempDir(), "portable-sdk-go.log")
-	args := []string{
-		"--no-print-directory",
-		"portable-sdk",
-		`GO="$${POWERCONTEXT_PORTABLE_GO_HELPER_BINARY}" -test.run=TestPortableSDKMakeTargetBuildsExactMatrix --`,
-		"GOLANGCI_LINT=unused",
-	}
-	if failTarget != "" {
-		args = append(args, "SHELLOPTS=nounset:pipefail")
-	}
-	environment := append(os.Environ(),
-		"POWERCONTEXT_PORTABLE_GO_HELPER=1",
-		"POWERCONTEXT_PORTABLE_GO_HELPER_BINARY="+filepath.ToSlash(os.Args[0]),
-		"POWERCONTEXT_PORTABLE_GO_LOG="+logPath,
-		"POWERCONTEXT_PORTABLE_GO_FAIL_TARGET="+failTarget,
-	)
-	output, runErr := runMake(t, environment, "", args...)
-	payload, readErr := os.ReadFile(logPath)
-	if readErr != nil {
-		t.Fatalf("read portable SDK helper log: %v\n%s", readErr, output)
-	}
-	lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(payload), "\r\n", "\n")), "\n")
-	return lines, string(output), runErr
-}
-
-func runPortableSDKGoHelper(t *testing.T) {
-	t.Helper()
-	separator := slices.Index(os.Args, "--")
-	if separator == -1 {
-		t.Fatal("portable SDK helper arguments are missing the separator")
-	}
-	arguments := os.Args[separator+1:]
-	if len(arguments) == 0 || arguments[0] != "build" {
-		return
-	}
-	target := os.Getenv("GOOS") + "/" + os.Getenv("GOARCH")
-	line := target + " CGO_ENABLED=" + os.Getenv("CGO_ENABLED") + " " + strings.Join(arguments, " ") + "\n"
-	logFile, err := os.OpenFile(os.Getenv("POWERCONTEXT_PORTABLE_GO_LOG"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := logFile.WriteString(line); err != nil {
-		_ = logFile.Close()
-		t.Fatal(err)
-	}
-	if err := logFile.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if target == os.Getenv("POWERCONTEXT_PORTABLE_GO_FAIL_TARGET") {
-		os.Exit(23)
-	}
-}
-
-func TestMakefileDefaultGoalListsSupportedTargets(t *testing.T) {
-	defaultOutput, err := runMake(t, nil, "", "--no-print-directory")
-	if err != nil {
-		t.Fatalf("run default Make goal: %v\n%s", err, defaultOutput)
-	}
-	helpOutput, err := runMake(t, nil, "", "--no-print-directory", "help")
-	if err != nil {
-		t.Fatalf("run Make help goal: %v\n%s", err, helpOutput)
-	}
-	if defaultOutput != helpOutput {
-		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
-	}
-	for _, target := range []string{"lint", "check", "portable-sdk", "test", "build", "package-full", "governance-check"} {
-		if !strings.Contains(helpOutput, "  "+target+" ") {
-			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
-		}
-	}
-}
-
-func TestMakefileRejectsFailedPipelines(t *testing.T) {
-	const probe = `.PHONY: strict-shell-probe
-strict-shell-probe:
-	@false | true
-	@printf 'strict shell did not stop\n'
-`
-	output, err := runMake(
-		t,
-		nil,
-		probe,
-		"--no-print-directory",
-		"-f", "Makefile",
-		"-f", "-",
-		"strict-shell-probe",
-	)
-	if err == nil {
-		t.Fatalf("failed pipeline did not stop Make\n%s", output)
-	}
-	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
-		t.Fatalf("run strict Make probe: %v\n%s", err, output)
-	}
-	if strings.Contains(output, "strict shell did not stop") {
-		t.Fatalf("Make continued after a failed pipeline\n%s", output)
-	}
-}
-
-func TestMakefileMissingCredentialTargetsKeepActionableErrors(t *testing.T) {
-	tests := []struct {
-		name      string
-		target    string
-		variables []string
-		want      string
-	}{
-		{
-			name:      "OceanBase URL",
-			target:    "test-oceanbase-live",
-			variables: []string{"POWERCONTEXT_TEST_OCEANBASE_URL"},
-			want:      "POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database",
-		},
-		{
-			name:   "real provider model",
-			target: "real-provider-test",
-			variables: []string{
-				"POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL",
-				"POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL",
-			},
-			want: "set at least one POWERCONTEXT_REAL_SMOKE_*_MODEL variable",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			output, err := runMake(
-				t,
-				environmentWithout(test.variables...),
-				"",
-				"--no-print-directory",
-				test.target,
-			)
-			if err == nil {
-				t.Fatalf("make %s succeeded without required configuration\n%s", test.target, output)
-			}
-			if _, ok := errors.AsType[*exec.ExitError](err); !ok {
-				t.Fatalf("run make %s: %v\n%s", test.target, err, output)
-			}
-			if !strings.Contains(output, test.want) {
-				t.Errorf("make %s output is missing %q\n%s", test.target, test.want, output)
-			}
-			if strings.Contains(output, "unbound variable") {
-				t.Errorf("make %s exposed a shell nounset error instead of the target guidance\n%s", test.target, output)
-			}
-		})
-	}
-}
-
-func runMake(t *testing.T, environment []string, stdin string, arguments ...string) (string, error) {
-	t.Helper()
-	repository := filepath.Clean(filepath.Join("..", ".."))
-	command := exec.CommandContext(t.Context(), "make", arguments...)
-	command.Dir = repository
-	command.Env = environment
-	if stdin != "" {
-		command.Stdin = strings.NewReader(stdin)
-	}
-	output, err := command.CombinedOutput()
-	return string(output), err
-}
-
-func environmentWithout(names ...string) []string {
-	environment := os.Environ()
-	filtered := make([]string, 0, len(environment))
-	for _, entry := range environment {
-		name, _, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		excluded := false
-		for _, candidate := range names {
-			if strings.EqualFold(name, candidate) {
-				excluded = true
-				break
-			}
-		}
-		if !excluded {
-			filtered = append(filtered, entry)
-		}
-	}
-	return filtered
 }

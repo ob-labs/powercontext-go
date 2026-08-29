@@ -38,6 +38,11 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+
       - name: Set up the environment
         uses: ./.github/actions/setup-go-env
 
@@ -71,6 +76,11 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
 
       - name: Set up the environment
         uses: ./.github/actions/setup-go-env

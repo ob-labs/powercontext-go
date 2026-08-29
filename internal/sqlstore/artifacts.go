@@ -458,25 +458,25 @@ func loadLineage(ctx context.Context, db DBTX, scopeID string, ref artifact.Ref)
 	for artifactRows.Next() {
 		var family, artifactID string
 		var revision any
-		if err := artifactRows.Scan(&family, &artifactID, &revision); err != nil {
-			return artifact.Lineage{}, errors.Join(err, closeRows(artifactRows))
+		if scanErr := artifactRows.Scan(&family, &artifactID, &revision); scanErr != nil {
+			return artifact.Lineage{}, errors.Join(scanErr, closeRows(artifactRows))
 		}
 		decodedRevision, ok := integer(revision)
 		if !ok {
 			columnErr := &InvalidStoredColumnError{Column: "upstream_revision", Expected: "an integer"}
 			return artifact.Lineage{}, errors.Join(columnErr, closeRows(artifactRows))
 		}
-		value, err := artifact.NewRef(family, artifactID, decodedRevision)
-		if err != nil {
-			return artifact.Lineage{}, errors.Join(err, closeRows(artifactRows))
+		value, refErr := artifact.NewRef(family, artifactID, decodedRevision)
+		if refErr != nil {
+			return artifact.Lineage{}, errors.Join(refErr, closeRows(artifactRows))
 		}
 		artifacts = append(artifacts, value)
 	}
-	if err := artifactRows.Close(); err != nil {
-		return artifact.Lineage{}, err
+	if closeErr := artifactRows.Close(); closeErr != nil {
+		return artifact.Lineage{}, closeErr
 	}
-	if err := artifactRows.Err(); err != nil {
-		return artifact.Lineage{}, err
+	if rowsErr := artifactRows.Err(); rowsErr != nil {
+		return artifact.Lineage{}, rowsErr
 	}
 	return artifact.NewLineage(sources, artifacts)
 }

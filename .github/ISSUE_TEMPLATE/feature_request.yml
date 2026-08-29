@@ -1,6 +1,6 @@
-name: Feature or compatibility proposal
-description: Propose a bounded capability, compatibility change, or quality gate
-title: "proposal: "
+name: Feature request
+description: Request a bounded capability or quality improvement
+title: "feature: "
 labels:
   - enhancement
 body:
@@ -29,26 +29,10 @@ body:
       required: true
 
   - type: textarea
-    id: non_goals
-    attributes:
-      label: Non-goals
-      description: State adjacent behavior that must remain unchanged or be handled separately.
-    validations:
-      required: true
-
-  - type: textarea
     id: evidence
     attributes:
       label: Acceptance evidence
       description: Which tests, commands, generated checks, or runtime observations will prove completion?
-    validations:
-      required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: Describe simpler alternatives and why they do not meet the required outcome.
     validations:
       required: true
 

@@ -60,6 +60,169 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			},
 			wantError: "least-privilege permissions",
 		},
+		{
+			name: "valid reusable workflow caller",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller())
+			},
+		},
+		{
+			name: "reusable workflow caller with timeout",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller("    timeout-minutes: 10"))
+			},
+			wantError: "reusable-workflow caller keywords",
+		},
+		{
+			name: "reusable workflow caller with blank reference",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCallerWithReference(" "))
+			},
+			wantError: "must name a reusable workflow",
+		},
+		{
+			name: "reusable workflow caller with ordinary job fields",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller(
+					"    runs-on: ubuntu-24.04",
+					"    steps: []",
+				))
+			},
+			wantError: "reusable-workflow caller keywords",
+		},
+		{
+			name: "valid dropdown",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", `
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - High
+    validations:
+      required: true
+`)
+			},
+		},
+		{
+			name: "missing field label",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", "      label: current_behavior\n", "")
+			},
+			wantError: "must define a label",
+		},
+		{
+			name: "missing markdown value",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", "      value: Provide bounded evidence.\n", "")
+			},
+			wantError: "markdown element must define a value",
+		},
+		{
+			name: "invalid field ID",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", `
+  - type: textarea
+    id: invalid id
+    attributes:
+      label: Invalid ID
+    validations:
+      required: true
+`)
+			},
+			wantError: "contains invalid field ID",
+		},
+		{
+			name: "duplicate dropdown option",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", `
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - Low
+    validations:
+      required: true
+`)
+			},
+			wantError: "contains duplicate option",
+		},
+		{
+			name: "missing proposal field label",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", "      label: compatibility\n", "")
+			},
+			wantError: "must define a label",
+		},
+		{
+			name: "proposal contract surface must be a dropdown",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", `  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      options:
+        - Public Go API
+        - Persistence format
+    validations:
+      required: true
+`, `  - type: textarea
+    id: contract_surface
+    attributes:
+      label: Contract surface
+    validations:
+      required: true
+`)
+			},
+			wantError: `required field ID "contract_surface" must use type "dropdown"`,
+		},
+		{
+			name: "confirmations must be checkboxes",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", `  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I verified the report.
+          required: true
+`, `  - type: textarea
+    id: confirmations
+    attributes:
+      label: Confirmations
+    validations:
+      required: true
+`)
+			},
+			wantError: `required field ID "confirmations" must use type "checkboxes"`,
+		},
+		{
+			name: "proposal contract surface must be required",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", `  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      options:
+        - Public Go API
+        - Persistence format
+    validations:
+      required: true
+`, `  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      options:
+        - Public Go API
+        - Persistence format
+`)
+			},
+			wantError: `field "contract_surface" must be required`,
+		},
 	}
 
 	for _, test := range tests {
@@ -94,8 +257,11 @@ func writeGovernanceFixture(t *testing.T) string {
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", validIssueForm("Bug report", []string{
 		"current_behavior", "expected_behavior", "reproduction", "evidence", "environment", "confirmations",
 	}))
-	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", validIssueForm("Feature proposal", []string{
-		"problem", "outcome", "scope", "non_goals", "evidence", "alternatives", "confirmations",
+	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", validIssueForm("Feature request", []string{
+		"problem", "outcome", "scope", "evidence", "confirmations",
+	}))
+	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", validIssueForm("Contract proposal", []string{
+		"problem", "contract_surface", "outcome", "compatibility", "scope", "non_goals", "alternatives", "evidence", "confirmations",
 	}))
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/config.yml", "blank_issues_enabled: false\ncontact_links: []\n")
 	writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflow(true))
@@ -112,9 +278,17 @@ func validPullRequestTemplate(includeRelationship bool) string {
 
 func validIssueForm(name string, ids []string) string {
 	var builder strings.Builder
-	builder.WriteString("name: " + name + "\ndescription: Evidence-bearing form\nbody:\n")
+	builder.WriteString("name: " + name + "\ndescription: Evidence-bearing form\nbody:\n  - type: markdown\n    attributes:\n      value: Provide bounded evidence.\n")
 	for _, id := range ids {
-		builder.WriteString("  - type: textarea\n    id: " + id + "\n    validations:\n      required: true\n")
+		if id == "contract_surface" {
+			builder.WriteString("  - type: dropdown\n    id: contract_surface\n    attributes:\n      label: Contract surface\n      options:\n        - Public Go API\n        - Persistence format\n    validations:\n      required: true\n")
+			continue
+		}
+		if id == "confirmations" {
+			builder.WriteString("  - type: checkboxes\n    id: confirmations\n    attributes:\n      label: Confirmations\n      options:\n        - label: I verified the report.\n          required: true\n")
+			continue
+		}
+		builder.WriteString("  - type: textarea\n    id: " + id + "\n    attributes:\n      label: " + id + "\n    validations:\n      required: true\n")
 	}
 	return builder.String()
 }
@@ -144,6 +318,51 @@ func validWorkflowWithoutPermissions() string {
 		"    timeout-minutes: 10",
 		"    steps: []",
 	}, "\n") + "\n"
+}
+
+func reusableWorkflowCaller(extraLines ...string) string {
+	return reusableWorkflowCallerWithReference("./.github/workflows/reusable.yml", extraLines...)
+}
+
+func reusableWorkflowCallerWithReference(reference string, extraLines ...string) string {
+	lines := []string{
+		"name: CI",
+		"permissions:",
+		"  contents: read",
+		"jobs:",
+		"  delegated:",
+		"    uses: \"" + reference + "\"",
+	}
+	lines = append(lines, extraLines...)
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func appendFixtureFile(t *testing.T, root, name, contents string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(existing, contents...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func replaceFixtureText(t *testing.T, root, name, old, replacement string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(name))
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(contents), old, replacement, 1)
+	if updated == string(contents) {
+		t.Fatalf("%s does not contain %q", name, old)
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeFixtureFile(t *testing.T, root, name, contents string) {
