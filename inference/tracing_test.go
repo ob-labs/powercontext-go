@@ -45,7 +45,7 @@ func TestInferenceSpanRecordsNoModelContent(t *testing.T) {
 		t.Fatalf("spans = %#v", spans)
 	}
 	for _, value := range spans[0].Attributes() {
-		encoded := strings.ToLower(string(value.Key) + value.Value.Emit())
+		encoded := strings.ToLower(string(value.Key) + value.Value.String())
 		for _, forbidden := range []string{"secret", "prompt", "content", "vector", "credential"} {
 			if strings.Contains(encoded, forbidden) {
 				t.Fatalf("span attribute exposes %q: %s", forbidden, encoded)
@@ -112,7 +112,7 @@ func TestPromptedGeneratorRetrySpansExcludeInputOutputAndFeedback(t *testing.T) 
 			t.Fatalf("span name = %q", span.Name())
 		}
 		for _, value := range span.Attributes() {
-			encoded := strings.ToLower(string(value.Key) + value.Value.Emit())
+			encoded := strings.ToLower(string(value.Key) + value.Value.String())
 			for _, forbidden := range []string{
 				"secret", "traveler", "aisle", "redacted", "candidate", "feedback", "schema", "prompt", "content",
 			} {
@@ -173,7 +173,7 @@ func TestEmbeddingSpanNestsUnderActiveOperationWithoutRecordingTextOrVectors(t *
 		t.Fatalf("embedding parent = %s, want %s", embeddingSpan.Parent().SpanID(), operationSpan.SpanContext().SpanID())
 	}
 	for _, value := range embeddingSpan.Attributes() {
-		encoded := strings.ToLower(string(value.Key) + value.Value.Emit())
+		encoded := strings.ToLower(string(value.Key) + value.Value.String())
 		for _, forbidden := range []string{"secret", "bounded", "evidence", "vector", "embedding.value", "content"} {
 			if strings.Contains(encoded, forbidden) {
 				t.Fatalf("embedding span attribute exposes %q: %s", forbidden, encoded)

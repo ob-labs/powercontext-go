@@ -256,19 +256,19 @@ func TestFmtFailsWhenGoSyntaxIsInvalid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(temporary, "Makefile"), makefile, 0o644); err != nil {
-		t.Fatal(err)
+	if writeMakefileErr := os.WriteFile(filepath.Join(temporary, "Makefile"), makefile, 0o644); writeMakefileErr != nil {
+		t.Fatal(writeMakefileErr)
 	}
-	if err := os.WriteFile(filepath.Join(temporary, "go.mod"), []byte("module example.com/malformed\n\ngo 1.27.0\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if writeModuleErr := os.WriteFile(filepath.Join(temporary, "go.mod"), []byte("module example.com/malformed\n\ngo 1.27.0\n"), 0o644); writeModuleErr != nil {
+		t.Fatal(writeModuleErr)
 	}
-	if err := os.WriteFile(filepath.Join(temporary, "malformed.go"), []byte("package invalid\n\nfunc broken( {\n"), 0o644); err != nil {
-		t.Fatal(err)
+	if writeSourceErr := os.WriteFile(filepath.Join(temporary, "malformed.go"), []byte("package invalid\n\nfunc broken( {\n"), 0o644); writeSourceErr != nil {
+		t.Fatal(writeSourceErr)
 	}
 
 	toolsBin := filepath.Join(temporary, ".tools", "bin")
-	if err := os.MkdirAll(toolsBin, 0o755); err != nil {
-		t.Fatal(err)
+	if mkdirErr := os.MkdirAll(toolsBin, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
 	}
 	linter := filepath.Join(toolsBin, "golangci-lint")
 	const linterScript = `#!/bin/sh
@@ -277,11 +277,11 @@ if [ "${1:-}" = "--version" ]; then
 fi
 exit 0
 `
-	if err := os.WriteFile(linter, []byte(linterScript), 0o755); err != nil {
-		t.Fatal(err)
+	if writeLinterErr := os.WriteFile(linter, []byte(linterScript), 0o755); writeLinterErr != nil {
+		t.Fatal(writeLinterErr)
 	}
-	if err := os.WriteFile(filepath.Join(toolsBin, ".golangci-lint-v2.13.1-go1.27.0"), nil, 0o644); err != nil {
-		t.Fatal(err)
+	if writeStampErr := os.WriteFile(filepath.Join(toolsBin, ".golangci-lint-v2.13.1-go1.27.0"), nil, 0o644); writeStampErr != nil {
+		t.Fatal(writeStampErr)
 	}
 	fakeGo := filepath.Join(temporary, "go")
 	const fakeGoScript = `#!/bin/sh
@@ -300,8 +300,8 @@ esac
 printf 'unexpected go command: %s\n' "$*" >&2
 exit 64
 `
-	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
-		t.Fatal(err)
+	if writeGoErr := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); writeGoErr != nil {
+		t.Fatal(writeGoErr)
 	}
 
 	command := exec.CommandContext(t.Context(), "make", "fmt", "GO="+fakeGo, "GOFMT=gofmt", "TOOLS_BIN="+toolsBin)

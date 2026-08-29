@@ -69,8 +69,8 @@ func newSetupCodexCommand(state *commandState) *cobra.Command {
 			}
 			checks := runCodexDiagnostics(command.Context(), state.system)
 			if diagnosticsStatus(checks) != "ok" {
-				if err := writeDiagnostics(state, checks); err != nil {
-					return err
+				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
+					return writeErr
 				}
 				return alreadyReported(errors.New("Codex diagnostics did not pass"))
 			}

@@ -107,8 +107,8 @@ func (r *SourceRepository) Add(
 	if err != nil {
 		return StoredSource{}, &InvalidStoredPayloadError{Kind: "source", Name: codec.name, Issue: "value is not JSON serializable"}
 	}
-	if err := r.lockJournalHead(ctx, db, scopeID); err != nil {
-		return StoredSource{}, err
+	if lockErr := r.lockJournalHead(ctx, db, scopeID); lockErr != nil {
+		return StoredSource{}, lockErr
 	}
 	existing, found, err := r.find(ctx, db, scopeID, ref)
 	if err != nil {

@@ -46,24 +46,24 @@ func TestLiveOceanBaseProfileSmoke(t *testing.T) {
 		t.Fatalf("OceanBase profile did not open: %T", err)
 	}
 	t.Cleanup(func() { _ = database.Close(context.Background()) })
-	if err := database.Ping(context.Background()); err != nil {
+	if pingErr := database.Ping(context.Background()); pingErr != nil {
 		t.Fatal("OceanBase profile did not answer the compatibility probe")
 	}
 
 	ctx := t.Context()
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	scopeID := "oceanbase-live-" + suffix
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		cursors := sqlstore.SourceCursorRepository{}
-		stored, err := cursors.Save(ctx, tx, scopeID, "source_window", source.NewCursor(1), nil)
-		if err != nil {
-			return err
+		stored, saveErr := cursors.Save(ctx, tx, scopeID, "source_window", source.NewCursor(1), nil)
+		if saveErr != nil {
+			return saveErr
 		}
 		expected := stored.Generation
-		_, err = cursors.Save(ctx, tx, scopeID, "source_window", source.NewCursor(2), &expected)
-		return err
-	}); err != nil {
-		t.Fatalf("OceanBase Source cursor CAS failed: %T", err)
+		_, saveErr = cursors.Save(ctx, tx, scopeID, "source_window", source.NewCursor(2), &expected)
+		return saveErr
+	}); transactionErr != nil {
+		t.Fatalf("OceanBase Source cursor CAS failed: %T", transactionErr)
 	}
 
 	sourceRepository, err := sqlstore.NewSourceRepository(sqlstore.MySQLDialect, sqlstore.ContentSourceCodec())
@@ -77,7 +77,7 @@ func TestLiveOceanBaseProfileSmoke(t *testing.T) {
 		}
 		return (source.ContentAdapter{}).Resolve(ctx, capture)
 	}
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		upperScope := "PC-" + suffix + "-Alpha"
 		upper, buildErr := content("Turn-1", "uppercase turn")
 		if buildErr != nil {
@@ -114,16 +114,16 @@ func TestLiveOceanBaseProfileSmoke(t *testing.T) {
 			}
 		}
 		return nil
-	}); err != nil {
-		t.Fatalf("OceanBase binary identity collation failed: %T: %v", err, err)
+	}); transactionErr != nil {
+		t.Fatalf("OceanBase binary identity collation failed: %T: %v", transactionErr, transactionErr)
 	}
 
 	reports, err := sqlstore.NewHandoffReportStore(database, sqlstore.MySQLDialect)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reports.EnsureSchema(ctx); err != nil {
-		t.Fatalf("OceanBase Handoff Report schema failed: %T", err)
+	if schemaErr := reports.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatalf("OceanBase Handoff Report schema failed: %T", schemaErr)
 	}
 	projectID := "project-" + suffix
 	project, err := handoffreport.NewProjectDescriptor(
@@ -134,8 +134,8 @@ func TestLiveOceanBaseProfileSmoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	if _, err := reports.CreateProject(ctx, project, now); err != nil {
-		t.Fatalf("OceanBase Handoff Report project failed: %T", err)
+	if _, createErr := reports.CreateProject(ctx, project, now); createErr != nil {
+		t.Fatalf("OceanBase Handoff Report project failed: %T", createErr)
 	}
 	event, err := handoffreport.NewActivityEvent(handoffreport.ActivityEventInput{
 		EventID: "event-" + suffix, ProjectID: projectID,

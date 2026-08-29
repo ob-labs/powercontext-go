@@ -321,8 +321,8 @@ func TestArchiveTreeIsDeterministic(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			t.Errorf("close deterministic release archive: %v", err)
+		if closeErr := file.Close(); closeErr != nil {
+			t.Errorf("close deterministic release archive: %v", closeErr)
 		}
 	}()
 	gzipReader, err := gzip.NewReader(file)
@@ -368,8 +368,8 @@ func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			t.Errorf("close release archive: %v", err)
+		if closeErr := file.Close(); closeErr != nil {
+			t.Errorf("close release archive: %v", closeErr)
 		}
 	}()
 	compressed, err := gzip.NewReader(file)

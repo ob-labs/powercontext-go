@@ -251,17 +251,17 @@ func TestReportSelectionEntryRequiresExactHandoffOrExplicitAbsence(t *testing.T)
 	if selected.HandoffRef() == nil || *selected.HandoffRef() != handoffRef || absent.HandoffRef() != nil {
 		t.Fatalf("selection values = %#v %#v", selected, absent)
 	}
-	if _, err := handoffreport.NewSelectionEntry("scope-report", 3, handoffreport.SelectionSelected, nil); err == nil {
+	if _, selectionErr := handoffreport.NewSelectionEntry("scope-report", 3, handoffreport.SelectionSelected, nil); selectionErr == nil {
 		t.Fatal("selected entry without a Handoff was accepted")
 	}
-	if _, err := handoffreport.NewSelectionEntry("scope-report", 3, handoffreport.SelectionNoHandoff, &handoffRef); err == nil {
+	if _, selectionErr := handoffreport.NewSelectionEntry("scope-report", 3, handoffreport.SelectionNoHandoff, &handoffRef); selectionErr == nil {
 		t.Fatal("no_handoff entry containing a Handoff was accepted")
 	}
 	memoryRef, err := artifact.NewRef("memory", "memory-1", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := handoffreport.NewSelectionEntry("scope-report", 3, handoffreport.SelectionSelected, &memoryRef); err == nil {
+	if _, selectionErr := handoffreport.NewSelectionEntry("scope-report", 3, handoffreport.SelectionSelected, &memoryRef); selectionErr == nil {
 		t.Fatal("selected entry referencing a non-Handoff family was accepted")
 	}
 }

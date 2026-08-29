@@ -99,11 +99,11 @@ func Open(ctx context.Context, config Config) (*Scheduler, error) {
 	if err != nil {
 		return nil, &ConfigurationError{Field: "scheduler_path"}
 	}
-	if err := validateConfig(config); err != nil {
-		return nil, err
+	if validationErr := validateConfig(config); validationErr != nil {
+		return nil, validationErr
 	}
-	if err := claimOwner(path); err != nil {
-		return nil, err
+	if claimErr := claimOwner(path); claimErr != nil {
+		return nil, claimErr
 	}
 	claimed := true
 	defer func() {
@@ -112,8 +112,8 @@ func Open(ctx context.Context, config Config) (*Scheduler, error) {
 		}
 	}()
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+	if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o755); mkdirErr != nil {
+		return nil, mkdirErr
 	}
 	dsn := (&url.URL{Scheme: "file", Path: path}).String() + "?_busy_timeout=30000&_foreign_keys=on"
 	db, err := sql.Open("sqlite3", dsn)
@@ -123,11 +123,11 @@ func Open(ctx context.Context, config Config) (*Scheduler, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	cleanup := func(err error) (*Scheduler, error) { _ = db.Close(); return nil, err }
-	if err := db.PingContext(ctx); err != nil {
-		return cleanup(err)
+	if pingErr := db.PingContext(ctx); pingErr != nil {
+		return cleanup(pingErr)
 	}
-	if err := ensureSchema(ctx, db); err != nil {
-		return cleanup(err)
+	if schemaErr := ensureSchema(ctx, db); schemaErr != nil {
+		return cleanup(schemaErr)
 	}
 	clock := config.Clock
 	if clock == nil {

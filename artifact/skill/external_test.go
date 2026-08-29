@@ -272,14 +272,14 @@ func TestRegistryRefreshesProjectionAndChecksLiveAvailability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := file.WriteString("Changed.\n"); err != nil {
+	if _, writeErr := file.WriteString("Changed.\n"); writeErr != nil {
 		if closeErr := file.Close(); closeErr != nil {
 			t.Errorf("close changed Skill manifest: %v", closeErr)
 		}
-		t.Fatal(err)
+		t.Fatal(writeErr)
 	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	listed, err = service.List(ctx, false)
 	if err != nil || len(listed) != 0 {

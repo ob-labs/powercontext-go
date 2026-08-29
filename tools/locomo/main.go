@@ -191,8 +191,8 @@ func runCommand(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeStdoutJSON(map[string]any{"run": manifest, "output_directory": outputDirectory}); err != nil {
-		return err
+	if writeErr := writeStdoutJSON(map[string]any{"run": manifest, "output_directory": outputDirectory}); writeErr != nil {
+		return writeErr
 	}
 	evaluationOptions := locomo.EvaluateOptions{
 		RunID: runID, OutputDirectory: outputDirectory, TopK: flags.topK, AnswerK: answerK,
@@ -205,16 +205,16 @@ func runCommand(ctx context.Context, arguments []string) error {
 		RetryErrors: !flags.keepErrors,
 	}
 	if flags.skipIngestion && !flags.skipEvaluation {
-		pending, err := locomo.PendingEvaluationCount(
+		pending, pendingErr := locomo.PendingEvaluationCount(
 			dataset, outputDirectory, categories, conversationLimit, questionLimit, !flags.keepErrors,
 		)
-		if err != nil {
-			return err
+		if pendingErr != nil {
+			return pendingErr
 		}
 		if pending == 0 {
-			report, err := locomo.Evaluate(ctx, dataset, nil, evaluationOptions)
-			if err != nil {
-				return err
+			report, evaluateErr := locomo.Evaluate(ctx, dataset, nil, evaluationOptions)
+			if evaluateErr != nil {
+				return evaluateErr
 			}
 			return writeStdoutJSON(map[string]any{"summary": report})
 		}
@@ -235,16 +235,16 @@ func runCommand(ctx context.Context, arguments []string) error {
 	}()
 	progress := func(value string) { fmt.Fprintln(os.Stderr, value) }
 	if !flags.skipIngestion {
-		report, err := locomo.Ingest(ctx, dataset, application.operations, locomo.IngestOptions{
+		report, ingestErr := locomo.Ingest(ctx, dataset, application.operations, locomo.IngestOptions{
 			RunID: runID, OutputDirectory: outputDirectory, DatabaseKind: config.Database.Kind,
 			ConversationLimit: conversationLimit, Concurrency: flags.ingestConcurrency,
 			OperationRetries: flags.operationRetries, Progress: progress,
 		})
-		if err != nil {
-			return err
+		if ingestErr != nil {
+			return ingestErr
 		}
-		if err := writeStdoutJSON(map[string]any{"ingestion": report}); err != nil {
-			return err
+		if writeErr := writeStdoutJSON(map[string]any{"ingestion": report}); writeErr != nil {
+			return writeErr
 		}
 	}
 	if flags.skipEvaluation {

@@ -40,8 +40,8 @@ func TestFrozenOracleManifestAndFixtureHashes(t *testing.T) {
 		t.Fatal(err)
 	}
 	var manifest oracleManifest
-	if err := json.Unmarshal(contents, &manifest); err != nil {
-		t.Fatal(err)
+	if unmarshalErr := json.Unmarshal(contents, &manifest); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
 	}
 	if manifest.SchemaVersion != 3 || manifest.OracleCommit != oracleCommit {
 		t.Fatalf("unexpected Oracle manifest identity: %#v", manifest)

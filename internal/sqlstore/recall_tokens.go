@@ -191,9 +191,9 @@ func (e *RelationalRecallTokenEstimator) Estimate(
 
 	baseline := int64(0)
 	for _, text := range texts {
-		count, err := e.estimator.Estimate(text)
-		if err != nil {
-			return stats.RecallTokenMeasurement{}, err
+		count, estimateErr := e.estimator.Estimate(text)
+		if estimateErr != nil {
+			return stats.RecallTokenMeasurement{}, estimateErr
 		}
 		if uint64(count) > uint64(math.MaxInt64-baseline) {
 			return stats.RecallTokenMeasurement{}, errors.New("sqlstore: recall baseline token count overflow")

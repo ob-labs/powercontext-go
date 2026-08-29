@@ -136,6 +136,9 @@ source / artifact / trigger / inference
 - Merge with an existing rule when the lesson is already covered. Keep the
   stronger wording and remove duplication so this file remains a practical
   engineering contract rather than an append-only incident log.
+- When a Go package has build-tagged implementation variants, keep its package
+  documentation in an untagged `doc.go`. Verify the package `Doc` field with
+  `go list -e` under every supported `GOOS` and CGO selection.
 - When a query checks `Rows.Err` before returning, its deferred cleanup must
   merge only `Rows.Close`; do not call a helper that reads `Rows.Err` again.
   Verify injected iteration and close failures remain matchable while each

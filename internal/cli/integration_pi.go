@@ -55,19 +55,19 @@ func newSetupPiCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := requirePiPackage(packagePath); err != nil {
-				return err
+			if packageErr := requirePiPackage(packagePath); packageErr != nil {
+				return packageErr
 			}
-			if _, err := state.system.Run(command.Context(), executable, "install", packagePath); err != nil {
-				return err
+			if _, installErr := state.system.Run(command.Context(), executable, "install", packagePath); installErr != nil {
+				return installErr
 			}
-			if err := removeSupersededPiPackages(command.Context(), state.system, executable, packagePath); err != nil {
-				return err
+			if cleanupErr := removeSupersededPiPackages(command.Context(), state.system, executable, packagePath); cleanupErr != nil {
+				return cleanupErr
 			}
 			checks := runPiDiagnostics(command.Context(), state.system)
 			if diagnosticsStatus(checks) != "ok" {
-				if err := writeDiagnostics(state, checks); err != nil {
-					return err
+				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
+					return writeErr
 				}
 				return alreadyReported(errors.New("Pi diagnostics did not pass"))
 			}

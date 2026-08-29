@@ -55,8 +55,8 @@ func (a *WorkApplication) CreateContract(ctx context.Context, scopeID string, re
 		if err != nil {
 			return err
 		}
-		if err := service.ValidateEvidence(ctx, claimsEvidence(request.Contract.Facts())); err != nil {
-			return err
+		if validationErr := service.ValidateEvidence(ctx, claimsEvidence(request.Contract.Facts())); validationErr != nil {
+			return validationErr
 		}
 		result, err = a.capture(ctx, scope, work.WorkContractSourceKind, request.SourceID, request.Contract)
 		return err
@@ -78,8 +78,8 @@ func (a *WorkApplication) HandoffCurrent(ctx context.Context, scopeID string, re
 		if next := request.Handoff.NextAction(); next != nil {
 			claims = append(claims, *next)
 		}
-		if err := service.ValidateEvidence(ctx, claimsEvidence(claims)); err != nil {
-			return err
+		if validationErr := service.ValidateEvidence(ctx, claimsEvidence(claims)); validationErr != nil {
+			return validationErr
 		}
 		boundary, err := a.capture(ctx, scope, work.HandoffBoundarySourceKind, request.SourceID, request.Handoff)
 		if err != nil {
@@ -197,12 +197,12 @@ func (a *WorkApplication) RecordOutcome(ctx context.Context, scopeID string, req
 		if err != nil {
 			return err
 		}
-		if err := service.ValidateEvidence(ctx, citations); err != nil {
-			return err
+		if validationErr := service.ValidateEvidence(ctx, citations); validationErr != nil {
+			return validationErr
 		}
 		if receipt := request.Outcome.HandoffReceiptRef(); receipt != nil {
-			if err := a.validateOutcomeReceipt(ctx, scope, *receipt); err != nil {
-				return err
+			if receiptErr := a.validateOutcomeReceipt(ctx, scope, *receipt); receiptErr != nil {
+				return receiptErr
 			}
 		}
 		result, err = a.capture(ctx, scope, work.TaskOutcomeSourceKind, request.SourceID, request.Outcome)

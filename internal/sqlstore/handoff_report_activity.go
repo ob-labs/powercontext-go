@@ -103,8 +103,8 @@ func (s *HandoffReportStore) recordActivity(ctx context.Context, tx DBTX, event 
 	if err != nil {
 		return handoffreport.StoredActivity{}, err
 	}
-	if err := s.reserveActivityWriter(ctx, tx, event.ProjectID()); err != nil {
-		return handoffreport.StoredActivity{}, err
+	if reserveErr := s.reserveActivityWriter(ctx, tx, event.ProjectID()); reserveErr != nil {
+		return handoffreport.StoredActivity{}, reserveErr
 	}
 	existing, found, err := s.findActivityByIdentity(ctx, tx, event.Source(), event.SourceEventID())
 	if err != nil {
@@ -125,8 +125,8 @@ func (s *HandoffReportStore) recordActivity(ctx context.Context, tx DBTX, event 
 		return handoffreport.StoredActivity{}, fmt.Errorf("Handoff Report Activity cursor allocator is missing")
 	}
 	var cursor int64
-	if err := tx.QueryRowContext(ctx, quoteCursorIdentifier("SELECT cursor FROM pc_handoff_report_activity_heads WHERE project_id = ?"), event.ProjectID()).Scan(&cursor); err != nil {
-		return handoffreport.StoredActivity{}, err
+	if scanErr := tx.QueryRowContext(ctx, quoteCursorIdentifier("SELECT cursor FROM pc_handoff_report_activity_heads WHERE project_id = ?"), event.ProjectID()).Scan(&cursor); scanErr != nil {
+		return handoffreport.StoredActivity{}, scanErr
 	}
 	if cursor < 1 {
 		return handoffreport.StoredActivity{}, fmt.Errorf("invalid Handoff Report Activity cursor")
@@ -144,8 +144,8 @@ func (s *HandoffReportStore) recordActivity(ctx context.Context, tx DBTX, event 
         occurred_at, observed_at, period_at, time_basis, payload
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`), event.ProjectID(), cursor, event.EventID(), reportNullableString(event.ScopeID()), event.Source(), event.SourceEventID(), occurred, handoffreport.UTCText(event.ObservedAt()), period, event.TimeBasis(), string(payload))
 	if err != nil {
-		existing, found, findErr := s.findActivityByIdentity(ctx, tx, event.Source(), event.SourceEventID())
-		if findErr == nil && found {
+		existing, retryFound, findErr := s.findActivityByIdentity(ctx, tx, event.Source(), event.SourceEventID())
+		if findErr == nil && retryFound {
 			return idempotentActivity(existing, payload)
 		}
 		return handoffreport.StoredActivity{}, err

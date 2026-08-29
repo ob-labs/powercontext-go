@@ -28,18 +28,18 @@ func TestSQLiteExperienceIndexUpgradesLegacyArtifactHeadsIdempotently(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
-	if _, err := database.Exec(`CREATE TABLE pc_artifact_heads (
+	if _, execErr := database.Exec(`CREATE TABLE pc_artifact_heads (
         scope_id VARCHAR(256) NOT NULL,
         family VARCHAR(128) NOT NULL,
         artifact_id VARCHAR(128) NOT NULL,
         revision INTEGER NOT NULL,
         PRIMARY KEY (scope_id, family, artifact_id)
-    )`); err != nil {
-		t.Fatal(err)
+	)`); execErr != nil {
+		t.Fatal(execErr)
 	}
 	for range 2 {
-		if err := EnsureArtifactHeadSearchableText(context.Background(), database, SQLiteDialect); err != nil {
-			t.Fatal(err)
+		if migrationErr := EnsureArtifactHeadSearchableText(context.Background(), database, SQLiteDialect); migrationErr != nil {
+			t.Fatal(migrationErr)
 		}
 	}
 	rows, err := database.Query(`PRAGMA table_info('pc_artifact_heads')`)

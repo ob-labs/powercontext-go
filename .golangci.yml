@@ -24,9 +24,25 @@ linters:
     - bodyclose
     - durationcheck
     - errcheck
+    - govet
     - ineffassign
+    - misspell
+    - staticcheck
+    - unused
     - wastedassign
     - whitespace
+  settings:
+    govet:
+      enable:
+        - shadow
+    staticcheck:
+      checks:
+        - all
+        # Domain and CLI errors deliberately preserve their user-facing names.
+        - -ST1005
+        # Type spelling and quick-fix suggestions are style-only churn.
+        - -ST1023
+        - -QF*
   exclusions:
     generated: strict
 

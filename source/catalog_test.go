@@ -40,11 +40,11 @@ func (referencedSource) SourceMaterialization() source.Materialization {
 }
 func (referencedSource) SourceDescription() (string, bool) { return "", false }
 
-type adapter struct{ resolveReferenced bool }
+type adapter struct{}
 
 func (adapter) Name() string { return "capture" }
 func (a adapter) Resolve(_ context.Context, value input) (capturedSource, error) {
-	return capturedSource{name: value.name}, nil
+	return capturedSource(value), nil
 }
 
 func (adapter) Read(_ context.Context, value capturedSource) (string, error) {

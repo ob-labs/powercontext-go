@@ -112,19 +112,19 @@ func (a *ContextApplication) Prepare(
 	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
 		lease, releaseLease := a.runtime.scopes.lease(scope)
 		defer releaseLease()
-		if err := a.runtime.resolveScope(ctx); err != nil {
-			return err
+		if resolveErr := a.runtime.resolveScope(ctx); resolveErr != nil {
+			return resolveErr
 		}
 		var release func()
-		err := a.runtime.runStage(ctx, "scope.lock", map[string]TraceAttribute{
+		stageErr := a.runtime.runStage(ctx, "scope.lock", map[string]TraceAttribute{
 			"powercontext.scope.lock.contended": lease.contended(),
 		}, func(stageContext context.Context, _ StageSpan) error {
 			var acquireErr error
 			release, acquireErr = lease.acquire(stageContext)
 			return acquireErr
 		})
-		if err != nil {
-			return err
+		if stageErr != nil {
+			return stageErr
 		}
 		ctx = a.runtime.withModelUsage(ctx, scope, "", stats.MemoryRecall)
 		build, err = func() (contextpack.Build, error) {

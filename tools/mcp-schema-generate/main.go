@@ -82,8 +82,8 @@ func run(specPath, outputPath string) error {
 		return err
 	}
 	var root map[string]any
-	if err := json.Unmarshal(jsonBytes, &root); err != nil {
-		return err
+	if unmarshalErr := json.Unmarshal(jsonBytes, &root); unmarshalErr != nil {
+		return unmarshalErr
 	}
 	definitions, err := collect(root)
 	if err != nil {

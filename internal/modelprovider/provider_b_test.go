@@ -421,8 +421,8 @@ func TestBedrockConverseAndEmbeddingFormats(t *testing.T) {
 	transport := &BedrockEmbeddingTransport{route: embedRoute, client: bedrockClientFake{
 		invoke: func(input *bedrockruntime.InvokeModelInput) (*bedrockruntime.InvokeModelOutput, error) {
 			var body map[string]any
-			if err := json.Unmarshal(input.Body, &body); err != nil {
-				t.Fatal(err)
+			if unmarshalErr := json.Unmarshal(input.Body, &body); unmarshalErr != nil {
+				t.Fatal(unmarshalErr)
 			}
 			if body["input_type"] != "search_query" || body["truncate"] != "NONE" {
 				t.Fatalf("body = %#v", body)

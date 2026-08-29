@@ -105,8 +105,8 @@ func run(ctx context.Context, opts options) error {
 	if err != nil {
 		return fmt.Errorf("resolve binary: %w", err)
 	}
-	if err := verifyVersion(ctx, binary, opts.version); err != nil {
-		return err
+	if versionErr := verifyVersion(ctx, binary, opts.version); versionErr != nil {
+		return versionErr
 	}
 
 	root, err := os.MkdirTemp("", "powercontext-release-")
@@ -388,18 +388,18 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 		return fmt.Errorf("Go Client readiness response is %T", readiness)
 	}
 	if remember {
-		result, err := api.RememberMemory(ctx, &v1.RememberMemoryRequest{
+		result, rememberErr := api.RememberMemory(ctx, &v1.RememberMemoryRequest{
 			ScopeID: smokeScope, Kind: "fact", Text: smokeText,
 		})
-		if err != nil {
-			return fmt.Errorf("remember through Go Client: %w", err)
+		if rememberErr != nil {
+			return fmt.Errorf("remember through Go Client: %w", rememberErr)
 		}
-		mutation, ok := result.(*v1.MemoryMutationResponseHeaders)
-		if !ok {
+		mutation, mutationOK := result.(*v1.MemoryMutationResponseHeaders)
+		if !mutationOK {
 			return fmt.Errorf("remember response is %T", result)
 		}
-		entry, ok := mutation.Response.Entry.Get()
-		if !ok || entry.Text != smokeText {
+		entry, entryOK := mutation.Response.Entry.Get()
+		if !entryOK || entry.Text != smokeText {
 			return errors.New("remember did not return the exact Memory entry")
 		}
 	}

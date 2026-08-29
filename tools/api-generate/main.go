@@ -61,11 +61,11 @@ func run(specification, target, packageName, clientInvoker string) error {
 	}
 	temporaryName := temporary.Name()
 	defer func() { _ = os.Remove(temporaryName) }()
-	if _, err := temporary.Write(generatedInput); err != nil {
-		return errors.Join(err, temporary.Close())
+	if _, writeErr := temporary.Write(generatedInput); writeErr != nil {
+		return errors.Join(writeErr, temporary.Close())
 	}
-	if err := temporary.Close(); err != nil {
-		return err
+	if closeErr := temporary.Close(); closeErr != nil {
+		return closeErr
 	}
 	absoluteTarget, err := filepath.Abs(target)
 	if err != nil {

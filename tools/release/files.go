@@ -120,8 +120,8 @@ func copyONNXRuntime(source, destination, goos string) error {
 	if goos != "darwin" && goos != "linux" {
 		return fmt.Errorf("unsupported ONNX Runtime release target %q", goos)
 	}
-	if err := os.MkdirAll(destination, 0o755); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(destination, 0o755); mkdirErr != nil {
+		return mkdirErr
 	}
 
 	entries, err := os.ReadDir(root)

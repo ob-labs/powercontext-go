@@ -150,17 +150,17 @@ func (r *ReviewBackend) Revise(
 		if err != nil {
 			return err
 		}
-		if err := validateReviewedProposal(current.Family(), proposal); err != nil {
-			return err
+		if proposalErr := validateReviewedProposal(current.Family(), proposal); proposalErr != nil {
+			return proposalErr
 		}
 		if !equalOptionalRef(target, current.Target()) {
 			return &review.InvalidCandidateError{Field: "target", Detail: "cannot change across Candidate versions"}
 		}
-		if err := r.validateEvidence(ctx, tx, sources, artifacts); err != nil {
-			return err
+		if evidenceErr := r.validateEvidence(ctx, tx, sources, artifacts); evidenceErr != nil {
+			return evidenceErr
 		}
-		if err := r.validateTarget(ctx, tx, current.Family(), target, artifacts); err != nil {
-			return err
+		if targetErr := r.validateTarget(ctx, tx, current.Family(), target, artifacts); targetErr != nil {
+			return targetErr
 		}
 		result, err = r.candidates.Revise(
 			ctx, tx, r.scopeID, candidateID, expectedVersion, proposal,
@@ -198,8 +198,8 @@ func (r *ReviewBackend) Approve(
 		if err != nil {
 			return err
 		}
-		if err := validateApprovalLineage(candidate); err != nil {
-			return err
+		if lineageErr := validateApprovalLineage(candidate); lineageErr != nil {
+			return lineageErr
 		}
 		draft, err := candidateDraft(candidate)
 		if err != nil {
@@ -208,18 +208,18 @@ func (r *ReviewBackend) Approve(
 		var stored artifact.Snapshot
 		target := candidate.Target()
 		if target == nil {
-			artifactID, err := idFactory(candidate.Family())
-			if err != nil {
-				return err
+			artifactID, idErr := idFactory(candidate.Family())
+			if idErr != nil {
+				return idErr
 			}
 			stored, err = r.artifacts.Create(ctx, tx, r.scopeID, artifactID, draft)
 			if err != nil {
 				return err
 			}
 		} else {
-			current, err := r.artifacts.Get(ctx, tx, r.scopeID, *target)
-			if err != nil {
-				return err
+			current, currentErr := r.artifacts.Get(ctx, tx, r.scopeID, *target)
+			if currentErr != nil {
+				return currentErr
 			}
 			stored, err = r.artifacts.Revise(ctx, tx, r.scopeID, current, draft)
 			if err != nil {
@@ -231,8 +231,8 @@ func (r *ReviewBackend) Approve(
 			}
 		}
 		if value, ok := stored.(artifact.Artifact[experience.Content]); ok {
-			if err := r.experienceIndex.Replace(ctx, tx, r.scopeID, value); err != nil {
-				return err
+			if indexErr := r.experienceIndex.Replace(ctx, tx, r.scopeID, value); indexErr != nil {
+				return indexErr
 			}
 		}
 		approved, err = r.candidates.MarkApproved(

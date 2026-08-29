@@ -255,8 +255,8 @@ func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *
 	for rows.Next() {
 		var row projectRow
 		var payload any
-		if err := rows.Scan(&row.projectID, &row.projectKey, &row.version, &row.state, &payload); err != nil {
-			return handoffreport.Page[handoffreport.ProjectDescriptor]{}, err
+		if scanErr := rows.Scan(&row.projectID, &row.projectKey, &row.version, &row.state, &payload); scanErr != nil {
+			return handoffreport.Page[handoffreport.ProjectDescriptor]{}, scanErr
 		}
 		row.payload, err = reportPayload(payload)
 		if err != nil {
@@ -429,8 +429,8 @@ func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, proje
 	for rows.Next() {
 		var row workstreamRow
 		var payload any
-		if err := rows.Scan(&row.scopeID, &row.projectID, &row.key, &row.version, &row.state, &payload); err != nil {
-			return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, err
+		if scanErr := rows.Scan(&row.scopeID, &row.projectID, &row.key, &row.version, &row.state, &payload); scanErr != nil {
+			return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, scanErr
 		}
 		row.payload, err = reportPayload(payload)
 		if err != nil {

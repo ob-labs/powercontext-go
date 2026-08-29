@@ -159,15 +159,15 @@ func (r *ArtifactRepository) Revise(
 			DraftFamily:    draft.Family(),
 		}
 	}
-	if err := current.Ref().Validate(); err != nil {
-		return nil, err
+	if validationErr := current.Ref().Validate(); validationErr != nil {
+		return nil, validationErr
 	}
 	// This is intentionally the first database access. SQLite acquires its
 	// write reservation; MySQL/OceanBase locks a matching row.
-	if _, err := db.ExecContext(ctx, `UPDATE pc_artifact_heads SET revision = revision
+	if _, lockErr := db.ExecContext(ctx, `UPDATE pc_artifact_heads SET revision = revision
         WHERE scope_id = ? AND family = ? AND artifact_id = ? AND revision = ?`,
-		scopeID, current.Ref().Family(), current.Ref().ID(), current.Ref().Revision()); err != nil {
-		return nil, err
+		scopeID, current.Ref().Family(), current.Ref().ID(), current.Ref().Revision()); lockErr != nil {
+		return nil, lockErr
 	}
 	lockedRevision, found, err := r.findHead(ctx, db, scopeID, current.Ref().Family(), current.Ref().ID(), true)
 	if err != nil {
@@ -319,26 +319,26 @@ func (r *ArtifactRepository) insertRevision(
 	if err != nil {
 		return nil, &InvalidStoredPayloadError{Kind: "artifact", Name: codec.family, Issue: "value is not JSON serializable"}
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO pc_artifacts
+	if _, insertErr := db.ExecContext(ctx, `INSERT INTO pc_artifacts
         (scope_id, family, artifact_id, revision, content) VALUES (?, ?, ?, ?, ?)`,
-		scopeID, ref.Family(), ref.ID(), ref.Revision(), payload); err != nil {
-		return nil, err
+		scopeID, ref.Family(), ref.ID(), ref.Revision(), payload); insertErr != nil {
+		return nil, insertErr
 	}
 	for ordinal, sourceRef := range lineage.Sources() {
-		if _, err := db.ExecContext(ctx, `INSERT INTO pc_artifact_lineage_sources
+		if _, sourceErr := db.ExecContext(ctx, `INSERT INTO pc_artifact_lineage_sources
             (scope_id, family, artifact_id, revision, ordinal, source_type, source_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)`, scopeID, ref.Family(), ref.ID(), ref.Revision(),
-			ordinal, sourceRef.Type(), sourceRef.ID()); err != nil {
-			return nil, err
+			ordinal, sourceRef.Type(), sourceRef.ID()); sourceErr != nil {
+			return nil, sourceErr
 		}
 	}
 	for ordinal, upstream := range lineage.Artifacts() {
-		if _, err := db.ExecContext(ctx, `INSERT INTO pc_artifact_lineage_artifacts
+		if _, artifactErr := db.ExecContext(ctx, `INSERT INTO pc_artifact_lineage_artifacts
             (scope_id, family, artifact_id, revision, ordinal,
              upstream_family, upstream_artifact_id, upstream_revision)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, scopeID, ref.Family(), ref.ID(), ref.Revision(),
-			ordinal, upstream.Family(), upstream.ID(), upstream.Revision()); err != nil {
-			return nil, err
+			ordinal, upstream.Family(), upstream.ID(), upstream.Revision()); artifactErr != nil {
+			return nil, artifactErr
 		}
 	}
 	created, err := codec.decode(ref, lineage, payload)
@@ -431,20 +431,20 @@ func loadLineage(ctx context.Context, db DBTX, scopeID string, ref artifact.Ref)
 	sources := make([]source.Ref, 0)
 	for sourceRows.Next() {
 		var sourceType, sourceID string
-		if err := sourceRows.Scan(&sourceType, &sourceID); err != nil {
-			return artifact.Lineage{}, errors.Join(err, closeRows(sourceRows))
+		if scanErr := sourceRows.Scan(&sourceType, &sourceID); scanErr != nil {
+			return artifact.Lineage{}, errors.Join(scanErr, closeRows(sourceRows))
 		}
-		value, err := source.NewRef(sourceType, sourceID)
-		if err != nil {
-			return artifact.Lineage{}, errors.Join(err, closeRows(sourceRows))
+		value, refErr := source.NewRef(sourceType, sourceID)
+		if refErr != nil {
+			return artifact.Lineage{}, errors.Join(refErr, closeRows(sourceRows))
 		}
 		sources = append(sources, value)
 	}
-	if err := sourceRows.Close(); err != nil {
-		return artifact.Lineage{}, err
+	if closeErr := sourceRows.Close(); closeErr != nil {
+		return artifact.Lineage{}, closeErr
 	}
-	if err := sourceRows.Err(); err != nil {
-		return artifact.Lineage{}, err
+	if rowsErr := sourceRows.Err(); rowsErr != nil {
+		return artifact.Lineage{}, rowsErr
 	}
 
 	artifactRows, err := db.QueryContext(ctx, `SELECT upstream_family, upstream_artifact_id, upstream_revision
@@ -458,25 +458,25 @@ func loadLineage(ctx context.Context, db DBTX, scopeID string, ref artifact.Ref)
 	for artifactRows.Next() {
 		var family, artifactID string
 		var revision any
-		if err := artifactRows.Scan(&family, &artifactID, &revision); err != nil {
-			return artifact.Lineage{}, errors.Join(err, closeRows(artifactRows))
+		if scanErr := artifactRows.Scan(&family, &artifactID, &revision); scanErr != nil {
+			return artifact.Lineage{}, errors.Join(scanErr, closeRows(artifactRows))
 		}
 		decodedRevision, ok := integer(revision)
 		if !ok {
 			columnErr := &InvalidStoredColumnError{Column: "upstream_revision", Expected: "an integer"}
 			return artifact.Lineage{}, errors.Join(columnErr, closeRows(artifactRows))
 		}
-		value, err := artifact.NewRef(family, artifactID, decodedRevision)
-		if err != nil {
-			return artifact.Lineage{}, errors.Join(err, closeRows(artifactRows))
+		value, refErr := artifact.NewRef(family, artifactID, decodedRevision)
+		if refErr != nil {
+			return artifact.Lineage{}, errors.Join(refErr, closeRows(artifactRows))
 		}
 		artifacts = append(artifacts, value)
 	}
-	if err := artifactRows.Close(); err != nil {
-		return artifact.Lineage{}, err
+	if closeErr := artifactRows.Close(); closeErr != nil {
+		return artifact.Lineage{}, closeErr
 	}
-	if err := artifactRows.Err(); err != nil {
-		return artifact.Lineage{}, err
+	if rowsErr := artifactRows.Err(); rowsErr != nil {
+		return artifact.Lineage{}, rowsErr
 	}
 	return artifact.NewLineage(sources, artifacts)
 }
