@@ -20,6 +20,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -104,6 +105,21 @@ func TestWriteBaselineFailurePreservesExistingOutput(t *testing.T) {
 	}
 }
 
+func TestWriteBaselineReplacesExistingOutput(t *testing.T) {
+	moduleRoot := writeProbeModule(t)
+	output := filepath.Join(t.TempDir(), "baseline.apidiff")
+	if err := os.WriteFile(output, []byte("stale baseline"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	packages := []string{"example.com/probe/sample"}
+	if err := writeBaseline(moduleRoot, output, "example.com/probe", packages); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkBaseline(output, "example.com/probe", packages); err != nil {
+		t.Fatalf("replacement baseline is unreadable: %v", err)
+	}
+}
+
 func TestCheckBaselineRejectsPackageInventoryDrift(t *testing.T) {
 	moduleRoot := writeProbeModule(t)
 	output := filepath.Join(t.TempDir(), "baseline.apidiff")
@@ -129,6 +145,35 @@ func TestWriteBaselineRejectsDuplicatePackages(t *testing.T) {
 	}
 }
 
+func TestAPIDiffRejectsRemovedExportedIdentifier(t *testing.T) {
+	apidiff := os.Getenv("POWERCONTEXT_APIDIFF")
+	if apidiff == "" {
+		t.Skip("POWERCONTEXT_APIDIFF is required for the real comparator probe")
+	}
+	moduleRoot := writeProbeModule(t)
+	packagePath := "example.com/probe/sample"
+	baseline := filepath.Join(t.TempDir(), "baseline.apidiff")
+	current := filepath.Join(t.TempDir(), "current.apidiff")
+	if err := writeBaseline(moduleRoot, baseline, "example.com/probe", []string{packagePath}); err != nil {
+		t.Fatal(err)
+	}
+	const incompatibleSource = "package sample\n\ntype retained struct{}\n"
+	if err := os.WriteFile(filepath.Join(moduleRoot, "sample", "sample.go"), []byte(incompatibleSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeBaseline(moduleRoot, current, "example.com/probe", []string{packagePath}); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), apidiff, "-m", "-incompatible", baseline, current)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run real apidiff probe: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "Exported: removed") {
+		t.Fatalf("real apidiff report did not identify the removed export:\n%s", output)
+	}
+}
+
 func writeProbeModule(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -139,7 +184,7 @@ func writeProbeModule(t *testing.T) string {
 	if err := os.Mkdir(packageDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	const source = "package sample\n\ntype Value struct {\n\tName string\n}\n"
+	const source = "package sample\n\ntype Exported struct {\n\tName string\n}\n"
 	if err := os.WriteFile(filepath.Join(packageDirectory, "sample.go"), []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}

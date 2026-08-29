@@ -203,6 +203,9 @@ func TestAPICompatChecksEveryDeliberatePublicPackage(t *testing.T) {
 	output, baselineLog, apidiffLog, err := runAPICompatWithFake(t, `#!/bin/sh
 set -eu
 printf '%s|%s\n' "${GOFLAGS:-}" "$*" >> "$API_COMPAT_CALL_LOG"
+if [ "$(grep -c '^' "$API_COMPAT_CALL_LOG")" -eq 2 ]; then
+	printf '%s\n' '- ./sample.Exported: removed'
+fi
 `)
 	if err != nil {
 		t.Fatalf("make api-compat failed: %v\n%s", err, output)
@@ -254,16 +257,25 @@ printf '%s|%s\n' "${GOFLAGS:-}" "$*" >> "$API_COMPAT_CALL_LOG"
 	if err != nil {
 		t.Fatal(err)
 	}
-	apidiffFlags, apidiffArguments, ok := strings.Cut(strings.TrimSpace(string(apidiffPayload)), "|")
-	if !ok {
-		t.Fatalf("apidiff call %q has no GOFLAGS boundary", apidiffPayload)
+	apidiffCalls := strings.Split(strings.TrimSpace(string(apidiffPayload)), "\n")
+	if len(apidiffCalls) != 2 {
+		t.Fatalf("apidiff calls = %q, want repository comparison and real removal probe", apidiffCalls)
 	}
+	apidiffFlags, apidiffArguments := splitAPICompatCall(t, apidiffCalls[0])
 	if !slices.Contains(strings.Fields(apidiffFlags), "-trimpath") {
 		t.Errorf("apidiff GOFLAGS = %q, want -trimpath", apidiffFlags)
 	}
 	wantAPIDiff := []string{"-m", "-incompatible", "test/api-compat/pre-release.apidiff", currentBundle}
 	if got := strings.Fields(apidiffArguments); !slices.Equal(got, wantAPIDiff) {
 		t.Fatalf("apidiff arguments = %q, want %q", got, wantAPIDiff)
+	}
+	probeFlags, probeArguments := splitAPICompatCall(t, apidiffCalls[1])
+	if !slices.Contains(strings.Fields(probeFlags), "-trimpath") {
+		t.Errorf("apidiff probe GOFLAGS = %q, want -trimpath", probeFlags)
+	}
+	probe := strings.Fields(probeArguments)
+	if len(probe) != 4 || probe[0] != "-m" || probe[1] != "-incompatible" || probe[2] == probe[3] {
+		t.Fatalf("apidiff probe arguments = %q, want two distinct module bundles", probe)
 	}
 }
 
@@ -328,14 +340,48 @@ printf 'incompatible: removed exported field\n'
 	}
 }
 
-func runAPICompatWithFake(t *testing.T, apidiffScript string) (string, string, string, error) {
-	t.Helper()
-	repository := filepath.Clean(filepath.Join("..", ".."))
-	temporary := t.TempDir()
-	baselineLog := filepath.Join(temporary, "baseline.txt")
-	apidiffLog := filepath.Join(temporary, "apidiff.txt")
-	fakeBaseline := filepath.Join(temporary, "api-baseline")
-	const baselineScript = `#!/bin/sh
+func TestAPICompatFailsWhenCurrentBundleGenerationFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+	const failingBaseline = `#!/bin/sh
+set -eu
+printf 'current bundle generation failed\n' >&2
+exit 23
+`
+	const unexpectedAPIDiff = `#!/bin/sh
+set -eu
+printf 'apidiff should not run after generator failure\n' >&2
+exit 24
+`
+	output, _, _, err := runAPICompatWithScripts(t, failingBaseline, unexpectedAPIDiff)
+	if err == nil {
+		t.Fatalf("make api-compat ignored current bundle generation failure:\n%s", output)
+	}
+	if !strings.Contains(output, "current bundle generation failed") {
+		t.Fatalf("generator failure is not actionable:\n%s", output)
+	}
+}
+
+func TestAPICompatFailsWhenAPIDiffExecutionFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+	const failingAPIDiff = `#!/bin/sh
+set -eu
+printf 'apidiff bundle read failed\n' >&2
+exit 24
+`
+	output, _, _, err := runAPICompatWithFake(t, failingAPIDiff)
+	if err == nil {
+		t.Fatalf("make api-compat ignored apidiff execution failure:\n%s", output)
+	}
+	if !strings.Contains(output, "apidiff bundle read failed") {
+		t.Fatalf("apidiff execution failure is not actionable:\n%s", output)
+	}
+}
+
+const successfulAPIBaselineScript = `#!/bin/sh
 set -eu
 printf '%s|%s\n' "${GOFLAGS:-}" "$*" >> "$API_BASELINE_CALL_LOG"
 output=''
@@ -360,6 +406,19 @@ elif [ -z "$check" ]; then
 	exit 64
 fi
 `
+
+func runAPICompatWithFake(t *testing.T, apidiffScript string) (string, string, string, error) {
+	t.Helper()
+	return runAPICompatWithScripts(t, successfulAPIBaselineScript, apidiffScript)
+}
+
+func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string) (string, string, string, error) {
+	t.Helper()
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	baselineLog := filepath.Join(temporary, "baseline.txt")
+	apidiffLog := filepath.Join(temporary, "apidiff.txt")
+	fakeBaseline := filepath.Join(temporary, "api-baseline")
 	if err := os.WriteFile(fakeBaseline, []byte(baselineScript), 0o755); err != nil {
 		t.Fatal(err)
 	}

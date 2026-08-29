@@ -110,7 +110,8 @@ api-compat: api-compat-tools ## Reject incompatible changes to deliberate public
 	fi
 	@GOFLAGS="$(API_COMPAT_GOFLAGS)" $(API_BASELINE_GENERATOR) \
 		-check "$(API_BASELINE)" -module "$(MODULE_PATH)" $(PUBLIC_API_PACKAGES)
-	@current=$$(mktemp); \
+	@set -eu; \
+	current=$$(mktemp); \
 	trap 'rm -f "$$current"' EXIT; \
 	GOFLAGS="$(API_COMPAT_GOFLAGS)" $(API_BASELINE_GENERATOR) \
 		-output "$$current" -module "$(MODULE_PATH)" $(PUBLIC_API_PACKAGES); \
@@ -119,6 +120,8 @@ api-compat: api-compat-tools ## Reject incompatible changes to deliberate public
 		printf 'incompatible public API change:\n%s\n' "$$report" >&2; \
 		exit 1; \
 	fi
+	@POWERCONTEXT_APIDIFF="$(APIDIFF)" GOFLAGS="$(API_COMPAT_GOFLAGS)" \
+		$(GO) test -count=1 ./tools/api-baseline -run '^TestAPIDiffRejectsRemovedExportedIdentifier$$'
 
 generate: ## Regenerate checked-in OpenAPI and MCP outputs.
 	$(GO) generate ./openapi

@@ -280,6 +280,46 @@ func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 	}
 }
 
+func TestWindowsContractExercisesAPIBaselineReplacement(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "windows-contract.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string `yaml:"name"`
+				Uses string `yaml:"uses"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["windows-contract"]
+	if !ok {
+		t.Fatal("windows-contract.yml has no windows-contract job")
+	}
+	setupIndex, testIndex := -1, -1
+	for index, step := range job.Steps {
+		switch step.Name {
+		case "Set up the Go environment":
+			if step.Uses == "./.github/actions/setup-go-env" {
+				setupIndex = index
+			}
+		case "Verify API baseline replacement on Windows":
+			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'" {
+				testIndex = index
+			}
+		}
+	}
+	if setupIndex < 0 || testIndex <= setupIndex {
+		t.Fatalf("Windows API baseline steps = setup %d, test %d, want ordered setup and replacement test", setupIndex, testIndex)
+	}
+}
+
 func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	paths := []string{
