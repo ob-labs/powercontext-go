@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "comment": "Mode assignments for the delta between the frozen v0.0.2 Oracle (622 cases) and the active parity target (759 cases). Cases listed under \"cases\" carry resolvable evidence and become status=mapped; every other delta case becomes status=pending with the file mode and is expected to gain evidence as the relevant port lands (for example WP2 for the transport surface). Frozen Oracle cases inherit their mappings from traceability.json and never appear here.",
+  "files": {
+    "e2e/bub/tests/test_bub_transport_trust.py": {
+      "mode": "retained-host",
+      "reason": "Bub plugin transport trust behavior; evidence will live in the retained Bub adapter tests once WP2 aligns the shared loopback vectors."
+    },
+    "e2e/bub/tests/test_harbor_agent.py": {
+      "mode": "retained-host",
+      "reason": "Bub harbor agent installation behavior owned by the retained Bub adapter."
+    },
+    "tests/e2e/test_pydantic_ai_chain.py": {
+      "mode": "cross-layer",
+      "reason": "End-to-end capture/checkpoint/recall/search chain crossing the Pydantic AI adapter and the Server."
+    },
+    "tests/e2e/test_workbuddy_service_chain.py": {
+      "mode": "cross-layer",
+      "reason": "End-to-end chain crossing the WorkBuddy hook and the shared MCP service configuration."
+    },
+    "tests/integrations/test_hermes_provider.py": {
+      "mode": "retained-host",
+      "reason": "Hermes provider plugin behavior; evidence will live in the retained Hermes adapter tests."
+    },
+    "tests/langchain_middleware/test_middleware.py": {
+      "mode": "retained-host",
+      "reason": "LangChain middleware observable behavior owned by the LangChain adapter named in the WP2 retained-adapter alignment list."
+    },
+    "tests/langchain_middleware/test_packaging.py": {
+      "mode": "retained-host",
+      "reason": "LangChain middleware packaging owned by the LangChain adapter."
+    },
+    "tests/langchain_middleware/test_scope.py": {
+      "mode": "retained-host",
+      "reason": "LangChain scope handling owned by the LangChain adapter."
+    },
+    "tests/langchain_middleware/test_settings.py": {
+      "mode": "retained-host",
+      "reason": "LangChain settings handling owned by the LangChain adapter."
+    },
+    "tests/pydantic_ai_adapter/test_capability.py": {
+      "mode": "retained-host",
+      "reason": "Pydantic AI adapter capability behavior owned by the Pydantic AI adapter."
+    },
+    "tests/pydantic_ai_adapter/test_capture.py": {
+      "mode": "retained-host",
+      "reason": "Pydantic AI shared capture behavior owned by the Pydantic AI adapter."
+    },
+    "tests/pydantic_ai_adapter/test_packaging.py": {
+      "mode": "retained-host",
+      "reason": "Pydantic AI adapter packaging owned by the Pydantic AI adapter."
+    },
+    "tests/pydantic_ai_adapter/test_settings_scope.py": {
+      "mode": "retained-host",
+      "reason": "Pydantic AI settings and scope behavior owned by the Pydantic AI adapter."
+    },
+    "tests/pydantic_ai_adapter/test_toolset.py": {
+      "mode": "retained-host",
+      "reason": "Pydantic AI toolset behavior owned by the Pydantic AI adapter."
+    },
+    "tests/test_cli.py": {
+      "mode": "go-port",
+      "reason": "CLI server command transport overrides; the CLI is Go (internal/cli) and the behavior is part of the WP2 transport surface."
+    },
+    "tests/test_cli_workbuddy.py": {
+      "mode": "go-port",
+      "reason": "WorkBuddy setup/doctor CLI commands; the CLI is Go (internal/cli)."
+    },
+    "tests/test_docker_contract.py": {
+      "mode": "go-port",
+      "reason": "Dockerfile and container invocation contract owned by this repository."
+    },
+    "tests/test_docs_remote_access_contract.py": {
+      "mode": "go-port",
+      "reason": "Documentation contract for non-loopback binds owned by this repository."
+    },
+    "tests/test_doctor_integrations.py": {
+      "mode": "go-port",
+      "reason": "CLI doctor integrations matrix; the CLI is Go (internal/cli)."
+    },
+    "tests/test_hermes_cli.py": {
+      "mode": "go-port",
+      "reason": "Hermes setup CLI commands; the CLI is Go (internal/cli)."
+    },
+    "tests/test_opencode_cli.py": {
+      "mode": "go-port",
+      "reason": "OpenCode activation probe CLI commands; the CLI is Go (internal/cli)."
+    },
+    "tests/test_setup_select.py": {
+      "mode": "go-port",
+      "reason": "Interactive/non-interactive host selection CLI; the CLI is Go (internal/cli)."
+    },
+    "tests/test_transport.py": {
+      "mode": "go-port",
+      "reason": "Shared loopback/plaintext transport policy across Client, CLI, and Server; the Go port of this policy is WP2.",
+      "cases": {
+        "test_vendored_plugin_shares_the_loopback_host_set": {
+          "mode": "cross-layer",
+          "reason": "Asserts retained plugins share the core loopback host set; crosses the Go core and retained adapters."
+        },
+        "test_vendored_plugin_matches_the_shared_plaintext_policy": {
+          "mode": "cross-layer",
+          "reason": "Asserts retained plugins match the core plaintext policy; crosses the Go core and retained adapters."
+        }
+      }
+    }
+  }
+}

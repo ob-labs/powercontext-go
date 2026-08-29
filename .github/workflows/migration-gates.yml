@@ -98,6 +98,16 @@ jobs:
       - name: Verify Oracle identity
         run: test "$(git -C _oracle rev-parse HEAD)" = 3a6cb0151670eaff7dc0293466edd673124e80da
 
+      - name: Check out the active parity target
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: oceanbase/powercontext
+          ref: f2ec1f75e5e1b46ad0626ab8390801b88966b6f5
+          path: _target
+
+      - name: Verify parity target identity
+        run: test "$(git -C _target rev-parse HEAD)" = f2ec1f75e5e1b46ad0626ab8390801b88966b6f5
+
       - name: Set up the Go environment
         uses: ./.github/actions/setup-go-env
 
@@ -140,6 +150,7 @@ jobs:
             --expected test/conformance/testdata/python-v0.0.2/scheduler.db
           go run ./tools/fixture-generate -python _oracle -check
           go run ./tools/traceability-generate -check
+          go run ./tools/parity-inventory-generate -upstream _target -check
 
       - name: Run Python to Go to Python compatibility tests
         env:
