@@ -155,10 +155,9 @@ source / artifact / trigger / inference
 - When a consumer constructs generated nullable request fields, represent a
   required JSON `null` explicitly instead of relying on a zero value, and add
   a focused request-validation test before exercising the transport.
-- When an external consumer acknowledges a Handoff, capture a distinct
-  receiver Source and use its source ID for the receipt; verify the accepted
-  acknowledgement through the public HTTP client rather than reusing a work
-  boundary source.
+- When an external consumer acknowledges a Handoff, use a fresh receipt source
+  ID that is distinct from the work boundary and has not already been captured;
+  verify the accepted acknowledgement through the public HTTP client.
 - Compare regenerated SQLite fixtures through schema and row semantics, not
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and

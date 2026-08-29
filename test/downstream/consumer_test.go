@@ -62,10 +62,6 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create work contract through public client: %v", err)
 	}
-	if _, err := api.CaptureContentSource(ctx, receiverSourceRequest()); err != nil {
-		t.Fatalf("capture acknowledgement source through public client: %v", err)
-	}
-
 	preparedResult, err := api.HandoffCurrentWork(ctx, currentWorkHandoffRequest())
 	if err != nil {
 		t.Fatalf("prepare current-work Handoff through public client: %v", err)
@@ -108,20 +104,17 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}
 }
 
-func TestPublicHandoffRequestsUsePublicContract(t *testing.T) {
-	requests := []struct {
-		name    string
-		request interface{ Validate() error }
-	}{
-		{name: "current-work Handoff", request: currentWorkHandoffRequest()},
-		{name: "acknowledgement source", request: receiverSourceRequest()},
+func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
+	if err := currentWorkHandoffRequest().Validate(); err != nil {
+		t.Fatalf("current-work Handoff request violates the public contract: %v", err)
 	}
-	for _, check := range requests {
-		t.Run(check.name, func(t *testing.T) {
-			if err := check.request.Validate(); err != nil {
-				t.Fatalf("request violates the public contract: %v", err)
-			}
-		})
+}
+
+// Regression for #42: HandoffCurrentWork captures its boundary source, while
+// AcknowledgeHandoff captures a handoff receipt at its own source ID.
+func TestAcknowledgementUsesDistinctReceiptSource(t *testing.T) {
+	if downstreamReceiptSourceID == downstreamSourceID {
+		t.Fatal("acknowledgement must not reuse the current-work boundary source ID")
 	}
 }
 
@@ -138,14 +131,6 @@ func currentWorkHandoffRequest() *v1.HandoffCurrentWorkRequest {
 			NextAction:  v1.NilWorkClaim{Null: true},
 			Omissions:   []string{},
 		},
-	}
-}
-
-func receiverSourceRequest() *v1.CaptureContentSourceRequest {
-	return &v1.CaptureContentSourceRequest{
-		ScopeID:  downstreamScope,
-		SourceID: downstreamReceiptSourceID,
-		Content:  "The downstream receiver inspected the prepared Handoff.",
 	}
 }
 
