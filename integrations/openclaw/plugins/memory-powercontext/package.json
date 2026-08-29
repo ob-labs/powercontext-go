@@ -38,6 +38,11 @@
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   },
+  "pnpm": {
+    "overrides": {
+      "ansi-regex": "5.0.1"
+    }
+  },
   "peerDependencies": {
     "openclaw": ">=2026.8.1-beta.2"
   },

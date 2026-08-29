@@ -120,12 +120,25 @@ static void mark(const char *name, const char *value) {
     fclose(file);
 }
 
+static void wait_for_release(const char *name) {
+    const char *path = getenv(name);
+    if (path == NULL) return;
+    for (;;) {
+        FILE *file = fopen(path, "r");
+        if (file != NULL) {
+            fclose(file);
+            return;
+        }
+        struct timespec delay = { .tv_sec = 0, .tv_nsec = 1000000 };
+        nanosleep(&delay, NULL);
+    }
+}
+
 int seekdb_open(const char *directory, const char **error, void **out) {
     (void)directory;
     (void)error;
     mark("POWERCONTEXT_SEEKDB_TEST_OPENED", "opened");
-    struct timespec delay = { .tv_sec = 0, .tv_nsec = 100000000 };
-    nanosleep(&delay, NULL);
+    wait_for_release("POWERCONTEXT_SEEKDB_TEST_RELEASED");
     *out = (void *)0x1;
     return 0;
 }
@@ -159,9 +172,14 @@ int seekdb_connection_options(void *handle, SeekDBConnectionOptions *out) {
 	for attempt := 0; attempt < 3; attempt++ {
 		opened := filepath.Join(root, "opened-"+strconv.Itoa(attempt))
 		closed := filepath.Join(root, "closed-"+strconv.Itoa(attempt))
+		released := filepath.Join(root, "released-"+strconv.Itoa(attempt))
 		t.Setenv("POWERCONTEXT_SEEKDB_TEST_OPENED", opened)
 		t.Setenv("POWERCONTEXT_SEEKDB_TEST_CLOSED", closed)
-		ctx, cancel := context.WithCancel(context.Background())
+		t.Setenv("POWERCONTEXT_SEEKDB_TEST_RELEASED", released)
+		t.Cleanup(func() {
+			_ = os.WriteFile(released, []byte("released"), 0o600)
+		})
+		ctx, cancel := context.WithCancel(t.Context())
 		result := make(chan error, 1)
 		go func() {
 			instance, openErr := Open(ctx, Config{Path: filepath.Join(root, "data"), LibraryPath: library})
@@ -188,6 +206,9 @@ int seekdb_connection_options(void *handle, SeekDBConnectionOptions *out) {
 		cancel()
 		cancel()
 		cancel()
+		if err := os.WriteFile(released, []byte("released"), 0o600); err != nil {
+			t.Fatal(err)
+		}
 		if openErr := <-result; !errors.Is(openErr, context.Canceled) {
 			t.Fatalf("open error = %v, want context cancellation", openErr)
 		}
