@@ -30,17 +30,24 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $textPaths = @(
+            '.gitattributes',
             'openapi/powercontext.yaml',
             'api/v1/oas_client_gen.go',
             'client/invoker_gen.go',
             'internal/mcpapi/schemas_gen.go',
             'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
-            'test/conformance/testdata/python-v0.0.2/manifest.json'
+            'test/conformance/testdata/python-v0.0.2/manifest.json',
+            'artifact/memory/prompts/conversation.txt',
+            'evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl'
           )
           foreach ($path in $textPaths) {
             $attribute = git check-attr eol -- $path
             if ($attribute -ne "${path}: eol: lf") {
               throw "expected LF checkout attribute for $path; got $attribute"
+            }
+            $bytes = [IO.File]::ReadAllBytes($path)
+            if ([Array]::IndexOf($bytes, [byte]13) -ge 0) {
+              throw "expected LF checkout bytes for $path"
             }
           }
 

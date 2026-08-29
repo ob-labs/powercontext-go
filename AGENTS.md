@@ -130,3 +130,8 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When defining or changing LF checkout rules, enumerate every tracked
+  byte-sensitive prompt, schema, dataset, fixture, and generated-contract
+  format. Verify representative paths with `git check-attr eol` and raw
+  working-tree bytes in a fresh `core.autocrlf=true` checkout so clean-filter
+  normalization cannot hide CRLF.

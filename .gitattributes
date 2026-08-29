@@ -1,6 +1,7 @@
 # Every supported source and contract text format is checked out with LF so
 # frozen hashes and generated-contract diff checks are independent of a
 # contributor's core.autocrlf setting. Binary fixtures are never transformed.
+.gitattributes text eol=lf
 *.c text eol=lf
 *.css text eol=lf
 *.go text eol=lf
@@ -8,6 +9,7 @@
 *.html text eol=lf
 *.js text eol=lf
 *.json text eol=lf
+*.jsonl text eol=lf
 *.md text eol=lf
 *.mjs text eol=lf
 *.py text eol=lf
@@ -15,6 +17,7 @@
 *.toml text eol=lf
 *.ts text eol=lf
 *.tsx text eol=lf
+*.txt text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
 Dockerfile text eol=lf

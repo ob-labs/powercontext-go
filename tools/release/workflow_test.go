@@ -17,6 +17,7 @@ package main
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -117,6 +118,33 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	if strings.Contains(string(e2eHarness), "continue-on-error:") {
 		t.Error("e2e-harness.yml must not suppress acceptance or evidence failures")
+	}
+}
+
+func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	paths := []string{
+		".gitattributes",
+		"openapi/powercontext.yaml",
+		"artifact/memory/prompts/conversation.txt",
+		"artifact/memory/prompts/extraction.schema.json",
+		"evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl",
+		"api/v1/oas_client_gen.go",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			command := exec.CommandContext(t.Context(), "git", "check-attr", "eol", "--", path)
+			command.Dir = repository
+			output, err := command.Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.TrimSpace(string(output))
+			want := path + ": eol: lf"
+			if got != want {
+				t.Fatalf("checkout attribute = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
