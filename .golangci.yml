@@ -24,6 +24,7 @@ linters:
     - bodyclose
     - durationcheck
     - errcheck
+    - gocyclo
     - govet
     - ineffassign
     - misspell
@@ -32,6 +33,8 @@ linters:
     - wastedassign
     - whitespace
   settings:
+    gocyclo:
+      min-complexity: 50
     govet:
       enable:
         - shadow
@@ -45,6 +48,28 @@ linters:
         - -QF*
   exclusions:
     generated: strict
+    warn-unused: true
+    rules:
+      # Scheduler: the pickle compatibility parser branches by supported opcode.
+      # Remove this waiver when parsePickle is reduced below the threshold.
+      - path: ^internal/scheduler/pickle\.go$
+        linters:
+          - gocyclo
+        text: 'cyclomatic complexity 107 of func `parsePickle` is high \(> 50\)'
+
+      # Server: process configuration validation covers the complete option matrix.
+      # Remove this waiver when ProcessConfig.Validate is reduced below the threshold.
+      - path: ^server/config_validate\.go$
+        linters:
+          - gocyclo
+        text: 'cyclomatic complexity 62 of func `\(ProcessConfig\)\.Validate` is high \(> 50\)'
+
+      # End-to-end tests: this vertical slice intentionally verifies the full memory lifecycle.
+      # Remove this waiver when the scenario is split into functions below the threshold.
+      - path: ^test/e2e/http_memory_test\.go$
+        linters:
+          - gocyclo
+        text: 'cyclomatic complexity 206 of func `TestHTTPSourceAndMemorySQLiteVerticalSlice` is high \(> 50\)'
 
 formatters:
   enable:
