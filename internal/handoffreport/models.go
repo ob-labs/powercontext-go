@@ -382,13 +382,6 @@ func optionalKey(value *string) string {
 	return *value
 }
 
-func timeTextPtr(value *time.Time) any {
-	if value == nil {
-		return nil
-	}
-	return TimestampText(*value)
-}
-
 func artifactRefMap(value *artifact.Ref) any {
 	if value == nil {
 		return nil

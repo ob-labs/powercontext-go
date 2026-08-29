@@ -121,6 +121,9 @@ source / artifact / trigger / inference
 - Merge with an existing rule when the lesson is already covered. Keep the
   stronger wording and remove duplication so this file remains a practical
   engineering contract rather than an append-only incident log.
+- When a Go package has build-tagged implementation variants, keep its package
+  documentation in an untagged `doc.go`. Verify the package `Doc` field with
+  `go list -e` under every supported `GOOS` and CGO selection.
 - When a CI end-to-end test starts a compiled Go service under a readiness
   deadline, build the binary once before the deadline and pass its absolute
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and

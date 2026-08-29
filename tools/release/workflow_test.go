@@ -117,16 +117,16 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 func TestCIThirdPartyExecutablesUseImmutableReferences(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	actionUse := regexp.MustCompile(
-		"(?m)^[\\t ]*(?:-[\\t ]*)?uses:[\\t ]+([^@\\s]+)@([^\\s#]+)([^\\r\\n]*)$",
+		`(?m)^[\t ]*(?:-[\t ]*)?uses:[\t ]+([^@\s]+)@([^\s#]+)([^\r\n]*)$`,
 	)
 	containerUse := regexp.MustCompile(
-		"(?m)^[\\t ]*(?:container|image|[A-Z][A-Z0-9_]*_IMAGE):[\\t ]+([^\\s#]+)",
+		`(?m)^[\t ]*(?:container|image|[A-Z][A-Z0-9_]*_IMAGE):[\t ]+([^\s#]+)`,
 	)
 	dockerActionUse := regexp.MustCompile(
-		"(?m)^[\\t ]*(?:-[\\t ]*)?uses:[\\t ]+docker://([^\\s#]+)",
+		`(?m)^[\t ]*(?:-[\t ]*)?uses:[\t ]+docker://([^\s#]+)`,
 	)
 	commit := regexp.MustCompile("^[0-9a-f]{40}$")
-	containerDigest := regexp.MustCompile("^[^@\\s]+@sha256:[0-9a-f]{64}$")
+	containerDigest := regexp.MustCompile(`^[^@\s]+@sha256:[0-9a-f]{64}$`)
 	staticContainerReferences := 0
 
 	err := filepath.WalkDir(filepath.Join(repository, ".github"), func(path string, entry fs.DirEntry, walkErr error) error {
