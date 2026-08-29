@@ -38,7 +38,7 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}

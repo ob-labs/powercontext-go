@@ -70,6 +70,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		},
 		"migration-gates.yml": {
 			"name: Go migration assurance", "workflow_call:", "make test-race",
+			"make module-inventory",
 			"docker build --pull --target powercontext -t powercontext:ci .",
 			"FuzzRestrictedPickleJobDecoder", "Frozen Python Oracle and differential fixtures",
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",

@@ -39,8 +39,9 @@ PORTABLE_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./ope
 PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 DOWNSTREAM_DIR := test/downstream
 DOWNSTREAM_BINARY := $(CURDIR)/bin/powercontext-downstream$(shell $(GO) env GOEXE)
+MODULE_INVENTORY := test/module-inventory.json
 
-.PHONY: help lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix generate check-generated module-check module-inventory contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -81,6 +82,9 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 module-check: ## Verify tidy readonly module metadata and checksums.
 	$(GO) mod tidy -diff
 	$(GO) mod verify
+
+module-inventory: ## Verify every owned Go module has an explicit inventory entry.
+	$(GO) run ./tools/module-integrity -inventory "$(MODULE_INVENTORY)"
 
 contract-test: check-generated ## Test the generated OpenAPI transport contract.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' \
