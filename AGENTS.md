@@ -242,6 +242,10 @@ source / artifact / trigger / inference
   final validation. Verify both directions: a safe override repairs an unsafe
   environment value, and an unsafe override cannot replace a safe environment
   value without failing.
+- When a CLI converts a typed configuration failure into a usage error, keep
+  the underlying error matchable and name concrete operator remediation without
+  exposing configured values. Verify exit code 2 and that execution never
+  reaches the operation runner.
 - When isolated host adapters vendor the same transport policy, drive every
   configuration and directly constructible client boundary from one shared
   host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6
