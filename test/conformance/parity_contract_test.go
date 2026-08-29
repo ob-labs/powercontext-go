@@ -86,9 +86,21 @@ func TestParityContractRejectsAmbiguousJSON(t *testing.T) {
 	}
 }
 
-func TestFrozenOracleWorkflowRejectsNonVerifyingIdentityStep(t *testing.T) {
-	if validOracleIdentityCommand("echo "+oracleCommit, oracleCommit) {
-		t.Error("accepted an Oracle identity step that only prints the expected commit")
+func TestWorkflowRejectsNonVerifyingIdentitySteps(t *testing.T) {
+	tests := []struct {
+		name         string
+		checkoutPath string
+		commit       string
+	}{
+		{name: "frozen Oracle", checkoutPath: "_oracle", commit: oracleCommit},
+		{name: "active parity target", checkoutPath: "_target", commit: "target-commit"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if validCheckoutIdentityCommand("echo "+test.commit, test.checkoutPath, test.commit) {
+				t.Errorf("accepted a non-verifying identity step for %s", test.checkoutPath)
+			}
+		})
 	}
 }
 
@@ -201,7 +213,7 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			}
 		case "Verify Oracle identity":
 			verify = step.Name
-			if !validOracleIdentityCommand(step.Run, contract.FrozenReleaseOracle.Commit) {
+			if !validCheckoutIdentityCommand(step.Run, "_oracle", contract.FrozenReleaseOracle.Commit) {
 				t.Errorf("Verify Oracle identity step does not pin the contract frozen Oracle %q", contract.FrozenReleaseOracle.Commit)
 			}
 		case "Check out the active parity target":
@@ -214,7 +226,7 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			}
 		case "Verify parity target identity":
 			targetVerify = step.Name
-			if !strings.Contains(step.Run, contract.ExactTargetSHA) {
+			if !validCheckoutIdentityCommand(step.Run, "_target", contract.ExactTargetSHA) {
 				t.Errorf("Verify parity target identity step does not pin the contract exact target SHA %q", contract.ExactTargetSHA)
 			}
 		}
@@ -260,7 +272,7 @@ func validGitHubRepositorySlug(slug string) bool {
 		strings.IndexFunc(slug, unicode.IsSpace) < 0
 }
 
-func validOracleIdentityCommand(command, commit string) bool {
-	want := `test "$(git -C _oracle rev-parse HEAD)" = ` + commit
+func validCheckoutIdentityCommand(command, checkoutPath, commit string) bool {
+	want := `test "$(git -C ` + checkoutPath + ` rev-parse HEAD)" = ` + commit
 	return strings.TrimSpace(command) == want
 }

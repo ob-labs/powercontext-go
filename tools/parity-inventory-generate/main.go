@@ -25,7 +25,9 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	"cmp"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -33,7 +35,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -117,7 +119,6 @@ type inventory struct {
 var (
 	goTestDeclaration = regexp.MustCompile(`^func\s+(Test[A-Za-z0-9_]+)\s*\(`)
 	pyTestDeclaration = regexp.MustCompile(`^\s*(?:async\s+)?def\s+(test_[A-Za-z0-9_]+)\s*\(`)
-	pyCaseScanner     = regexp.MustCompile(`^\s*(?:async\s+)?def\s+(test_[A-Za-z0-9_]+)\s*\(`)
 )
 
 const (
@@ -271,7 +272,7 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 		MappedCaseCount: mapped, PendingCaseCount: pending,
 		Entries: entries,
 	}
-	payload, err := json.MarshalIndent(value, "", "  ")
+	payload, err := json.Marshal(&value, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
@@ -338,14 +339,14 @@ func extractUpstreamCases(upstream string) ([]pythonTest, error) {
 			return nil, fmt.Errorf("walk upstream %s: %w", base, err)
 		}
 	}
-	sort.Slice(cases, func(i, j int) bool {
-		if cases[i].File != cases[j].File {
-			return cases[i].File < cases[j].File
+	slices.SortFunc(cases, func(left, right pythonTest) int {
+		if order := cmp.Compare(left.File, right.File); order != 0 {
+			return order
 		}
-		if cases[i].Line != cases[j].Line {
-			return cases[i].Line < cases[j].Line
+		if order := cmp.Compare(left.Line, right.Line); order != 0 {
+			return order
 		}
-		return cases[i].Name < cases[j].Name
+		return cmp.Compare(left.Name, right.Name)
 	})
 	if len(cases) == 0 {
 		return nil, fmt.Errorf("upstream checkout %s yielded no Python test cases", upstream)
@@ -364,7 +365,7 @@ func scanPythonCases(path, rel string) ([]pythonTest, error) {
 	line := 0
 	for scanner.Scan() {
 		line++
-		match := pyCaseScanner.FindStringSubmatch(scanner.Text())
+		match := pyTestDeclaration.FindStringSubmatch(scanner.Text())
 		if len(match) == 2 {
 			found = append(found, pythonTest{File: rel, Name: match[1], Line: line})
 		}
@@ -400,8 +401,14 @@ func resolveEvidence(root, reference string) (evidence, error) {
 
 func declaresTest(kind string, contents []byte, name string) bool {
 	if kind == "ts" {
-		text := string(contents)
-		return strings.Contains(text, "it('"+name+"'") || strings.Contains(text, `it("`+name+`"`)
+		scanner := bufio.NewScanner(bytes.NewReader(contents))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "it('"+name+"'") || strings.HasPrefix(line, `it("`+name+`"`) {
+				return true
+			}
+		}
+		return false
 	}
 	pattern := goTestDeclaration
 	if kind == "py" {
@@ -422,9 +429,7 @@ func readJSON(path string, target any) error {
 	if err != nil {
 		return err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(contents))
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(target)
+	return json.Unmarshal(contents, target, json.RejectUnknownMembers(true))
 }
 
 func readJSONLoose(path string, target any) error {
