@@ -15,10 +15,12 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -38,7 +40,7 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "generated-consumers", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "generated-consumers", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
@@ -190,6 +192,347 @@ func TestGeneratedConsumersTargetRunsFreshConsumerVerification(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "go test -count=1 ./tools/generated-consumers") {
 		t.Fatalf("make generated-consumers does not run the uncached fresh-consumer check:\n%s", output)
+	}
+}
+
+func TestAPICompatChecksEveryDeliberatePublicPackage(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	output, baselineLog, apidiffLog, err := runAPICompatWithFake(t, `#!/bin/sh
+set -eu
+printf '%s|%s\n' "${GOFLAGS:-}" "$*" >> "$API_COMPAT_CALL_LOG"
+if [ "$(grep -c '^' "$API_COMPAT_CALL_LOG")" -eq 2 ]; then
+	printf '%s\n' '- ./sample.Exported: removed'
+fi
+`)
+	if err != nil {
+		t.Fatalf("make api-compat failed: %v\n%s", err, output)
+	}
+	baselinePayload, err := os.ReadFile(baselineLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineCalls := strings.Split(strings.TrimSpace(string(baselinePayload)), "\n")
+	if len(baselineCalls) != 2 {
+		t.Fatalf("api baseline calls = %q, want inventory check and current bundle generation", baselineCalls)
+	}
+	wantPackages := []string{
+		"-module", "github.com/ob-labs/powercontext-go",
+		"github.com/ob-labs/powercontext-go/api/v1",
+		"github.com/ob-labs/powercontext-go/artifact",
+		"github.com/ob-labs/powercontext-go/artifact/experience",
+		"github.com/ob-labs/powercontext-go/artifact/handoff",
+		"github.com/ob-labs/powercontext-go/artifact/memory",
+		"github.com/ob-labs/powercontext-go/artifact/skill",
+		"github.com/ob-labs/powercontext-go/client",
+		"github.com/ob-labs/powercontext-go/inference",
+		"github.com/ob-labs/powercontext-go/server",
+		"github.com/ob-labs/powercontext-go/source",
+		"github.com/ob-labs/powercontext-go/trigger",
+	}
+	checkFlags, checkArguments := splitAPICompatCall(t, baselineCalls[0])
+	if !slices.Contains(strings.Fields(checkFlags), "-trimpath") {
+		t.Errorf("api baseline check GOFLAGS = %q, want -trimpath", checkFlags)
+	}
+	wantCheck := append([]string{"-check", "test/api-compat/pre-release.apidiff"}, wantPackages...)
+	if got := strings.Fields(checkArguments); !slices.Equal(got, wantCheck) {
+		t.Fatalf("api baseline check arguments = %q, want %q", got, wantCheck)
+	}
+	writeFlags, writeArguments := splitAPICompatCall(t, baselineCalls[1])
+	if !slices.Contains(strings.Fields(writeFlags), "-trimpath") {
+		t.Errorf("api baseline write GOFLAGS = %q, want -trimpath", writeFlags)
+	}
+	gotWrite := strings.Fields(writeArguments)
+	if len(gotWrite) < 4 || gotWrite[0] != "-output" {
+		t.Fatalf("api baseline write arguments = %q, want output flag", gotWrite)
+	}
+	currentBundle := gotWrite[1]
+	if !slices.Equal(gotWrite[2:], wantPackages) {
+		t.Fatalf("api baseline write arguments = %q, want %q", gotWrite[2:], wantPackages)
+	}
+
+	apidiffPayload, err := os.ReadFile(apidiffLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	apidiffCalls := strings.Split(strings.TrimSpace(string(apidiffPayload)), "\n")
+	if len(apidiffCalls) != 2 {
+		t.Fatalf("apidiff calls = %q, want repository comparison and real removal probe", apidiffCalls)
+	}
+	apidiffFlags, apidiffArguments := splitAPICompatCall(t, apidiffCalls[0])
+	if !slices.Contains(strings.Fields(apidiffFlags), "-trimpath") {
+		t.Errorf("apidiff GOFLAGS = %q, want -trimpath", apidiffFlags)
+	}
+	wantAPIDiff := []string{"-m", "-incompatible", "test/api-compat/pre-release.apidiff", currentBundle}
+	if got := strings.Fields(apidiffArguments); !slices.Equal(got, wantAPIDiff) {
+		t.Fatalf("apidiff arguments = %q, want %q", got, wantAPIDiff)
+	}
+	probeFlags, probeArguments := splitAPICompatCall(t, apidiffCalls[1])
+	if !slices.Contains(strings.Fields(probeFlags), "-trimpath") {
+		t.Errorf("apidiff probe GOFLAGS = %q, want -trimpath", probeFlags)
+	}
+	probe := strings.Fields(probeArguments)
+	if len(probe) != 4 || probe[0] != "-m" || probe[1] != "-incompatible" || probe[2] == probe[3] {
+		t.Fatalf("apidiff probe arguments = %q, want two distinct module bundles", probe)
+	}
+}
+
+func TestAPIBaselinesDoNotEmbedMachinePaths(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	paths, err := filepath.Glob(filepath.Join(repository, "test", "api-compat", "*.apidiff"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 1 || filepath.Base(paths[0]) != "pre-release.apidiff" {
+		t.Fatalf("public API baselines = %q, want only pre-release.apidiff", paths)
+	}
+	for _, path := range paths {
+		payload, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		for _, forbidden := range [][]byte{
+			[]byte(filepath.Clean(repository)),
+			[]byte(filepath.ToSlash(repository)),
+			[]byte(`C:\Users\`),
+			[]byte(`D:\programs\`),
+			[]byte(`/home/`),
+			[]byte(`/Users/`),
+			[]byte(`/mnt/`),
+			[]byte(`/tmp/`),
+			[]byte(`/workspace/`),
+		} {
+			if bytes.Contains(payload, forbidden) {
+				t.Fatalf("%s contains machine path prefix %q", filepath.Base(path), forbidden)
+			}
+		}
+		if match := regexp.MustCompile(`[A-Za-z]:\\`).Find(payload); match != nil {
+			t.Fatalf("%s contains Windows absolute path prefix %q", filepath.Base(path), match)
+		}
+	}
+}
+
+func TestAPICompatRejectsAnIncompatibleModuleReport(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	output, _, callLog, err := runAPICompatWithFake(t, `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$API_COMPAT_CALL_LOG"
+printf 'incompatible: removed exported field\n'
+`)
+	if err == nil {
+		t.Fatalf("make api-compat accepted an incompatible public API:\n%s", output)
+	}
+	if !strings.Contains(output, "incompatible public API change") ||
+		!strings.Contains(output, "removed exported field") {
+		t.Fatalf("api-compat failure is not actionable:\n%s", output)
+	}
+	payload, readErr := os.ReadFile(callLog)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if got := strings.Split(strings.TrimSpace(string(payload)), "\n"); len(got) != 1 {
+		t.Fatalf("apidiff calls after incompatibility = %q, want 1 call", got)
+	}
+}
+
+func TestAPICompatFailsWhenCurrentBundleGenerationFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+	const failingBaseline = `#!/bin/sh
+set -eu
+mode=''
+for argument in "$@"; do
+	case "$argument" in
+	  '-check') mode='check' ;;
+	  '-output') mode='output' ;;
+	esac
+done
+if [ "$mode" = 'check' ]; then
+	exit 0
+fi
+if [ "$mode" = 'output' ]; then
+	printf 'current bundle generation failed\n' >&2
+	exit 23
+fi
+printf 'unexpected baseline generator arguments: %s\n' "$*" >&2
+exit 64
+`
+	const unexpectedAPIDiff = `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$API_COMPAT_CALL_LOG"
+printf 'apidiff should not run after generator failure\n' >&2
+exit 24
+`
+	output, _, apidiffLog, err := runAPICompatWithScripts(t, failingBaseline, unexpectedAPIDiff)
+	if err == nil {
+		t.Fatalf("make api-compat ignored current bundle generation failure:\n%s", output)
+	}
+	if !strings.Contains(output, "current bundle generation failed") {
+		t.Fatalf("generator failure is not actionable:\n%s", output)
+	}
+	payload, readErr := os.ReadFile(apidiffLog)
+	if readErr == nil && strings.TrimSpace(string(payload)) != "" {
+		t.Fatalf("apidiff ran after current bundle generation failed: %q", payload)
+	}
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		t.Fatal(readErr)
+	}
+}
+
+func TestAPICompatFailsWhenAPIDiffExecutionFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+	const failingAPIDiff = `#!/bin/sh
+set -eu
+printf 'apidiff bundle read failed\n' >&2
+exit 24
+`
+	output, _, _, err := runAPICompatWithFake(t, failingAPIDiff)
+	if err == nil {
+		t.Fatalf("make api-compat ignored apidiff execution failure:\n%s", output)
+	}
+	if !strings.Contains(output, "apidiff bundle read failed") {
+		t.Fatalf("apidiff execution failure is not actionable:\n%s", output)
+	}
+}
+
+const successfulAPIBaselineScript = `#!/bin/sh
+set -eu
+printf '%s|%s\n' "${GOFLAGS:-}" "$*" >> "$API_BASELINE_CALL_LOG"
+output=''
+check=''
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	  '-output')
+		shift
+		output="$1"
+		;;
+	  '-check')
+		shift
+		check="$1"
+		;;
+	esac
+	shift
+done
+if [ -n "$output" ]; then
+	printf 'current bundle\n' > "$output"
+elif [ -z "$check" ]; then
+	printf 'missing -output or -check\n' >&2
+	exit 64
+fi
+`
+
+func runAPICompatWithFake(t *testing.T, apidiffScript string) (string, string, string, error) {
+	t.Helper()
+	return runAPICompatWithScripts(t, successfulAPIBaselineScript, apidiffScript)
+}
+
+func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string) (string, string, string, error) {
+	t.Helper()
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	baselineLog := filepath.Join(temporary, "baseline.txt")
+	apidiffLog := filepath.Join(temporary, "apidiff.txt")
+	fakeBaseline := filepath.Join(temporary, "api-baseline")
+	if err := os.WriteFile(fakeBaseline, []byte(baselineScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeAPIDiff := filepath.Join(temporary, "apidiff")
+	if err := os.WriteFile(fakeAPIDiff, []byte(apidiffScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stamp := filepath.Join(temporary, "apidiff.stamp")
+	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(
+		t.Context(),
+		"make",
+		"api-compat",
+		"APIDIFF="+fakeAPIDiff,
+		"APIDIFF_STAMP="+stamp,
+		"API_BASELINE_GENERATOR="+fakeBaseline,
+	)
+	command.Dir = repository
+	command.Env = append(
+		os.Environ(),
+		"API_BASELINE_CALL_LOG="+baselineLog,
+		"API_COMPAT_CALL_LOG="+apidiffLog,
+	)
+	output, err := command.CombinedOutput()
+	return string(output), baselineLog, apidiffLog, err
+}
+
+func splitAPICompatCall(t *testing.T, call string) (string, string) {
+	t.Helper()
+	goFlags, arguments, ok := strings.Cut(call, "|")
+	if !ok {
+		t.Fatalf("API compatibility call %q has no GOFLAGS boundary", call)
+	}
+	return goFlags, arguments
+}
+
+func TestAPIDiffToolInstallUsesProjectSelectedGoVersion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	toolsBin := filepath.Join(temporary, "bin")
+	installRecord := filepath.Join(temporary, "install.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+  "version -m")
+    printf '%s: go1.27.0\n\tpath\tgolang.org/x/exp/cmd/apidiff\n\tmod\tgolang.org/x/exp\tv0.0.0-20260824195058-e88cd73687aa\th1:probe\n' "$3"
+    exit 0
+    ;;
+esac
+
+if [ "${1:-}" != "install" ]; then
+  printf 'unexpected go command: %s\n' "$*" >&2
+  exit 64
+fi
+
+printf '%s|%s\n' "${GOTOOLCHAIN:-}" "$*" > "$APIDIFF_INSTALL_RECORD"
+mkdir -p "$GOBIN"
+printf '#!/bin/sh\nexit 0\n' > "$GOBIN/apidiff"
+chmod +x "$GOBIN/apidiff"
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(t.Context(), "make", "api-compat-tools", "GO="+fakeGo, "TOOLS_BIN="+toolsBin)
+	command.Dir = repository
+	command.Env = append(os.Environ(), "GOTOOLCHAIN=auto", "APIDIFF_INSTALL_RECORD="+installRecord)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("make api-compat-tools failed: %v\n%s", err, output)
+	}
+	payload, err := os.ReadFile(installRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "go1.27.0+auto|install golang.org/x/exp/cmd/apidiff@v0.0.0-20260824195058-e88cd73687aa"
+	if got := strings.TrimSpace(string(payload)); got != want {
+		t.Fatalf("apidiff install = %q, want %q", got, want)
 	}
 }
 

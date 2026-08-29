@@ -207,6 +207,11 @@ source / artifact / trigger / inference
   install with the project-selected `go env GOVERSION` as the minimum
   `GOTOOLCHAIN`. Verify from an older bootstrap Go release that the installed
   binary can process the module's declared Go version.
+- When a repository writes `gcexportdata` bundles for an `apidiff` baseline,
+  use an empty `token.FileSet`, reject absolute machine paths and package-list
+  drift, and pin an `apidiff` build that uses the same `x/tools` export format
+  as the writer. Verify deterministic regeneration on Windows and Linux and
+  prove that removing a real exported identifier fails the public API gate.
 - When a CI Makefile target iterates over a platform or package matrix, verify
   a successful fake command observes every required entry and intended
   environment. Make a non-final entry fail, then verify the target exits

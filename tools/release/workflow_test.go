@@ -220,6 +220,106 @@ func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) 
 	}
 }
 
+func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Name           string            `yaml:"name"`
+			RunsOn         string            `yaml:"runs-on"`
+			TimeoutMinutes int               `yaml:"timeout-minutes"`
+			Env            map[string]string `yaml:"env"`
+			Steps          []struct {
+				Name string `yaml:"name"`
+				Uses string `yaml:"uses"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["api-compat"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no api-compat job")
+	}
+	if job.Name != "Public API compatibility" || job.RunsOn != "ubuntu-24.04" || job.TimeoutMinutes != 15 {
+		t.Fatalf(
+			"api-compat job identity = (%q, %q, %d), want (%q, %q, %d)",
+			job.Name, job.RunsOn, job.TimeoutMinutes,
+			"Public API compatibility", "ubuntu-24.04", 15,
+		)
+	}
+	if job.Env["GOTOOLCHAIN"] != "local" || job.Env["GOFLAGS"] != "-mod=readonly" {
+		t.Fatalf("api-compat job Go environment = %#v", job.Env)
+	}
+	wantSteps := []struct {
+		name string
+		uses string
+		run  string
+	}{
+		{name: "Check out", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
+		{name: "Install SQLite development headers", run: "sudo apt-get update\nsudo apt-get install --yes --no-install-recommends libsqlite3-dev"},
+		{name: "Set up the Go environment", uses: "./.github/actions/setup-go-env"},
+		{name: "Compare deliberate public packages with the approved baseline", run: "make api-compat"},
+	}
+	if len(job.Steps) != len(wantSteps) {
+		t.Fatalf("api-compat step count = %d, want %d", len(job.Steps), len(wantSteps))
+	}
+	for index, want := range wantSteps {
+		got := job.Steps[index]
+		if got.Name != want.name || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
+			t.Fatalf(
+				"api-compat step %d = (%q, %q, %q), want (%q, %q, %q)",
+				index, got.Name, got.Uses, strings.TrimSpace(got.Run), want.name, want.uses, want.run,
+			)
+		}
+	}
+}
+
+func TestWindowsContractExercisesAPIBaselineReplacement(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "windows-contract.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string `yaml:"name"`
+				Uses string `yaml:"uses"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["windows-contract"]
+	if !ok {
+		t.Fatal("windows-contract.yml has no windows-contract job")
+	}
+	setupIndex, testIndex := -1, -1
+	for index, step := range job.Steps {
+		switch step.Name {
+		case "Set up the Go environment":
+			if step.Uses == "./.github/actions/setup-go-env" {
+				setupIndex = index
+			}
+		case "Verify API baseline replacement on Windows":
+			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'" {
+				testIndex = index
+			}
+		}
+	}
+	if setupIndex < 0 || testIndex <= setupIndex {
+		t.Fatalf("Windows API baseline steps = setup %d, test %d, want ordered setup and replacement test", setupIndex, testIndex)
+	}
+}
+
 func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	paths := []string{

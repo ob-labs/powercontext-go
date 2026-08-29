@@ -14,6 +14,9 @@ reviewable concern.
   of assuming a historical development branch.
 - The frozen Python v0.0.2 Oracle under `test/conformance/testdata/python-v0.0.2` is immutable. A newer compatibility
   target must use a separate versioned baseline.
+- The deliberate public Go packages are checked against `test/api-compat`. Run `make api-compat` before submitting a
+  public-package change. Regenerate with `make api-baseline` only when the linked proposal explains every incompatible
+  change, migration requirement, and versioning decision.
 
 ## Before starting work
 

@@ -25,6 +25,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Verify API baseline replacement on Windows
+        run: go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'
+
       - name: Verify LF attributes and frozen fixture hashes
         shell: pwsh
         run: |
