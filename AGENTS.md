@@ -130,3 +130,8 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When remediating a transitive dependency vulnerability, declare the
+  resolution in the affected package manager's root manifest rather than
+  editing only the lockfile. Regenerate with the package-manager version pinned
+  in CI, preserve required license headers, and verify both a frozen install
+  and an authoritative audit eliminate every vulnerable dependency path.
