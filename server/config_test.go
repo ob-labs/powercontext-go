@@ -348,7 +348,9 @@ func TestLoadConfigRequiresBearerTokenWhenEnabled(t *testing.T) {
 	t.Setenv(PowerContextHomeEnv, t.TempDir())
 	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "true")
 	t.Setenv("POWERCONTEXT_SERVER_AUTH_TOKEN", "")
-	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "bearer token is required") {
+	_, err := LoadConfig()
+	if _, ok := errors.AsType[*AuthenticationTokenRequiredError](err); !ok ||
+		!strings.Contains(err.Error(), "bearer token is required") {
 		t.Fatalf("authentication error = %v", err)
 	}
 }

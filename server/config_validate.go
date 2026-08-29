@@ -41,6 +41,14 @@ func (*UnauthenticatedNonLoopbackBindError) Error() string {
 		"POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true to opt in"
 }
 
+// AuthenticationTokenRequiredError reports enabled bearer authentication
+// without the token required to authenticate requests.
+type AuthenticationTokenRequiredError struct{}
+
+func (*AuthenticationTokenRequiredError) Error() string {
+	return "server: bearer token is required when authentication is enabled"
+}
+
 func (c ProcessConfig) Validate() error {
 	if strings.TrimSpace(c.HTTP.Host) == "" || c.HTTP.Port < 1 || c.HTTP.Port > 65_535 {
 		return errors.New("server: HTTP host and port are invalid")
@@ -49,7 +57,7 @@ func (c ProcessConfig) Validate() error {
 		return err
 	}
 	if c.Auth.Enabled && c.Auth.Token == "" {
-		return errors.New("server: bearer token is required when authentication is enabled")
+		return &AuthenticationTokenRequiredError{}
 	}
 	if !c.Auth.Enabled && !c.AllowUnauthenticatedNonLoopback && !transportpolicy.IsLoopbackHost(c.HTTP.Host) {
 		return &UnauthenticatedNonLoopbackBindError{}

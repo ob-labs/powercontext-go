@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 638,
-  "pending_case_count": 121,
+  "mapped_case_count": 641,
+  "pending_case_count": 118,
   "entries": [
     {
       "python": {
@@ -7783,8 +7783,15 @@
         "line": 246
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/python_contract_test.go",
+          "test": "TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride"
+        }
+      ]
     },
     {
       "python": {
@@ -7793,8 +7800,20 @@
         "line": 269
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/config_test.go",
+          "test": "TestLoadConfigRequiresBearerTokenWhenEnabled"
+        },
+        {
+          "kind": "go",
+          "file": "internal/cli/python_contract_test.go",
+          "test": "TestServerCommandReportsFriendlyErrorWhenAuthTokenMissing"
+        }
+      ]
     },
     {
       "python": {
@@ -7803,8 +7822,15 @@
         "line": 291
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/python_contract_test.go",
+          "test": "TestServerCommandLoopbackOverrideRepairsUnsafeEnvironment"
+        }
+      ]
     },
     {
       "python": {

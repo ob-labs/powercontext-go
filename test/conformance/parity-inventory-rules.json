@@ -60,7 +60,25 @@
     },
     "tests/test_cli.py": {
       "mode": "go-port",
-      "reason": "CLI server command transport overrides; the CLI is Go (internal/cli) and the behavior is part of the WP2 transport surface."
+      "reason": "CLI server command transport overrides; the CLI is Go (internal/cli) and the behavior is part of the WP2 transport surface.",
+      "cases": {
+        "test_server_command_rejects_an_unauthenticated_non_loopback_host_override": {
+          "evidence": [
+            "go:internal/cli/python_contract_test.go#TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride"
+          ]
+        },
+        "test_server_command_reports_a_friendly_error_when_auth_lacks_a_token": {
+          "evidence": [
+            "go:server/config_test.go#TestLoadConfigRequiresBearerTokenWhenEnabled",
+            "go:internal/cli/python_contract_test.go#TestServerCommandReportsFriendlyErrorWhenAuthTokenMissing"
+          ]
+        },
+        "test_server_command_lets_a_loopback_override_repair_an_unsafe_environment_host": {
+          "evidence": [
+            "go:internal/cli/python_contract_test.go#TestServerCommandLoopbackOverrideRepairsUnsafeEnvironment"
+          ]
+        }
+      }
     },
     "tests/test_cli_workbuddy.py": {
       "mode": "go-port",

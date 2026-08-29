@@ -61,6 +61,12 @@ func newServerRunCommand(state *commandState) *cobra.Command {
 				if _, ok := errors.AsType[*server.UnauthenticatedNonLoopbackBindError](err); ok {
 					return usageError(err)
 				}
+				if _, ok := errors.AsType[*server.AuthenticationTokenRequiredError](err); ok {
+					return usageError(fmt.Errorf(
+						"server: set POWERCONTEXT_SERVER_AUTH_TOKEN or POWERCONTEXT_SERVER_AUTH_ENABLED=false: %w",
+						err,
+					))
+				}
 				return err
 			}
 			runner := state.serverRun
