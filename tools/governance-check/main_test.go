@@ -60,6 +60,36 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			},
 			wantError: "least-privilege permissions",
 		},
+		{
+			name: "valid reusable workflow caller",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller())
+			},
+		},
+		{
+			name: "reusable workflow caller with timeout",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller("    timeout-minutes: 10"))
+			},
+			wantError: "reusable-workflow caller keywords",
+		},
+		{
+			name: "reusable workflow caller with blank reference",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCallerWithReference(" "))
+			},
+			wantError: "must name a reusable workflow",
+		},
+		{
+			name: "reusable workflow caller with ordinary job fields",
+			mutate: func(t *testing.T, root string) {
+				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller(
+					"    runs-on: ubuntu-24.04",
+					"    steps: []",
+				))
+			},
+			wantError: "reusable-workflow caller keywords",
+		},
 	}
 
 	for _, test := range tests {
@@ -144,6 +174,23 @@ func validWorkflowWithoutPermissions() string {
 		"    timeout-minutes: 10",
 		"    steps: []",
 	}, "\n") + "\n"
+}
+
+func reusableWorkflowCaller(extraLines ...string) string {
+	return reusableWorkflowCallerWithReference("./.github/workflows/reusable.yml", extraLines...)
+}
+
+func reusableWorkflowCallerWithReference(reference string, extraLines ...string) string {
+	lines := []string{
+		"name: CI",
+		"permissions:",
+		"  contents: read",
+		"jobs:",
+		"  delegated:",
+		"    uses: \"" + reference + "\"",
+	}
+	lines = append(lines, extraLines...)
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func writeFixtureFile(t *testing.T, root, name, contents string) {

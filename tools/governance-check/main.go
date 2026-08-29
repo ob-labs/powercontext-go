@@ -59,9 +59,10 @@ type workflowContract struct {
 }
 
 type workflowJob struct {
-	Uses           string         `yaml:"uses"`
-	TimeoutMinutes *int           `yaml:"timeout-minutes"`
-	Permissions    map[string]any `yaml:"permissions"`
+	Uses               *string        `yaml:"uses"`
+	TimeoutMinutes     *int           `yaml:"timeout-minutes"`
+	Permissions        map[string]any `yaml:"permissions"`
+	AdditionalKeywords map[string]any `yaml:",inline"`
 }
 
 func main() {
@@ -231,9 +232,32 @@ func checkWorkflowContracts(root string) error {
 			if workflow.Permissions == nil && job.Permissions == nil {
 				return fmt.Errorf("workflow %s job %s must declare least-privilege permissions", filepath.Base(path), name)
 			}
-			if job.Uses == "" && (job.TimeoutMinutes == nil || *job.TimeoutMinutes <= 0) {
+			if job.Uses != nil {
+				if err := job.checkReusableWorkflowCaller(); err != nil {
+					return fmt.Errorf("workflow %s job %s %w", filepath.Base(path), name, err)
+				}
+				continue
+			}
+			if job.TimeoutMinutes == nil || *job.TimeoutMinutes <= 0 {
 				return fmt.Errorf("workflow %s job %s must declare a positive timeout-minutes", filepath.Base(path), name)
 			}
+		}
+	}
+	return nil
+}
+
+func (job workflowJob) checkReusableWorkflowCaller() error {
+	if strings.TrimSpace(*job.Uses) == "" {
+		return errors.New("must name a reusable workflow")
+	}
+	if job.TimeoutMinutes != nil {
+		return errors.New("may only use reusable-workflow caller keywords; found \"timeout-minutes\"")
+	}
+	for keyword := range job.AdditionalKeywords {
+		switch keyword {
+		case "name", "with", "secrets", "strategy", "needs", "if", "concurrency":
+		default:
+			return fmt.Errorf("may only use reusable-workflow caller keywords; found %q", keyword)
 		}
 	}
 	return nil

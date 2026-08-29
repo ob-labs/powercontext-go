@@ -130,3 +130,8 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When a governance parser exempts a GitHub Actions reusable-workflow caller
+  from ordinary-job requirements, require a nonblank `uses` reference and
+  reject every keyword outside GitHub's supported caller-job set. Verify the
+  rule with fixtures for a valid caller, a blank reference, `timeout-minutes`,
+  and ordinary-only fields such as `runs-on` or `steps`.
