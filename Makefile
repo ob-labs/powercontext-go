@@ -6,6 +6,7 @@ export SHELLOPTS := errexit:nounset:pipefail
 MAKEFLAGS += --no-builtin-rules
 
 GO ?= go
+GOFMT ?= gofmt
 GOCACHE ?=
 GOMODCACHE ?=
 PNPM ?= pnpm
@@ -14,8 +15,10 @@ LICENSE_EYE ?= $(GO) run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.
 
 TOOLS_BIN := $(CURDIR)/.tools/bin
 GOLANGCI_LINT_VERSION := v2.13.1
+GOLANGCI_LINT_VERSION_TEXT := $(patsubst v%,%,$(GOLANGCI_LINT_VERSION))
 GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
-GOLANGCI_LINT_STAMP := $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)
+PROJECT_GO_TOOLCHAIN = $(shell $(GO) env GOVERSION)
+GOLANGCI_LINT_STAMP = $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
 
 COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
@@ -38,11 +41,13 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 help: ## Show supported development, verification, and release commands.
 	@awk 'BEGIN { FS = ":.*##"; print "Supported targets:" } /^[[:alnum:]_-]+:.*##/ { printf "  %-28s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-$(GOLANGCI_LINT): Makefile
+$(GOLANGCI_LINT): Makefile go.mod
 	@mkdir -p "$(TOOLS_BIN)"
-	GOBIN="$(TOOLS_BIN)" $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 $(GOLANGCI_LINT_STAMP): $(GOLANGCI_LINT)
+	@"$(GOLANGCI_LINT)" --version | grep -q "version $(GOLANGCI_LINT_VERSION_TEXT) "
 	@$(RM) $(TOOLS_BIN)/.golangci-lint-*
 	@touch "$@"
 
@@ -81,9 +86,11 @@ license-fix: ## Repair eligible source headers and recheck them.
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 
 fmt: lint-tools ## Format supported source with the pinned formatter set.
+	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
 	"$(GOLANGCI_LINT)" fmt
 
 fmt-check: lint-tools ## Verify supported source formatting without edits.
+	@$(GOFMT) -l $$(find . -name '*.go' -not -path './vendor/*') >/dev/null
 	"$(GOLANGCI_LINT)" fmt --diff
 
 vet: ## Run Go vet across all packages.
@@ -118,11 +125,19 @@ coverage: ## Generate race-enabled atomic coverage and enforce its baseline.
 coverage-check: ## Check an existing coverage summary against the minimum.
 	@test -s "$(COVERAGE_SUMMARY)" || { echo 'coverage summary is missing or empty' >&2; exit 2; }
 	@actual=$$(awk 'END { value = $$3; sub(/%$$/, "", value); print value }' "$(COVERAGE_SUMMARY)"); \
-		test -n "$$actual" || { echo 'coverage total could not be parsed' >&2; exit 2; }; \
-		if awk -v actual="$$actual" -v minimum="$(COVERAGE_MINIMUM)" 'BEGIN { exit !((actual + 0) >= (minimum + 0)) }'; then \
-			printf 'coverage %s%% meets minimum %s%%\n' "$$actual" "$(COVERAGE_MINIMUM)"; \
+		minimum="$(COVERAGE_MINIMUM)"; \
+		if ! awk -v value="$$actual" 'BEGIN { exit !(value ~ /^[0-9]+([.][0-9]+)?$$/) }'; then \
+			printf 'coverage total must be a non-negative number, got %s\n' "$$actual" >&2; \
+			exit 2; \
+		fi; \
+		if ! awk -v value="$$minimum" 'BEGIN { exit !(value ~ /^[0-9]+([.][0-9]+)?$$/) }'; then \
+			printf 'coverage minimum must be a non-negative number, got %s\n' "$$minimum" >&2; \
+			exit 2; \
+		fi; \
+		if awk -v actual="$$actual" -v minimum="$$minimum" 'BEGIN { exit !((actual + 0) >= (minimum + 0)) }'; then \
+			printf 'coverage %s%% meets minimum %s%%\n' "$$actual" "$$minimum"; \
 		else \
-			printf 'coverage %s%% is below minimum %s%%\n' "$$actual" "$(COVERAGE_MINIMUM)" >&2; \
+			printf 'coverage %s%% is below minimum %s%%\n' "$$actual" "$$minimum" >&2; \
 			exit 1; \
 		fi
 

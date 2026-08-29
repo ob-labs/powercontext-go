@@ -67,6 +67,21 @@ source / artifact / trigger / inference
 - Do not introduce `pkg`, `src`, `common`, `utils`, `helpers`, or global
   `models`, `services`, and `repositories` packages.
 
+## Mandatory Modern Go skill
+
+- At the start of every agent session in this repository, load and follow the
+  installed `use-modern-go` skill from
+  `https://github.com/JetBrains/go-modern-guidelines` before performing
+  repository work.
+- Before analyzing, reviewing, writing, modifying, fixing, or refactoring Go
+  code, run the skill's `list` command for each relevant Go file or the
+  repository's resolved Go version, and read the complete unfiltered output.
+  Follow every applicable returned guideline.
+- Use the skill's `explain` command only for specific guideline IDs that need
+  further evaluation. If the skill is unavailable, cannot be loaded, or its
+  wrapper fails, stop before changing Go code and report the blocker instead
+  of relying on remembered guidance.
+
 ## Go conventions
 
 - Put `context.Context` first on every operation that can block or perform I/O.
@@ -121,6 +136,13 @@ source / artifact / trigger / inference
 - Merge with an existing rule when the lesson is already covered. Keep the
   stronger wording and remove duplication so this file remains a practical
   engineering contract rather than an append-only incident log.
+- When a Go package has build-tagged implementation variants, keep its package
+  documentation in an untagged `doc.go`. Verify the package `Doc` field with
+  `go list -e` under every supported `GOOS` and CGO selection.
+- When a query checks `Rows.Err` before returning, its deferred cleanup must
+  merge only `Rows.Close`; do not call a helper that reads `Rows.Err` again.
+  Verify injected iteration and close failures remain matchable while each
+  root error appears only once.
 - When a CI end-to-end test starts a compiled Go service under a readiness
   deadline, build the binary once before the deadline and pass its absolute
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and
@@ -130,10 +152,30 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When defining or changing LF checkout rules, enumerate every tracked
+  byte-sensitive executable, prompt, schema, dataset, fixture, and
+  generated-contract format, including extensionless files. Verify
+  representative paths with `git check-attr eol` and raw working-tree bytes in
+  a fresh `core.autocrlf=true` checkout so clean-filter normalization cannot
+  hide CRLF.
 - When Make recipes enable Bash nounset or pipefail globally, expand optional
   environment variables in preflight guards with explicit defaults and run
   real failed-pipeline and missing-variable probes on every supported Make
   runtime; source-text checks alone do not prove the execution contract.
-- When adding a repository-owned extensionless text file, give it an
-  explicit `text eol=lf` attribute and include it in the Windows checkout
-  attribute and clean-diff probes so `core.autocrlf` cannot silently change it.
+- When a governance parser exempts a GitHub Actions reusable-workflow caller
+  from ordinary-job requirements, require a nonblank `uses` reference and
+  reject every keyword outside GitHub's supported caller-job set. Verify the
+  rule with fixtures for a valid caller, a blank reference, `timeout-minutes`,
+  and ordinary-only fields such as `runs-on` or `steps`.
+- When a repository gate mirrors an external structured schema, validate every
+  supported variant's required attributes and keep a valid fixture plus a
+  failing mutant for each variant boundary. Recheck the assumptions against
+  the current official schema before changing the validator.
+- When blank Issues are disabled, inventory every supported request class and
+  provide a distinct validated form or contact route for each. Verify that the
+  chooser routes bounded features separately from compatibility-sensitive
+  contract or platform proposals.
+- When `go install module@version` provisions a repository-local tool, run the
+  install with the project-selected `go env GOVERSION` as the minimum
+  `GOTOOLCHAIN`. Verify from an older bootstrap Go release that the installed
+  binary can process the module's declared Go version.

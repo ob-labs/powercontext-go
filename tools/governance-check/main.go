@@ -26,7 +26,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var goDirective = regexp.MustCompile(`(?m)^go[ \t]+1\.27\.0\r?$`)
+var (
+	goDirective  = regexp.MustCompile(`(?m)^go[ \t]+1\.27\.0\r?$`)
+	issueFieldID = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+)
 
 type issueForm struct {
 	Name        string         `yaml:"name"`
@@ -34,18 +37,48 @@ type issueForm struct {
 	Body        []issueControl `yaml:"body"`
 }
 
+type issueFieldRequirement struct {
+	ID   string
+	Type string
+}
+
 type issueControl struct {
 	Type       string `yaml:"type"`
 	ID         string `yaml:"id"`
 	Attributes struct {
-		Options []struct {
-			Label    string `yaml:"label"`
-			Required bool   `yaml:"required"`
-		} `yaml:"options"`
+		Label   string        `yaml:"label"`
+		Value   string        `yaml:"value"`
+		Options []issueOption `yaml:"options"`
 	} `yaml:"attributes"`
 	Validations struct {
 		Required bool `yaml:"required"`
 	} `yaml:"validations"`
+}
+
+type issueOption struct {
+	Value      string
+	Label      string
+	Required   bool
+	isCheckbox bool
+}
+
+func (option *issueOption) UnmarshalYAML(unmarshal func(any) error) error {
+	var value string
+	if err := unmarshal(&value); err == nil {
+		option.Value = value
+		return nil
+	}
+	var checkbox struct {
+		Label    string `yaml:"label"`
+		Required bool   `yaml:"required"`
+	}
+	if err := unmarshal(&checkbox); err != nil {
+		return err
+	}
+	option.Label = checkbox.Label
+	option.Required = checkbox.Required
+	option.isCheckbox = true
+	return nil
 }
 
 type issueConfig struct {
@@ -59,9 +92,10 @@ type workflowContract struct {
 }
 
 type workflowJob struct {
-	Uses           string         `yaml:"uses"`
-	TimeoutMinutes *int           `yaml:"timeout-minutes"`
-	Permissions    map[string]any `yaml:"permissions"`
+	Uses               *string        `yaml:"uses"`
+	TimeoutMinutes     *int           `yaml:"timeout-minutes"`
+	Permissions        map[string]any `yaml:"permissions"`
+	AdditionalKeywords map[string]any `yaml:",inline"`
 }
 
 func main() {
@@ -95,13 +129,35 @@ func checkRepository(root string) error {
 	}); err != nil {
 		return err
 	}
-	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/bug_report.yml", []string{
-		"current_behavior", "expected_behavior", "reproduction", "evidence", "environment", "confirmations",
+	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/bug_report.yml", []issueFieldRequirement{
+		{ID: "current_behavior", Type: "textarea"},
+		{ID: "expected_behavior", Type: "textarea"},
+		{ID: "reproduction", Type: "textarea"},
+		{ID: "evidence", Type: "textarea"},
+		{ID: "environment", Type: "textarea"},
+		{ID: "confirmations", Type: "checkboxes"},
 	}); err != nil {
 		return err
 	}
-	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/feature_request.yml", []string{
-		"problem", "outcome", "scope", "non_goals", "evidence", "alternatives", "confirmations",
+	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/feature_request.yml", []issueFieldRequirement{
+		{ID: "problem", Type: "textarea"},
+		{ID: "outcome", Type: "textarea"},
+		{ID: "scope", Type: "textarea"},
+		{ID: "evidence", Type: "textarea"},
+		{ID: "confirmations", Type: "checkboxes"},
+	}); err != nil {
+		return err
+	}
+	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/proposal.yml", []issueFieldRequirement{
+		{ID: "problem", Type: "textarea"},
+		{ID: "contract_surface", Type: "dropdown"},
+		{ID: "outcome", Type: "textarea"},
+		{ID: "compatibility", Type: "textarea"},
+		{ID: "scope", Type: "textarea"},
+		{ID: "non_goals", Type: "textarea"},
+		{ID: "alternatives", Type: "textarea"},
+		{ID: "evidence", Type: "textarea"},
+		{ID: "confirmations", Type: "checkboxes"},
 	}); err != nil {
 		return err
 	}
@@ -124,7 +180,7 @@ func requirePhrases(root, name string, phrases []string) error {
 	return nil
 }
 
-func checkIssueForm(root, name string, requiredIDs []string) error {
+func checkIssueForm(root, name string, requiredFields []issueFieldRequirement) error {
 	contents, err := readRepositoryFile(root, name)
 	if err != nil {
 		return err
@@ -140,9 +196,12 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 	if strings.TrimSpace(form.Name) == "" || strings.TrimSpace(form.Description) == "" || len(form.Body) == 0 {
 		return fmt.Errorf("%s must define a name, description, and body", name)
 	}
-	seen := make(map[string]struct{})
+	seen := make(map[string]string)
 	for _, control := range form.Body {
 		if control.Type == "markdown" {
+			if strings.TrimSpace(control.Attributes.Value) == "" {
+				return fmt.Errorf("%s markdown element must define a value", name)
+			}
 			continue
 		}
 		if control.Type != "textarea" && control.Type != "input" && control.Type != "dropdown" && control.Type != "checkboxes" {
@@ -151,26 +210,52 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 		if control.ID == "" {
 			return fmt.Errorf("%s contains a field without an ID", name)
 		}
+		if !issueFieldID.MatchString(control.ID) {
+			return fmt.Errorf("%s contains invalid field ID %q", name, control.ID)
+		}
+		if strings.TrimSpace(control.Attributes.Label) == "" {
+			return fmt.Errorf("%s field %q must define a label", name, control.ID)
+		}
 		if _, exists := seen[control.ID]; exists {
 			return fmt.Errorf("%s contains duplicate field ID %q", name, control.ID)
 		}
-		seen[control.ID] = struct{}{}
+		seen[control.ID] = control.Type
 		if control.Type == "checkboxes" {
 			if len(control.Attributes.Options) == 0 {
 				return fmt.Errorf("%s checkboxes field %q must define options", name, control.ID)
 			}
 			for _, option := range control.Attributes.Options {
-				if strings.TrimSpace(option.Label) == "" || !option.Required {
+				if !option.isCheckbox || strings.TrimSpace(option.Label) == "" || !option.Required {
 					return fmt.Errorf("%s checkboxes field %q must require every labeled option", name, control.ID)
 				}
 			}
-		} else if !control.Validations.Required {
+		} else if control.Type == "dropdown" {
+			if len(control.Attributes.Options) == 0 {
+				return fmt.Errorf("%s dropdown field %q must define options", name, control.ID)
+			}
+			seenOptions := make(map[string]struct{}, len(control.Attributes.Options))
+			for _, option := range control.Attributes.Options {
+				value := strings.TrimSpace(option.Value)
+				if option.isCheckbox || value == "" {
+					return fmt.Errorf("%s dropdown field %q must define non-empty text options", name, control.ID)
+				}
+				if _, exists := seenOptions[value]; exists {
+					return fmt.Errorf("%s dropdown field %q contains duplicate option %q", name, control.ID, value)
+				}
+				seenOptions[value] = struct{}{}
+			}
+		}
+		if control.Type != "checkboxes" && !control.Validations.Required {
 			return fmt.Errorf("%s field %q must be required", name, control.ID)
 		}
 	}
-	for _, id := range requiredIDs {
-		if _, exists := seen[id]; !exists {
-			return fmt.Errorf("%s is missing required field ID %q", name, id)
+	for _, field := range requiredFields {
+		controlType, exists := seen[field.ID]
+		if !exists {
+			return fmt.Errorf("%s is missing required field ID %q", name, field.ID)
+		}
+		if controlType != field.Type {
+			return fmt.Errorf("%s required field ID %q must use type %q", name, field.ID, field.Type)
 		}
 	}
 	return nil
@@ -231,9 +316,32 @@ func checkWorkflowContracts(root string) error {
 			if workflow.Permissions == nil && job.Permissions == nil {
 				return fmt.Errorf("workflow %s job %s must declare least-privilege permissions", filepath.Base(path), name)
 			}
-			if job.Uses == "" && (job.TimeoutMinutes == nil || *job.TimeoutMinutes <= 0) {
+			if job.Uses != nil {
+				if err := job.checkReusableWorkflowCaller(); err != nil {
+					return fmt.Errorf("workflow %s job %s %w", filepath.Base(path), name, err)
+				}
+				continue
+			}
+			if job.TimeoutMinutes == nil || *job.TimeoutMinutes <= 0 {
 				return fmt.Errorf("workflow %s job %s must declare a positive timeout-minutes", filepath.Base(path), name)
 			}
+		}
+	}
+	return nil
+}
+
+func (job workflowJob) checkReusableWorkflowCaller() error {
+	if strings.TrimSpace(*job.Uses) == "" {
+		return errors.New("must name a reusable workflow")
+	}
+	if job.TimeoutMinutes != nil {
+		return errors.New("may only use reusable-workflow caller keywords; found \"timeout-minutes\"")
+	}
+	for keyword := range job.AdditionalKeywords {
+		switch keyword {
+		case "name", "with", "secrets", "strategy", "needs", "if", "concurrency":
+		default:
+			return fmt.Errorf("may only use reusable-workflow caller keywords; found %q", keyword)
 		}
 	}
 	return nil
