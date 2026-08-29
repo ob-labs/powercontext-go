@@ -15,3 +15,6 @@ Start `powercontext server run`, then open a new Pi session in the project. The 
 Use `POWERCONTEXT_PI_BASE_URL`, `POWERCONTEXT_PI_SCOPE_ID`, and `POWERCONTEXT_PI_CAPTURE_PROMPTS` to adjust the
 connection, scope, and automatic prompt capture. See the repository documentation for the full configuration and
 security behavior.
+
+Plain HTTP is accepted only for loopback hosts, including the complete
+`127.0.0.0/8` range. Every remote Server URL must use HTTPS.

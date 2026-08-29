@@ -96,12 +96,12 @@ describe('config env overrides', () => {
     const resolved = resolveConfig(
       { baseUrl: 'http://127.0.0.1:8000', capturePrompts: true },
       {
-        POWERCONTEXT_DSH_BASE_URL: 'http://example.local:9000/',
+        POWERCONTEXT_DSH_BASE_URL: 'https://example.local:9000/',
         POWERCONTEXT_DSH_SCOPE_ID: 'project:from-env',
         POWERCONTEXT_DSH_CAPTURE_PROMPTS: 'false',
       },
     )
-    expect(resolved.baseUrl).toBe('http://example.local:9000')
+    expect(resolved.baseUrl).toBe('https://example.local:9000')
     expect(resolved.scopeId).toBe('project:from-env')
     expect(resolved.capturePrompts).toBe(false)
   })

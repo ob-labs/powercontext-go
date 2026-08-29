@@ -26,6 +26,10 @@ from typing import Any
 import pytest
 
 HERMES_ROOT = Path(__file__).parents[3] / "integrations" / "hermes"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
 _HERMES_MODULE_NAMES = (
     "plugins.powercontext",
     "plugins.powercontext.client",
@@ -126,6 +130,16 @@ class FakeClient:
     def get_capabilities(self):
         self.calls.append(("get_capabilities", (), {}))
         return {"memory_extraction": self.memory_extraction}
+
+
+def test_client_matches_shared_transport_vectors(hermes_modules) -> None:
+    del hermes_modules
+    client_module = importlib.import_module("plugins.powercontext.client")
+    for host in _TRANSPORT_VECTORS["loopback"]:
+        client_module.PowerContextClient(f"http://{host}:8000")
+    for host in _TRANSPORT_VECTORS["non_loopback"]:
+        with pytest.raises(ValueError):
+            client_module.PowerContextClient(f"http://{host}:8000")
 
 
 @pytest.fixture

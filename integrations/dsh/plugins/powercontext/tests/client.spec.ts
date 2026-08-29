@@ -136,7 +136,7 @@ describe('PowerContextClient', () => {
     const { OPERATION_IDS, OPERATIONS } = await import('../src/operations.generated.ts')
     const seen: Array<{ method: string; url: string; hasBody: boolean }> = []
     const client = new PowerContextClient({
-      baseUrl: 'http://example.test',
+      baseUrl: 'https://example.test',
       requestTimeoutMs: 1000,
       fetch: async (url, init) => {
         seen.push({ method: String(init?.method), url, hasBody: Boolean(init?.body) })
@@ -151,7 +151,7 @@ describe('PowerContextClient', () => {
     OPERATION_IDS.forEach((id, index) => {
       const spec = OPERATIONS[id]
       expect(seen[index].method).toBe(spec.method)
-      expect(seen[index].url.startsWith(`http://example.test${spec.path}`)).toBe(true)
+      expect(seen[index].url.startsWith(`https://example.test${spec.path}`)).toBe(true)
       expect(seen[index].hasBody).toBe(spec.method === 'POST' && spec.location === 'body')
     })
   })

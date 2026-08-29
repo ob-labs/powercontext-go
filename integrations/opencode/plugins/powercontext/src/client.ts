@@ -24,6 +24,7 @@ import {
   UnknownOperationError,
 } from './errors.ts'
 import { OPERATIONS, type OperationId, type OperationSpec } from './operations.generated.ts'
+import { normalizePowerContextBaseUrl } from './transport.ts'
 
 export type JsonObject = Record<string, unknown>
 export type FetchFn = (input: string, init: RequestInit) => Promise<Response>
@@ -117,9 +118,14 @@ function queryString(payload: JsonObject | undefined): string {
 }
 
 export class PowerContextClient {
+  private readonly options: ClientOptions
   private readonly fetchImpl: FetchFn
 
-  constructor(private readonly options: ClientOptions) {
+  constructor(options: ClientOptions) {
+    this.options = {
+      ...options,
+      baseUrl: normalizePowerContextBaseUrl(options.baseUrl, 'PowerContext base URL'),
+    }
     this.fetchImpl = options.fetch ?? fetch
   }
 

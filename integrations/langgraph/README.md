@@ -84,6 +84,11 @@ Configuration is read through pydantic-settings with the prefix `POWERCONTEXT_LA
 | `POWERCONTEXT_LANGGRAPH_BASE_URL` | `http://127.0.0.1:8000` | PowerContext Server URL |
 | `POWERCONTEXT_LANGGRAPH_TOKEN` | unset | Bearer token forwarded to the PowerContext Go Server |
 | `POWERCONTEXT_LANGGRAPH_SCOPE_ID` | derived | Durable scope shared across runs |
+
+Plain HTTP is accepted only for loopback hosts, including the complete
+`127.0.0.0/8` range. Every remote Server URL must use HTTPS. A caller that
+installs an in-process, Unix-socket, or TLS-terminating shared HTTP client must
+also pass `trust_transport_security=True` to `shared_http_client`.
 | `POWERCONTEXT_LANGGRAPH_TIMEOUT` | `10` | Client timeout in seconds |
 | `POWERCONTEXT_LANGGRAPH_MAX_BYTES` | `8000` | Prepared-context size limit |
 

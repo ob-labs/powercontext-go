@@ -390,6 +390,25 @@ const OPERATIONS = {
 const OPERATION_IDS = Object.keys(OPERATIONS);
 
 //#endregion
+//#region src/transport.ts
+function isLoopbackHost(hostname) {
+	const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	return normalized === "localhost" || normalized === "::1" || /^127(?:\.\d{1,3}){3}$/.test(normalized);
+}
+function normalizePowerContextBaseUrl(value, name) {
+	let url;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error(`${name} must be a valid HTTP(S) URL`);
+	}
+	if (!["http:", "https:"].includes(url.protocol)) throw new Error(`${name} must use HTTP or HTTPS`);
+	if (url.username || url.password || url.search || url.hash) throw new Error(`${name} must not contain credentials, a query, or a fragment`);
+	if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) throw new Error(`${name} must use HTTPS outside loopback`);
+	return url.toString().replace(/\/+$/, "");
+}
+
+//#endregion
 //#region src/client.ts
 function combineSignals(signals) {
 	if (signals.length === 1) return signals[0];
@@ -457,9 +476,13 @@ function queryString(payload) {
 	return encoded ? `?${encoded}` : "";
 }
 var PowerContextClient = class {
+	options;
 	fetchImpl;
 	constructor(options) {
-		this.options = options;
+		this.options = {
+			...options,
+			baseUrl: normalizePowerContextBaseUrl(options.baseUrl, "PowerContext base URL")
+		};
 		this.fetchImpl = options.fetch ?? fetch;
 	}
 	async request(id, payload, signal) {
@@ -564,21 +587,7 @@ function envInteger(env, name, fallback, minimum, maximum) {
 	return value;
 }
 function normalizeBaseUrl(value) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error("POWERCONTEXT_OPENCODE_BASE_URL must be a valid HTTP(S) URL");
-	}
-	if (!["http:", "https:"].includes(url.protocol)) throw new Error("POWERCONTEXT_OPENCODE_BASE_URL must use HTTP or HTTPS");
-	if (url.username || url.password || url.search || url.hash) throw new Error("POWERCONTEXT_OPENCODE_BASE_URL must not contain credentials, a query, or a fragment");
-	const loopback = [
-		"localhost",
-		"127.0.0.1",
-		"[::1]"
-	].includes(url.hostname);
-	if (url.protocol === "http:" && !loopback) throw new Error("POWERCONTEXT_OPENCODE_BASE_URL must use HTTPS outside loopback");
-	return url.toString().replace(/\/+$/, "");
+	return normalizePowerContextBaseUrl(value, "POWERCONTEXT_OPENCODE_BASE_URL");
 }
 function resolveConfig(env = process.env) {
 	const requestTimeoutMs = envInteger(env, "POWERCONTEXT_OPENCODE_REQUEST_TIMEOUT_MS", DEFAULTS.requestTimeoutMs, 50, 3e4);

@@ -91,6 +91,9 @@ Environment variables override file values:
 | `POWERCONTEXT_HERMES_BASE_URL` | PowerContext server URL |
 | `POWERCONTEXT_HERMES_AUTHORIZATION` | Complete authorization header, e.g. `Bearer <token>` |
 | `POWERCONTEXT_HERMES_TOKEN` | Token shorthand; used when `AUTHORIZATION` is absent |
+
+Plain HTTP is accepted only for loopback hosts, including the complete
+`127.0.0.0/8` range. Every remote Server URL must use HTTPS.
 | `POWERCONTEXT_HERMES_SCOPE_ID` | Explicit scope or scope template |
 | `POWERCONTEXT_HERMES_MAX_BYTES` | Maximum prepared context size, 512–32768 |
 | `POWERCONTEXT_HERMES_TIMEOUT` | HTTP request timeout in seconds |

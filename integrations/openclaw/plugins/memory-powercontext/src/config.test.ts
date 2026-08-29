@@ -15,8 +15,32 @@
  */
 
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { resolvePowerContextConfig, resolvePowerContextScope } from "./config.js";
+
+type TransportVectors = { loopback: string[]; non_loopback: string[] };
+
+const vectors = JSON.parse(
+  readFileSync(new URL("../../../../../test/transport/testdata/loopback_hosts.json", import.meta.url), "utf8"),
+) as TransportVectors;
+
+describe("PowerContext transport policy", () => {
+  it.each(vectors.loopback)("accepts plaintext loopback host %s", (host) => {
+    const endpoint = `http://${host}:8000`;
+    expect(resolvePowerContextConfig(undefined, { endpoint }).endpoint).toBeDefined();
+  });
+
+  it.each(vectors.non_loopback)("rejects plaintext non-loopback host %s", (host) => {
+    const endpoint = `http://${host}:8000`;
+    expect(resolvePowerContextConfig(undefined, { endpoint }).endpoint).toBeUndefined();
+  });
+
+  it("accepts HTTPS outside loopback", () => {
+    expect(resolvePowerContextConfig(undefined, { endpoint: "https://memory.example:8000" }).endpoint)
+      .toBe("https://memory.example:8000");
+  });
+});
 
 describe("PowerContext scope resolution", () => {
   it("isolates agents without using a raw session key", () => {

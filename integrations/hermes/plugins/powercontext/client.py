@@ -16,11 +16,13 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 from collections.abc import Callable
 from http.client import HTTPResponse
 from typing import TYPE_CHECKING, Any, TypeVar
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 if TYPE_CHECKING:
@@ -60,6 +62,27 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 Transport = Callable[[Request, float], HTTPResponse]
 
 
+def _http_base_url(value: str) -> str:
+    parsed = urlsplit(value.rstrip("/"))
+    if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+        raise ValueError("PowerContext base URL must use HTTP or HTTPS")
+    if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+        raise ValueError("PowerContext base URL must not contain credentials, query data, or a fragment")
+    if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
+        raise ValueError("unencrypted PowerContext URLs must be loopback addresses")
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
 class PowerContextClient:
     """HTTP facade for the PowerContext operations used by Hermes."""
 
@@ -71,7 +94,7 @@ class PowerContextClient:
         timeout: float = 5.0,
         transport: Transport | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _http_base_url(base_url)
         self.authorization = authorization.strip() if authorization else None
         self.timeout = timeout
         self._opener = build_opener(_NoRedirectHandler())

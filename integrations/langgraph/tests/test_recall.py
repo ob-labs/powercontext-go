@@ -92,10 +92,14 @@ def _run(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as http_client:
-            client = PowerContextClient("http://testserver", http_client=http_client)
+            client = PowerContextClient(
+                "http://testserver",
+                http_client=http_client,
+                trust_transport_security=True,
+            )
             from powercontext_langgraph.client import shared_http_client
 
-            with shared_http_client(http_client):
+            with shared_http_client(http_client, trust_transport_security=True):
                 await scenario(client)
 
     asyncio.run(driver())

@@ -63,7 +63,8 @@ the hook: the hook validates its PowerContext MCP URL and derives the HTTP API
 base by removing the final `/mcp` path segment. Change that file before
 installing the plugin when the loopback default is not appropriate. MCP URLs
 cannot contain credentials, query strings, or fragments; plain HTTP is accepted
-only for loopback hosts.
+only for loopback hosts, including IPv6 `::1` and the complete IPv4
+`127.0.0.0/8` range. Every remote Server URL must use HTTPS.
 
 The hook strictly validates `powercontext.prepared-context.v1`, rejects redirects,
 caps response bodies at 1 MiB, and applies both per-request and shared wall-clock

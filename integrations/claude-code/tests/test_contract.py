@@ -28,6 +28,9 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = REPOSITORY_ROOT / "integrations" / "claude-code" / "plugins" / "powercontext"
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
 _WINDOWS_DRIVE_PATH = re.compile(r"(?:^|[\"'\s(=])[A-Za-z]:[\\/]", re.MULTILINE)
 _WINDOWS_UNC_PATH = re.compile(r"(?:^|[\"'\s(=])\\\\[A-Za-z0-9_.-]+\\[A-Za-z0-9_$.-]+", re.MULTILINE)
 
@@ -177,6 +180,17 @@ def test_scope_reads_the_shared_git_private_workstream_binding(scope_module: Mod
 def test_settings_reject_unsafe_server_urls(settings_module: ModuleType, value: str) -> None:
     with pytest.raises(ValueError):
         settings_module.ClaudeCodePluginSettings(server_url=value)
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_settings_accept_shared_loopback_hosts(settings_module: ModuleType, host: str) -> None:
+    settings_module.ClaudeCodePluginSettings(server_url=f"http://{host}:8000")
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+def test_settings_reject_shared_non_loopback_plaintext_hosts(settings_module: ModuleType, host: str) -> None:
+    with pytest.raises(ValueError):
+        settings_module.ClaudeCodePluginSettings(server_url=f"http://{host}:8000")
 
 
 def test_environment_override_controls_prompt_capture(

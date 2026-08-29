@@ -36,11 +36,17 @@ validated by Pydantic before the plugin starts.
 | `POWERCONTEXT_BUB_API_TOKEN` | unset | Optional PowerContext Server bearer token |
 | `POWERCONTEXT_BUB_SCOPE_ID` | workspace-derived | Durable scope shared by Bub sessions |
 | `POWERCONTEXT_BUB_TIMEOUT` | `10` | Client timeout in seconds |
+| `POWERCONTEXT_BUB_TRUST_TRANSPORT_SECURITY` | `false` | Explicitly trust an HTTP-labelled controlled or TLS-terminated transport |
 | `POWERCONTEXT_BUB_MAX_BYTES` | `8000` | Maximum prepared-context size |
 | `POWERCONTEXT_BUB_CAPTURE_EVENTS` | `false` | Capture completed Bub events as Content Sources |
 | `POWERCONTEXT_BUB_CAPTURE_CHECKPOINT_EVERY` | `5` | Flush Memory after this many captured events |
 | `POWERCONTEXT_BUB_CAPTURE_MAX_BYTES` | `8192` | Maximum UTF-8 bytes stored for one captured event |
 | `POWERCONTEXT_BUB_CAPTURE_LOG` | unset | Optional JSONL evidence path; records metadata but not event content |
+
+Plain HTTP is accepted only for loopback hosts, including the complete
+`127.0.0.0/8` range. Set `POWERCONTEXT_BUB_TRUST_TRANSPORT_SECURITY=true` only
+when the configured HTTP label routes over a controlled network or a transport
+that terminates TLS outside the adapter.
 
 Captured tool arguments redact values under credential-like keys. Known credential environment values are also
 removed from serialized event content. Keep the PowerContext scope and optional capture log protected because normal

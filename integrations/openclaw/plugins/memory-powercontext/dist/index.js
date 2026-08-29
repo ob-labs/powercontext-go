@@ -37,13 +37,19 @@ function readPluginConfig(config, fallback) {
 function boundedInteger(value, fallback, min, max) {
 	return typeof value === "number" && Number.isInteger(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
+function isLoopbackHost(hostname) {
+	const normalized = hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+	return normalized === "localhost" || normalized === "::1" || /^127(?:\.\d{1,3}){3}$/u.test(normalized);
+}
 function normalizeEndpoint(value) {
 	if (typeof value !== "string") return;
 	const endpoint = value.trim().replace(/\/+$/u, "");
 	if (!/^https?:\/\//iu.test(endpoint)) return;
 	try {
 		const parsed = new URL(endpoint);
-		return parsed.username || parsed.password ? void 0 : endpoint;
+		if (parsed.username || parsed.password) return;
+		if (parsed.protocol === "http:" && !isLoopbackHost(parsed.hostname)) return;
+		return endpoint;
 	} catch {
 		return;
 	}

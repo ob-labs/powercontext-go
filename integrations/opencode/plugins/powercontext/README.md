@@ -21,4 +21,7 @@ The project scope comes from the normalized Git remote, falling back to a hash o
 `AUTHORIZATION`, `CAPTURE_PROMPTS`, `FLUSH_ON_CAPTURE`, `REQUEST_TIMEOUT_MS`, `HTTP_BUDGET_MS`, `MAX_BYTES`, and
 `FLUSH_MAX_CALLS`.
 
+Plain HTTP is accepted only for loopback hosts, including the complete
+`127.0.0.0/8` range. Every remote Server URL must use HTTPS.
+
 OpenCode 1.18.21 or newer in the 1.x line is required. Server failures are fail-open and never block normal work.

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 from collections.abc import Mapping
 from time import monotonic
@@ -79,8 +80,15 @@ _URL_OPENER = build_opener(_RejectRedirects)
 class PowerContextHTTPClient:
     """The narrow five-operation client required by the Bub integration."""
 
-    def __init__(self, base_url: str, *, token: str | None = None, timeout: float = 10.0) -> None:
-        self._base_url = _http_base_url(base_url)
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        token: str | None = None,
+        timeout: float = 10.0,
+        trust_transport_security: bool = False,
+    ) -> None:
+        self._base_url = _http_base_url(base_url, trust_transport_security=trust_transport_security)
         if timeout <= 0:
             raise ValueError("PowerContext timeout must be positive")
         if token is not None and (not token or any(character.isspace() for character in token)):
@@ -192,13 +200,25 @@ def _set_response_timeout(response: _Response, timeout: float) -> None:
         settimeout(timeout)
 
 
-def _http_base_url(value: str) -> str:
+def _http_base_url(value: str, *, trust_transport_security: bool = False) -> str:
     parsed = urlsplit(value.rstrip("/"))
     if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
         raise ValueError("PowerContext base URL must use HTTP or HTTPS")
     if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
         raise ValueError("PowerContext base URL must not contain credentials, query data, or a fragment")
+    if parsed.scheme == "http" and not trust_transport_security and not _is_loopback_host(parsed.hostname):
+        raise ValueError("unencrypted PowerContext URLs must be loopback addresses")
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
 
 
 __all__ = [

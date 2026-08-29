@@ -22,7 +22,11 @@ from types import ModuleType
 import pytest
 from pydantic import ValidationError
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[3] / "integrations" / "codex" / "plugins" / "powercontext"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+PLUGIN_ROOT = REPOSITORY_ROOT / "integrations" / "codex" / "plugins" / "powercontext"
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
 
 
 @pytest.mark.parametrize(
@@ -169,6 +173,17 @@ def test_codex_settings_reject_unsafe_or_ambiguous_mcp_urls(
 ) -> None:
     with pytest.raises(ValueError):
         settings_module._http_base_url(value)
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_codex_settings_accept_shared_loopback_hosts(settings_module: ModuleType, host: str) -> None:
+    settings_module._http_base_url(f"http://{host}:8000/mcp")
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+def test_codex_settings_reject_shared_non_loopback_plaintext_hosts(settings_module: ModuleType, host: str) -> None:
+    with pytest.raises(ValueError):
+        settings_module._http_base_url(f"http://{host}:8000/mcp")
 
 
 def test_codex_settings_normalize_the_mcp_path_to_http_base(

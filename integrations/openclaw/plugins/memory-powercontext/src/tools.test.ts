@@ -41,7 +41,7 @@ describe("PowerContext tools", () => {
     } as OpenClawPluginToolContext;
     const deps = {
       client,
-      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "http://powercontext.test" }),
+      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "https://powercontext.test" }),
       isPrivateSession: () => true,
     };
 
@@ -59,7 +59,7 @@ describe("PowerContext tools", () => {
     } as OpenClawPluginToolContext;
     const deps = {
       client,
-      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "http://powercontext.test" }),
+      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "https://powercontext.test" }),
       isPrivateSession: () => true,
     };
 
@@ -83,7 +83,7 @@ describe("PowerContext tools", () => {
     const manager = {} as never;
     const deps = {
       client,
-      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "http://powercontext.test" }),
+      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "https://powercontext.test" }),
       isPrivateSession: () => true,
       managerFor: () => manager,
     };
@@ -106,7 +106,7 @@ describe("PowerContext tools", () => {
     } as OpenClawPluginToolContext;
     const deps = {
       client,
-      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "http://powercontext.test" }),
+      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "https://powercontext.test" }),
       isPrivateSession: () => true,
     };
     const tool = createMemorySearchTool(context, deps);
@@ -129,7 +129,7 @@ describe("PowerContext tools", () => {
     } as OpenClawPluginToolContext;
     const deps = {
       client,
-      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "http://powercontext.test" }),
+      getConfig: () => resolvePowerContextConfig(undefined, { endpoint: "https://powercontext.test" }),
       isPrivateSession: () => true,
     };
     const tool = createMemoryGetTool(context, deps);
