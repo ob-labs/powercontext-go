@@ -148,6 +148,22 @@ source / artifact / trigger / inference
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and
   `GOCACHE` directories so dependency download and compilation cannot hide in
   the service startup budget.
+- When an end-to-end readiness probe owns a child process, race in-flight
+  readiness against child completion, retain the most recent bounded log tail,
+  include the exit code or signal, and prove the failure path with a real
+  short-lived child whose diagnostic follows over-limit output.
+- When a test invokes a freshly built external binary, disable result caching
+  or key it to the binary content. Verify the gate reruns after the binary
+  changes without changing the test package.
+- When a harness recursively removes a temporary home, create the exact
+  deletion target itself under any caller-supplied parent. Verify a parent
+  sentinel survives failed startup cleanup.
+- When a consumer constructs generated nullable request fields, represent a
+  required JSON `null` explicitly instead of relying on a zero value, and add
+  a focused request-validation test before exercising the transport.
+- When an external consumer acknowledges a Handoff, use a fresh receipt source
+  ID that is distinct from the work boundary and has not already been captured;
+  verify the accepted acknowledgement through the public HTTP client.
 - Compare regenerated SQLite fixtures through schema and row semantics, not
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and

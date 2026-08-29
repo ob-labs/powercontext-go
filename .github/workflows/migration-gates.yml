@@ -66,6 +66,20 @@ jobs:
       - name: Cross-build public packages with CGO disabled
         run: make check-portable
 
+  downstream-compat:
+    name: Downstream public consumer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Build and exercise the isolated consumer
+        run: make downstream-compat
+
   frozen-oracle:
     name: Frozen Python Oracle and differential fixtures
     runs-on: ubuntu-24.04
