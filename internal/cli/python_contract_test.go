@@ -236,6 +236,28 @@ func TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride(t *testing.T
 	}
 }
 
+func TestServerCommandReportsFriendlyErrorWhenAuthTokenMissing(t *testing.T) {
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "true")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_TOKEN", "")
+	called := false
+	runner := func(context.Context, *commandState, server.ProcessConfig) error {
+		called = true
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run"})
+	err := command.ExecuteContext(context.Background())
+	if err == nil || ExitCode(err) != 2 ||
+		!strings.Contains(err.Error(), "POWERCONTEXT_SERVER_AUTH_TOKEN") ||
+		!strings.Contains(err.Error(), "POWERCONTEXT_SERVER_AUTH_ENABLED=false") {
+		t.Fatalf("error = %v, exit = %d", err, ExitCode(err))
+	}
+	if called {
+		t.Fatal("invalid authentication configuration reached the runner")
+	}
+}
+
 func TestServerCommandRejectsBlankHostOverride(t *testing.T) {
 	for _, host := range []string{"", " "} {
 		t.Run(fmt.Sprintf("host=%q", host), func(t *testing.T) {
