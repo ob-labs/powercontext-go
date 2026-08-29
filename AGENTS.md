@@ -130,3 +130,7 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When blank Issues are disabled, inventory every supported request class and
+  provide a distinct validated form or contact route for each. Verify that the
+  chooser routes bounded features separately from compatibility-sensitive
+  contract or platform proposals.
