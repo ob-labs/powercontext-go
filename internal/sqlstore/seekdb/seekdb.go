@@ -14,7 +14,6 @@
 
 //go:build cgo && (darwin || linux)
 
-// Package seekdb loads and owns the embedded seekDB runtime used by the SQL store.
 package seekdb
 
 /*
