@@ -169,3 +169,11 @@ source / artifact / trigger / inference
   flight, coordinate entry and release with explicit barriers instead of a
   fixed sleep. Verify the public error and cleanup side effects under high
   repetition on every supported architecture.
+- When a stacked pull request's prerequisite lands or its base branch is
+  rewritten, rebuild the branch on the current intended base with only the
+  pull request's own semantic changes. Verify the base is an ancestor of the
+  new Head and reconcile GitHub, REST, and local diff file counts before using
+  prior tests, comments, or CI as evidence.
+- When a Go function retains an outer error value, do not redeclare `err` in a
+  nested short declaration. Use operation-specific names and verify the change
+  with the pinned `make lint` policy, including `govet` shadow analysis.

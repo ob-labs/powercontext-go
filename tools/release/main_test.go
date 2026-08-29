@@ -16,7 +16,9 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"os"
@@ -27,6 +29,43 @@ import (
 	"testing"
 	"time"
 )
+
+func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
+	t.Parallel()
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	output := filepath.Join(t.TempDir(), "dependencies.json")
+	var stdout bytes.Buffer
+	if inventoryErr := runLicenseInventory([]string{
+		"-binary", binary, "-edition", "standard", "-output", output, "-repository", repository,
+	}, &stdout); inventoryErr != nil {
+		t.Fatal(inventoryErr)
+	}
+	var result licenseInventoryResult
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &result); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if result.GoModules == 0 || result.NativeDependencies != 1 || result.Output != "dependencies.json" {
+		t.Fatalf("license inventory result = %#v", result)
+	}
+	contents, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest dependencyManifest
+	if err := json.Unmarshal(contents, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SchemaVersion != 1 || len(manifest.Modules) != result.GoModules || len(manifest.Native) != result.NativeDependencies {
+		t.Fatalf("license manifest = %#v", manifest)
+	}
+	if len(manifest.Native[0].Licenses) != 1 || manifest.Native[0].Path != "github.com/asg017/sqlite-vec" {
+		t.Fatalf("native license evidence = %#v", manifest.Native)
+	}
+}
 
 func TestGenerateSBOMUsesStablePublicIdentity(t *testing.T) {
 	if runtime.GOOS == "windows" {
