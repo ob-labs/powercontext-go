@@ -98,7 +98,7 @@ func New(serverURL string, options Options) (*Client, error) {
 		return nil, err
 	}
 	if !options.trustsTransportSecurity() && transportpolicy.IsPlaintextNonLoopback(endpoint) {
-		return nil, &ConfigurationError{Field: "server_url"}
+		return nil, &PlaintextNonLoopbackError{}
 	}
 	transport, err := clientTransport(options)
 	if err != nil {
@@ -142,6 +142,23 @@ func (e *ConfigurationError) GoString() string {
 		return "(*client.ConfigurationError)(nil)"
 	}
 	return fmt.Sprintf("&client.ConfigurationError{Field:%q}", e.Field)
+}
+
+// PlaintextNonLoopbackError reports that the Client refused plaintext HTTP to
+// a non-loopback host. It excludes the rejected URL from every representation
+// and unwraps to ConfigurationError for compatibility with existing callers.
+type PlaintextNonLoopbackError struct{}
+
+func (*PlaintextNonLoopbackError) Error() string {
+	return "PowerContext Client refuses plaintext HTTP to a non-loopback host without an explicit secure-transport vouch"
+}
+
+func (*PlaintextNonLoopbackError) GoString() string {
+	return "&client.PlaintextNonLoopbackError{}"
+}
+
+func (*PlaintextNonLoopbackError) Unwrap() error {
+	return &ConfigurationError{Field: "server_url"}
 }
 
 type bearerSource struct{ token string }
@@ -205,7 +222,7 @@ type transportPolicyRoundTripper struct {
 
 func (t transportPolicyRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	if !t.trusted && transportpolicy.IsPlaintextNonLoopback(request.URL) {
-		return nil, &ConfigurationError{Field: "server_url"}
+		return nil, &PlaintextNonLoopbackError{}
 	}
 	return t.next.RoundTrip(request)
 }

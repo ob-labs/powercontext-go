@@ -234,10 +234,14 @@ source / artifact / trigger / inference
   the final RoundTripper. Verify an unsafe override fails before the underlying
   transport runs, and allow an HTTP-labelled non-loopback route only when the
   caller supplies the client and explicitly vouches for transport security.
+  Return a typed refusal that preserves configuration-error matching, names the
+  non-loopback policy, and never includes the rejected URL in its representations.
 - When a cross-field security policy depends on environment values plus CLI
-  overrides, merge every explicit override before the final validation. Verify
-  both directions: a safe override repairs an unsafe environment value, and an
-  unsafe override cannot replace a safe environment value without failing.
+  overrides, preserve whether each override was explicitly present, reject
+  explicit blank values as operator input, and merge valid overrides before the
+  final validation. Verify both directions: a safe override repairs an unsafe
+  environment value, and an unsafe override cannot replace a safe environment
+  value without failing.
 - When isolated host adapters vendor the same transport policy, drive every
   configuration and directly constructible client boundary from one shared
   host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6

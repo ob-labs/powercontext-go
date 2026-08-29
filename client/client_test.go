@@ -253,6 +253,28 @@ func TestClientTrustOverrideRequiresCallerTransport(t *testing.T) {
 	}
 }
 
+func TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL(t *testing.T) {
+	t.Parallel()
+	const rejectedHost = "private-memory.example"
+	_, err := New("http://"+rejectedHost, Options{BearerToken: "probe-token"})
+	if err == nil {
+		t.Fatal("New() accepted plaintext HTTP to a non-loopback host")
+	}
+	if _, ok := errors.AsType[*PlaintextNonLoopbackError](err); !ok {
+		t.Fatalf("New() error = %T %v, want PlaintextNonLoopbackError", err, err)
+	}
+	if !IsConfigurationError(err) {
+		t.Fatalf("IsConfigurationError(%T) = false, want compatibility with configuration errors", err)
+	}
+	rendered := fmt.Sprintf("%v\n%#v", err, err)
+	if !strings.Contains(rendered, "non-loopback") {
+		t.Fatalf("refusal = %q, want the upstream policy token", rendered)
+	}
+	if strings.Contains(rendered, rejectedHost) {
+		t.Fatalf("refusal leaked the rejected host: %q", rendered)
+	}
+}
+
 func TestClientAllowsExplicitlyTrustedCallerTransport(t *testing.T) {
 	t.Parallel()
 	client, err := New("http://memory.example", Options{
@@ -288,6 +310,9 @@ func TestClientRejectsPlaintextNonLoopbackPerRequestOverride(t *testing.T) {
 	_, err = client.GetCapabilities(v1.WithServerURL(t.Context(), override))
 	if err == nil || !IsConfigurationError(err) {
 		t.Fatalf("GetCapabilities() error = %v, want configuration error", err)
+	}
+	if _, ok := errors.AsType[*PlaintextNonLoopbackError](err); !ok {
+		t.Fatalf("GetCapabilities() error = %T %v, want PlaintextNonLoopbackError", err, err)
 	}
 	if requests != 0 {
 		t.Fatalf("requests = %d, want 0", requests)
