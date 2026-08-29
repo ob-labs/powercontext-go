@@ -67,6 +67,21 @@ source / artifact / trigger / inference
 - Do not introduce `pkg`, `src`, `common`, `utils`, `helpers`, or global
   `models`, `services`, and `repositories` packages.
 
+## Mandatory Modern Go skill
+
+- At the start of every agent session in this repository, load and follow the
+  installed `use-modern-go` skill from
+  `https://github.com/JetBrains/go-modern-guidelines` before performing
+  repository work.
+- Before analyzing, reviewing, writing, modifying, fixing, or refactoring Go
+  code, run the skill's `list` command for each relevant Go file or the
+  repository's resolved Go version, and read the complete unfiltered output.
+  Follow every applicable returned guideline.
+- Use the skill's `explain` command only for specific guideline IDs that need
+  further evaluation. If the skill is unavailable, cannot be loaded, or its
+  wrapper fails, stop before changing Go code and report the blocker instead
+  of relying on remembered guidance.
+
 ## Go conventions
 
 - Put `context.Context` first on every operation that can block or perform I/O.
@@ -124,6 +139,10 @@ source / artifact / trigger / inference
 - When a Go package has build-tagged implementation variants, keep its package
   documentation in an untagged `doc.go`. Verify the package `Doc` field with
   `go list -e` under every supported `GOOS` and CGO selection.
+- When a query checks `Rows.Err` before returning, its deferred cleanup must
+  merge only `Rows.Close`; do not call a helper that reads `Rows.Err` again.
+  Verify injected iteration and close failures remain matchable while each
+  root error appears only once.
 - When a CI end-to-end test starts a compiled Go service under a readiness
   deadline, build the binary once before the deadline and pass its absolute
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and
@@ -133,3 +152,7 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When `go install module@version` provisions a repository-local tool, run the
+  install with the project-selected `go env GOVERSION` as the minimum
+  `GOTOOLCHAIN`. Verify from an older bootstrap Go release that the installed
+  binary can process the module's declared Go version.

@@ -26,6 +26,7 @@ linters:
     - errcheck
     - govet
     - ineffassign
+    - misspell
     - staticcheck
     - unused
     - wastedassign
@@ -47,12 +48,9 @@ linters:
 
 formatters:
   enable:
-    - gofmt
     - gofumpt
     - goimports
   settings:
-    gofumpt:
-      module-path: github.com/ob-labs/powercontext-go
     goimports:
       local-prefixes:
         - github.com/ob-labs/powercontext-go

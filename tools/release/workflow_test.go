@@ -37,6 +37,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
+		"codeql.yml":          true,
 		"migration-gates.yml": true,
 		"provider-smoke.yml":  true,
 	}
@@ -71,6 +72,13 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
 			"OceanBase live compatibility", "Standard (", "Full build tags (",
 			"Host adapters", "Evaluation control plane and console",
+		},
+		"codeql.yml": {
+			"name: CodeQL", "pull_request:", "push:", "branches: [main]", "schedule:", "workflow_dispatch:",
+			"security-events: write", "persist-credentials: false",
+			"github/codeql-action/init@", "build-mode: manual",
+			"CGO_ENABLED=1 go build -tags sqlite_fts5 ./...",
+			"github/codeql-action/analyze@",
 		},
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",

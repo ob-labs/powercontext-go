@@ -88,8 +88,8 @@ POWERCONTEXT_TEST_OCEANBASE_URL='mysql+aoceanbase://root%40tenant:password@127.0
 ```
 
 The lint targets install the pinned `golangci-lint` release under
-`.tools/bin`; its embedded gofmt, gofumpt, and goimports versions are therefore
-the same locally and in CI. No mutable global linter installation is used.
+`.tools/bin`; its embedded gofumpt and goimports versions are therefore the same
+locally and in CI. No mutable global linter installation is used.
 
 If a newly added source file is missing the standard Apache-2.0 header, repair
 all eligible files and immediately recheck them with one command:
