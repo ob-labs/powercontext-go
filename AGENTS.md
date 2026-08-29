@@ -148,6 +148,10 @@ source / artifact / trigger / inference
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and
   `GOCACHE` directories so dependency download and compilation cannot hide in
   the service startup budget.
+- When an end-to-end readiness probe owns a child process, race readiness
+  against child completion, include its exit code or signal and a bounded log
+  buffer in startup failures, and prove the failure path with a real
+  short-lived child process.
 - Compare regenerated SQLite fixtures through schema and row semantics, not
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and

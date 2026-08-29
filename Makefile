@@ -37,12 +37,14 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 # import without CGO, matching the platform matrix used by CI.
 PORTABLE_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...
 PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+DOWNSTREAM_DIR := test/downstream
+DOWNSTREAM_BINARY := $(CURDIR)/bin/powercontext-downstream$(shell $(GO) env GOEXE)
 
 .PHONY: help lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
-	check-portable package-standard package-full clean
+	check-portable downstream-compat package-standard package-full clean
 
 help: ## Show supported development, verification, and release commands.
 	@awk 'BEGIN { FS = ":.*##"; print "Supported targets:" } /^[[:alnum:]_-]+:.*##/ { printf "  %-28s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -243,6 +245,13 @@ check-portable: ## Cross-build the deliberate public SDK packages without CGO.
 		printf 'building portable SDK for %s/%s: ' "$$os" "$$arch"; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build $(PORTABLE_PACKAGES) && echo OK || exit 1; \
 	done
+
+downstream-compat: ## Test the current checkout from an isolated public Go module.
+	$(GO) build -tags '$(STANDARD_TAGS)' -o "$(DOWNSTREAM_BINARY)" ./cmd/powercontext
+	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" mod tidy -diff
+	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" mod verify
+	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" build -mod=readonly ./...
+	POWERCONTEXT_DOWNSTREAM_BINARY="$(DOWNSTREAM_BINARY)" GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" test -mod=readonly ./...
 
 clean: ## Remove known local build, distribution, coverage, and site outputs.
 	$(RM) -r bin dist coverage site
