@@ -62,18 +62,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 		t.Fatalf("create work contract through public client: %v", err)
 	}
 
-	preparedResult, err := api.HandoffCurrentWork(ctx, &v1.HandoffCurrentWorkRequest{
-		ScopeID:  downstreamScope,
-		SourceID: downstreamSourceID,
-		Handoff: v1.CurrentWorkHandoff{
-			Schema:      v1.CurrentWorkHandoffSchemaPowercontextCurrentWorkHandoffV1,
-			Trust:       v1.CurrentWorkHandoffTrustUntrustedInput,
-			Objective:   "Validate the isolated downstream consumer.",
-			State:       []v1.WorkClaim{{Text: "The public HTTP client is available.", Basis: v1.WorkClaimBasisDeclared, Evidence: []v1.HandoffCitation{}}},
-			Disposition: v1.HandoffDispositionContinuable,
-			Omissions:   []string{},
-		},
-	})
+	preparedResult, err := api.HandoffCurrentWork(ctx, currentWorkHandoffRequest())
 	if err != nil {
 		t.Fatalf("prepare current-work Handoff through public client: %v", err)
 	}
@@ -112,6 +101,28 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}
 	if _, ok := acknowledgedResult.(*v1.HandoffAcknowledgementHeaders); !ok {
 		t.Fatalf("acknowledge Handoff response = %T", acknowledgedResult)
+	}
+}
+
+func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
+	if err := currentWorkHandoffRequest().Validate(); err != nil {
+		t.Fatalf("current-work Handoff request violates the public contract: %v", err)
+	}
+}
+
+func currentWorkHandoffRequest() *v1.HandoffCurrentWorkRequest {
+	return &v1.HandoffCurrentWorkRequest{
+		ScopeID:  downstreamScope,
+		SourceID: downstreamSourceID,
+		Handoff: v1.CurrentWorkHandoff{
+			Schema:      v1.CurrentWorkHandoffSchemaPowercontextCurrentWorkHandoffV1,
+			Trust:       v1.CurrentWorkHandoffTrustUntrustedInput,
+			Objective:   "Validate the isolated downstream consumer.",
+			State:       []v1.WorkClaim{{Text: "The public HTTP client is available.", Basis: v1.WorkClaimBasisDeclared, Evidence: []v1.HandoffCitation{}}},
+			Disposition: v1.HandoffDispositionContinuable,
+			NextAction:  v1.NilWorkClaim{Null: true},
+			Omissions:   []string{},
+		},
 	}
 }
 

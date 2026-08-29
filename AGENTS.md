@@ -152,6 +152,9 @@ source / artifact / trigger / inference
   against child completion, include its exit code or signal and a bounded log
   buffer in startup failures, and prove the failure path with a real
   short-lived child process.
+- When a consumer constructs generated nullable request fields, represent a
+  required JSON `null` explicitly instead of relying on a zero value, and add
+  a focused request-validation test before exercising the transport.
 - Compare regenerated SQLite fixtures through schema and row semantics, not
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
