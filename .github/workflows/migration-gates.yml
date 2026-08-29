@@ -83,6 +83,23 @@ jobs:
       - name: Build and exercise the isolated consumer
         run: make downstream-compat
 
+  generated-consumers:
+    name: Generated consumers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Generate and test fresh Go consumers
+        run: make generated-consumers
+
   frozen-oracle:
     name: Frozen Python Oracle and differential fixtures
     runs-on: ubuntu-24.04
