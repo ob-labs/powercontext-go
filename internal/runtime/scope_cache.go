@@ -87,22 +87,6 @@ func (c *scopeCache) lease(key string) (*scopeLease, func()) {
 	return lease, func() { once.Do(func() { c.release(entry) }) }
 }
 
-func (c *scopeCache) acquire(ctx context.Context, key string) (func(), error) {
-	lease, releaseLease := c.lease(key)
-	releaseToken, err := lease.acquire(ctx)
-	if err != nil {
-		releaseLease()
-		return nil, err
-	}
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			releaseToken()
-			releaseLease()
-		})
-	}, nil
-}
-
 func (l *scopeLease) contended() bool {
 	return l != nil && l.entry != nil && len(l.entry.semaphore.token) == 0
 }

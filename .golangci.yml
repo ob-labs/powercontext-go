@@ -27,6 +27,7 @@ linters:
     - govet
     - ineffassign
     - staticcheck
+    - unused
     - wastedassign
     - whitespace
   settings:
