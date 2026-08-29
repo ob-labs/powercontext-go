@@ -19,6 +19,7 @@ COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
 COVERAGE_SUMMARY ?= $(COVERAGE_DIR)/summary.txt
 COVERAGE_MINIMUM ?= 16.0
+LICENSE_DEPENDENCY_OUTPUT ?= $(COVERAGE_DIR)/dependencies.json
 
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
@@ -32,7 +33,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 PORTABLE_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...
 PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all coverage coverage-check \
+.PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -81,6 +82,10 @@ license-check:
 license-fix:
 	$(LICENSE_EYE) -c .licenserc.yaml header fix
 	$(LICENSE_EYE) -c .licenserc.yaml header check
+
+license-dependencies: build
+	@$(RM) "$(LICENSE_DEPENDENCY_OUTPUT)"
+	$(GO) run ./tools/release licenses -binary bin/powercontext -edition standard -output "$(LICENSE_DEPENDENCY_OUTPUT)"
 
 fmt: lint-tools
 	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')

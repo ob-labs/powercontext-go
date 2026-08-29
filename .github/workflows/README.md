@@ -6,7 +6,7 @@ counterpart or enforces a Go release constraint that does not exist in Python.
 
 | Python workflow | Go workflow | Deliberate adaptation |
 | --- | --- | --- |
-| `master.yml` | `master.yml` | Pinned lint and formatting, an independent Go 1.27 readonly package build with explicit SQLite development headers, race-enabled atomic coverage, Go module verification, vet, generated transport contracts, Go tests, and the same Pi package replace Python lock, prek, and interpreter tests. |
+| `master.yml` | `master.yml` | Pinned lint and formatting, an independent Go 1.27 readonly package build with explicit SQLite development headers, race-enabled atomic coverage, built-binary dependency-license evidence, Go module verification, vet, generated transport contracts, Go tests, and the same Pi package replace Python lock, prek, and interpreter tests. |
 | `e2e-harness.yml` | `e2e-harness.yml` | The same validate/SQLite/OceanBase/evidence lifecycle drives the Go process and live OceanBase acceptance tests. |
 | `license-check.yml` | `license-check.yml` | Both call SkyWalking Eyes 0.8.0 directly. `make license-check` and `make license-fix` remain local entry points. |
 | `deploy-docs.yml` | `deploy-docs.yml` | Both build locked Zensical documentation and deploy GitHub Pages. |
