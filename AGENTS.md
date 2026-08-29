@@ -156,3 +156,7 @@ source / artifact / trigger / inference
   install with the project-selected `go env GOVERSION` as the minimum
   `GOTOOLCHAIN`. Verify from an older bootstrap Go release that the installed
   binary can process the module's declared Go version.
+- When a CI Makefile target iterates over a platform or package matrix, verify
+  a successful fake command observes every required entry and intended
+  environment. Make a non-final entry fail, then verify the target exits
+  nonzero without running later entries.

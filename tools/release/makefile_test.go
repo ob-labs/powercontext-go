@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,6 +57,113 @@ func TestBuildAllUsesReadonlyModuleResolution(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "go build -mod=readonly ./...") {
 		t.Fatalf("make build-all does not use readonly module resolution:\n%s", output)
+	}
+}
+
+func TestCheckPortableBuildsEverySupportedTargetWithoutCGO(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	callLog := filepath.Join(temporary, "calls.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+esac
+
+printf '%s|%s|%s|%s\n' "$GOOS" "$GOARCH" "$CGO_ENABLED" "$*" >> "$PORTABLE_CALL_LOG"
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(t.Context(), "make", "check-portable", "GO="+fakeGo)
+	command.Dir = repository
+	command.Env = append(os.Environ(), "PORTABLE_CALL_LOG="+callLog)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("make check-portable failed: %v\n%s", err, output)
+	}
+
+	payload, err := os.ReadFile(callLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const arguments = "build ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/..."
+	want := []string{
+		"linux|amd64|0|" + arguments,
+		"linux|arm64|0|" + arguments,
+		"darwin|amd64|0|" + arguments,
+		"darwin|arm64|0|" + arguments,
+	}
+	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	if !slices.Equal(got, want) {
+		t.Fatalf("portable build calls = %q, want %q", got, want)
+	}
+}
+
+func TestCheckPortableStopsAfterTheFirstFailedBuild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	callLog := filepath.Join(temporary, "calls.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+esac
+
+target="$GOOS/$GOARCH"
+printf '%s\n' "$target" >> "$PORTABLE_CALL_LOG"
+if [ "$target" = "$PORTABLE_FAIL_TARGET" ]; then
+	exit 23
+fi
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(t.Context(), "make", "check-portable", "GO="+fakeGo)
+	command.Dir = repository
+	command.Env = append(
+		os.Environ(),
+		"PORTABLE_CALL_LOG="+callLog,
+		"PORTABLE_FAIL_TARGET=linux/arm64",
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make check-portable succeeded after a failed cross-build:\n%s", output)
+	}
+
+	payload, readErr := os.ReadFile(callLog)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	want := []string{"linux/amd64", "linux/arm64"}
+	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	if !slices.Equal(got, want) {
+		t.Fatalf("portable build calls after failure = %q, want %q", got, want)
 	}
 }
 
