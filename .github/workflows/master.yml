@@ -49,6 +49,52 @@ jobs:
       - name: Build every package with readonly modules
         run: make build-all
 
+  coverage:
+    name: coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Run race-enabled atomic coverage
+        run: make coverage
+
+      - name: Publish the coverage total
+        if: always()
+        shell: bash
+        run: |
+          if [[ -s coverage/summary.txt ]]; then
+            {
+              echo "### Go coverage"
+              echo '```text'
+              tail -n 1 coverage/summary.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload bounded coverage evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: go-coverage-${{ github.sha }}
+          path: |
+            coverage/coverage.out
+            coverage/summary.txt
+          if-no-files-found: warn
+          retention-days: 14
+
   quality:
     runs-on: ubuntu-latest
     steps:

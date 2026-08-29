@@ -148,6 +148,37 @@ func TestGoCompatibilityJobUsesLocalReadonlyBuild(t *testing.T) {
 	}
 }
 
+func TestCoverageJobUsesRaceAtomicEvidenceContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  coverage:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define coverage before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: coverage",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make coverage",
+		"if: always()",
+		"coverage/coverage.out",
+		"coverage/summary.txt",
+		"if-no-files-found: warn",
+		"retention-days: 14",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("coverage job is missing %q", value)
+		}
+	}
+}
+
 func TestCIThirdPartyExecutablesUseImmutableReferences(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	actionUse := regexp.MustCompile(

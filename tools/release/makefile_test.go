@@ -59,6 +59,73 @@ func TestBuildAllUsesReadonlyModuleResolution(t *testing.T) {
 	}
 }
 
+func TestCoverageTargetUsesRaceAtomicProfileAndThreshold(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "coverage", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make coverage dry-run failed: %v\n%s", err, output)
+	}
+	contents := string(output)
+	for _, required := range []string{
+		"go test -race -covermode=atomic -coverprofile=\"coverage/coverage.out\" ./...",
+		"go tool cover -func=\"coverage/coverage.out\"",
+		"make coverage-check",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("make coverage output is missing %q:\n%s", required, output)
+		}
+	}
+}
+
+func TestCoverageCheckValidatesThresholdInputs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("coverage-check requires a POSIX shell and awk")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	tests := []struct {
+		name        string
+		total       string
+		minimum     string
+		wantSuccess bool
+		wantOutput  string
+	}{
+		{name: "meets minimum", total: "16.1", minimum: "16.0", wantSuccess: true, wantOutput: "meets minimum"},
+		{name: "below minimum", total: "16.1", minimum: "16.2", wantOutput: "is below minimum"},
+		{name: "invalid minimum", total: "16.1", minimum: "not-a-number", wantOutput: "coverage minimum must be a non-negative number"},
+		{name: "invalid total", total: "not-a-number", minimum: "16.0", wantOutput: "coverage total must be a non-negative number"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			summary := filepath.Join(t.TempDir(), "summary.txt")
+			contents := "total:\t(statements)\t" + test.total + "%\n"
+			if err := os.WriteFile(summary, []byte(contents), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.CommandContext(
+				t.Context(),
+				"make",
+				"coverage-check",
+				"COVERAGE_SUMMARY="+summary,
+				"COVERAGE_MINIMUM="+test.minimum,
+			)
+			command.Dir = repository
+			output, err := command.CombinedOutput()
+			if test.wantSuccess && err != nil {
+				t.Fatalf("coverage-check failed: %v\n%s", err, output)
+			}
+			if !test.wantSuccess && err == nil {
+				t.Fatalf("coverage-check unexpectedly succeeded:\n%s", output)
+			}
+			if !strings.Contains(string(output), test.wantOutput) {
+				t.Fatalf("coverage-check output is missing %q:\n%s", test.wantOutput, output)
+			}
+		})
+	}
+}
+
 func firstGeneratedCommand(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, "make") && (strings.Contains(line, "Entering directory") ||
