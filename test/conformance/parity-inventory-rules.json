@@ -86,7 +86,19 @@
     },
     "tests/test_docker_contract.py": {
       "mode": "go-port",
-      "reason": "Dockerfile and container invocation contract owned by this repository."
+      "reason": "Dockerfile and container invocation contract owned by this repository.",
+      "cases": {
+        "test_dockerfile_pins_the_bind_environment_under_test": {
+          "evidence": [
+            "go:server/docker_contract_test.go#TestDockerImageDeclaresControlledNonLoopbackBind"
+          ]
+        },
+        "test_documented_container_invocation_starts_out_of_the_box": {
+          "evidence": [
+            "go:internal/cli/docker_contract_test.go#TestDockerImageServerCommandStartsWithDeclaredEnvironment"
+          ]
+        }
+      }
     },
     "tests/test_docs_remote_access_contract.py": {
       "mode": "go-port",
