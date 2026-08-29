@@ -127,7 +127,9 @@ func TestGoClientExercisesReviewHTTPRuntimeSQLiteVerticalSlice(t *testing.T) {
 		handler.ServeHTTP(recorder, request)
 		return recorder.Result(), nil
 	})}
-	sdk, err := pcclient.New("http://powercontext.test", pcclient.Options{HTTPClient: inProcessHTTPClient})
+	sdk, err := pcclient.New("http://powercontext.test", pcclient.Options{
+		HTTPClient: inProcessHTTPClient, TrustTransportSecurity: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +321,9 @@ func TestGoClientGeneratesReviewedExperienceAndSkillCandidates(t *testing.T) {
 		handler.ServeHTTP(recorder, request)
 		return recorder.Result(), nil
 	})}
-	sdk, err := pcclient.New("http://powercontext.test", pcclient.Options{HTTPClient: httpClient})
+	sdk, err := pcclient.New("http://powercontext.test", pcclient.Options{
+		HTTPClient: httpClient, TrustTransportSecurity: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

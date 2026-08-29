@@ -222,3 +222,8 @@ source / artifact / trigger / inference
 - When a Go function retains an outer error value, do not redeclare `err` in a
   nested short declaration. Use operation-specific names and verify the change
   with the pinned `make lint` policy, including `govet` shadow analysis.
+- When a Client supports per-request endpoint overrides or caller-supplied HTTP
+  clients, enforce the plaintext loopback policy both at construction and in
+  the final RoundTripper. Verify an unsafe override fails before the underlying
+  transport runs, and allow an HTTP-labelled non-loopback route only when the
+  caller supplies the client and explicitly vouches for transport security.

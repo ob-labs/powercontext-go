@@ -99,7 +99,7 @@ func TestCLIVersionReportsBuildVersion(t *testing.T) {
 }
 
 func TestCLIClientSettingsLoadEnvironmentAndExplicitURLOverride(t *testing.T) {
-	t.Setenv(clientURLVar, "http://memory.example/api/")
+	t.Setenv(clientURLVar, "https://memory.example/api/")
 	t.Setenv(clientTimeoutVar, "3.5")
 	t.Setenv(clientTokenVar, "")
 	var URLs []string
@@ -114,10 +114,10 @@ func TestCLIClientSettingsLoadEnvironmentAndExplicitURLOverride(t *testing.T) {
 	if _, _, err := executeContractCLI(t, httpClient, "live"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executeContractCLI(t, httpClient, "--server-url", "http://override.example/root/", "live"); err != nil {
+	if _, _, err := executeContractCLI(t, httpClient, "--server-url", "https://override.example/root/", "live"); err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(URLs) != "[http://memory.example/api/health/live http://override.example/root/health/live]" {
+	if fmt.Sprint(URLs) != "[https://memory.example/api/health/live https://override.example/root/health/live]" {
 		t.Fatalf("request URLs = %v", URLs)
 	}
 	if len(deadlineRemaining) != 2 {
@@ -143,7 +143,7 @@ func TestCLIClientSettingsRejectInvalidEnvironment(t *testing.T) {
 		}
 	})
 	t.Run("timeout", func(t *testing.T) {
-		t.Setenv(clientURLVar, "http://powercontext.test")
+		t.Setenv(clientURLVar, "https://powercontext.test")
 		t.Setenv(clientTimeoutVar, "0")
 		_, _, err := executeContractCLI(t, nil, "live")
 		if err == nil || err.Error() != "invalid POWERCONTEXT_CLIENT_TIMEOUT" {
@@ -164,7 +164,7 @@ func TestCLITimeoutFlagAcceptsSecondsAndGoDuration(t *testing.T) {
 	})}
 	for _, value := range []string{"3.5", "3500ms"} {
 		if _, _, err := executeContractCLI(t, httpClient,
-			"--server-url", "http://powercontext.test", "--timeout", value, "live"); err != nil {
+			"--server-url", "https://powercontext.test", "--timeout", value, "live"); err != nil {
 			t.Fatalf("--timeout %s: %v", value, err)
 		}
 	}
@@ -174,7 +174,7 @@ func TestCLITimeoutFlagAcceptsSecondsAndGoDuration(t *testing.T) {
 		}
 	}
 	for _, arguments := range [][]string{
-		{"--server-url", "http://powercontext.test", "--timeout", "NaN", "live"},
+		{"--server-url", "https://powercontext.test", "--timeout", "NaN", "live"},
 		{"--server-url", "", "live"},
 	} {
 		_, _, err := executeContractCLI(t, nil, arguments...)
@@ -242,7 +242,7 @@ func TestCLIReportsServerErrorWithRequestContext(t *testing.T) {
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = writer.Write([]byte("Service Unavailable"))
 	})
-	_, _, err := executeContractCLI(t, httpClient, "--server-url", "http://powercontext.test", "ready")
+	_, _, err := executeContractCLI(t, httpClient, "--server-url", "https://powercontext.test", "ready")
 	if err == nil || err.Error() != "PowerContext Server returned HTTP 503 (request ID: request-123)" {
 		t.Fatalf("error = %v", err)
 	}
@@ -253,7 +253,7 @@ func TestCLIPrintsHumanLivenessByDefault(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"status":"ok"}`))
 	})
-	stdout, _, err := executeContractCLI(t, httpClient, "--server-url", "http://powercontext.test", "live")
+	stdout, _, err := executeContractCLI(t, httpClient, "--server-url", "https://powercontext.test", "live")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestStatsCommandBuildsRequestAndPrintsSummary(t *testing.T) {
 		_, _ = writer.Write([]byte(scopedStatsJSON))
 	})
 	stdout, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "stats", "--scope-id", "project", "--period", "today")
+		"--server-url", "https://powercontext.test", "stats", "--scope-id", "project", "--period", "today")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,13 +311,13 @@ func TestCLIGenerationCommandsBuildTypedRequests(t *testing.T) {
 		_, _ = writer.Write([]byte(generatedNoOpJSON))
 	})
 	if _, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "--json", "experience", "generate",
+		"--server-url", "https://powercontext.test", "--json", "experience", "generate",
 		"--scope-id", "project", "--source-ref", "content/task-1", "--source-ref", "content/task-2",
 		"--target", "experience/exp-1@2", "--reason", "incorporate the latest result"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "--json", "skill", "generate",
+		"--server-url", "https://powercontext.test", "--json", "skill", "generate",
 		"--scope-id", "project", "--origin", "experience", "--artifact-ref", "experience/exp-2@1"); err != nil {
 		t.Fatal(err)
 	}
@@ -349,14 +349,14 @@ func TestCLICandidateRevisionCommandsBuildTypedProposals(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "candidate", "revise", "experience",
+		"--server-url", "https://powercontext.test", "candidate", "revise", "experience",
 		"--scope-id", "project", "--expected-version", "1", "--situation", "Only one backend was tested.",
 		"--action", "Run the same scenario on both backends.", "--outcome", "Both backends passed.",
 		"--lesson", "Keep acceptance behavior backend-neutral.", "--source-ref", "content/task-1", "candidate-experience"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "candidate", "revise", "skill",
+		"--server-url", "https://powercontext.test", "candidate", "revise", "skill",
 		"--scope-id", "project", "--expected-version", "2", "--name", "backend-validation",
 		"--description", "Validate storage backends consistently.", "--instructions-file", instructions,
 		"--validation", "SQLite passes.", "--validation", "OceanBase passes.",
@@ -434,7 +434,7 @@ func TestCLICandidateLifecycleCommandsBuildTypedRequests(t *testing.T) {
 	}
 	for _, arguments := range commands {
 		stdout, _, err := executeContractCLI(
-			t, httpClient, append([]string{"--server-url", "http://powercontext.test"}, arguments...)...,
+			t, httpClient, append([]string{"--server-url", "https://powercontext.test"}, arguments...)...,
 		)
 		if err != nil {
 			t.Fatalf("powercontext %v: %v", arguments, err)
@@ -489,7 +489,7 @@ func TestCLIExternalSkillImportPreservesIdentityAndIntent(t *testing.T) {
 	})
 	fingerprint := strings.Repeat("a", 64)
 	if _, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "external-skill", "import", "--scope-id", "project",
+		"--server-url", "https://powercontext.test", "external-skill", "import", "--scope-id", "project",
 		"--fingerprint", fingerprint, "--mode", "fork", "codex:project:repository/friendly-python"); err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +506,7 @@ func TestCLIMapsOpenAPIRequestValidationToUsage(t *testing.T) {
 		return responseForCLI(request, http.StatusInternalServerError, ""), nil
 	})}
 	_, _, err := executeContractCLI(t, httpClient,
-		"--server-url", "http://powercontext.test", "external-skill", "import",
+		"--server-url", "https://powercontext.test", "external-skill", "import",
 		"--scope-id", "project", "--fingerprint", "too-short", "external-skill-id")
 	if err == nil || ExitCode(err) != 2 {
 		t.Fatalf("error = %v, exit = %d", err, ExitCode(err))
@@ -517,7 +517,7 @@ func TestCLIMapsOpenAPIRequestValidationToUsage(t *testing.T) {
 }
 
 func TestCLISkillExportUsesConfiguredAuthentication(t *testing.T) {
-	t.Setenv(clientURLVar, "http://powercontext.test")
+	t.Setenv(clientURLVar, "https://powercontext.test")
 	t.Setenv(clientTokenVar, "secret-token")
 	t.Setenv(clientTimeoutVar, "10")
 	var authorization string

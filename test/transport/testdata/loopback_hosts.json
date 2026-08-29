@@ -1,0 +1,20 @@
+{
+  "_comment": "Shared transport-policy host vectors. Go and retained adapter drift guards must agree that plaintext HTTP is trusted only for these loopback authorities, including the complete IPv4 127.0.0.0/8 range.",
+  "loopback": [
+    "127.0.0.0",
+    "127.0.0.1",
+    "127.0.0.2",
+    "127.1.2.3",
+    "127.255.255.255",
+    "localhost",
+    "LOCALHOST",
+    "[::1]"
+  ],
+  "non_loopback": [
+    "0.0.0.0",
+    "[::]",
+    "192.168.1.10",
+    "memory.example",
+    "[2001:db8::1]"
+  ]
+}
