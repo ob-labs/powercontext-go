@@ -33,6 +33,7 @@ import (
 
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
+	"github.com/ob-labs/powercontext-go/internal/transportpolicy"
 )
 
 const DefaultTimeout = 10 * time.Second
@@ -41,21 +42,30 @@ const DefaultTimeout = 10 * time.Second
 // generated-client errors. A caller-supplied HTTP client is shallow-cloned and
 // is never mutated.
 type Options struct {
-	BearerToken    string               `json:"-"`
-	Timeout        time.Duration        `json:"timeout"`
-	HTTPClient     *http.Client         `json:"-"`
-	TracerProvider trace.TracerProvider `json:"-"`
-	MeterProvider  metric.MeterProvider `json:"-"`
+	BearerToken string        `json:"-"`
+	Timeout     time.Duration `json:"timeout"`
+	HTTPClient  *http.Client  `json:"-"`
+	// TrustTransportSecurity permits a caller-supplied HTTPClient to use an
+	// http:// label only when its transport is secured outside ordinary TCP,
+	// such as an in-process handler, Unix socket, or TLS-terminating proxy.
+	TrustTransportSecurity bool                 `json:"trust_transport_security"`
+	TracerProvider         trace.TracerProvider `json:"-"`
+	MeterProvider          metric.MeterProvider `json:"-"`
 }
 
 func (o Options) String() string   { return o.redactedString() }
 func (o Options) GoString() string { return o.redactedString() }
+
+func (o Options) trustsTransportSecurity() bool {
+	return o.HTTPClient != nil && o.TrustTransportSecurity
+}
 
 func (o Options) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.Bool("token_configured", o.BearerToken != ""),
 		slog.Duration("timeout", o.Timeout),
 		slog.Bool("http_client_configured", o.HTTPClient != nil),
+		slog.Bool("trust_transport_security", o.TrustTransportSecurity),
 		slog.Bool("tracer_provider_configured", o.TracerProvider != nil),
 		slog.Bool("meter_provider_configured", o.MeterProvider != nil),
 	)
@@ -63,8 +73,9 @@ func (o Options) LogValue() slog.Value {
 
 func (o Options) redactedString() string {
 	return fmt.Sprintf(
-		"client.Options{token_configured:%t, timeout:%s, http_client_configured:%t, tracer_provider_configured:%t, meter_provider_configured:%t}",
-		o.BearerToken != "", o.Timeout, o.HTTPClient != nil, o.TracerProvider != nil, o.MeterProvider != nil,
+		"client.Options{token_configured:%t, timeout:%s, http_client_configured:%t, trust_transport_security:%t, tracer_provider_configured:%t, meter_provider_configured:%t}",
+		o.BearerToken != "", o.Timeout, o.HTTPClient != nil, o.TrustTransportSecurity,
+		o.TracerProvider != nil, o.MeterProvider != nil,
 	)
 }
 
@@ -82,9 +93,12 @@ var _ v1.Invoker = (*Client)(nil)
 // Server URLs may contain a path prefix but never credentials, query values, or
 // fragments.
 func New(serverURL string, options Options) (*Client, error) {
-	normalized, err := normalizeServerURL(serverURL)
+	endpoint, err := normalizeServerURL(serverURL)
 	if err != nil {
 		return nil, err
+	}
+	if !options.trustsTransportSecurity() && transportpolicy.IsPlaintextNonLoopback(endpoint) {
+		return nil, &ConfigurationError{Field: "server_url"}
 	}
 	transport, err := clientTransport(options)
 	if err != nil {
@@ -95,7 +109,7 @@ func New(serverURL string, options Options) (*Client, error) {
 	if options.MeterProvider != nil {
 		generatedOptions = append(generatedOptions, v1.WithMeterProvider(options.MeterProvider))
 	}
-	raw, err := v1.NewClient(normalized, bearerSource{token: options.BearerToken}, generatedOptions...)
+	raw, err := v1.NewClient(endpoint.String(), bearerSource{token: options.BearerToken}, generatedOptions...)
 	if err != nil {
 		return nil, &ConfigurationError{Field: "server_url"}
 	}
@@ -139,23 +153,23 @@ func (s bearerSource) BearerAuth(context.Context, v1.OperationName) (v1.BearerAu
 	return v1.BearerAuth{Token: s.token}, nil
 }
 
-func normalizeServerURL(value string) (string, error) {
+func normalizeServerURL(value string) (*url.URL, error) {
 	if strings.TrimSpace(value) == "" {
-		return "", &ConfigurationError{Field: "server_url"}
+		return nil, &ConfigurationError{Field: "server_url"}
 	}
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", &ConfigurationError{Field: "server_url"}
+		return nil, &ConfigurationError{Field: "server_url"}
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", &ConfigurationError{Field: "server_url"}
+		return nil, &ConfigurationError{Field: "server_url"}
 	}
 	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", &ConfigurationError{Field: "server_url"}
+		return nil, &ConfigurationError{Field: "server_url"}
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawPath = strings.TrimRight(parsed.RawPath, "/")
-	return parsed.String(), nil
+	return parsed, nil
 }
 
 func clientTransport(options Options) (*http.Client, error) {
@@ -178,7 +192,22 @@ func clientTransport(options Options) (*http.Client, error) {
 		result.Transport = http.DefaultTransport
 	}
 	result.Transport = traceContextRoundTripper{next: result.Transport}
+	result.Transport = transportPolicyRoundTripper{
+		next: result.Transport, trusted: options.trustsTransportSecurity(),
+	}
 	return &result, nil
+}
+
+type transportPolicyRoundTripper struct {
+	next    http.RoundTripper
+	trusted bool
+}
+
+func (t transportPolicyRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if !t.trusted && transportpolicy.IsPlaintextNonLoopback(request.URL) {
+		return nil, &ConfigurationError{Field: "server_url"}
+	}
+	return t.next.RoundTrip(request)
 }
 
 type traceContextRoundTripper struct{ next http.RoundTripper }
@@ -402,6 +431,6 @@ func decodeDetails(value v1.NilErrorDetailDetails) map[string]any {
 // IsConfigurationError reports configuration failures without requiring users
 // to import generated transport packages.
 func IsConfigurationError(err error) bool {
-	var target *ConfigurationError
-	return errors.As(err, &target)
+	_, ok := errors.AsType[*ConfigurationError](err)
+	return ok
 }

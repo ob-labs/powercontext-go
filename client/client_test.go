@@ -23,6 +23,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,7 @@ func repeatValue[T any](value T, count int) []T {
 
 func TestClientRejectsUndeclaredSuccessStatus(t *testing.T) {
 	t.Parallel()
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return response(http.StatusOK, `{"status":"accepted","source":{"name":"content","source_id":"turn-1"},"position":1}`), nil
 		}),
@@ -69,7 +70,7 @@ func TestClientRejectsUndeclaredSuccessStatus(t *testing.T) {
 func TestClientValidatesRequestsBeforeTransport(t *testing.T) {
 	t.Parallel()
 	transportCalled := false
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			transportCalled = true
 			return response(http.StatusInternalServerError, ""), nil
@@ -107,7 +108,7 @@ func TestClientValidatesRequestsBeforeTransport(t *testing.T) {
 func TestClientRejectsCombinedCandidateEvidenceBeforeTransport(t *testing.T) {
 	t.Parallel()
 	transportCalled := false
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			transportCalled = true
 			return response(http.StatusCreated, `{}`), nil
@@ -157,7 +158,7 @@ func TestClientRejectsCombinedCandidateEvidenceInSuccessResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			result := response(http.StatusCreated, string(payload))
 			result.Header.Set(requestIDHeader, "0123456789abcdef")
@@ -190,7 +191,7 @@ func TestClientRejectsCombinedCandidateEvidenceInSuccessResponse(t *testing.T) {
 
 func TestClientPreservesDeclaredServerErrorContext(t *testing.T) {
 	t.Parallel()
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			result := response(http.StatusServiceUnavailable, `{"error":{"code":"runtime_not_ready","message":"The Runtime is not ready.","details":{"component":"memory"}}}`)
 			result.Header.Set(requestIDHeader, "request-123")
@@ -215,6 +216,84 @@ func TestClientPreservesDeclaredServerErrorContext(t *testing.T) {
 	}
 }
 
+func TestClientRejectsPlaintextNonLoopbackByDefault(t *testing.T) {
+	t.Parallel()
+	callerTransport := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return response(http.StatusOK, capabilitiesJSON), nil
+	})}
+	for _, test := range []struct {
+		name    string
+		options Options
+	}{
+		{name: "owned transport without token"},
+		{name: "owned transport with token", options: Options{BearerToken: "probe-token"}},
+		{name: "caller transport without token", options: Options{HTTPClient: callerTransport}},
+		{
+			name: "caller transport with token",
+			options: Options{
+				BearerToken: "probe-token",
+				HTTPClient:  callerTransport,
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := New("http://memory.example", test.options)
+			if err == nil || !IsConfigurationError(err) {
+				t.Fatalf("New() error = %v, want configuration error", err)
+			}
+		})
+	}
+}
+
+func TestClientTrustOverrideRequiresCallerTransport(t *testing.T) {
+	t.Parallel()
+	_, err := New("http://memory.example", Options{TrustTransportSecurity: true})
+	if err == nil || !IsConfigurationError(err) {
+		t.Fatalf("New() error = %v, want configuration error", err)
+	}
+}
+
+func TestClientAllowsExplicitlyTrustedCallerTransport(t *testing.T) {
+	t.Parallel()
+	client, err := New("http://memory.example", Options{
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return response(http.StatusOK, capabilitiesJSON), nil
+		})},
+		TrustTransportSecurity: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.GetCapabilities(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientRejectsPlaintextNonLoopbackPerRequestOverride(t *testing.T) {
+	t.Parallel()
+	requests := 0
+	client, err := New("https://powercontext.test", Options{
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests++
+			return response(http.StatusOK, capabilitiesJSON), nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	override, err := url.Parse("http://memory.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.GetCapabilities(v1.WithServerURL(t.Context(), override))
+	if err == nil || !IsConfigurationError(err) {
+		t.Fatalf("GetCapabilities() error = %v, want configuration error", err)
+	}
+	if requests != 0 {
+		t.Fatalf("requests = %d, want 0", requests)
+	}
+}
+
 func TestClientSendsBearerAndPreservesCallerHTTPClient(t *testing.T) {
 	t.Parallel()
 	var authorization string
@@ -222,7 +301,7 @@ func TestClientSendsBearerAndPreservesCallerHTTPClient(t *testing.T) {
 		authorization = request.Header.Get("Authorization")
 		return response(http.StatusOK, capabilitiesJSON), nil
 	})}
-	client, err := New("http://powercontext.test/root/", Options{
+	client, err := New("https://powercontext.test/root/", Options{
 		BearerToken: "server-secret", HTTPClient: original,
 	})
 	if err != nil {
@@ -246,7 +325,7 @@ func TestClientSendsBearerAndPreservesCallerHTTPClient(t *testing.T) {
 func TestClientWithoutTokenOmitsAuthorization(t *testing.T) {
 	t.Parallel()
 	var authorizationPresent bool
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			_, authorizationPresent = request.Header["Authorization"]
 			return response(http.StatusOK, capabilitiesJSON), nil
@@ -265,7 +344,7 @@ func TestClientWithoutTokenOmitsAuthorization(t *testing.T) {
 
 func TestClientKeepsGenericServerErrorForInvalidErrorBody(t *testing.T) {
 	t.Parallel()
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			result := response(http.StatusInternalServerError, "Internal Server Error")
 			result.Header.Set("Content-Type", "text/plain")
@@ -287,7 +366,7 @@ func TestClientKeepsGenericServerErrorForInvalidErrorBody(t *testing.T) {
 
 func TestClientRejectsInvalidSuccessResponse(t *testing.T) {
 	t.Parallel()
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			result := response(http.StatusOK, `{"status":"ok","unexpected":true}`)
 			result.Header.Set(requestIDHeader, "request-123")
@@ -310,7 +389,7 @@ func TestClientRejectsInvalidSuccessResponse(t *testing.T) {
 func TestClientWrapsHTTPTransportFailure(t *testing.T) {
 	t.Parallel()
 	connectionError := errors.New("connection refused")
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return nil, connectionError
 		}),
@@ -331,7 +410,7 @@ func TestClientWrapsHTTPTransportFailure(t *testing.T) {
 func TestClientRendersAndDownloadsHandoffReportWithoutMutatingRequest(t *testing.T) {
 	t.Parallel()
 	var downloadFlags []bool
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			body, readErr := io.ReadAll(request.Body)
 			if readErr != nil {
@@ -376,7 +455,7 @@ func TestClientDownloadPreservesCanonicalJSONBytes(t *testing.T) {
 	t.Parallel()
 	digest := "sha256:" + strings.Repeat("a", 64)
 	canonical := []byte(`{"format":"json","report":{},"markdown":null,"selection_digest":"` + digest + `","report_digest":"` + digest + `"}`)
-	client, err := New("http://powercontext.test", Options{HTTPClient: &http.Client{
+	client, err := New("https://powercontext.test", Options{HTTPClient: &http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return response(http.StatusOK, string(canonical)), nil
 		}),
@@ -407,7 +486,7 @@ func TestClientSpanInjectsW3CTraceContext(t *testing.T) {
 		traceparent = request.Header.Get("traceparent")
 		return response(http.StatusOK, capabilitiesJSON), nil
 	})
-	client, err := New("http://powercontext.test", Options{
+	client, err := New("https://powercontext.test", Options{
 		HTTPClient: &http.Client{Transport: transport}, TracerProvider: provider,
 	})
 	if err != nil {
@@ -449,7 +528,7 @@ func TestClientRejectsRedirects(t *testing.T) {
 			return nil
 		},
 	}
-	client, err := New("http://powercontext.test", Options{HTTPClient: original})
+	client, err := New("https://powercontext.test", Options{HTTPClient: original})
 	if err != nil {
 		t.Fatal(err)
 	}
