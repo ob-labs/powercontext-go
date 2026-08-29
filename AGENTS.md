@@ -166,7 +166,9 @@ source / artifact / trigger / inference
   execute the target with a recording command and assert the complete
   invocation matrix, critical environment assignments, and fail-fast behavior.
   Verify mutants that remove an entry, unset the constraint, and fail the first
-  iteration are rejected.
+  iteration are rejected. If the recorder reuses a Go test binary, terminate
+  helper invocations explicitly and run the probe under race-enabled coverage
+  so test-harness output cannot corrupt command substitution.
 - When a governance parser exempts a GitHub Actions reusable-workflow caller
   from ordinary-job requirements, require a nonblank `uses` reference and
   reject every keyword outside GitHub's supported caller-job set. Verify the

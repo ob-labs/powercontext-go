@@ -114,7 +114,7 @@ func runPortableSDKGoHelper(t *testing.T) {
 	}
 	arguments := os.Args[separator+1:]
 	if len(arguments) == 0 || arguments[0] != "build" {
-		return
+		os.Exit(0)
 	}
 	target := os.Getenv("GOOS") + "/" + os.Getenv("GOARCH")
 	line := target + " CGO_ENABLED=" + os.Getenv("CGO_ENABLED") + " " + strings.Join(arguments, " ") + "\n"
@@ -132,6 +132,7 @@ func runPortableSDKGoHelper(t *testing.T) {
 	if target == os.Getenv("POWERCONTEXT_PORTABLE_GO_FAIL_TARGET") {
 		os.Exit(23)
 	}
+	os.Exit(0)
 }
 
 func TestMakefileRejectsFailedPipelines(t *testing.T) {
