@@ -142,18 +142,16 @@ func RebuildExperienceProjections(ctx context.Context, db DBTX) error {
 		var scopeID, artifactID string
 		var revision, content any
 		if err := rows.Scan(&scopeID, &artifactID, &revision, &content); err != nil {
-			rows.Close()
-			return err
+			return errors.Join(err, closeRows(rows))
 		}
 		decodedRevision, ok := integer(revision)
 		if !ok {
-			rows.Close()
-			return &InvalidStoredColumnError{Column: "revision", Expected: "an integer"}
+			columnErr := &InvalidStoredColumnError{Column: "revision", Expected: "an integer"}
+			return errors.Join(columnErr, closeRows(rows))
 		}
 		value, err := DecodeExperienceStoredValue(content)
 		if err != nil {
-			rows.Close()
-			return err
+			return errors.Join(err, closeRows(rows))
 		}
 		projections = append(projections, projection{
 			scopeID: scopeID, artifactID: artifactID, revision: decodedRevision,
@@ -222,7 +220,7 @@ func (SQLiteExperienceFTSIndex) Search(
 	db DBTX,
 	scopeID, query string,
 	limit int,
-) ([]experience.SearchHit, error) {
+) (hits []experience.SearchHit, returnErr error) {
 	match, ok := memory.FTSMatchQuery(query)
 	if !ok {
 		return []experience.SearchHit{}, nil
@@ -238,9 +236,9 @@ func (SQLiteExperienceFTSIndex) Search(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	codec := ExperienceArtifactCodec()
-	hits := make([]experience.SearchHit, 0, limit)
+	hits = make([]experience.SearchHit, 0, limit)
 	for rows.Next() {
 		var artifactID string
 		var revision, content any

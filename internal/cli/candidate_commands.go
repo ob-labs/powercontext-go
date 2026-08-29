@@ -270,7 +270,7 @@ func resolveInstructions(inline, path string) (string, error) {
 	if err != nil {
 		return "", errors.New("cannot read --instructions-file")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	const maximum = 1 << 20
 	content, err := io.ReadAll(io.LimitReader(file, maximum+1))
 	if err != nil || len(content) > maximum || !utf8.Valid(content) {

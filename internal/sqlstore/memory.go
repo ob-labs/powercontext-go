@@ -124,13 +124,11 @@ func (r *MemoryRepository) Projections(ctx context.Context, ref artifact.Ref) ([
 			var searchable string
 			entry, err = scanMemoryEntryWithSearchable(rows, &searchable)
 			if err != nil {
-				rows.Close()
-				return err
+				return errors.Join(err, closeRows(rows))
 			}
 			projection, err := memory.NewProjection(entry, searchable, nil, nil)
 			if err != nil {
-				rows.Close()
-				return err
+				return errors.Join(err, closeRows(rows))
 			}
 			projections = append(projections, projection)
 		}
@@ -415,8 +413,7 @@ func (r *MemoryRepository) entries(
 	for rows.Next() {
 		entry, err := scanMemoryEntry(rows)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return nil, errors.Join(err, closeRows(rows))
 		}
 		byID[entry.EntryVersionID] = entry
 	}

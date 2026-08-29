@@ -164,7 +164,7 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	if err != nil {
 		return packageResult{}, err
 	}
-	defer os.RemoveAll(temporary)
+	defer func() { _ = os.RemoveAll(temporary) }()
 
 	version := strings.TrimPrefix(options.Version, "v")
 	artifactName := "powercontext-" + version + "-" + target

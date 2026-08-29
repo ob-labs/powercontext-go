@@ -172,7 +172,7 @@ func (r *SourceRepository) List(
 	scopeID string,
 	after int64,
 	limit *int,
-) ([]StoredSource, error) {
+) (result []StoredSource, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return nil, err
 	}
@@ -193,8 +193,8 @@ func (r *SourceRepository) List(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make([]StoredSource, 0)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make([]StoredSource, 0)
 	for rows.Next() {
 		row, err := scanSource(rows)
 		if err != nil {

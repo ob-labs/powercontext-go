@@ -43,6 +43,11 @@ func TestPythonSidecarCanBeRewrittenByGoAndRestoredByAPScheduler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := database.Close(); err != nil {
+			t.Errorf("close scheduler database: %v", err)
+		}
+	})
 	rows, err := database.QueryContext(t.Context(), `SELECT id, next_run_time, job_state
 		FROM powercontext_scheduler_jobs ORDER BY id`)
 	if err != nil {
@@ -57,22 +62,30 @@ func TestPythonSidecarCanBeRewrittenByGoAndRestoredByAPScheduler(t *testing.T) {
 	for rows.Next() {
 		var row storedJobRow
 		if err := rows.Scan(&row.id, &row.next, &row.blob); err != nil {
-			rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
 			t.Fatal(err)
 		}
 		decoded, err := decodeJobState(row.blob, row.id, "/powercontext-fixtures/scheduler.db", row.next)
 		if err != nil {
-			rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
 			t.Fatal(err)
 		}
 		rewritten, err := NewJob(decoded.Kind(), working, decoded.Interval(), decoded.StartDate(), decoded.NextRunTime())
 		if err != nil {
-			rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
 			t.Fatal(err)
 		}
 		blob, err := encodeJobState(rewritten)
 		if err != nil {
-			rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				t.Errorf("close scheduler rows: %v", closeErr)
+			}
 			t.Fatal(err)
 		}
 		replacements = append(replacements, replacement{

@@ -231,7 +231,7 @@ func (s *HandoffReportStore) updateProject(ctx context.Context, tx DBTX, value h
 	return value, nil
 }
 
-func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *string, limit int, includeArchived bool) (handoffreport.Page[handoffreport.ProjectDescriptor], error) {
+func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *string, limit int, includeArchived bool) (page handoffreport.Page[handoffreport.ProjectDescriptor], returnErr error) {
 	if err := pageArguments(cursor, limit, handoffreport.MaxReportIDLength); err != nil {
 		return handoffreport.Page[handoffreport.ProjectDescriptor]{}, err
 	}
@@ -250,7 +250,7 @@ func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *
 	if err != nil {
 		return handoffreport.Page[handoffreport.ProjectDescriptor]{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	items := []handoffreport.ProjectDescriptor{}
 	for rows.Next() {
 		var row projectRow
@@ -277,7 +277,8 @@ func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *
 		value := items[len(items)-1].ProjectID()
 		next = &value
 	}
-	return handoffreport.Page[handoffreport.ProjectDescriptor]{Items: items, NextCursor: next}, nil
+	page = handoffreport.Page[handoffreport.ProjectDescriptor]{Items: items, NextCursor: next}
+	return page, nil
 }
 
 type workstreamRow struct {
@@ -401,7 +402,7 @@ func (s *HandoffReportStore) updateWorkstream(ctx context.Context, tx DBTX, valu
 	return value, nil
 }
 
-func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, projectID string, cursor *string, limit int, includeArchived bool) (handoffreport.Page[handoffreport.WorkstreamDescriptor], error) {
+func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, projectID string, cursor *string, limit int, includeArchived bool) (page handoffreport.Page[handoffreport.WorkstreamDescriptor], returnErr error) {
 	if err := reportIdentifier("project_id", projectID, handoffreport.MaxReportIDLength); err != nil {
 		return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, err
 	}
@@ -423,7 +424,7 @@ func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, proje
 	if err != nil {
 		return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	items := []handoffreport.WorkstreamDescriptor{}
 	for rows.Next() {
 		var row workstreamRow
@@ -450,7 +451,8 @@ func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, proje
 		value := items[len(items)-1].ScopeID()
 		next = &value
 	}
-	return handoffreport.Page[handoffreport.WorkstreamDescriptor]{Items: items, NextCursor: next}, nil
+	page = handoffreport.Page[handoffreport.WorkstreamDescriptor]{Items: items, NextCursor: next}
+	return page, nil
 }
 
 func reportIdentifier(field, value string, maximum int) error {

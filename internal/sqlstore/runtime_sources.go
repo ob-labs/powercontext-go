@@ -89,14 +89,14 @@ func (b *RuntimeSourceBackend) Entries(ctx context.Context, scopeID string) ([]s
 // or configuration.
 func (b *RuntimeSourceBackend) ScopeIDs(ctx context.Context) ([]string, error) {
 	var result []string
-	err := b.database.Transaction(ctx, func(tx DBTX) error {
+	err := b.database.Transaction(ctx, func(tx DBTX) (returnErr error) {
 		rows, err := tx.QueryContext(ctx,
 			"SELECT scope_id FROM pc_source_journal_heads ORDER BY scope_id",
 		)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 		for rows.Next() {
 			var scopeID string
 			if err := rows.Scan(&scopeID); err != nil {

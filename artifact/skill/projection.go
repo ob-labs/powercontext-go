@@ -213,7 +213,7 @@ func PublishSkillProjection(
 	if err != nil {
 		return ProjectionStatus{}, err
 	}
-	defer os.RemoveAll(temporary)
+	defer func() { _ = os.RemoveAll(temporary) }()
 	staged, err := projectSkillTo(
 		ref, content, target.agentKind, filepath.Join(temporary, "staged", content.Name()),
 	)
@@ -265,7 +265,7 @@ func projectSkillTo(
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(temporary)
+	defer func() { _ = os.RemoveAll(temporary) }()
 	staging := filepath.Join(temporary, "projection")
 	if err := os.Mkdir(staging, 0o750); err != nil {
 		return "", err
@@ -485,7 +485,7 @@ func readProjectionManifest(path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	decoder := json.NewDecoder(file)
 	decoder.UseNumber()
 	var manifest map[string]any

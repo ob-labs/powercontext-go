@@ -118,7 +118,7 @@ func (r *CandidateRepository) List(
 	status review.Status,
 	family, cursor *string,
 	limit int,
-) (review.Page, error) {
+) (page review.Page, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return review.Page{}, err
 	}
@@ -151,7 +151,7 @@ func (r *CandidateRepository) List(
 	if err != nil {
 		return review.Page{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	values := make([]review.Snapshot, 0, limit+1)
 	for rows.Next() {
 		candidate, err := r.scanAndDecode(rows)
@@ -172,7 +172,8 @@ func (r *CandidateRepository) List(
 		value := values[len(values)-1].ID()
 		next = &value
 	}
-	return review.Page{Candidates: values, NextCursor: next}, nil
+	page = review.Page{Candidates: values, NextCursor: next}
+	return page, nil
 }
 
 func (r *CandidateRepository) Revise(

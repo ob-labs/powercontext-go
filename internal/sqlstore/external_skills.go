@@ -121,7 +121,7 @@ func (ExternalSkillRepository) List(
 	ctx context.Context,
 	db DBTX,
 	scopeID string,
-) ([]skill.Registration, error) {
+) (result []skill.Registration, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return nil, err
 	}
@@ -133,8 +133,8 @@ func (ExternalSkillRepository) List(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make([]skill.Registration, 0)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make([]skill.Registration, 0)
 	for rows.Next() {
 		registration, err := scanExternalSkill(rows)
 		if err != nil {
