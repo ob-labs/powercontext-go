@@ -130,3 +130,8 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When a CI gate derives package or platform coverage from Make variables,
+  execute the target with a recording command and assert the complete
+  invocation matrix, critical environment assignments, and fail-fast behavior.
+  Verify mutants that remove an entry, unset the constraint, and fail the first
+  iteration are rejected.

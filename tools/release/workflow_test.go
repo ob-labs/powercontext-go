@@ -17,8 +17,10 @@ package main
 import (
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -296,6 +298,101 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 	}
 }
 
+func TestPortableSDKMakeTargetBuildsExactMatrix(t *testing.T) {
+	if os.Getenv("POWERCONTEXT_PORTABLE_GO_HELPER") == "1" {
+		runPortableSDKGoHelper(t)
+		return
+	}
+
+	calls, output, err := runPortableSDKMake(t, "")
+	if err != nil {
+		t.Fatalf("make portable-sdk failed: %v\n%s", err, output)
+	}
+	want := []string{
+		"linux/amd64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
+		"linux/arm64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
+		"darwin/amd64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
+		"darwin/arm64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
+	}
+	if !slices.Equal(calls, want) {
+		t.Errorf("portable-sdk calls = %q, want %q", calls, want)
+	}
+}
+
+func TestPortableSDKMakeTargetStopsOnFirstFailure(t *testing.T) {
+	calls, output, err := runPortableSDKMake(t, "linux/amd64")
+	if err == nil {
+		t.Fatalf("make portable-sdk succeeded after the first target failed\n%s", output)
+	}
+	want := []string{
+		"linux/amd64 CGO_ENABLED=0 build -mod=readonly ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...",
+	}
+	if !slices.Equal(calls, want) {
+		t.Errorf("portable-sdk calls after failure = %q, want %q", calls, want)
+	}
+}
+
+func runPortableSDKMake(t *testing.T, failTarget string) ([]string, string, error) {
+	t.Helper()
+	makePath, err := exec.LookPath("make")
+	if err != nil {
+		t.Skip("make is required to verify the portable SDK target")
+	}
+	logPath := filepath.Join(t.TempDir(), "portable-sdk-go.log")
+	args := []string{
+		"--no-print-directory",
+		"portable-sdk",
+		`GO="$${POWERCONTEXT_PORTABLE_GO_HELPER_BINARY}" -test.run=TestPortableSDKMakeTargetBuildsExactMatrix --`,
+		"GOLANGCI_LINT=unused",
+	}
+	if failTarget != "" {
+		args = append(args, ".SHELLFLAGS=-u -o pipefail -c")
+	}
+	command := exec.CommandContext(t.Context(), makePath, args...)
+	command.Dir = filepath.Clean(filepath.Join("..", ".."))
+	command.Env = append(os.Environ(),
+		"POWERCONTEXT_PORTABLE_GO_HELPER=1",
+		"POWERCONTEXT_PORTABLE_GO_HELPER_BINARY="+filepath.ToSlash(os.Args[0]),
+		"POWERCONTEXT_PORTABLE_GO_LOG="+logPath,
+		"POWERCONTEXT_PORTABLE_GO_FAIL_TARGET="+failTarget,
+	)
+	output, runErr := command.CombinedOutput()
+	payload, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatalf("read portable SDK helper log: %v\n%s", readErr, output)
+	}
+	lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(payload), "\r\n", "\n")), "\n")
+	return lines, string(output), runErr
+}
+
+func runPortableSDKGoHelper(t *testing.T) {
+	t.Helper()
+	separator := slices.Index(os.Args, "--")
+	if separator == -1 {
+		t.Fatal("portable SDK helper arguments are missing the separator")
+	}
+	arguments := os.Args[separator+1:]
+	if len(arguments) == 0 || arguments[0] != "build" {
+		return
+	}
+	target := os.Getenv("GOOS") + "/" + os.Getenv("GOARCH")
+	line := target + " CGO_ENABLED=" + os.Getenv("CGO_ENABLED") + " " + strings.Join(arguments, " ") + "\n"
+	logFile, err := os.OpenFile(os.Getenv("POWERCONTEXT_PORTABLE_GO_LOG"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := logFile.WriteString(line); err != nil {
+		_ = logFile.Close()
+		t.Fatal(err)
+	}
+	if err := logFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if target == os.Getenv("POWERCONTEXT_PORTABLE_GO_FAIL_TARGET") {
+		os.Exit(23)
+	}
+}
+
 func TestMakefileDeclaresStrictDiscoverableExecution(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, "Makefile"))
@@ -315,9 +412,6 @@ func TestMakefileDeclaresStrictDiscoverableExecution(t *testing.T) {
 		"check: module-check fmt-check vet ##",
 		"build-all: ##",
 		"portable-sdk: ##",
-		"./openapi/...",
-		"linux/arm64 darwin/amd64 darwin/arm64",
-		"$(GO) build -mod=readonly $(PORTABLE_SDK_PACKAGES) || exit 1",
 		"governance-check: ##",
 	} {
 		if !strings.Contains(contents, required) {
