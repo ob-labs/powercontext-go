@@ -61,7 +61,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	required := map[string][]string{
 		"master.yml": {
-			"name: Main", "quality:", "run: make check", "run: make contract-test",
+			"name: Main", "go-compat:", "quality:", "run: make check", "run: make contract-test",
 			"tests:", "run: make unit-test", "run: make e2e-test", "pi-package:", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
@@ -119,6 +119,32 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	if strings.Contains(string(e2eHarness), "continue-on-error:") {
 		t.Error("e2e-harness.yml must not suppress acceptance or evidence failures")
+	}
+}
+
+func TestGoCompatibilityJobUsesLocalReadonlyBuild(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "\n  go-compat:\n")
+	end := strings.Index(contents, "\n  quality:\n")
+	if start < 0 || end <= start {
+		t.Fatal("master.yml must define go-compat before quality")
+	}
+	job := contents[start:end]
+	for _, value := range []string{
+		"name: go-compat",
+		"GOTOOLCHAIN: local",
+		"GOFLAGS: -mod=readonly",
+		"libsqlite3-dev",
+		"run: make build-all",
+	} {
+		if !strings.Contains(job, value) {
+			t.Errorf("go-compat job is missing %q", value)
+		}
 	}
 }
 

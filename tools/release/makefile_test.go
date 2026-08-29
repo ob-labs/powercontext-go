@@ -46,6 +46,19 @@ func TestBareMakeKeepsGenerateAsDefaultGoal(t *testing.T) {
 	}
 }
 
+func TestBuildAllUsesReadonlyModuleResolution(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "build-all", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make build-all dry-run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "go build -mod=readonly ./...") {
+		t.Fatalf("make build-all does not use readonly module resolution:\n%s", output)
+	}
+}
+
 func firstGeneratedCommand(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, "make") && (strings.Contains(line, "Entering directory") ||
