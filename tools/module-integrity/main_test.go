@@ -55,14 +55,86 @@ func TestValidateInventoryRejectsUninventoriedNestedModule(t *testing.T) {
 	}
 }
 
-func TestValidateInventoryRejectsModuleWithoutChecksum(t *testing.T) {
+func TestValidateInventoryRejectsOwnedModuleBelowGeneratedLikeDirectory(t *testing.T) {
 	root := t.TempDir()
 	writeModule(t, root, ".")
-	writeModule(t, root, "test/downstream")
-	if err := os.Remove(filepath.Join(root, "test", "downstream", "go.sum")); err != nil {
-		t.Fatal(err)
-	}
+	writeModule(t, root, "tools/bin/owned")
 	inventory := writeInventory(t, root, `{
+  "schema_version": 1,
+  "modules": [
+    {"path": "."}
+  ]
+}`)
+
+	err := validateInventory(t.Context(), root, inventory)
+	if err == nil || !strings.Contains(err.Error(), "tools/bin/owned") {
+		t.Fatalf("uninventoried module below generated-like directory error = %v", err)
+	}
+}
+
+func TestReadInventoryRejectsMalformedJSONContracts(t *testing.T) {
+	tests := map[string]string{
+		"unknown member": `{
+  "schema_version": 1,
+  "modules": [{"path": "."}],
+  "unexpected": true
+}`,
+		"duplicate member": `{
+  "schema_version": 1,
+  "schema_version": 1,
+  "modules": [{"path": "."}]
+}`,
+		"trailing value": `{
+  "schema_version": 1,
+  "modules": [{"path": "."}]
+} {}`,
+	}
+	for name, contents := range tests {
+		t.Run(name, func(t *testing.T) {
+			inventory := writeInventory(t, t.TempDir(), contents)
+			if _, err := readInventory(t.Context(), inventory); err == nil {
+				t.Fatal("readInventory accepted malformed JSON contract")
+			}
+		})
+	}
+}
+
+func TestValidateInventoryRejectsRepositoryParentPath(t *testing.T) {
+	root := t.TempDir()
+	writeModule(t, root, ".")
+	inventory := writeInventory(t, root, `{
+  "schema_version": 1,
+  "modules": [
+    {"path": ".."}
+  ]
+}`)
+
+	err := validateInventory(t.Context(), root, inventory)
+	if err == nil || !strings.Contains(err.Error(), "escapes the repository root") {
+		t.Fatalf("repository parent path error = %v", err)
+	}
+}
+
+func TestValidateInventoryRejectsInvalidChecksum(t *testing.T) {
+	tests := map[string]func(*testing.T, string){
+		"missing": func(t *testing.T, path string) {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"empty": func(t *testing.T, path string) {
+			if err := os.WriteFile(path, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, invalidate := range tests {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeModule(t, root, ".")
+			writeModule(t, root, "test/downstream")
+			invalidate(t, filepath.Join(root, "test", "downstream", "go.sum"))
+			inventory := writeInventory(t, root, `{
   "schema_version": 1,
   "modules": [
     {"path": "."},
@@ -70,9 +142,11 @@ func TestValidateInventoryRejectsModuleWithoutChecksum(t *testing.T) {
   ]
 }`)
 
-	err := validateInventory(t.Context(), root, inventory)
-	if err == nil || !strings.Contains(err.Error(), "test/downstream") {
-		t.Fatalf("missing checksum error = %v", err)
+			err := validateInventory(t.Context(), root, inventory)
+			if err == nil || !strings.Contains(err.Error(), "test/downstream") {
+				t.Fatalf("invalid checksum error = %v", err)
+			}
+		})
 	}
 }
 

@@ -189,6 +189,13 @@ source / artifact / trigger / inference
   steps by the complete required operation rather than substring presence.
   Keep a valid fixture plus a failing mutant for each boundary, and recheck the
   assumptions against the current official schema before changing the gate.
+- When a repository inventory prunes generated output while discovering owned
+  files, scope name-based exclusions to explicit repository-relative roots
+  unless that directory class is unowned at every depth. Verify an owned nested
+  path with the same basename is still discovered.
+- When a repository inventory accepts repository-relative paths, reject the
+  exact parent path as well as parent-prefixed normalized paths before joining
+  or comparison. Verify the exact parent boundary reports an escape.
 - When blank Issues are disabled, inventory every supported request class and
   provide a distinct validated form or contact route for each. Verify that the
   chooser routes bounded features separately from compatibility-sensitive

@@ -22,6 +22,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 )
 
 func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T) {
@@ -70,7 +72,6 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		},
 		"migration-gates.yml": {
 			"name: Go migration assurance", "workflow_call:", "make test-race",
-			"make module-inventory",
 			"docker build --pull --target powercontext -t powercontext:ci .",
 			"FuzzRestrictedPickleJobDecoder", "Frozen Python Oracle and differential fixtures",
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
@@ -129,6 +130,35 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	if strings.Contains(string(e2eHarness), "continue-on-error:") {
 		t.Error("e2e-harness.yml must not suppress acceptance or evidence failures")
 	}
+}
+
+func TestMigrationQualityRunsModuleInventory(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string `yaml:"name"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	quality, ok := workflow.Jobs["quality"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no quality job")
+	}
+	for _, step := range quality.Steps {
+		if step.Name == "Verify owned Go module inventory" && strings.TrimSpace(step.Run) == "make module-inventory" {
+			return
+		}
+	}
+	t.Fatal("migration-gates.yml quality job does not execute make module-inventory")
 }
 
 func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {

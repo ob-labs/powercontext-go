@@ -18,11 +18,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -97,13 +96,8 @@ func readInventory(ctx context.Context, path string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read module inventory: %w", err)
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(contents)))
-	decoder.DisallowUnknownFields()
 	var value inventory
-	if err := decoder.Decode(&value); err != nil {
-		return nil, fmt.Errorf("decode module inventory: %w", err)
-	}
-	if err := rejectTrailingJSON(decoder); err != nil {
+	if err := json.Unmarshal(contents, &value, json.RejectUnknownMembers(true)); err != nil {
 		return nil, fmt.Errorf("decode module inventory: %w", err)
 	}
 	if value.SchemaVersion != inventorySchemaVersion {
@@ -129,18 +123,6 @@ func readInventory(ctx context.Context, path string) ([]string, error) {
 	return paths, nil
 }
 
-func rejectTrailingJSON(decoder *json.Decoder) error {
-	var extra any
-	err := decoder.Decode(&extra)
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return errors.New("contains more than one JSON value")
-}
-
 func cleanModulePath(path string) (string, error) {
 	if path == "." {
 		return path, nil
@@ -149,7 +131,7 @@ func cleanModulePath(path string) (string, error) {
 		return "", fmt.Errorf("module path %q must be a repository-relative slash path", path)
 	}
 	cleaned := filepath.ToSlash(filepath.Clean(path))
-	if cleaned == "." || strings.HasPrefix(cleaned, "../") {
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return "", fmt.Errorf("module path %q escapes the repository root", path)
 	}
 	return cleaned, nil
@@ -164,8 +146,14 @@ func findModules(ctx context.Context, root string) ([]string, error) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if entry.IsDir() && ignoredDirectory(entry.Name()) && path != root {
-			return filepath.SkipDir
+		if entry.IsDir() && path != root {
+			relative, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			if ignoredDirectory(relative) {
+				return filepath.SkipDir
+			}
 		}
 		if entry.IsDir() || entry.Name() != "go.mod" {
 			return nil
@@ -189,13 +177,16 @@ func findModules(ctx context.Context, root string) ([]string, error) {
 	return paths, nil
 }
 
-func ignoredDirectory(name string) bool {
-	switch name {
-	case ".git", ".tools", "bin", "coverage", "dist", "node_modules", "site":
+func ignoredDirectory(relative string) bool {
+	switch filepath.Base(relative) {
+	case ".git", "node_modules":
 		return true
-	default:
-		return false
 	}
+	switch filepath.ToSlash(relative) {
+	case ".tools", "bin", "coverage", "dist", "site":
+		return true
+	}
+	return false
 }
 
 func difference(left, right []string) []string {
