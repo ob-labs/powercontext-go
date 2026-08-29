@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	downstreamScope    = "project:downstream-consumer"
-	downstreamSourceID = "downstream-work-boundary"
+	downstreamScope           = "project:downstream-consumer"
+	downstreamSourceID        = "downstream-work-boundary"
+	downstreamReceiptSourceID = "downstream-receipt"
 )
 
 func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
@@ -61,6 +62,9 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create work contract through public client: %v", err)
 	}
+	if _, err := api.CaptureContentSource(ctx, receiverSourceRequest()); err != nil {
+		t.Fatalf("capture acknowledgement source through public client: %v", err)
+	}
 
 	preparedResult, err := api.HandoffCurrentWork(ctx, currentWorkHandoffRequest())
 	if err != nil {
@@ -85,7 +89,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 
 	acknowledgedResult, err := api.AcknowledgeHandoff(ctx, &v1.AcknowledgeHandoffRequest{
 		ScopeID:   downstreamScope,
-		SourceID:  downstreamSourceID,
+		SourceID:  downstreamReceiptSourceID,
 		Receiver:  "downstream-consumer",
 		Status:    v1.HandoffReceiptStatusAccepted,
 		Selection: v1.HandoffAcknowledgementSelectionExact,
@@ -104,9 +108,20 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}
 }
 
-func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
-	if err := currentWorkHandoffRequest().Validate(); err != nil {
-		t.Fatalf("current-work Handoff request violates the public contract: %v", err)
+func TestPublicHandoffRequestsUsePublicContract(t *testing.T) {
+	requests := []struct {
+		name    string
+		request interface{ Validate() error }
+	}{
+		{name: "current-work Handoff", request: currentWorkHandoffRequest()},
+		{name: "acknowledgement source", request: receiverSourceRequest()},
+	}
+	for _, check := range requests {
+		t.Run(check.name, func(t *testing.T) {
+			if err := check.request.Validate(); err != nil {
+				t.Fatalf("request violates the public contract: %v", err)
+			}
+		})
 	}
 }
 
@@ -123,6 +138,14 @@ func currentWorkHandoffRequest() *v1.HandoffCurrentWorkRequest {
 			NextAction:  v1.NilWorkClaim{Null: true},
 			Omissions:   []string{},
 		},
+	}
+}
+
+func receiverSourceRequest() *v1.CaptureContentSourceRequest {
+	return &v1.CaptureContentSourceRequest{
+		ScopeID:  downstreamScope,
+		SourceID: downstreamReceiptSourceID,
+		Content:  "The downstream receiver inspected the prepared Handoff.",
 	}
 }
 
