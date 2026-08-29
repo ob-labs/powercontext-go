@@ -179,7 +179,7 @@ int seekdb_connection_options(void *handle, SeekDBConnectionOptions *out) {
 		t.Cleanup(func() {
 			_ = os.WriteFile(released, []byte("released"), 0o600)
 		})
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		result := make(chan error, 1)
 		go func() {
 			instance, openErr := Open(ctx, Config{Path: filepath.Join(root, "data"), LibraryPath: library})
