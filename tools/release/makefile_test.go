@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -56,6 +57,134 @@ func TestBuildAllUsesReadonlyModuleResolution(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "go build -mod=readonly ./...") {
 		t.Fatalf("make build-all does not use readonly module resolution:\n%s", output)
+	}
+}
+
+func TestCheckPortableBuildsEverySupportedTargetWithoutCGO(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	callLog := filepath.Join(temporary, "calls.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+esac
+
+printf '%s|%s|%s|%s\n' "$GOOS" "$GOARCH" "$CGO_ENABLED" "$*" >> "$PORTABLE_CALL_LOG"
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(t.Context(), "make", "check-portable", "GO="+fakeGo)
+	command.Dir = repository
+	command.Env = append(os.Environ(), "PORTABLE_CALL_LOG="+callLog)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("make check-portable failed: %v\n%s", err, output)
+	}
+
+	payload, err := os.ReadFile(callLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTargets := []string{"darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64"}
+	wantPackages := []string{
+		"./api/...",
+		"./artifact/...",
+		"./client/...",
+		"./inference/...",
+		"./openapi/...",
+		"./source/...",
+		"./trigger/...",
+	}
+	lines := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	gotTargets := make([]string, 0, len(lines))
+	for _, line := range lines {
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) != 4 {
+			t.Fatalf("portable build call %q has %d fields, want 4", line, len(parts))
+		}
+		gotTargets = append(gotTargets, parts[0]+"/"+parts[1])
+		if parts[2] != "0" {
+			t.Errorf("portable build %s/%s CGO_ENABLED = %q, want 0", parts[0], parts[1], parts[2])
+		}
+		arguments := strings.Fields(parts[3])
+		if len(arguments) == 0 || arguments[0] != "build" {
+			t.Fatalf("portable build %s/%s arguments = %q, want build command", parts[0], parts[1], arguments)
+		}
+		gotPackages := slices.Sorted(slices.Values(arguments[1:]))
+		if !slices.Equal(gotPackages, wantPackages) {
+			t.Errorf("portable build %s/%s packages = %q, want %q", parts[0], parts[1], gotPackages, wantPackages)
+		}
+	}
+	gotTargets = slices.Sorted(slices.Values(gotTargets))
+	if !slices.Equal(gotTargets, wantTargets) {
+		t.Fatalf("portable build targets = %q, want %q", gotTargets, wantTargets)
+	}
+}
+
+func TestCheckPortableStopsAfterTheFirstFailedBuild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	callLog := filepath.Join(temporary, "calls.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+esac
+
+target="$GOOS/$GOARCH"
+printf '%s\n' "$target" >> "$PORTABLE_CALL_LOG"
+if [ "$(grep -c '^' "$PORTABLE_CALL_LOG")" -eq 2 ]; then
+	exit 23
+fi
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(t.Context(), "make", "check-portable", "GO="+fakeGo)
+	command.Dir = repository
+	command.Env = append(
+		os.Environ(),
+		"PORTABLE_CALL_LOG="+callLog,
+	)
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make check-portable succeeded after a failed cross-build:\n%s", output)
+	}
+
+	payload, readErr := os.ReadFile(callLog)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	if len(got) != 2 {
+		t.Fatalf("portable build calls after second-call failure = %q, want exactly 2 calls", got)
 	}
 }
 

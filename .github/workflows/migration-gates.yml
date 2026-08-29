@@ -52,6 +52,20 @@ jobs:
       - name: Build the standard Docker image
         run: docker build --pull --target powercontext -t powercontext:ci .
 
+  portable-sdk:
+    name: Portable SDK cross-builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Cross-build public packages with CGO disabled
+        run: make check-portable
+
   frozen-oracle:
     name: Frozen Python Oracle and differential fixtures
     runs-on: ubuntu-24.04

@@ -27,11 +27,16 @@ COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
 
+# Deliberate public packages that downstream Go consumers must be able to
+# import without CGO, matching the platform matrix used by CI.
+PORTABLE_PACKAGES := ./api/... ./artifact/... ./client/... ./inference/... ./openapi/... ./source/... ./trigger/...
+PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+
 .PHONY: lint-tools lint lint-fix generate check-generated module-check contract-test license-check license-fix fmt fmt-check vet build-all coverage coverage-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
-	package-standard package-full clean
+	check-portable package-standard package-full clean
 
 $(GOLANGCI_LINT): Makefile go.mod
 	@mkdir -p "$(TOOLS_BIN)"
@@ -212,6 +217,16 @@ package-full: build-full
 		-output dist -syft "$(SYFT)"
 
 check: module-check fmt-check vet
+
+# Prove the deliberate public SDK surface stays CGO-free and cross-compilable
+# for every supported platform. A failure here means a public package gained a
+# CGO dependency or platform-specific code that breaks pure-Go consumers.
+check-portable:
+	@for target in $(PORTABLE_TARGETS); do \
+		os=$${target%/*}; arch=$${target#*/}; \
+		printf 'building portable SDK for %s/%s: ' "$$os" "$$arch"; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build $(PORTABLE_PACKAGES) && echo OK || exit 1; \
+	done
 
 clean:
 	$(RM) -r bin dist coverage site
