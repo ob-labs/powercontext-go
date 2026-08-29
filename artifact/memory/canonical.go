@@ -24,10 +24,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/ob-labs/powercontext-go/artifact"
 	internaljcs "github.com/ob-labs/powercontext-go/internal/jcs"
 	"github.com/ob-labs/powercontext-go/source"
-	"golang.org/x/text/unicode/norm"
 )
 
 var lowerHex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)

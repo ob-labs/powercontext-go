@@ -170,8 +170,9 @@ type Inventory struct {
 	memory     MemoryEntryInventory
 }
 
-func (v Inventory) Sources() SourceInventory            { return v.sources }
-func (v Inventory) Artifacts() ArtifactInventory        { return cloneArtifactInventory(v.artifacts) }
+func (v Inventory) Sources() SourceInventory     { return v.sources }
+func (v Inventory) Artifacts() ArtifactInventory { return cloneArtifactInventory(v.artifacts) }
+
 func (v Inventory) Candidates() CandidateInventory      { return cloneCandidateInventory(v.candidates) }
 func (v Inventory) MemoryEntries() MemoryEntryInventory { return cloneMemoryInventory(v.memory) }
 
@@ -286,7 +287,8 @@ func (v RecallTokenMeasurement) Estimator() inference.TokenEstimatorProfile { re
 func (v RecallTokenMeasurement) Ready() bool                                { return v.ready }
 func (v RecallTokenMeasurement) Comparable() bool                           { return v.comparable }
 func (v RecallTokenMeasurement) BaselineTokens() int64                      { return v.baselineTokens }
-func (v RecallTokenMeasurement) RecalledTokens() int64                      { return v.recalledTokens }
+
+func (v RecallTokenMeasurement) RecalledTokens() int64 { return v.recalledTokens }
 
 type RecallTokenValue struct {
 	preparations, readyPreparations, comparablePreparations int64
@@ -351,14 +353,17 @@ func cloneInt64(value *int64) *int64 {
 	copy := *value
 	return &copy
 }
+
 func cloneUsageValue(v ModelUsageValue) ModelUsageValue {
 	v.inputTokens, v.outputTokens = cloneInt64(v.inputTokens), cloneInt64(v.outputTokens)
 	return v
 }
+
 func cloneModelUsage(v ModelUsage) ModelUsage {
 	v.generation, v.embedding = cloneUsageValue(v.generation), cloneUsageValue(v.embedding)
 	return v
 }
+
 func clonePurposeBreakdowns(values []PurposeBreakdown) []PurposeBreakdown {
 	result := make([]PurposeBreakdown, len(values))
 	for i, value := range values {
@@ -367,6 +372,7 @@ func clonePurposeBreakdowns(values []PurposeBreakdown) []PurposeBreakdown {
 	}
 	return result
 }
+
 func cloneUsageDays(values []ModelUsageDay) []ModelUsageDay {
 	result := make([]ModelUsageDay, len(values))
 	for i, value := range values {
@@ -376,30 +382,36 @@ func cloneUsageDays(values []ModelUsageDay) []ModelUsageDay {
 	}
 	return result
 }
+
 func cloneArtifactInventory(v ArtifactInventory) ArtifactInventory {
 	v.byFamily = slices.Clone(v.byFamily)
 	return v
 }
+
 func cloneCandidateInventory(v CandidateInventory) CandidateInventory {
 	v.byFamily = slices.Clone(v.byFamily)
 	return v
 }
+
 func cloneMemoryInventory(v MemoryEntryInventory) MemoryEntryInventory {
 	v.byKind = slices.Clone(v.byKind)
 	return v
 }
+
 func cloneInventory(v Inventory) Inventory {
 	v.artifacts = cloneArtifactInventory(v.artifacts)
 	v.candidates = cloneCandidateInventory(v.candidates)
 	v.memory = cloneMemoryInventory(v.memory)
 	return v
 }
+
 func cloneUsage(v Usage) Usage {
 	v.totals = cloneModelUsage(v.totals)
 	v.byPurpose = clonePurposeBreakdowns(v.byPurpose)
 	v.daily = cloneUsageDays(v.daily)
 	return v
 }
+
 func cloneRecall(v Recall) Recall {
 	if v.estimator != nil {
 		profile := *v.estimator

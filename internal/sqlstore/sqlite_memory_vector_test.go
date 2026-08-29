@@ -123,8 +123,8 @@ func TestSQLiteVecEmbeddedExtensionAndVec0Schema(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Errorf("close database: %v", err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
 		}
 	})
 	profile, err := memory.NewEmbeddingProfile("profile", "model", 3, "unit")
@@ -168,8 +168,8 @@ func TestSQLiteVec0ReplaceHydrateAndSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Errorf("close database: %v", err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
 		}
 	})
 	profile, err := memory.NewEmbeddingProfile("profile", "model", 3, "unit")
@@ -186,10 +186,14 @@ func TestSQLiteVec0ReplaceHydrateAndSearch(t *testing.T) {
 	}
 	const scopeID = "scope"
 	entries := []memory.EntryVersion{
-		{MemoryArtifactID: memoryRef.ID(), EntryID: "entry-a", EntryVersionID: "version-a", Version: 1,
-			Kind: "fact", Text: "nearest", EntryContentHash: strings.Repeat("a", 64), CreatedInRevision: 1},
-		{MemoryArtifactID: memoryRef.ID(), EntryID: "entry-b", EntryVersionID: "version-b", Version: 1,
-			Kind: "fact", Text: "farther", EntryContentHash: strings.Repeat("b", 64), CreatedInRevision: 1},
+		{
+			MemoryArtifactID: memoryRef.ID(), EntryID: "entry-a", EntryVersionID: "version-a", Version: 1,
+			Kind: "fact", Text: "nearest", EntryContentHash: strings.Repeat("a", 64), CreatedInRevision: 1,
+		},
+		{
+			MemoryArtifactID: memoryRef.ID(), EntryID: "entry-b", EntryVersionID: "version-b", Version: 1,
+			Kind: "fact", Text: "farther", EntryContentHash: strings.Repeat("b", 64), CreatedInRevision: 1,
+		},
 	}
 	vectors := [][]float64{{1, 0, 0}, {0, 1, 0}}
 	projections := make([]memory.Projection, len(entries))

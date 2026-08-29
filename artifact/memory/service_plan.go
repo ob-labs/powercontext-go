@@ -199,7 +199,7 @@ func (s *Service) prepareCommit(
 	evidence operationEvidence,
 	currentEntries []EntryVersion,
 ) (*Commit, error) {
-	memoryID := ""
+	var memoryID string
 	nextRevision := int64(1)
 	manifest := make(map[string]ManifestEntry)
 	if base == nil {

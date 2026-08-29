@@ -99,10 +99,12 @@ func NewRegistration(
 		maximum int
 	}{
 		{"external_skill_id", externalSkillID, artifactIDLimit},
-		{"provider", provider, 128}, {"agent_kind", agentKind, 128},
+		{"provider", provider, 128},
+		{"agent_kind", agentKind, 128},
 		{"host_id", hostID, MaxExternalHostIDLength},
 		{"locator", locator, MaxExternalLocatorLength},
-		{"name", name, MaxNameLength}, {"description", description, MaxDescriptionLength},
+		{"name", name, MaxNameLength},
+		{"description", description, MaxDescriptionLength},
 	} {
 		if err := externalText(value.label, value.text, value.maximum); err != nil {
 			return Registration{}, err

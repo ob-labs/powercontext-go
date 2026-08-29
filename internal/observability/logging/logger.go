@@ -28,8 +28,9 @@ import (
 	"sync"
 	"time"
 
-	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"go.opentelemetry.io/otel/trace"
+
+	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 )
 
 type Format string

@@ -163,9 +163,11 @@ func (NoMemoryIndex) Capabilities() memory.Capabilities { return memory.Capabili
 func (NoMemoryIndex) Initialize(context.Context, DBTX) error {
 	return nil
 }
+
 func (NoMemoryIndex) Replace(context.Context, DBTX, string, artifact.Ref, []memory.Projection) error {
 	return nil
 }
+
 func (NoMemoryIndex) Search(
 	context.Context,
 	DBTX,
@@ -174,6 +176,7 @@ func (NoMemoryIndex) Search(
 ) (memory.SearchChannels, error) {
 	return memory.SearchChannels{}, &memory.CapabilityNotSupportedError{Capability: "fts"}
 }
+
 func (NoMemoryIndex) VectorComplete(
 	context.Context,
 	DBTX,
@@ -183,6 +186,7 @@ func (NoMemoryIndex) VectorComplete(
 ) (bool, error) {
 	return false, nil
 }
+
 func (NoMemoryIndex) Hydrate(
 	_ context.Context,
 	_ DBTX,

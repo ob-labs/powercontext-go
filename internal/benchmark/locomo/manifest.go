@@ -262,8 +262,8 @@ func PrepareRejudge(dataset Dataset, options RejudgeOptions) (RejudgeManifest, e
 	if err != nil {
 		return RejudgeManifest{}, err
 	}
-	if err := validateSourceObservations(selected, observations); err != nil {
-		return RejudgeManifest{}, err
+	if validationErr := validateSourceObservations(selected, observations); validationErr != nil {
+		return RejudgeManifest{}, validationErr
 	}
 	configuration, ok := sourceManifest["configuration"].(map[string]any)
 	if !ok {
@@ -381,7 +381,7 @@ func readObservations(path string) (map[string]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	result := make(map[string]map[string]any)
 	scanner := bufio.NewScanner(stream)
 	scanner.Buffer(make([]byte, 64*1024), 10*1024*1024)
@@ -414,7 +414,7 @@ func readJSONObject(path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	decoder := json.NewDecoder(stream)
 	decoder.UseNumber()
 	var result map[string]any
@@ -502,7 +502,7 @@ func fileSHA256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	hash := sha256.New()
 	if _, err := io.Copy(hash, stream); err != nil {
 		return "", err

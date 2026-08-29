@@ -109,7 +109,7 @@ func TestExperienceIncubationRetriesSameWindowAfterGenerationFailure(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Incubate(context.Background(), "scope", experience.IncubationWindowLimit); err == nil {
+	if _, incubationErr := application.Incubate(context.Background(), "scope", experience.IncubationWindowLimit); incubationErr == nil {
 		t.Fatal("generation failure was hidden")
 	}
 	if backend.applied {

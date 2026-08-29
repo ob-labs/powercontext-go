@@ -45,8 +45,8 @@ func TestPythonGoPythonHandoffReportActivityDatabaseCompatibility(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnsureSchema(ctx); err != nil {
-		t.Fatal(err)
+	if schemaErr := store.EnsureSchema(ctx); schemaErr != nil {
+		t.Fatal(schemaErr)
 	}
 	project, err := handoffreport.NewProjectDescriptor(
 		"project-1", "project-one", "Project One", nil,
@@ -55,8 +55,8 @@ func TestPythonGoPythonHandoffReportActivityDatabaseCompatibility(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateProject(ctx, project, time.Date(2026, time.August, 5, 8, 0, 0, 0, time.UTC)); err != nil {
-		t.Fatal(err)
+	if _, createErr := store.CreateProject(ctx, project, time.Date(2026, time.August, 5, 8, 0, 0, 0, time.UTC)); createErr != nil {
+		t.Fatal(createErr)
 	}
 
 	page, err := store.ListActivities(ctx, "project-1", nil, nil, nil, 0, nil, 50)
@@ -105,8 +105,8 @@ func TestPythonGoPythonHandoffReportActivityDatabaseCompatibility(t *testing.T) 
 	if stored.Cursor != 2 || stored.Event.EventID() != "event-go" {
 		t.Fatalf("Go append = %#v", stored)
 	}
-	if err := database.Close(ctx); err != nil {
-		t.Fatal(err)
+	if closeErr := database.Close(ctx); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 
 	runPythonActivityFixture(t, ctx, python, "verify", databasePath)
@@ -116,8 +116,8 @@ func TestPythonGoPythonHandoffReportActivityDatabaseCompatibility(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := database.Close(context.Background()); err != nil {
-			t.Error(err)
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Error(closeErr)
 		}
 	}()
 	store, err = sqlstore.NewHandoffReportStore(database, sqlstore.SQLiteDialect)

@@ -101,6 +101,7 @@ func (externalApplicationProvider) ProviderNames() []string { return []string{"c
 func (p externalApplicationProvider) Scan(context.Context) (skill.ProviderScan, error) {
 	return skill.NewProviderScan([]skill.Registration{p.registration}, 0)
 }
+
 func (p externalApplicationProvider) Resolve(context.Context, skill.Registration) (skill.Resolution, error) {
 	return skill.Resolution{
 		Registration: p.registration, Status: skill.Available, Entrypoint: "/bounded/SKILL.md",
@@ -115,6 +116,7 @@ func (s *externalApplicationStore) Replace(
 	s.registrations = slices.Clone(registrations)
 	return slices.Clone(registrations), nil
 }
+
 func (s *externalApplicationStore) Get(_ context.Context, id string) (skill.Registration, error) {
 	for _, registration := range s.registrations {
 		if registration.ExternalSkillID() == id {
@@ -123,6 +125,7 @@ func (s *externalApplicationStore) Get(_ context.Context, id string) (skill.Regi
 	}
 	return skill.Registration{}, &skill.ExternalNotFoundError{ExternalSkillID: id}
 }
+
 func (s *externalApplicationStore) List(context.Context) ([]skill.Registration, error) {
 	return slices.Clone(s.registrations), nil
 }

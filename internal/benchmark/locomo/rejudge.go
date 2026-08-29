@@ -147,8 +147,8 @@ func Rejudge(ctx context.Context, dataset Dataset, options RejudgeRunOptions) (R
 		encoded, readErr := os.ReadFile(filepath.Join(options.OutputDirectory, "summary.json"))
 		if readErr == nil {
 			var completed RejudgeReport
-			if err := json.Unmarshal(encoded, &completed); err != nil {
-				return RejudgeReport{}, fmt.Errorf("decode completed rejudge summary: %w", err)
+			if unmarshalErr := json.Unmarshal(encoded, &completed); unmarshalErr != nil {
+				return RejudgeReport{}, fmt.Errorf("decode completed rejudge summary: %w", unmarshalErr)
 			}
 			return completed, nil
 		}
@@ -160,15 +160,15 @@ func Rejudge(ctx context.Context, dataset Dataset, options RejudgeRunOptions) (R
 		if options.JudgeGenerator == nil {
 			return RejudgeReport{}, fmt.Errorf("judge generator must not be nil while questions are pending")
 		}
-		values, err := parallelRejudge(ctx, pending, options.Concurrency, func(ctx context.Context, question Question) RejudgeObservation {
+		values, rejudgeErr := parallelRejudge(ctx, pending, options.Concurrency, func(ctx context.Context, question Question) RejudgeObservation {
 			return rejudgeQuestion(ctx, source[question.ID()], fmt.Sprint(sourceManifest["run_id"]), options)
 		})
-		if err != nil {
-			return RejudgeReport{}, err
+		if rejudgeErr != nil {
+			return RejudgeReport{}, rejudgeErr
 		}
 		for _, value := range values {
-			if err := appendJSONLine(observationsPath, value); err != nil {
-				return RejudgeReport{}, err
+			if appendErr := appendJSONLine(observationsPath, value); appendErr != nil {
+				return RejudgeReport{}, appendErr
 			}
 			observed[value.QuestionID] = value
 			progress(fmt.Sprintf("[rejudge] recorded %s status=%s", value.QuestionID, value.Status))
@@ -277,7 +277,7 @@ func readRejudgeObservations(path string) (map[string]RejudgeObservation, error)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	result := make(map[string]RejudgeObservation)
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 64<<10), maxObservationBytes)

@@ -76,17 +76,17 @@ func rejudgeCommand(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeStdoutJSON(map[string]any{"run": manifest, "output_directory": resolvedOutput}); err != nil {
-		return err
+	if writeErr := writeStdoutJSON(map[string]any{"run": manifest, "output_directory": resolvedOutput}); writeErr != nil {
+		return writeErr
 	}
 	generator := &lazyJudgeGenerator{open: func() (inference.StructuredGenerator[locomo.JudgeInput, locomo.JudgeOutput], error) {
-		model, err := textModel(*judgeModel, nil)
-		if err != nil {
-			return nil, err
+		model, modelErr := textModel(*judgeModel, nil)
+		if modelErr != nil {
+			return nil, modelErr
 		}
-		limits, err := inference.NewLimits(config.Inference.GenerationTimeout, config.Inference.GenerationMaxRequests)
-		if err != nil {
-			return nil, err
+		limits, limitsErr := inference.NewLimits(config.Inference.GenerationTimeout, config.Inference.GenerationMaxRequests)
+		if limitsErr != nil {
+			return nil, limitsErr
 		}
 		return locomo.NewJudgeGenerator(model, &limits, profile)
 	}}

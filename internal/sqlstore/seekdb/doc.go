@@ -12,15 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package httpapi
-
-import "github.com/ogen-go/ogen/middleware"
-
-// These aliases keep the request-ID middleware signature readable without
-// introducing a transport abstraction parallel to ogen.
-type (
-	Request    = middleware.Request
-	Response   = middleware.Response
-	Next       = middleware.Next
-	Middleware = middleware.Middleware
-)
+// Package seekdb loads and owns the embedded seekDB runtime used by the SQL store.
+package seekdb

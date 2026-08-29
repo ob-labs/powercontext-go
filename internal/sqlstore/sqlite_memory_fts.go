@@ -100,7 +100,7 @@ func (SQLiteMemoryFTSIndex) Search(
 	db DBTX,
 	scopeID string,
 	request memory.SearchRequest,
-) (memory.SearchChannels, error) {
+) (channels memory.SearchChannels, returnErr error) {
 	request = request.Clone()
 	if request.Mode != memory.SearchFTS && request.Mode != memory.SearchHybrid {
 		return memory.SearchChannels{}, nil
@@ -137,7 +137,7 @@ func (SQLiteMemoryFTSIndex) Search(
 	if err != nil {
 		return memory.SearchChannels{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	hits := make([]memory.ChannelHit, 0)
 	for rows.Next() {
 		var artifactID, entryID, versionID, text string
@@ -162,7 +162,8 @@ func (SQLiteMemoryFTSIndex) Search(
 	if err := rows.Err(); err != nil {
 		return memory.SearchChannels{}, err
 	}
-	return memory.SearchChannels{FTS: hits}, nil
+	channels = memory.SearchChannels{FTS: hits}
+	return channels, nil
 }
 
 func (SQLiteMemoryFTSIndex) VectorComplete(

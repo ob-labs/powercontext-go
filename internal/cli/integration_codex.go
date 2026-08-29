@@ -69,8 +69,8 @@ func newSetupCodexCommand(state *commandState) *cobra.Command {
 			}
 			checks := runCodexDiagnostics(command.Context(), state.system)
 			if diagnosticsStatus(checks) != "ok" {
-				if err := writeDiagnostics(state, checks); err != nil {
-					return err
+				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
+					return writeErr
 				}
 				return alreadyReported(errors.New("Codex diagnostics did not pass"))
 			}
@@ -91,6 +91,7 @@ func newSetupCodexCommand(state *commandState) *cobra.Command {
 	command.Flags().StringVar(&ref, "ref", defaultMarketplaceRef, "Git ref used for a remote marketplace source.")
 	return command
 }
+
 func runCodexDiagnostics(ctx context.Context, commands systemCommandExecutor) map[string]diagnostic {
 	executable, err := commands.LookPath("codex")
 	if err != nil {
@@ -126,6 +127,7 @@ func runCodexDiagnostics(ctx context.Context, commands systemCommandExecutor) ma
 	}
 	return map[string]diagnostic{"codex": {OK: true, Status: "ok", Detail: executable}, "plugin": plugin}
 }
+
 func normalizeMarketplaceSource(source string) (string, bool, error) {
 	if strings.HasPrefix(source, ".") || strings.HasPrefix(source, "/") || strings.HasPrefix(source, "~") ||
 		(len(source) >= 2 && source[1] == ':') {

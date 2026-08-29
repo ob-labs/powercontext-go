@@ -32,9 +32,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel/propagation"
+
 	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
-	"go.opentelemetry.io/otel/propagation"
 )
 
 // ValidateJSONUnicode rejects malformed UTF-8 and unpaired JSON surrogate

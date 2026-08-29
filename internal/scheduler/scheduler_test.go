@@ -41,8 +41,8 @@ func TestSchedulerPersistsOneStableSourceWindowJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := first.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := first.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	before := storedRows(t, path)
 	if len(before) != 1 || before[0].id != SourceWindowJobID {
@@ -53,8 +53,8 @@ func TestSchedulerPersistsOneStableSourceWindowJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := restored.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := restored.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	after := storedRows(t, path)
 	if len(after) != 1 || after[0].id != before[0].id || after[0].next != before[0].next ||
@@ -96,8 +96,8 @@ func TestSchedulerPersistsStableJobAndReconcilesDisabledJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := first.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := first.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	before := storedRows(t, path)
 	if len(before) != 2 {
@@ -111,8 +111,8 @@ func TestSchedulerPersistsStableJobAndReconcilesDisabledJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := restored.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := restored.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	after := storedRows(t, path)
 	if len(after) != len(before) {
@@ -130,8 +130,8 @@ func TestSchedulerPersistsStableJobAndReconcilesDisabledJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := experienceOnly.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := experienceOnly.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	rows := storedRows(t, path)
 	if len(rows) != 1 || rows[0].id != ExperienceIncubationJobID {
@@ -159,15 +159,15 @@ func TestSchedulerEnforcesOneLiveOwner(t *testing.T) {
 	if !errors.As(err, &state) || state.Code != "duplicate" {
 		t.Fatalf("expected duplicate owner, got %v", err)
 	}
-	if err := first.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := first.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	second, err := Open(context.Background(), Config{Path: path, SourceWindowInterval: &interval, SourceWindow: noOpProcessor})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := second.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := second.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 }
 
@@ -209,16 +209,16 @@ func TestCorruptStateFailsOpenWithoutDeletingOrRewritingRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := scheduler.Close(context.Background()); err != nil {
-		t.Fatal(err)
+	if closeErr := scheduler.Close(context.Background()); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	db := openSidecar(t, path)
 	malicious := []byte{0x80, 5, 0x8c, 5, 'p', 'o', 's', 'i', 'x', 0x8c, 6, 's', 'y', 's', 't', 'e', 'm', 0x93, ')', 'R', '.'}
-	if _, err := db.Exec(`UPDATE powercontext_scheduler_jobs SET job_state = ? WHERE id = ?`, malicious, SourceWindowJobID); err != nil {
-		t.Fatal(err)
+	if _, execErr := db.Exec(`UPDATE powercontext_scheduler_jobs SET job_state = ? WHERE id = ?`, malicious, SourceWindowJobID); execErr != nil {
+		t.Fatal(execErr)
 	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := db.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 
 	_, err = Open(context.Background(), Config{Path: path, SourceWindowInterval: &interval, SourceWindow: noOpProcessor})
@@ -284,12 +284,20 @@ type storedJobRow struct {
 func storedRows(t *testing.T, path string) []storedJobRow {
 	t.Helper()
 	db := openSidecar(t, path)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close scheduler database: %v", err)
+		}
+	}()
 	rows, err := db.Query(`SELECT id, next_run_time, job_state FROM powercontext_scheduler_jobs ORDER BY id`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close scheduler rows: %v", err)
+		}
+	}()
 	var result []storedJobRow
 	for rows.Next() {
 		var row storedJobRow

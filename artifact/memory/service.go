@@ -65,8 +65,10 @@ type ArtifactResolver interface {
 	Get(context.Context, artifact.Snapshot) (artifact.Snapshot, error)
 }
 
-type IDFactory func(string) (string, error)
-type Clock func() time.Time
+type (
+	IDFactory func(string) (string, error)
+	Clock     func() time.Time
+)
 
 type ServiceOptions struct {
 	CandidatePipeline    CandidatePipeline

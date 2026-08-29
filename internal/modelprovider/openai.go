@@ -22,11 +22,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ob-labs/powercontext-go/inference"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
+
+	"github.com/ob-labs/powercontext-go/inference"
 )
 
 const openAIResponsesIdentity = "openai-responses"

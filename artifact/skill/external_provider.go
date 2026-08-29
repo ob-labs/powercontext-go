@@ -188,6 +188,7 @@ func (p *CodexProvider) ProviderNames() []string { return []string{string(CodexA
 func (p *CodexProvider) Scan(ctx context.Context) (ProviderScan, error) {
 	return p.provider.Scan(ctx)
 }
+
 func (p *CodexProvider) Resolve(ctx context.Context, registration Registration) (Resolution, error) {
 	return p.provider.Resolve(ctx, registration)
 }

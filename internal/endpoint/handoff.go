@@ -283,8 +283,8 @@ func runtimePreparedHandoff(value v1.PreparedHandoff) (handoff.Prepared, error) 
 	}
 	var base *artifact.Ref
 	if baseValue, ok := value.Base.Get(); ok {
-		ref, err := runtimeArtifactReference(baseValue)
-		if err != nil {
+		ref, referenceErr := runtimeArtifactReference(baseValue)
+		if referenceErr != nil {
 			return handoff.Prepared{}, invalidHandoffRequest("handoff.base")
 		}
 		base = &ref

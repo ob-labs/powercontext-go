@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 )
 

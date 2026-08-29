@@ -76,8 +76,10 @@ const (
 	MemoryCitationKind   CitationKind = "memory"
 )
 
-type Handoff = artifact.Artifact[Content]
-type ArtifactDraft = artifact.Draft[Content]
+type (
+	Handoff       = artifact.Artifact[Content]
+	ArtifactDraft = artifact.Draft[Content]
+)
 
 func NewArtifactDraft(content Content, sources []source.Ref, artifacts []artifact.Ref) (ArtifactDraft, error) {
 	if err := content.Validate(); err != nil {

@@ -49,8 +49,8 @@ func FuzzMarshalCanonicalJSONIsIdempotent(f *testing.F) {
 		decoder = json.NewDecoder(bytes.NewReader(first))
 		decoder.UseNumber()
 		var canonicalValue any
-		if err := decoder.Decode(&canonicalValue); err != nil {
-			t.Fatal(err)
+		if decodeErr := decoder.Decode(&canonicalValue); decodeErr != nil {
+			t.Fatal(decodeErr)
 		}
 		second, err := Marshal(canonicalValue)
 		if err != nil {

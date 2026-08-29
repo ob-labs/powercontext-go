@@ -32,6 +32,7 @@ func (s *HandoffReportStore) GetWorkspaceBinding(ctx context.Context, workspaceI
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) AttachWorkspaceBinding(ctx context.Context, workspaceID, projectID string, repository handoffreport.RepositoryRef, expected *int, confirmedAt time.Time) (handoffreport.WorkspaceBinding, error) {
 	var result handoffreport.WorkspaceBinding
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -44,6 +45,7 @@ func (s *HandoffReportStore) AttachWorkspaceBinding(ctx context.Context, workspa
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) DetachWorkspaceBinding(ctx context.Context, workspaceID string, expected int) (handoffreport.WorkspaceBinding, error) {
 	var result handoffreport.WorkspaceBinding
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -74,6 +76,7 @@ func (s *HandoffReportStore) findWorkspace(ctx context.Context, tx DBTX, id stri
 	row.payload, err = reportPayload(payload)
 	return row, err
 }
+
 func decodeWorkspaceRow(row workspaceRow) (handoffreport.WorkspaceBinding, error) {
 	var value handoffreport.WorkspaceBinding
 	if err := unmarshalJSON(row.payload, &value); err != nil {
@@ -84,6 +87,7 @@ func decodeWorkspaceRow(row workspaceRow) (handoffreport.WorkspaceBinding, error
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) getWorkspaceBinding(ctx context.Context, tx DBTX, id string, confirmedOnly bool) (handoffreport.WorkspaceBinding, error) {
 	if err := reportIdentifier("workspace_instance_id", id, handoffreport.MaxWorkspaceInstanceIDLength); err != nil {
 		return handoffreport.WorkspaceBinding{}, err
@@ -104,6 +108,7 @@ func (s *HandoffReportStore) getWorkspaceBinding(ctx context.Context, tx DBTX, i
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) attachWorkspaceBinding(ctx context.Context, tx DBTX, id, projectID string, repository handoffreport.RepositoryRef, expected *int, confirmedAt time.Time) (handoffreport.WorkspaceBinding, error) {
 	if err := reportIdentifier("workspace_instance_id", id, handoffreport.MaxWorkspaceInstanceIDLength); err != nil {
 		return handoffreport.WorkspaceBinding{}, err
@@ -126,9 +131,9 @@ func (s *HandoffReportStore) attachWorkspaceBinding(ctx context.Context, tx DBTX
 		if !found {
 			return handoffreport.WorkspaceBinding{}, workspaceConflict(id, expected, nil, "workspace binding record is missing")
 		}
-		current, err := decodeWorkspaceRow(row)
-		if err != nil {
-			return handoffreport.WorkspaceBinding{}, err
+		current, decodeErr := decodeWorkspaceRow(row)
+		if decodeErr != nil {
+			return handoffreport.WorkspaceBinding{}, decodeErr
 		}
 		if current.Version() != *expected {
 			return handoffreport.WorkspaceBinding{}, workspaceConflict(id, expected, intPointer(current.Version()), "")
@@ -163,6 +168,7 @@ func (s *HandoffReportStore) attachWorkspaceBinding(ctx context.Context, tx DBTX
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) detachWorkspaceBinding(ctx context.Context, tx DBTX, id string, expected int) (handoffreport.WorkspaceBinding, error) {
 	if expected < 1 {
 		return handoffreport.WorkspaceBinding{}, catalogArg("expected_version", "must be a positive integer")
@@ -199,6 +205,7 @@ func (s *HandoffReportStore) detachWorkspaceBinding(ctx context.Context, tx DBTX
 	}
 	return detached, nil
 }
+
 func workspaceConflict(id string, expected, current *int, detail string) error {
 	return &handoffreport.WorkspaceBindingConflictError{WorkspaceInstanceID: id, ExpectedVersion: expected, CurrentVersion: current, Detail: detail}
 }

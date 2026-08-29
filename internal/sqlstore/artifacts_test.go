@@ -53,12 +53,12 @@ func TestArtifactRepositoryPreservesPayloadRevisionAndOrderedLineage(t *testing.
 		t.Fatal(err)
 	}
 	var upstream artifact.Snapshot
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var createErr error
 		upstream, createErr = artifacts.Create(ctx, tx, "scope-a", "skill-1", skillDraft)
 		return createErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 
 	firstContent, err := experience.NewContent("situation", "action", "outcome", "lesson")
@@ -74,21 +74,21 @@ func TestArtifactRepositoryPreservesPayloadRevisionAndOrderedLineage(t *testing.
 		t.Fatal(err)
 	}
 	var first artifact.Snapshot
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var createErr error
 		first, createErr = artifacts.Create(ctx, tx, "scope-a", "experience-1", firstDraft)
 		return createErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	if first.Ref().Revision() != 1 {
 		t.Fatalf("revision = %d", first.Ref().Revision())
 	}
 	var payload []byte
-	if err := database.SQLDB().QueryRowContext(ctx, `SELECT content FROM pc_artifacts
+	if queryErr := database.SQLDB().QueryRowContext(ctx, `SELECT content FROM pc_artifacts
         WHERE scope_id = ? AND family = ? AND artifact_id = ? AND revision = 1`,
-		"scope-a", experience.Family, "experience-1").Scan(&payload); err != nil {
-		t.Fatal(err)
+		"scope-a", experience.Family, "experience-1").Scan(&payload); queryErr != nil {
+		t.Fatal(queryErr)
 	}
 	want := `{"situation":"situation","action":"action","outcome":"outcome","lesson":"lesson"}`
 	if string(payload) != want {
@@ -104,24 +104,24 @@ func TestArtifactRepositoryPreservesPayloadRevisionAndOrderedLineage(t *testing.
 		t.Fatal(err)
 	}
 	var second artifact.Snapshot
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var reviseErr error
 		second, reviseErr = artifacts.Revise(ctx, tx, "scope-a", first, secondDraft)
 		return reviseErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	if second.Ref().Revision() != 2 {
 		t.Fatalf("revision = %d", second.Ref().Revision())
 	}
 
 	var loaded artifact.Snapshot
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var getErr error
 		loaded, getErr = artifacts.Get(ctx, tx, "scope-a", second.Ref())
 		return getErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	lineage := loaded.(artifact.Artifact[experience.Content]).Lineage()
 	if got := lineage.Sources(); len(got) != 1 || got[0] != storedSource.Ref {
@@ -271,11 +271,11 @@ func TestMemoryAndHandoffPayloadsMatchPythonFieldOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		_, createErr := repository.Create(ctx, tx, "scope-a", "memory-1", memoryDraft)
 		return createErr
-	}); err != nil {
-		t.Fatal(err)
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
 	}
 	assertArtifactPayload(t, database, "memory", "memory-1",
 		`{"manifest":{"entries":[],"format":"flat-v1"},"changes":[],"schema":"powercontext.memory.v1"}`)

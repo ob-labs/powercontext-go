@@ -30,6 +30,7 @@ import (
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/mattn/go-sqlite3"
+
 	embeddedseekdb "github.com/ob-labs/powercontext-go/internal/sqlstore/seekdb"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore/sqlitevec"
 )
@@ -366,9 +367,9 @@ func OpenOceanBase(ctx context.Context, config OceanBaseConfig) (*Database, erro
 	}
 	if err := owned.Transaction(ctx, func(tx DBTX) error {
 		var name, mode string
-		err := tx.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'ob_compatibility_mode'").Scan(&name, &mode)
-		if err := validateOceanBaseTenantMode(name, mode, err); err != nil {
-			return err
+		queryErr := tx.QueryRowContext(ctx, "SHOW VARIABLES LIKE 'ob_compatibility_mode'").Scan(&name, &mode)
+		if validationErr := validateOceanBaseTenantMode(name, mode, queryErr); validationErr != nil {
+			return validationErr
 		}
 		return EnsureBuiltinSchemaForDialect(ctx, tx, MySQLDialect)
 	}); err != nil {

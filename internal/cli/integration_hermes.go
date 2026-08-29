@@ -45,8 +45,8 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return errors.New("Hermes CLI is not installed or is not on PATH")
 			}
-			if _, err := hermesVersion(command.Context(), state.system, executable); err != nil {
-				return err
+			if _, versionErr := hermesVersion(command.Context(), state.system, executable); versionErr != nil {
+				return versionErr
 			}
 			dataDirectory, err := prepareDataDirectory()
 			if err != nil {
@@ -61,13 +61,13 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 				return err
 			}
 			target := filepath.Join(home, "plugins", hermesPluginName)
-			if err := installHermesPlugin(command.Context(), state.system, executable, sourcePlugin, target); err != nil {
-				return err
+			if installErr := installHermesPlugin(command.Context(), state.system, executable, sourcePlugin, target); installErr != nil {
+				return installErr
 			}
 			checks := runHermesDiagnostics(command.Context(), state.system)
 			if diagnosticsStatus(checks) != "ok" {
-				if err := writeDiagnostics(state, checks); err != nil {
-					return err
+				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
+					return writeErr
 				}
 				return alreadyReported(errors.New("Hermes diagnostics did not pass"))
 			}
@@ -211,8 +211,8 @@ func installHermesPlugin(
 	if err := copyRegularTree(source, staging); err != nil {
 		return errors.New("cannot copy the PowerContext Hermes plugin")
 	}
-	if _, err := commands.Run(ctx, executable, "plugins", "doctor", "--ci", staging); err != nil {
-		return err
+	if _, doctorErr := commands.Run(ctx, executable, "plugins", "doctor", "--ci", staging); doctorErr != nil {
+		return doctorErr
 	}
 	backup := ""
 	if _, err := os.Lstat(target); err == nil {
@@ -220,16 +220,16 @@ func installHermesPlugin(
 		if err != nil {
 			return errors.New("cannot create Hermes plugin backup")
 		}
-		if err := os.Remove(backup); err != nil {
-			return err
+		if removeErr := os.Remove(backup); removeErr != nil {
+			return removeErr
 		}
-		if err := os.Rename(target, backup); err != nil {
+		if renameErr := os.Rename(target, backup); renameErr != nil {
 			return errors.New("cannot preserve existing Hermes plugin")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return errors.New("cannot inspect existing Hermes plugin")
 	}
-	if err := os.Rename(staging, target); err != nil {
+	if activateErr := os.Rename(staging, target); activateErr != nil {
 		if backup != "" {
 			_ = os.Rename(backup, target)
 		}

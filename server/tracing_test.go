@@ -20,11 +20,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ob-labs/powercontext-go/internal/endpoint"
 )
 
 func TestHTTPAndApplicationSpansPreserveW3CParentWithoutSensitiveAttributes(t *testing.T) {

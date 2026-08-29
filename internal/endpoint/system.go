@@ -21,8 +21,10 @@ import (
 	"github.com/ob-labs/powercontext-go/internal/runtime"
 )
 
-type CapabilityProvider func(context.Context) (runtime.Capabilities, error)
-type ReadinessProvider func(context.Context) (runtime.Readiness, error)
+type (
+	CapabilityProvider func(context.Context) (runtime.Capabilities, error)
+	ReadinessProvider  func(context.Context) (runtime.Readiness, error)
+)
 
 type HandlerOptions struct {
 	Capabilities  CapabilityProvider

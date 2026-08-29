@@ -70,19 +70,18 @@ func (r StatisticsRepository) Inventory(
 	for artifactRows.Next() {
 		var family string
 		var total any
-		if err := artifactRows.Scan(&family, &total); err != nil {
-			artifactRows.Close()
-			return stats.InventoryCounts{}, err
+		if scanErr := artifactRows.Scan(&family, &total); scanErr != nil {
+			return stats.InventoryCounts{}, errors.Join(scanErr, closeRows(artifactRows))
 		}
 		count, ok := integer(total)
 		if !ok || count < 0 {
-			artifactRows.Close()
-			return stats.InventoryCounts{}, &InvalidStoredColumnError{Column: "artifact count", Expected: "a non-negative integer"}
+			columnErr := &InvalidStoredColumnError{Column: "artifact count", Expected: "a non-negative integer"}
+			return stats.InventoryCounts{}, errors.Join(columnErr, closeRows(artifactRows))
 		}
 		result.Artifacts = append(result.Artifacts, stats.ArtifactCountRow{Family: family, Total: count})
 	}
-	if err := closeRows(artifactRows); err != nil {
-		return stats.InventoryCounts{}, err
+	if rowsErr := closeRows(artifactRows); rowsErr != nil {
+		return stats.InventoryCounts{}, rowsErr
 	}
 
 	candidateRows, err := db.QueryContext(ctx, `SELECT family, status, COUNT(*) FROM pc_artifact_candidate_heads
@@ -94,13 +93,12 @@ func (r StatisticsRepository) Inventory(
 		var family, status string
 		var total any
 		if err := candidateRows.Scan(&family, &status, &total); err != nil {
-			candidateRows.Close()
-			return stats.InventoryCounts{}, err
+			return stats.InventoryCounts{}, errors.Join(err, closeRows(candidateRows))
 		}
 		count, ok := integer(total)
 		if !ok || count < 0 {
-			candidateRows.Close()
-			return stats.InventoryCounts{}, &InvalidStoredColumnError{Column: "candidate count", Expected: "a non-negative integer"}
+			columnErr := &InvalidStoredColumnError{Column: "candidate count", Expected: "a non-negative integer"}
+			return stats.InventoryCounts{}, errors.Join(columnErr, closeRows(candidateRows))
 		}
 		result.Candidates = append(result.Candidates, stats.CandidateCountRow{Family: family, Status: status, Total: count})
 	}
@@ -146,8 +144,7 @@ func (StatisticsRepository) MemoryEntryStates(
 	for rows.Next() {
 		var versionID, kind string
 		if err := rows.Scan(&versionID, &kind); err != nil {
-			rows.Close()
-			return nil, err
+			return nil, errors.Join(err, closeRows(rows))
 		}
 		kinds[versionID] = kind
 	}
@@ -234,7 +231,7 @@ func (r StatisticsRepository) Usage(
 	db DBTX,
 	scopeID string,
 	startDate, endDate time.Time,
-) ([]stats.StoredModelUsage, error) {
+) (result []stats.StoredModelUsage, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return nil, err
 	}
@@ -249,8 +246,8 @@ func (r StatisticsRepository) Usage(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make([]stats.StoredModelUsage, 0)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make([]stats.StoredModelUsage, 0)
 	for rows.Next() {
 		var dateValue, requests, input, output, inputComplete, outputComplete any
 		var purpose, operation string
@@ -335,7 +332,7 @@ func (r StatisticsRepository) RecallUsage(
 	scopeID string,
 	startDate, endDate time.Time,
 	profile inference.TokenEstimatorProfile,
-) ([]stats.StoredRecallTokenUsage, error) {
+) (result []stats.StoredRecallTokenUsage, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return nil, err
 	}
@@ -351,8 +348,8 @@ func (r StatisticsRepository) RecallUsage(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make([]stats.StoredRecallTokenUsage, 0)
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
+	result = make([]stats.StoredRecallTokenUsage, 0)
 	for rows.Next() {
 		var dateValue, preparations, ready, comparable, baseline, recalled any
 		if err := rows.Scan(&dateValue, &preparations, &ready, &comparable, &baseline, &recalled); err != nil {

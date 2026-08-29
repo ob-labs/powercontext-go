@@ -107,12 +107,12 @@ func buildApplicationServices(
 		ctx context.Context, scopeID, query string, limit int,
 	) ([]experience.SearchHit, error) {
 		var result []experience.SearchHit
-		err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 			var searchErr error
 			result, searchErr = repositories.experienceIndex.Search(ctx, tx, scopeID, query, limit)
 			return searchErr
 		})
-		return result, err
+		return result, transactionErr
 	})
 	tokenEstimator := inference.CharacterTokenEstimator()
 	contextApplication, err := pcruntime.NewContextApplicationWithRecall(
@@ -222,11 +222,11 @@ func buildApplicationServices(
 	if err != nil {
 		return applicationServices{}, err
 	}
-	if err := attachApplicationScheduler(
+	if attachErr := attachApplicationScheduler(
 		ctx, config, dependencies, lifecycle, sourceBackend,
 		memoryApplication, experienceIncubationApplication,
-	); err != nil {
-		return applicationServices{}, err
+	); attachErr != nil {
+		return applicationServices{}, attachErr
 	}
 	handoffApplication, err := pcruntime.NewHandoffApplication(lifecycle, handoffFactory, activationStore)
 	if err != nil {

@@ -19,9 +19,10 @@ import (
 	"strings"
 	"testing"
 
-	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 )
 
 func TestRuntimeStageSpansInheritApplicationContextWithoutRawScope(t *testing.T) {
@@ -52,7 +53,7 @@ func TestRuntimeStageSpansInheritApplicationContextWithoutRawScope(t *testing.T)
 		}
 		serialized := strings.Builder{}
 		for _, attribute := range stage.Attributes() {
-			serialized.WriteString(attribute.Value.Emit())
+			serialized.WriteString(attribute.Value.String())
 		}
 		if strings.Contains(serialized.String(), "private-scope") {
 			t.Fatalf("%s leaked raw Scope: %s", name, serialized.String())

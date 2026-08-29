@@ -19,8 +19,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"go.opentelemetry.io/otel/trace"
+
+	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 )
 
 const (

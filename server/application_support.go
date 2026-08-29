@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 	"github.com/ob-labs/powercontext-go/artifact/skill"

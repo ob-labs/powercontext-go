@@ -59,11 +59,13 @@ func (s *HandoffReportStore) CreateProject(ctx context.Context, value handoffrep
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) GetProject(ctx context.Context, projectID string) (handoffreport.ProjectDescriptor, error) {
 	var result handoffreport.ProjectDescriptor
 	err := s.database.Transaction(ctx, func(tx DBTX) error { var err error; result, err = s.getProject(ctx, tx, projectID); return err })
 	return result, err
 }
+
 func (s *HandoffReportStore) UpdateProject(ctx context.Context, value handoffreport.ProjectDescriptor, expected int, effectiveAt time.Time) (handoffreport.ProjectDescriptor, error) {
 	var result handoffreport.ProjectDescriptor
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -73,6 +75,7 @@ func (s *HandoffReportStore) UpdateProject(ctx context.Context, value handoffrep
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) ListProjects(ctx context.Context, cursor *string, limit int, includeArchived bool) (handoffreport.Page[handoffreport.ProjectDescriptor], error) {
 	var result handoffreport.Page[handoffreport.ProjectDescriptor]
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -82,6 +85,7 @@ func (s *HandoffReportStore) ListProjects(ctx context.Context, cursor *string, l
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) RegisterWorkstream(ctx context.Context, value handoffreport.WorkstreamDescriptor, effectiveAt time.Time) (handoffreport.WorkstreamDescriptor, error) {
 	var result handoffreport.WorkstreamDescriptor
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -91,6 +95,7 @@ func (s *HandoffReportStore) RegisterWorkstream(ctx context.Context, value hando
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) UpdateWorkstream(ctx context.Context, value handoffreport.WorkstreamDescriptor, expected int, effectiveAt time.Time) (handoffreport.WorkstreamDescriptor, error) {
 	var result handoffreport.WorkstreamDescriptor
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -100,6 +105,7 @@ func (s *HandoffReportStore) UpdateWorkstream(ctx context.Context, value handoff
 	})
 	return result, err
 }
+
 func (s *HandoffReportStore) ListWorkstreams(ctx context.Context, projectID string, cursor *string, limit int, includeArchived bool) (handoffreport.Page[handoffreport.WorkstreamDescriptor], error) {
 	var result handoffreport.Page[handoffreport.WorkstreamDescriptor]
 	err := s.database.Transaction(ctx, func(tx DBTX) error {
@@ -140,6 +146,7 @@ func (s *HandoffReportStore) createProject(ctx context.Context, tx DBTX, value h
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) getProject(ctx context.Context, tx DBTX, projectID string) (handoffreport.ProjectDescriptor, error) {
 	if err := reportIdentifier("project_id", projectID, handoffreport.MaxReportIDLength); err != nil {
 		return handoffreport.ProjectDescriptor{}, err
@@ -171,6 +178,7 @@ func (s *HandoffReportStore) findProject(ctx context.Context, tx DBTX, id string
 	row.payload, err = reportPayload(payload)
 	return row, err
 }
+
 func decodeProjectRow(row projectRow) (handoffreport.ProjectDescriptor, error) {
 	var value handoffreport.ProjectDescriptor
 	if err := unmarshalJSON(row.payload, &value); err != nil {
@@ -181,6 +189,7 @@ func decodeProjectRow(row projectRow) (handoffreport.ProjectDescriptor, error) {
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) updateProject(ctx context.Context, tx DBTX, value handoffreport.ProjectDescriptor, expected int, effectiveAt time.Time) (handoffreport.ProjectDescriptor, error) {
 	if expected < 1 {
 		return handoffreport.ProjectDescriptor{}, catalogArg("expected_version", "must be a positive integer")
@@ -222,7 +231,7 @@ func (s *HandoffReportStore) updateProject(ctx context.Context, tx DBTX, value h
 	return value, nil
 }
 
-func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *string, limit int, includeArchived bool) (handoffreport.Page[handoffreport.ProjectDescriptor], error) {
+func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *string, limit int, includeArchived bool) (page handoffreport.Page[handoffreport.ProjectDescriptor], returnErr error) {
 	if err := pageArguments(cursor, limit, handoffreport.MaxReportIDLength); err != nil {
 		return handoffreport.Page[handoffreport.ProjectDescriptor]{}, err
 	}
@@ -241,13 +250,13 @@ func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *
 	if err != nil {
 		return handoffreport.Page[handoffreport.ProjectDescriptor]{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	items := []handoffreport.ProjectDescriptor{}
 	for rows.Next() {
 		var row projectRow
 		var payload any
-		if err := rows.Scan(&row.projectID, &row.projectKey, &row.version, &row.state, &payload); err != nil {
-			return handoffreport.Page[handoffreport.ProjectDescriptor]{}, err
+		if scanErr := rows.Scan(&row.projectID, &row.projectKey, &row.version, &row.state, &payload); scanErr != nil {
+			return handoffreport.Page[handoffreport.ProjectDescriptor]{}, scanErr
 		}
 		row.payload, err = reportPayload(payload)
 		if err != nil {
@@ -268,7 +277,8 @@ func (s *HandoffReportStore) listProjects(ctx context.Context, tx DBTX, cursor *
 		value := items[len(items)-1].ProjectID()
 		next = &value
 	}
-	return handoffreport.Page[handoffreport.ProjectDescriptor]{Items: items, NextCursor: next}, nil
+	page = handoffreport.Page[handoffreport.ProjectDescriptor]{Items: items, NextCursor: next}
+	return page, nil
 }
 
 type workstreamRow struct {
@@ -289,6 +299,7 @@ func (s *HandoffReportStore) findWorkstream(ctx context.Context, tx DBTX, scope 
 	row.payload, err = reportPayload(payload)
 	return row, err
 }
+
 func decodeWorkstreamRow(row workstreamRow) (handoffreport.WorkstreamDescriptor, error) {
 	var value handoffreport.WorkstreamDescriptor
 	if err := unmarshalJSON(row.payload, &value); err != nil {
@@ -300,6 +311,7 @@ func decodeWorkstreamRow(row workstreamRow) (handoffreport.WorkstreamDescriptor,
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) createWorkstream(ctx context.Context, tx DBTX, value handoffreport.WorkstreamDescriptor, effectiveAt time.Time) (handoffreport.WorkstreamDescriptor, error) {
 	if value.Version() != 1 {
 		return handoffreport.WorkstreamDescriptor{}, catalogArg("version", "a new Workstream must start at version 1")
@@ -340,6 +352,7 @@ func (s *HandoffReportStore) createWorkstream(ctx context.Context, tx DBTX, valu
 	}
 	return value, nil
 }
+
 func (s *HandoffReportStore) updateWorkstream(ctx context.Context, tx DBTX, value handoffreport.WorkstreamDescriptor, expected int, effectiveAt time.Time) (handoffreport.WorkstreamDescriptor, error) {
 	if expected < 1 {
 		return handoffreport.WorkstreamDescriptor{}, catalogArg("expected_version", "must be a positive integer")
@@ -388,7 +401,8 @@ func (s *HandoffReportStore) updateWorkstream(ctx context.Context, tx DBTX, valu
 	}
 	return value, nil
 }
-func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, projectID string, cursor *string, limit int, includeArchived bool) (handoffreport.Page[handoffreport.WorkstreamDescriptor], error) {
+
+func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, projectID string, cursor *string, limit int, includeArchived bool) (page handoffreport.Page[handoffreport.WorkstreamDescriptor], returnErr error) {
 	if err := reportIdentifier("project_id", projectID, handoffreport.MaxReportIDLength); err != nil {
 		return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, err
 	}
@@ -410,13 +424,13 @@ func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, proje
 	if err != nil {
 		return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	items := []handoffreport.WorkstreamDescriptor{}
 	for rows.Next() {
 		var row workstreamRow
 		var payload any
-		if err := rows.Scan(&row.scopeID, &row.projectID, &row.key, &row.version, &row.state, &payload); err != nil {
-			return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, err
+		if scanErr := rows.Scan(&row.scopeID, &row.projectID, &row.key, &row.version, &row.state, &payload); scanErr != nil {
+			return handoffreport.Page[handoffreport.WorkstreamDescriptor]{}, scanErr
 		}
 		row.payload, err = reportPayload(payload)
 		if err != nil {
@@ -437,7 +451,8 @@ func (s *HandoffReportStore) listWorkstreams(ctx context.Context, tx DBTX, proje
 		value := items[len(items)-1].ScopeID()
 		next = &value
 	}
-	return handoffreport.Page[handoffreport.WorkstreamDescriptor]{Items: items, NextCursor: next}, nil
+	page = handoffreport.Page[handoffreport.WorkstreamDescriptor]{Items: items, NextCursor: next}
+	return page, nil
 }
 
 func reportIdentifier(field, value string, maximum int) error {
@@ -449,6 +464,7 @@ func reportIdentifier(field, value string, maximum int) error {
 	}
 	return nil
 }
+
 func pageArguments(cursor *string, limit, maximum int) error {
 	if cursor != nil {
 		if err := reportIdentifier("cursor", *cursor, maximum); err != nil {
@@ -460,6 +476,7 @@ func pageArguments(cursor *string, limit, maximum int) error {
 	}
 	return nil
 }
+
 func catalogArg(field, detail string) error {
 	return &handoffreport.CatalogArgumentError{Field: field, Detail: detail}
 }
@@ -470,12 +487,15 @@ func reportNullableString(value *string) any {
 	}
 	return *value
 }
+
 func projectConflict(id string, expected, current *int, detail string) error {
 	return &handoffreport.ProjectConflictError{ProjectID: id, ExpectedVersion: expected, CurrentVersion: current, Detail: detail}
 }
+
 func workstreamConflict(id string, expected, current *int, detail string) error {
 	return &handoffreport.WorkstreamConflictError{ScopeID: id, ExpectedVersion: expected, CurrentVersion: current, Detail: detail}
 }
+
 func reportPayload(value any) ([]byte, error) {
 	switch typed := value.(type) {
 	case string:
@@ -486,6 +506,7 @@ func reportPayload(value any) ([]byte, error) {
 		return nil, &InvalidStoredColumnError{Column: "payload", Expected: "text"}
 	}
 }
+
 func semanticActivityPayload(payload []byte) ([]byte, error) {
 	var value map[string]any
 	if err := unmarshalJSON(payload, &value); err != nil {
@@ -495,6 +516,7 @@ func semanticActivityPayload(payload []byte) ([]byte, error) {
 	delete(value, "observed_at")
 	return marshalJSON(value)
 }
+
 func duplicateStrings(values []handoffreport.ActivitySource) []handoffreport.ActivitySource {
 	if values == nil {
 		return nil

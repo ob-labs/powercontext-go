@@ -135,7 +135,7 @@ func loadEnvironmentFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("open benchmark environment file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 4<<10), 1<<20)
 	for line := 1; scanner.Scan(); line++ {

@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/ghodss/yaml"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 

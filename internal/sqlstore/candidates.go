@@ -118,7 +118,7 @@ func (r *CandidateRepository) List(
 	status review.Status,
 	family, cursor *string,
 	limit int,
-) (review.Page, error) {
+) (page review.Page, returnErr error) {
 	if err := requireScope(scopeID); err != nil {
 		return review.Page{}, err
 	}
@@ -151,7 +151,7 @@ func (r *CandidateRepository) List(
 	if err != nil {
 		return review.Page{}, err
 	}
-	defer rows.Close()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	values := make([]review.Snapshot, 0, limit+1)
 	for rows.Next() {
 		candidate, err := r.scanAndDecode(rows)
@@ -172,7 +172,8 @@ func (r *CandidateRepository) List(
 		value := values[len(values)-1].ID()
 		next = &value
 	}
-	return review.Page{Candidates: values, NextCursor: next}, nil
+	page = review.Page{Candidates: values, NextCursor: next}
+	return page, nil
 }
 
 func (r *CandidateRepository) Revise(
@@ -190,8 +191,8 @@ func (r *CandidateRepository) Revise(
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireProposal(current.Family(), proposal); err != nil {
-		return nil, err
+	if proposalErr := r.requireProposal(current.Family(), proposal); proposalErr != nil {
+		return nil, proposalErr
 	}
 	revised, err := review.NewCandidate(
 		candidateID, current.Version()+1, current.Family(), review.Pending, proposal,
@@ -200,8 +201,8 @@ func (r *CandidateRepository) Revise(
 	if err != nil {
 		return nil, err
 	}
-	if err := r.insertVersion(ctx, db, scopeID, revised); err != nil {
-		return nil, err
+	if insertErr := r.insertVersion(ctx, db, scopeID, revised); insertErr != nil {
+		return nil, insertErr
 	}
 	result, err := db.ExecContext(ctx, `UPDATE pc_artifact_candidate_heads SET version = ?
         WHERE scope_id = ? AND candidate_id = ? AND version = ? AND status = ?`,
