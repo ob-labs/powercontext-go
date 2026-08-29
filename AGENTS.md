@@ -130,3 +130,7 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When a repository gate mirrors an external structured schema, validate every
+  supported variant's required attributes and keep a valid fixture plus a
+  failing mutant for each variant boundary. Recheck the assumptions against
+  the current official schema before changing the validator.
