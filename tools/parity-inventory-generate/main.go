@@ -165,8 +165,8 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 	}
 
 	var trace traceabilityTable
-	if err := readJSONLoose(filepath.Join(root, traceabilityPath), &trace); err != nil {
-		return fmt.Errorf("read traceability table: %w", err)
+	if loadErr := readJSONLoose(filepath.Join(root, traceabilityPath), &trace); loadErr != nil {
+		return fmt.Errorf("read traceability table: %w", loadErr)
 	}
 	if trace.OracleCommit != contract.FrozenOracle.Commit {
 		return fmt.Errorf("traceability Oracle commit = %s, contract frozen Oracle = %s", trace.OracleCommit, contract.FrozenOracle.Commit)
@@ -177,8 +177,8 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 	}
 
 	var rules ruleSet
-	if err := readJSON(filepath.Join(root, rulesPath), &rules); err != nil {
-		return fmt.Errorf("read inventory rules: %w", err)
+	if loadErr := readJSON(filepath.Join(root, rulesPath), &rules); loadErr != nil {
+		return fmt.Errorf("read inventory rules: %w", loadErr)
 	}
 	if rules.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported rules schema %d", rules.SchemaVersion)
@@ -227,9 +227,9 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 		resolved := make([]evidence, 0, len(references))
 		for _, reference := range references {
 			reference = strings.ReplaceAll(reference, "{python_test}", test.Name)
-			value, err := resolveEvidence(root, reference)
-			if err != nil {
-				return fmt.Errorf("%s: %w", key, err)
+			value, resolveErr := resolveEvidence(root, reference)
+			if resolveErr != nil {
+				return fmt.Errorf("%s: %w", key, resolveErr)
 			}
 			resolved = append(resolved, value)
 		}
