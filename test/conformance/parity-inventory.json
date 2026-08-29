@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 641,
-  "pending_case_count": 118,
+  "mapped_case_count": 643,
+  "pending_case_count": 116,
   "entries": [
     {
       "python": {
@@ -8473,8 +8473,15 @@
         "line": 47
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/docker_contract_test.go",
+          "test": "TestDockerImageDeclaresControlledNonLoopbackBind"
+        }
+      ]
     },
     {
       "python": {
@@ -8483,8 +8490,15 @@
         "line": 53
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/docker_contract_test.go",
+          "test": "TestDockerImageServerCommandStartsWithDeclaredEnvironment"
+        }
+      ]
     },
     {
       "python": {
