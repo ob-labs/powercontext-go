@@ -122,12 +122,14 @@
         },
         "test_client_refuses_requests_over_non_loopback_plaintext": {
           "evidence": [
-            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault",
+            "go:client/client_test.go#TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
           ]
         },
         "test_client_refuses_a_bearer_token_over_non_loopback_plaintext": {
           "evidence": [
-            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault",
+            "go:client/client_test.go#TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
           ]
         },
         "test_client_allows_a_bearer_token_over_loopback_plaintext": {
@@ -142,12 +144,14 @@
         },
         "test_client_refuses_a_bearer_token_over_an_untrusted_caller_supplied_transport": {
           "evidence": [
-            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault",
+            "go:client/client_test.go#TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
           ]
         },
         "test_client_refuses_an_unauthenticated_untrusted_non_loopback_transport": {
           "evidence": [
-            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault"
+            "go:client/client_test.go#TestClientRejectsPlaintextNonLoopbackByDefault",
+            "go:client/client_test.go#TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
           ]
         },
         "test_server_rejects_an_unauthenticated_non_loopback_bind": {

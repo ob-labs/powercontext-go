@@ -12370,6 +12370,11 @@
           "kind": "go",
           "file": "client/client_test.go",
           "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
         }
       ]
     },
@@ -12387,6 +12392,11 @@
           "kind": "go",
           "file": "client/client_test.go",
           "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
         }
       ]
     },
@@ -12438,6 +12448,11 @@
           "kind": "go",
           "file": "client/client_test.go",
           "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
         }
       ]
     },
@@ -12455,6 +12470,11 @@
           "kind": "go",
           "file": "client/client_test.go",
           "test": "TestClientRejectsPlaintextNonLoopbackByDefault"
+        },
+        {
+          "kind": "go",
+          "file": "client/client_test.go",
+          "test": "TestClientPlaintextNonLoopbackErrorNamesPolicyWithoutLeakingURL"
         }
       ]
     },
