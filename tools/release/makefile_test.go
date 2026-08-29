@@ -167,6 +167,19 @@ func TestBuildAllUsesReadonlyModuleResolution(t *testing.T) {
 	}
 }
 
+func TestDownstreamCompatDisablesGoTestCaching(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "downstream-compat", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make downstream-compat dry-run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "test -count=1 -mod=readonly ./...") {
+		t.Fatalf("make downstream-compat can reuse a cached external-Server result:\n%s", output)
+	}
+}
+
 func TestCheckPortableBuildsEverySupportedTargetWithoutCGO(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the repository Makefile requires a POSIX shell")

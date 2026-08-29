@@ -15,9 +15,9 @@
  */
 
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startPowerContextServer } from '../scripts/e2e-server.mjs'
 
@@ -28,14 +28,14 @@ afterEach(async () => {
 })
 
 describe('DSH E2E Server startup diagnostics', () => {
-  it('reports an early child exit with bounded server logs', async () => {
+  it('reports an early child exit with the latest bounded server logs', async () => {
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'powercontext-dsh-e2e-server-'))
     createdPaths.push(fixtureDirectory)
     const fixture = join(fixtureDirectory, 'exit-seven.mjs')
     const marker = 'dsh-startup-fixture-marker'
     await writeFile(
       fixture,
-      `process.stderr.write(${JSON.stringify(marker + ' ' + 'x'.repeat(40 * 1024))}); process.exit(7)`,
+      `process.stderr.write('x'.repeat(40 * 1024) + ${JSON.stringify(' ' + marker)}); process.exit(7)`,
     )
 
     const error = await startPowerContextServer({
@@ -49,22 +49,29 @@ describe('DSH E2E Server startup diagnostics', () => {
     expect(Buffer.byteLength(error.message)).toBeLessThanOrEqual(34 * 1024)
   })
 
-  it('removes a failed startup home directory', async () => {
+  it('removes only the harness-owned home after failed startup', async () => {
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'powercontext-dsh-e2e-server-'))
     createdPaths.push(fixtureDirectory)
     const fixture = join(fixtureDirectory, 'exit-seven.mjs')
-    const home = join(fixtureDirectory, 'home')
+    const homeRecord = join(fixtureDirectory, 'home-path.txt')
+    const tempRoot = join(fixtureDirectory, 'temp-root')
     await Promise.all([
-      writeFile(fixture, 'process.exit(7)'),
-      mkdir(home),
+      writeFile(
+        fixture,
+        `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(homeRecord)}, process.env.POWERCONTEXT_HOME); process.exit(7)`,
+      ),
+      mkdir(tempRoot),
     ])
 
     await expect(startPowerContextServer({
       command: { command: process.execPath, args: [fixture] },
-      home,
+      tempRoot,
       timeoutMs: 250,
     })).rejects.toThrow('exit code 7')
 
+    const home = await readFile(homeRecord, 'utf8')
+    expect(resolve(home).startsWith(`${resolve(tempRoot)}${sep}`)).toBe(true)
+    expect(existsSync(tempRoot)).toBe(true)
     expect(existsSync(home)).toBe(false)
   })
 })

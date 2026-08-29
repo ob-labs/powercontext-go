@@ -108,7 +108,7 @@ export async function startPowerContextServer(options = {}) {
     throw new Error('Set POWERCONTEXT_ROOT to the PowerContext Go checkout that contains go.mod')
   }
   const port = await unusedPort()
-  const home = options.home || mkdtempSync(join(tmpdir(), 'pc-dsh-e2e-'))
+  const home = mkdtempSync(join(options.tempRoot || tmpdir(), 'pc-dsh-e2e-'))
   const env = {
     ...process.env,
     POWERCONTEXT_HOME: home,
@@ -146,28 +146,27 @@ export async function startPowerContextServer(options = {}) {
 }
 
 function boundedLogBuffer(limit) {
-  const chunks = []
-  let size = 0
+  let contents = Buffer.alloc(0)
   let truncated = false
   return {
     append(chunk) {
       const bytes = Buffer.from(chunk)
-      const remaining = limit - size
-      if (remaining <= 0) {
+      if (bytes.length >= limit) {
+        truncated ||= contents.length > 0 || bytes.length > limit
+        contents = Buffer.from(bytes.subarray(bytes.length - limit))
+        return
+      }
+      const combinedSize = contents.length + bytes.length
+      if (combinedSize > limit) {
+        const discarded = combinedSize - limit
+        contents = Buffer.concat([contents.subarray(discarded), bytes], limit)
         truncated = true
         return
       }
-      if (bytes.length > remaining) {
-        chunks.push(bytes.subarray(0, remaining))
-        size += remaining
-        truncated = true
-        return
-      }
-      chunks.push(bytes)
-      size += bytes.length
+      contents = Buffer.concat([contents, bytes], combinedSize)
     },
     text() {
-      const output = Buffer.concat(chunks).toString('utf8')
+      const output = contents.toString('utf8')
       return truncated ? `${output}\n[startup logs truncated at ${limit} bytes]` : output
     },
   }

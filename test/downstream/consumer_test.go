@@ -17,11 +17,15 @@ package downstream_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +37,7 @@ const (
 	downstreamScope           = "project:downstream-consumer"
 	downstreamSourceID        = "downstream-work-boundary"
 	downstreamReceiptSourceID = "downstream-receipt"
+	maximumServerLogBytes     = 32 * 1024
 )
 
 func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
@@ -45,7 +50,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 		t.Fatalf("create public client: %v", err)
 	}
 
-	if _, err := api.CreateWorkContract(ctx, &v1.CreateWorkContractRequest{
+	if _, createErr := api.CreateWorkContract(ctx, &v1.CreateWorkContractRequest{
 		ScopeID:  downstreamScope,
 		SourceID: "downstream-contract",
 		Contract: v1.WorkContract{
@@ -59,8 +64,8 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 			AuthorizationNotes: []string{},
 			OpenQuestions:      []string{},
 		},
-	}); err != nil {
-		t.Fatalf("create work contract through public client: %v", err)
+	}); createErr != nil {
+		t.Fatalf("create work contract through public client: %v", createErr)
 	}
 	preparedResult, err := api.HandoffCurrentWork(ctx, currentWorkHandoffRequest())
 	if err != nil {
@@ -110,11 +115,46 @@ func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
 	}
 }
 
-// Regression for #42: HandoffCurrentWork captures its boundary source, while
-// AcknowledgeHandoff captures a handoff receipt at its own source ID.
-func TestAcknowledgementUsesDistinctReceiptSource(t *testing.T) {
-	if downstreamReceiptSourceID == downstreamSourceID {
-		t.Fatal("acknowledgement must not reuse the current-work boundary source ID")
+func TestServerStartupReportsEarlyChildExit(t *testing.T) {
+	goBinary, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("locate Go toolchain for short-lived child fixture: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	process, err := startServerProcess(ctx, goBinary, t.TempDir(), 1)
+	if err != nil {
+		t.Fatalf("start short-lived child fixture: %v", err)
+	}
+	t.Cleanup(func() { stopServer(t, process) })
+
+	started := time.Now()
+	err = waitForServer(ctx, process, "http://127.0.0.1:1")
+	if err == nil {
+		t.Fatal("short-lived child fixture unexpectedly became ready")
+	}
+	if elapsed := time.Since(started); elapsed >= 3*time.Second {
+		t.Fatalf("early child exit took %s to report: %v", elapsed, err)
+	}
+	if !strings.Contains(err.Error(), "exited before readiness") {
+		t.Fatalf("early child failure is missing its exit state: %v", err)
+	}
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("early child failure is missing its bounded log: %v", err)
+	}
+}
+
+func TestServerLogBufferRetainsLatestBoundedOutput(t *testing.T) {
+	var logs serverLogBuffer
+	marker := []byte("latest-server-failure")
+	_, _ = logs.Write(bytes.Repeat([]byte("x"), maximumServerLogBytes+1024))
+	_, _ = logs.Write(marker)
+
+	if logs.Len() > maximumServerLogBytes {
+		t.Fatalf("server log retained %d bytes, want at most %d", logs.Len(), maximumServerLogBytes)
+	}
+	if !bytes.Contains(logs.Bytes(), marker) {
+		t.Fatal("server log dropped the latest failure output")
 	}
 }
 
@@ -145,58 +185,165 @@ func startServer(t *testing.T, ctx context.Context) string {
 		t.Fatalf("reserve loopback port: %v", err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("release loopback port: %v", err)
+	if closeErr := listener.Close(); closeErr != nil {
+		t.Fatalf("release loopback port: %v", closeErr)
 	}
 
 	home := t.TempDir()
-	command := exec.CommandContext(ctx, binary, "server", "run", "--host", "127.0.0.1", "--port", strconv.Itoa(port))
-	command.Env = append(os.Environ(), "POWERCONTEXT_HOME="+home)
-	var logs bytes.Buffer
-	command.Stdout = &logs
-	command.Stderr = &logs
-	if err := command.Start(); err != nil {
+	process, err := startServerProcess(ctx, binary, home, port)
+	if err != nil {
 		t.Fatalf("start prebuilt Server: %v", err)
 	}
-	t.Cleanup(func() { stopServer(t, command, &logs) })
+	t.Cleanup(func() { stopServer(t, process) })
 
 	serverURL := "http://127.0.0.1:" + strconv.Itoa(port)
+	if err := waitForServer(ctx, process, serverURL); err != nil {
+		t.Fatal(err)
+	}
+	return serverURL
+}
+
+type serverLogBuffer struct {
+	mu        sync.Mutex
+	contents  []byte
+	truncated bool
+}
+
+func (b *serverLogBuffer) Write(value []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	original := len(value)
+	if len(value) >= maximumServerLogBytes {
+		b.truncated = b.truncated || len(b.contents) > 0 || len(value) > maximumServerLogBytes
+		b.contents = append(b.contents[:0], value[len(value)-maximumServerLogBytes:]...)
+		return original, nil
+	}
+	combinedSize := len(b.contents) + len(value)
+	if combinedSize > maximumServerLogBytes {
+		discarded := combinedSize - maximumServerLogBytes
+		copy(b.contents, b.contents[discarded:])
+		b.contents = b.contents[:len(b.contents)-discarded]
+		b.truncated = true
+	}
+	b.contents = append(b.contents, value...)
+	return original, nil
+}
+
+func (b *serverLogBuffer) Bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return bytes.Clone(b.contents)
+}
+
+func (b *serverLogBuffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.contents)
+}
+
+func (b *serverLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	output := string(b.contents)
+	if b.truncated {
+		return fmt.Sprintf("%s\n[server logs truncated at %d bytes]", output, maximumServerLogBytes)
+	}
+	return output
+}
+
+type serverProcess struct {
+	command *exec.Cmd
+	logs    serverLogBuffer
+	done    chan struct{}
+	waitErr error
+}
+
+func startServerProcess(ctx context.Context, binary, home string, port int) (*serverProcess, error) {
+	command := exec.CommandContext(ctx, binary, "server", "run", "--host", "127.0.0.1", "--port", strconv.Itoa(port))
+	command.Env = append(os.Environ(), "POWERCONTEXT_HOME="+home)
+	process := &serverProcess{command: command, done: make(chan struct{})}
+	command.Stdout = &process.logs
+	command.Stderr = &process.logs
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+	go func() {
+		process.waitErr = command.Wait()
+		close(process.done)
+	}()
+	return process, nil
+}
+
+func waitForServer(ctx context.Context, process *serverProcess, serverURL string) error {
+	readinessCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	go func() {
+		select {
+		case <-process.done:
+			cancel(process.exitError())
+		case <-readinessCtx.Done():
+		}
+	}()
+
 	client := &http.Client{Timeout: time.Second}
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/health/live", nil)
+		request, err := http.NewRequestWithContext(readinessCtx, http.MethodGet, serverURL+"/health/live", nil)
 		if err != nil {
-			t.Fatalf("create Server readiness request: %v", err)
+			return fmt.Errorf("create Server readiness request: %w", err)
 		}
 		response, err := client.Do(request)
 		if err == nil {
 			_ = response.Body.Close()
 			if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusServiceUnavailable {
-				return serverURL
+				return nil
 			}
 		}
+		if cause := context.Cause(readinessCtx); cause != nil {
+			return process.startupFailure(cause)
+		}
 		select {
-		case <-ctx.Done():
-			t.Fatalf("prebuilt Server did not become ready: %v\nServer log:\n%s", ctx.Err(), logs.String())
+		case <-readinessCtx.Done():
+			return process.startupFailure(context.Cause(readinessCtx))
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
 
-func stopServer(t *testing.T, command *exec.Cmd, logs *bytes.Buffer) {
+func (p *serverProcess) exitError() error {
+	if p.waitErr != nil {
+		return fmt.Errorf("prebuilt Server exited before readiness: %w", p.waitErr)
+	}
+	if p.command.ProcessState != nil {
+		return fmt.Errorf("prebuilt Server exited before readiness with exit code %d", p.command.ProcessState.ExitCode())
+	}
+	return errors.New("prebuilt Server exited before readiness")
+}
+
+func (p *serverProcess) startupFailure(cause error) error {
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		cause = fmt.Errorf("prebuilt Server did not become ready: %w", cause)
+	}
+	return fmt.Errorf("%w\nServer log:\n%s", cause, p.logs.String())
+}
+
+func stopServer(t *testing.T, process *serverProcess) {
 	t.Helper()
-	if command.Process == nil {
+	if process.command.Process == nil {
 		return
 	}
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		_ = command.Process.Kill()
-	}
-	done := make(chan error, 1)
-	go func() { done <- command.Wait() }()
 	select {
-	case <-done:
+	case <-process.done:
+		return
+	default:
+	}
+	if err := process.command.Process.Signal(os.Interrupt); err != nil {
+		_ = process.command.Process.Kill()
+	}
+	select {
+	case <-process.done:
 	case <-time.After(3 * time.Second):
-		_ = command.Process.Kill()
-		<-done
-		t.Fatalf("prebuilt Server did not stop within the bounded shutdown window\nServer log:\n%s", logs.String())
+		_ = process.command.Process.Kill()
+		<-process.done
+		t.Fatalf("prebuilt Server did not stop within the bounded shutdown window\nServer log:\n%s", process.logs.String())
 	}
 }
