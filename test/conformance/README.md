@@ -4,6 +4,16 @@ This directory makes the Python `v0.0.2` implementation at commit
 `3a6cb0151670eaff7dc0293466edd673124e80da` an executable Oracle rather than
 an informal reference.
 
+- `parity-contract.json` records the upstream parity identity as four
+  separate concepts: the upstream repository, the exact target SHA, the
+  frozen release Oracle, and the active parity target. `parity_contract_test.go`
+  proves the frozen Oracle commit is identical across the contract, the Go
+  test constant, `manifest.json`, and the `frozen-oracle` CI checkout, and
+  rejects any conflation between the frozen Oracle and the parity targets.
+  Update the active parity target only deliberately: confirm the upstream CI
+  run at the new commit is green, record the new exact target SHA and its
+  test inventory together in one reviewed change, and keep the frozen
+  Oracle untouched until a new versioned Oracle directory is accepted.
 - `testdata/python-v0.0.2/manifest.json` freezes OpenAPI, SQLite schema,
   Prompt, fixture, and Python-test inventories.
 - `traceability.json` inventories every one of the 622 frozen Python test

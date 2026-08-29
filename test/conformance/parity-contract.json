@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "oceanbase/powercontext",
+    "url": "https://github.com/oceanbase/powercontext",
+    "default_branch": "master"
+  },
+  "frozen_release_oracle": {
+    "commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
+    "baseline": "python-v0.0.2",
+    "evidence_directory": "test/conformance/testdata/python-v0.0.2"
+  },
+  "exact_target_sha": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5",
+  "target_test_case_count": 759,
+  "active_parity_target": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5"
+}
