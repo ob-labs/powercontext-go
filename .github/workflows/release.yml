@@ -18,6 +18,7 @@ jobs:
   prepare:
     name: Freeze release identity
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       build_date: ${{ steps.release.outputs.build_date }}
       commit: ${{ steps.release.outputs.commit }}
@@ -265,6 +266,7 @@ jobs:
     name: Attach checksummed release assets
     needs: [prepare, binaries, images]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:

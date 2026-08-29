@@ -46,6 +46,9 @@ example, privacy-safe `log/slog` setup under `internal/observability/logging`.
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the full
 directory map and dependency rules.
 
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the supported Go policy, change boundaries, validation requirements, and
+pull request contract.
+
 ## Build and verify
 
 The standard build uses CGO and statically embeds the same sqlite-vec 0.1.9

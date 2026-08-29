@@ -1,0 +1,49 @@
+name: Feature request
+description: Request a bounded capability or quality improvement
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user, compatibility, maintenance, or assurance problem needs to be solved?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: Describe the externally verifiable final behavior or gate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Proposed scope
+      description: List the smallest files, surfaces, or jobs that need to change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: Which tests, commands, generated checks, or runtime observations will prove completion?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I checked that this work is not already assigned or implemented by an open pull request.
+          required: true
+        - label: I will keep repair, tooling, governance, generator, and feature behavior changes independently reviewable.
+          required: true
+        - label: I will not satisfy the proposal by weakening tests, broadening exclusions, or converting execution into skips.
+          required: true

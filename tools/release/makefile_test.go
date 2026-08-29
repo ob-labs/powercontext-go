@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,26 +26,132 @@ import (
 	"testing"
 )
 
-func TestBareMakeKeepsGenerateAsDefaultGoal(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the repository Makefile requires a POSIX shell")
-	}
-
-	repository := filepath.Clean(filepath.Join("..", ".."))
-	fakeGo := filepath.Join(t.TempDir(), "go")
-	if err := os.WriteFile(fakeGo, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	command := exec.CommandContext(t.Context(), "make", "--dry-run", "GO="+fakeGo)
-	command.Dir = repository
-	output, err := command.CombinedOutput()
+func TestBareMakeListsSupportedTargets(t *testing.T) {
+	defaultOutput, err := runRepositoryMake(t, nil, "", "--no-print-directory")
 	if err != nil {
-		t.Fatalf("make dry-run failed: %v\n%s", err, output)
+		t.Fatalf("run default Make goal: %v\n%s", err, defaultOutput)
 	}
-	if first := firstGeneratedCommand(string(output)); !strings.Contains(first, "generate ./openapi") {
-		t.Fatalf("bare make first command = %q, want generate default goal", first)
+	helpOutput, err := runRepositoryMake(t, nil, "", "--no-print-directory", "help")
+	if err != nil {
+		t.Fatalf("run Make help goal: %v\n%s", err, helpOutput)
 	}
+	if defaultOutput != helpOutput {
+		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
+	}
+	for _, target := range []string{"lint", "check", "check-portable", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+		if !strings.Contains(helpOutput, "  "+target+" ") {
+			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
+		}
+	}
+}
+
+func TestMakefileRejectsFailedPipelines(t *testing.T) {
+	const probe = `.PHONY: strict-shell-probe
+strict-shell-probe:
+	@false | true
+	@printf 'strict shell did not stop\n'
+`
+	output, err := runRepositoryMake(
+		t,
+		nil,
+		probe,
+		"--no-print-directory",
+		"-f", "Makefile",
+		"-f", "-",
+		"strict-shell-probe",
+	)
+	if err == nil {
+		t.Fatalf("failed pipeline did not stop Make\n%s", output)
+	}
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
+		t.Fatalf("run strict Make probe: %v\n%s", err, output)
+	}
+	if strings.Contains(output, "strict shell did not stop") {
+		t.Fatalf("Make continued after a failed pipeline\n%s", output)
+	}
+}
+
+func TestMakefileMissingCredentialTargetsKeepActionableErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		target    string
+		variables []string
+		want      string
+	}{
+		{
+			name:      "OceanBase URL",
+			target:    "test-oceanbase-live",
+			variables: []string{"POWERCONTEXT_TEST_OCEANBASE_URL"},
+			want:      "POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database",
+		},
+		{
+			name:   "real provider model",
+			target: "real-provider-test",
+			variables: []string{
+				"POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL",
+				"POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL",
+			},
+			want: "set at least one POWERCONTEXT_REAL_SMOKE_*_MODEL variable",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			output, err := runRepositoryMake(
+				t,
+				environmentWithout(test.variables...),
+				"",
+				"--no-print-directory",
+				test.target,
+			)
+			if err == nil {
+				t.Fatalf("make %s succeeded without required configuration\n%s", test.target, output)
+			}
+			if _, ok := errors.AsType[*exec.ExitError](err); !ok {
+				t.Fatalf("run make %s: %v\n%s", test.target, err, output)
+			}
+			if !strings.Contains(output, test.want) {
+				t.Errorf("make %s output is missing %q\n%s", test.target, test.want, output)
+			}
+			if strings.Contains(output, "unbound variable") {
+				t.Errorf("make %s exposed a shell nounset error instead of the target guidance\n%s", test.target, output)
+			}
+		})
+	}
+}
+
+func runRepositoryMake(t *testing.T, environment []string, stdin string, arguments ...string) (string, error) {
+	t.Helper()
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", arguments...)
+	command.Dir = repository
+	command.Env = environment
+	if stdin != "" {
+		command.Stdin = strings.NewReader(stdin)
+	}
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func environmentWithout(names ...string) []string {
+	environment := os.Environ()
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		excluded := false
+		for _, candidate := range names {
+			if strings.EqualFold(name, candidate) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func TestBuildAllUsesReadonlyModuleResolution(t *testing.T) {
@@ -253,19 +360,6 @@ func TestCoverageCheckValidatesThresholdInputs(t *testing.T) {
 			}
 		})
 	}
-}
-
-func firstGeneratedCommand(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(line, "make") && (strings.Contains(line, "Entering directory") ||
-			strings.Contains(line, "Leaving directory")) {
-			continue
-		}
-		if strings.TrimSpace(line) != "" {
-			return line
-		}
-	}
-	return ""
 }
 
 func TestLintToolInstallUsesProjectSelectedGoVersion(t *testing.T) {

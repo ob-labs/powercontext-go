@@ -1,0 +1,93 @@
+name: Contract or platform proposal
+description: Propose a change to a compatibility-sensitive contract or ownership boundary
+title: "proposal: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for public API, persistence, wire behavior, lifecycle or concurrency ownership, and supported platform changes. Use the feature request form for bounded capabilities that do not change those contracts.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What compatibility, ownership, or platform problem needs a design decision?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      description: Which compatibility-sensitive boundary is affected most directly?
+      options:
+        - Public Go API
+        - HTTP, MCP, or other wire behavior
+        - Persistence or migration format
+        - Lifecycle or concurrency ownership
+        - Supported Go toolchain or platform
+        - Other compatibility-sensitive boundary
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: Describe the externally verifiable result of the proposed change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration impact
+      description: Identify preserved behavior, breaking changes, migration requirements, and affected consumers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Proposed scope
+      description: List the smallest packages, contracts, files, or jobs that need to change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: State adjacent behavior that must remain unchanged or be handled separately.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe simpler alternatives and why they do not meet the required outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: Which public-entrypoint tests, compatibility checks, migrations, or runtime observations will prove completion?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I checked that this proposal is not already assigned or implemented by an open pull request.
+          required: true
+        - label: I will keep repair, tooling, governance, generator, and feature behavior changes independently reviewable.
+          required: true
+        - label: I will not satisfy the proposal by weakening tests, broadening exclusions, or converting execution into skips.
+          required: true

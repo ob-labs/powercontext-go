@@ -1,0 +1,82 @@
+name: Windows contract checkout
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-contract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-contract:
+    name: windows-contract
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - name: Check out with repository attributes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify LF attributes and frozen fixture hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $textPaths = @(
+            '.gitattributes',
+            'Makefile',
+            'go.mod',
+            'go.sum',
+            'openapi/powercontext.yaml',
+            'api/v1/oas_client_gen.go',
+            'client/invoker_gen.go',
+            'internal/mcpapi/schemas_gen.go',
+            'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
+            'test/conformance/testdata/python-v0.0.2/manifest.json',
+            'artifact/memory/prompts/conversation.txt',
+            'evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl'
+          )
+          foreach ($path in $textPaths) {
+            $attribute = git check-attr eol -- $path
+            if ($attribute -ne "${path}: eol: lf") {
+              throw "expected LF checkout attribute for $path; got $attribute"
+            }
+            $bytes = [IO.File]::ReadAllBytes($path)
+            if ([Array]::IndexOf($bytes, [byte]13) -ge 0) {
+              throw "expected LF checkout bytes for $path"
+            }
+          }
+
+          $manifestPath = 'test/conformance/testdata/python-v0.0.2/manifest.json'
+          $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+          foreach ($property in $manifest.fixture_sha256.PSObject.Properties) {
+            $path = Join-Path (Split-Path $manifestPath) $property.Name
+            $actual = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant()
+            if ($actual -ne $property.Value) {
+              throw "frozen fixture SHA-256 mismatch for $($property.Name): got $actual, want $($property.Value)"
+            }
+          }
+
+          $contractPaths = @(
+            '.gitattributes',
+            'Makefile',
+            'go.mod',
+            'go.sum',
+            'openapi',
+            'api/v1',
+            'client/invoker_gen.go',
+            'internal/mcpapi/schemas_gen.go',
+            'integrations/dsh/plugins/powercontext/openapi/powercontext.yaml',
+            'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
+            'integrations/opencode/plugins/powercontext/src/operations.generated.ts',
+            'integrations/pi/plugins/powercontext/src/operations.generated.ts',
+            'test/conformance/testdata/python-v0.0.2'
+          )
+          & git diff --exit-code -- @contractPaths
