@@ -69,11 +69,11 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 		return err
 	}
 	encoded = append(encoded, '\n')
-	if err := os.MkdirAll(filepath.Dir(options.Output), 0o755); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(filepath.Dir(options.Output), 0o755); mkdirErr != nil {
+		return mkdirErr
 	}
-	if err := writeNewFile(options.Output, encoded, 0o644); err != nil {
-		return err
+	if writeErr := writeNewFile(options.Output, encoded, 0o644); writeErr != nil {
+		return writeErr
 	}
 	result, err := json.Marshal(&licenseInventoryResult{
 		GoModules: len(manifest.Modules), NativeDependencies: len(manifest.Native), Output: filepath.Base(options.Output),

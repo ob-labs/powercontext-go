@@ -174,3 +174,6 @@ source / artifact / trigger / inference
   pull request's own semantic changes. Verify the base is an ancestor of the
   new Head and reconcile GitHub, REST, and local diff file counts before using
   prior tests, comments, or CI as evidence.
+- When a Go function retains an outer error value, do not redeclare `err` in a
+  nested short declaration. Use operation-specific names and verify the change
+  with the pinned `make lint` policy, including `govet` shadow analysis.
