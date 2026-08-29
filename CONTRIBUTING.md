@@ -19,8 +19,11 @@ reviewable concern.
 
 1. Search open issues and pull requests for the same scope.
 2. Check whether someone is already assigned or has publicly claimed the work.
-3. Link substantial changes to a tracking issue before implementation.
-4. Keep repairs, tooling, generators, governance, and feature behavior in separate pull requests.
+3. Open a contract or platform proposal before implementing changes to public APIs, persistence formats, wire behavior,
+   lifecycle or concurrency ownership, or supported Go toolchains and platforms.
+4. Link substantial changes to a tracking issue before implementation. Narrow bug fixes and maintenance work do not
+   need a separate proposal when an existing issue already captures the scope.
+5. Keep repairs, tooling, generators, governance, and feature behavior in separate pull requests.
 
 Do not include credentials, access tokens, private source content, or unredacted production logs in an issue, commit,
 test fixture, or pull request. Report security vulnerabilities through the repository security policy rather than a

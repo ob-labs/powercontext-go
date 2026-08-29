@@ -37,6 +37,11 @@ type issueForm struct {
 	Body        []issueControl `yaml:"body"`
 }
 
+type issueFieldRequirement struct {
+	ID   string
+	Type string
+}
+
 type issueControl struct {
 	Type       string `yaml:"type"`
 	ID         string `yaml:"id"`
@@ -124,13 +129,35 @@ func checkRepository(root string) error {
 	}); err != nil {
 		return err
 	}
-	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/bug_report.yml", []string{
-		"current_behavior", "expected_behavior", "reproduction", "evidence", "environment", "confirmations",
+	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/bug_report.yml", []issueFieldRequirement{
+		{ID: "current_behavior", Type: "textarea"},
+		{ID: "expected_behavior", Type: "textarea"},
+		{ID: "reproduction", Type: "textarea"},
+		{ID: "evidence", Type: "textarea"},
+		{ID: "environment", Type: "textarea"},
+		{ID: "confirmations", Type: "checkboxes"},
 	}); err != nil {
 		return err
 	}
-	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/feature_request.yml", []string{
-		"problem", "outcome", "scope", "non_goals", "evidence", "alternatives", "confirmations",
+	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/feature_request.yml", []issueFieldRequirement{
+		{ID: "problem", Type: "textarea"},
+		{ID: "outcome", Type: "textarea"},
+		{ID: "scope", Type: "textarea"},
+		{ID: "evidence", Type: "textarea"},
+		{ID: "confirmations", Type: "checkboxes"},
+	}); err != nil {
+		return err
+	}
+	if err := checkIssueForm(root, ".github/ISSUE_TEMPLATE/proposal.yml", []issueFieldRequirement{
+		{ID: "problem", Type: "textarea"},
+		{ID: "contract_surface", Type: "dropdown"},
+		{ID: "outcome", Type: "textarea"},
+		{ID: "compatibility", Type: "textarea"},
+		{ID: "scope", Type: "textarea"},
+		{ID: "non_goals", Type: "textarea"},
+		{ID: "alternatives", Type: "textarea"},
+		{ID: "evidence", Type: "textarea"},
+		{ID: "confirmations", Type: "checkboxes"},
 	}); err != nil {
 		return err
 	}
@@ -153,7 +180,7 @@ func requirePhrases(root, name string, phrases []string) error {
 	return nil
 }
 
-func checkIssueForm(root, name string, requiredIDs []string) error {
+func checkIssueForm(root, name string, requiredFields []issueFieldRequirement) error {
 	contents, err := readRepositoryFile(root, name)
 	if err != nil {
 		return err
@@ -169,7 +196,7 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 	if strings.TrimSpace(form.Name) == "" || strings.TrimSpace(form.Description) == "" || len(form.Body) == 0 {
 		return fmt.Errorf("%s must define a name, description, and body", name)
 	}
-	seen := make(map[string]struct{})
+	seen := make(map[string]string)
 	for _, control := range form.Body {
 		if control.Type == "markdown" {
 			if strings.TrimSpace(control.Attributes.Value) == "" {
@@ -192,7 +219,7 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 		if _, exists := seen[control.ID]; exists {
 			return fmt.Errorf("%s contains duplicate field ID %q", name, control.ID)
 		}
-		seen[control.ID] = struct{}{}
+		seen[control.ID] = control.Type
 		if control.Type == "checkboxes" {
 			if len(control.Attributes.Options) == 0 {
 				return fmt.Errorf("%s checkboxes field %q must define options", name, control.ID)
@@ -217,13 +244,18 @@ func checkIssueForm(root, name string, requiredIDs []string) error {
 				}
 				seenOptions[value] = struct{}{}
 			}
-		} else if !control.Validations.Required {
+		}
+		if control.Type != "checkboxes" && !control.Validations.Required {
 			return fmt.Errorf("%s field %q must be required", name, control.ID)
 		}
 	}
-	for _, id := range requiredIDs {
-		if _, exists := seen[id]; !exists {
-			return fmt.Errorf("%s is missing required field ID %q", name, id)
+	for _, field := range requiredFields {
+		controlType, exists := seen[field.ID]
+		if !exists {
+			return fmt.Errorf("%s is missing required field ID %q", name, field.ID)
+		}
+		if controlType != field.Type {
+			return fmt.Errorf("%s required field ID %q must use type %q", name, field.ID, field.Type)
 		}
 	}
 	return nil

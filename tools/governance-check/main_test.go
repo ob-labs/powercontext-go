@@ -151,6 +151,78 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			},
 			wantError: "contains duplicate option",
 		},
+		{
+			name: "missing proposal field label",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", "      label: compatibility\n", "")
+			},
+			wantError: "must define a label",
+		},
+		{
+			name: "proposal contract surface must be a dropdown",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", `  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      options:
+        - Public Go API
+        - Persistence format
+    validations:
+      required: true
+`, `  - type: textarea
+    id: contract_surface
+    attributes:
+      label: Contract surface
+    validations:
+      required: true
+`)
+			},
+			wantError: `required field ID "contract_surface" must use type "dropdown"`,
+		},
+		{
+			name: "confirmations must be checkboxes",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", `  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I verified the report.
+          required: true
+`, `  - type: textarea
+    id: confirmations
+    attributes:
+      label: Confirmations
+    validations:
+      required: true
+`)
+			},
+			wantError: `required field ID "confirmations" must use type "checkboxes"`,
+		},
+		{
+			name: "proposal contract surface must be required",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", `  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      options:
+        - Public Go API
+        - Persistence format
+    validations:
+      required: true
+`, `  - type: dropdown
+    id: contract_surface
+    attributes:
+      label: Contract surface
+      options:
+        - Public Go API
+        - Persistence format
+`)
+			},
+			wantError: `field "contract_surface" must be required`,
+		},
 	}
 
 	for _, test := range tests {
@@ -185,8 +257,11 @@ func writeGovernanceFixture(t *testing.T) string {
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", validIssueForm("Bug report", []string{
 		"current_behavior", "expected_behavior", "reproduction", "evidence", "environment", "confirmations",
 	}))
-	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", validIssueForm("Feature proposal", []string{
-		"problem", "outcome", "scope", "non_goals", "evidence", "alternatives", "confirmations",
+	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/feature_request.yml", validIssueForm("Feature request", []string{
+		"problem", "outcome", "scope", "evidence", "confirmations",
+	}))
+	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/proposal.yml", validIssueForm("Contract proposal", []string{
+		"problem", "contract_surface", "outcome", "compatibility", "scope", "non_goals", "alternatives", "evidence", "confirmations",
 	}))
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/config.yml", "blank_issues_enabled: false\ncontact_links: []\n")
 	writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflow(true))
@@ -205,6 +280,10 @@ func validIssueForm(name string, ids []string) string {
 	var builder strings.Builder
 	builder.WriteString("name: " + name + "\ndescription: Evidence-bearing form\nbody:\n  - type: markdown\n    attributes:\n      value: Provide bounded evidence.\n")
 	for _, id := range ids {
+		if id == "contract_surface" {
+			builder.WriteString("  - type: dropdown\n    id: contract_surface\n    attributes:\n      label: Contract surface\n      options:\n        - Public Go API\n        - Persistence format\n    validations:\n      required: true\n")
+			continue
+		}
 		if id == "confirmations" {
 			builder.WriteString("  - type: checkboxes\n    id: confirmations\n    attributes:\n      label: Confirmations\n      options:\n        - label: I verified the report.\n          required: true\n")
 			continue
