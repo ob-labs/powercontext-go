@@ -188,6 +188,7 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 		t.Fatal("migration-gates.yml has no frozen-oracle job")
 	}
 	checkout, verify := "", ""
+	targetCheckout, targetVerify := "", ""
 	for _, step := range job.Steps {
 		switch step.Name {
 		case "Check out frozen Python Oracle":
@@ -203,6 +204,19 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			if !validOracleIdentityCommand(step.Run, contract.FrozenReleaseOracle.Commit) {
 				t.Errorf("Verify Oracle identity step does not pin the contract frozen Oracle %q", contract.FrozenReleaseOracle.Commit)
 			}
+		case "Check out the active parity target":
+			targetCheckout = step.Name
+			if step.With.Repository != contract.Upstream.Repository {
+				t.Errorf("parity target checkout repository = %q, want the contract upstream %q", step.With.Repository, contract.Upstream.Repository)
+			}
+			if step.With.Ref != contract.ExactTargetSHA {
+				t.Errorf("parity target checkout ref = %q, want the contract exact target SHA %q", step.With.Ref, contract.ExactTargetSHA)
+			}
+		case "Verify parity target identity":
+			targetVerify = step.Name
+			if !strings.Contains(step.Run, contract.ExactTargetSHA) {
+				t.Errorf("Verify parity target identity step does not pin the contract exact target SHA %q", contract.ExactTargetSHA)
+			}
 		}
 	}
 	if checkout == "" {
@@ -210,6 +224,12 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	}
 	if verify == "" {
 		t.Error("frozen-oracle job has no 'Verify Oracle identity' step")
+	}
+	if targetCheckout == "" {
+		t.Error("frozen-oracle job has no 'Check out the active parity target' step")
+	}
+	if targetVerify == "" {
+		t.Error("frozen-oracle job has no 'Verify parity target identity' step")
 	}
 }
 
