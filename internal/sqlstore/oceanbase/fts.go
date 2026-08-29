@@ -96,7 +96,7 @@ func (MemoryFTSIndex) Search(
 	if err != nil {
 		return memory.SearchChannels{}, err
 	}
-	defer func() { returnErr = errors.Join(returnErr, closeRows(rows)) }()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	hits := make([]memory.ChannelHit, 0)
 	for rows.Next() {
 		var artifactID, entryID, versionID, text string
@@ -194,7 +194,7 @@ func (ExperienceFTSIndex) Search(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { returnErr = errors.Join(returnErr, closeRows(rows)) }()
+	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	hits = make([]experience.SearchHit, 0, limit)
 	for rows.Next() {
 		var artifactID string

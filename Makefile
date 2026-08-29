@@ -1,4 +1,5 @@
 GO ?= go
+GOFMT ?= gofmt
 GOCACHE ?=
 GOMODCACHE ?=
 PNPM ?= pnpm
@@ -7,8 +8,12 @@ LICENSE_EYE ?= $(GO) run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.
 
 TOOLS_BIN := $(CURDIR)/.tools/bin
 GOLANGCI_LINT_VERSION := v2.13.1
+GOLANGCI_LINT_VERSION_TEXT := $(patsubst v%,%,$(GOLANGCI_LINT_VERSION))
 GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
-GOLANGCI_LINT_STAMP := $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)
+PROJECT_GO_TOOLCHAIN = $(shell $(GO) env GOVERSION)
+GOLANGCI_LINT_STAMP = $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+
+.DEFAULT_GOAL := generate
 
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
@@ -23,11 +28,13 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	package-standard package-full clean
 
-$(GOLANGCI_LINT): Makefile
+$(GOLANGCI_LINT): Makefile go.mod
 	@mkdir -p "$(TOOLS_BIN)"
-	GOBIN="$(TOOLS_BIN)" $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 $(GOLANGCI_LINT_STAMP): $(GOLANGCI_LINT)
+	@"$(GOLANGCI_LINT)" --version | grep -q "version $(GOLANGCI_LINT_VERSION_TEXT) "
 	@$(RM) $(TOOLS_BIN)/.golangci-lint-*
 	@touch "$@"
 
@@ -66,9 +73,11 @@ license-fix:
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 
 fmt: lint-tools
+	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
 	"$(GOLANGCI_LINT)" fmt
 
 fmt-check: lint-tools
+	@$(GOFMT) -l $$(find . -name '*.go' -not -path './vendor/*') >/dev/null
 	"$(GOLANGCI_LINT)" fmt --diff
 
 vet:
