@@ -28,6 +28,7 @@ Makefile text eol=lf
 *.db binary
 *.db-shm binary
 *.db-wal binary
+*.apidiff binary
 *.png binary
 *.jpg binary
 *.jpeg binary

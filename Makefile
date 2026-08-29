@@ -19,6 +19,9 @@ GOLANGCI_LINT_VERSION_TEXT := $(patsubst v%,%,$(GOLANGCI_LINT_VERSION))
 GOLANGCI_LINT := $(TOOLS_BIN)/golangci-lint$(shell $(GO) env GOEXE)
 PROJECT_GO_TOOLCHAIN = $(shell $(GO) env GOVERSION)
 GOLANGCI_LINT_STAMP = $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+APIDIFF_VERSION := v0.0.0-20260824195058-e88cd73687aa
+APIDIFF := $(TOOLS_BIN)/apidiff$(shell $(GO) env GOEXE)
+APIDIFF_STAMP = $(TOOLS_BIN)/.apidiff-$(APIDIFF_VERSION)-$(PROJECT_GO_TOOLCHAIN)
 
 COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
@@ -40,8 +43,24 @@ PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 DOWNSTREAM_DIR := test/downstream
 DOWNSTREAM_BINARY := $(CURDIR)/bin/powercontext-downstream$(shell $(GO) env GOEXE)
 MODULE_INVENTORY := test/module-inventory.json
+MODULE_PATH := github.com/ob-labs/powercontext-go
+API_BASELINE := test/api-compat/pre-release.apidiff
+API_BASELINE_GENERATOR ?= $(GO) run ./tools/api-baseline
+API_COMPAT_GOFLAGS = $(strip $(GOFLAGS) -trimpath)
+PUBLIC_API_PACKAGES := \
+	$(MODULE_PATH)/api/v1 \
+	$(MODULE_PATH)/artifact \
+	$(MODULE_PATH)/artifact/experience \
+	$(MODULE_PATH)/artifact/handoff \
+	$(MODULE_PATH)/artifact/memory \
+	$(MODULE_PATH)/artifact/skill \
+	$(MODULE_PATH)/client \
+	$(MODULE_PATH)/inference \
+	$(MODULE_PATH)/server \
+	$(MODULE_PATH)/source \
+	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix generate check-generated module-check module-inventory contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat generate check-generated module-check module-inventory contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -68,6 +87,38 @@ lint: lint-tools ## Run the pinned lint policy.
 lint-fix: lint-tools ## Format and apply supported automatic lint fixes.
 	"$(GOLANGCI_LINT)" fmt
 	"$(GOLANGCI_LINT)" run --fix
+
+$(APIDIFF): Makefile go.mod
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install golang.org/x/exp/cmd/apidiff@$(APIDIFF_VERSION)
+
+$(APIDIFF_STAMP): $(APIDIFF)
+	@$(GO) version -m "$(APIDIFF)" | awk '$$1 == "mod" && $$2 == "golang.org/x/exp" && $$3 == "$(APIDIFF_VERSION)" { found = 1 } END { exit !found }'
+	@touch "$@"
+
+api-compat-tools: $(APIDIFF_STAMP) ## Install the pinned public API compatibility tool.
+
+api-baseline: ## Regenerate the approved pre-release public API baseline.
+	GOFLAGS="$(API_COMPAT_GOFLAGS)" $(API_BASELINE_GENERATOR) \
+		-output "$(API_BASELINE)" -module "$(MODULE_PATH)" $(PUBLIC_API_PACKAGES)
+
+api-compat: api-compat-tools ## Reject incompatible changes to deliberate public Go packages.
+	@if [ ! -f "$(API_BASELINE)" ]; then \
+		printf 'missing public API baseline: %s\n' "$(API_BASELINE)" >&2; \
+		exit 1; \
+	fi
+	@GOFLAGS="$(API_COMPAT_GOFLAGS)" $(API_BASELINE_GENERATOR) \
+		-check "$(API_BASELINE)" -module "$(MODULE_PATH)" $(PUBLIC_API_PACKAGES)
+	@current=$$(mktemp); \
+	trap 'rm -f "$$current"' EXIT; \
+	GOFLAGS="$(API_COMPAT_GOFLAGS)" $(API_BASELINE_GENERATOR) \
+		-output "$$current" -module "$(MODULE_PATH)" $(PUBLIC_API_PACKAGES); \
+	report=$$(GOFLAGS="$(API_COMPAT_GOFLAGS)" "$(APIDIFF)" -m -incompatible "$(API_BASELINE)" "$$current"); \
+	if [ -n "$$report" ]; then \
+		printf 'incompatible public API change:\n%s\n' "$$report" >&2; \
+		exit 1; \
+	fi
 
 generate: ## Regenerate checked-in OpenAPI and MCP outputs.
 	$(GO) generate ./openapi

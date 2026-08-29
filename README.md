@@ -30,6 +30,7 @@ Python test cases are inventoried with resolvable Go or retained-host evidence.
   providers, scheduler, endpoints, HTTP, MCP, dashboard, CLI, and
   observability. Native seekDB and sqlite-vec ownership lives below
   `internal/sqlstore`.
+
 - `integrations` contains host-native adapters for Codex, Claude Code, Bub,
   DeepSeek Harness, Hermes, LangGraph, OpenClaw, OpenCode, and Pi. They
   communicate only with the Go Server.
@@ -38,6 +39,13 @@ Python test cases are inventoried with resolvable Go or retained-host evidence.
 - `benchmark/locomo` contains operator-facing LoCoMo configuration and result
   space; its Go runner lives in `tools/locomo`, with deterministic internals in
   `internal/benchmark/locomo`.
+
+The deliberate public Go packages are checked against the approved pre-release
+baseline under `test/api-compat`. `make api-compat` permits compatible additions
+but rejects removed or incompatibly changed exported identifiers. Updating the
+baseline with `make api-baseline` requires review of the compatibility impact;
+the baseline is a pre-release change-control gate, not a declaration of Go v1
+stability before the first release.
 
 There is intentionally no `common`, `utils`, generic repository layer, or DI
 container. Shared infrastructure exists only where it has one clear owner—for
