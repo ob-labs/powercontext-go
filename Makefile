@@ -1,5 +1,5 @@
 SHELL := bash
-.SHELLFLAGS := -euo pipefail -c
+export SHELLOPTS := errexit:nounset:pipefail
 .DEFAULT_GOAL := help
 .DELETE_ON_ERROR:
 .SUFFIXES:
@@ -135,11 +135,11 @@ test-full: ## Run Full native-asset tests.
 		$(GO) test -tags '$(FULL_TAGS)' ./...
 
 test-oceanbase-live: ## Run the disposable live OceanBase compatibility smoke test.
-	@test -n "$$POWERCONTEXT_TEST_OCEANBASE_URL" || { echo 'POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database' >&2; exit 2; }
+	@test -n "$${POWERCONTEXT_TEST_OCEANBASE_URL:-}" || { echo 'POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database' >&2; exit 2; }
 	$(GO) test -count=1 -run TestLiveOceanBaseProfileSmoke -v ./test/e2e
 
 real-provider-test: ## Run explicit credentialed real-provider smoke tests.
-	@test -n "$$POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL$$POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL" || \
+	@test -n "$${POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL:-}$${POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL:-}" || \
 		{ echo 'set at least one POWERCONTEXT_REAL_SMOKE_*_MODEL variable' >&2; exit 2; }
 	$(GO) test -count=1 -run '^TestRealProviderSmoke$$' ./internal/modelprovider
 

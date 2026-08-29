@@ -130,3 +130,10 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When Make recipes enable Bash nounset or pipefail globally, expand optional
+  environment variables in preflight guards with explicit defaults and run
+  real failed-pipeline and missing-variable probes on every supported Make
+  runtime; source-text checks alone do not prove the execution contract.
+- When adding a repository-owned extensionless text file, give it an
+  explicit `text eol=lf` attribute and include it in the Windows checkout
+  attribute and clean-diff probes so `core.autocrlf` cannot silently change it.

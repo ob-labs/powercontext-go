@@ -30,6 +30,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $textPaths = @(
+            '.gitattributes',
+            'Makefile',
             'openapi/powercontext.yaml',
             'api/v1/oas_client_gen.go',
             'client/invoker_gen.go',
@@ -56,6 +58,7 @@ jobs:
 
           $contractPaths = @(
             '.gitattributes',
+            'Makefile',
             'openapi',
             'api/v1',
             'client/invoker_gen.go',
