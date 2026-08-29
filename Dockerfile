@@ -98,6 +98,14 @@ COPY --from=runtime-files /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-c
 COPY --from=runtime-files /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=runtime-files --chown=65532:65532 /out/data /var/lib/powercontext
 WORKDIR /var/lib/powercontext
+
+# Published container ports require a non-loopback bind. The image declares
+# the controlled-network opt-in so its documented invocation starts; operators
+# should still enable bearer authentication and terminate TLS before exposure.
+ENV POWERCONTEXT_SERVER_HTTP_HOST=0.0.0.0 \
+    POWERCONTEXT_SERVER_HTTP_PORT=8000 \
+    POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true
+EXPOSE 8000
 USER 65532:65532
 
 FROM runtime-base AS powercontext

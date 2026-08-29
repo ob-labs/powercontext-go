@@ -20,6 +20,17 @@ an informal reference.
   functions and records whether its evidence is case-specific or supporting.
   It is generated from `traceability-rules.json`; do not edit the generated
   table by hand.
+- `parity-inventory.json` inventories all 759 Python test cases at the
+  active parity target recorded in `parity-contract.json`. Every case
+  carries a mode (`go-port`, `cross-layer`, or `retained-host`) and a
+  status: `mapped` cases have case-specific evidence that resolves against
+  real test declarations, `pending` cases await the port that owns their
+  mode (for example WP2 for the transport surface). The 622 frozen Oracle
+  cases inherit their `traceability.json` mappings verbatim. It is
+  generated from `parity-inventory-rules.json` plus an upstream checkout
+  pinned at the contract target SHA; do not edit the generated inventory
+  by hand, and update the pinned mapped/pending counts only together with
+  the rule changes that move cases between the two states.
 - `authority_test.go` proves Python SQLite → Go read/write → Python back-read.
 - `review_database_test.go` proves Python Candidate → Go revise/approve →
   Python Artifact back-read and continued Candidate writes against the same
@@ -38,10 +49,22 @@ go run ./tools/traceability-generate
 go run ./tools/traceability-generate -check
 ```
 
-The frozen-Oracle CI job independently checks out the exact Python commit,
-runs its suite, regenerates the deterministic fixtures, and enables both
-Python back-read tests. A changed Oracle commit requires deliberate fixture
-regeneration and review; changing only a hash to silence drift is not valid.
+Regenerate or check the active parity target inventory against an upstream
+checkout pinned at the contract target SHA (the generator verifies
+`git rev-parse HEAD` before extracting):
+
+```sh
+git -C ../powercontext checkout f2ec1f75e5e1b46ad0626ab8390801b88966b6f5
+go run ./tools/parity-inventory-generate -upstream ../powercontext
+go run ./tools/parity-inventory-generate -upstream ../powercontext -check
+```
+
+The frozen-Oracle CI job checks out both the exact Oracle commit and the
+active parity target, runs the Oracle suite, regenerates the deterministic
+fixtures, verifies both generated inventories byte-for-byte, and enables
+both Python back-read tests. A changed Oracle commit requires deliberate
+fixture regeneration and review; changing only a hash to silence drift is
+not valid.
 
 The rules carry a monotonically increasing checkpoint for case-specific
 evidence. A changed Oracle case must add or update its exact `cases` mapping;

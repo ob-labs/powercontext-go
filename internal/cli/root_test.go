@@ -59,7 +59,7 @@ func TestCapabilitiesUsesEnvironmentAndWritesHumanOutput(t *testing.T) {
 		}`))
 	})
 
-	t.Setenv(clientURLVar, "http://powercontext.test")
+	t.Setenv(clientURLVar, "https://powercontext.test")
 	t.Setenv(clientTokenVar, "secret-token")
 	t.Setenv(clientTimeoutVar, "2.5")
 	var stdout, stderr bytes.Buffer
@@ -88,7 +88,7 @@ func TestCapabilitiesFormatsServerErrorWithRequestID(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	root := newCommandWithHTTPClient(VersionInfo{Version: "test"}, &stdout, &stderr, httpClient)
-	root.SetArgs([]string{"--server-url", "http://powercontext.test", "capabilities"})
+	root.SetArgs([]string{"--server-url", "https://powercontext.test", "capabilities"})
 	err := root.ExecuteContext(context.Background())
 	if err == nil || err.Error() != "PowerContext Server returned HTTP 401 (unauthorized) (request ID: request-42)" {
 		t.Fatalf("ExecuteContext() error = %v", err)

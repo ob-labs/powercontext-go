@@ -32,8 +32,9 @@ type environmentConfig struct {
 	MCPEnabled bool   `env:"MCP_ENABLED"`
 	MCPPath    string `env:"MCP_PATH"`
 
-	AuthEnabled bool   `env:"AUTH_ENABLED"`
-	AuthToken   string `env:"AUTH_TOKEN"`
+	AuthEnabled                     bool   `env:"AUTH_ENABLED"`
+	AuthToken                       string `env:"AUTH_TOKEN"`
+	AllowUnauthenticatedNonLoopback bool   `env:"ALLOW_UNAUTHENTICATED_NON_LOOPBACK"`
 
 	DashboardEnabled bool   `env:"DASHBOARD_ENABLED"`
 	DashboardScopes  string `env:"DASHBOARD_SCOPES"`
@@ -92,6 +93,16 @@ type externalSkillsEnvironment struct {
 // defaults. Nested object fields use the same one-level underscore spelling;
 // slices use JSON, matching pydantic-settings' environment representation.
 func LoadConfig() (ProcessConfig, error) {
+	return loadConfig(HTTPConfigOverride{})
+}
+
+// LoadConfigWithHTTPOverride overlays explicitly provided HTTP command-line
+// values before running the same final validation used by LoadConfig.
+func LoadConfigWithHTTPOverride(override HTTPConfigOverride) (ProcessConfig, error) {
+	return loadConfig(override)
+}
+
+func loadConfig(override HTTPConfigOverride) (ProcessConfig, error) {
 	defaults, err := defaultEnvironmentConfig()
 	if err != nil {
 		return ProcessConfig{}, err
@@ -99,7 +110,7 @@ func LoadConfig() (ProcessConfig, error) {
 	if err := env.ParseWithOptions(&defaults, env.Options{Prefix: serverEnvironmentPrefix}); err != nil {
 		return ProcessConfig{}, fmt.Errorf("server: invalid environment configuration: %w", err)
 	}
-	return buildProcessConfig(defaults)
+	return buildProcessConfig(defaults, override)
 }
 
 // DefaultConfig returns the same validated defaults used by LoadConfig,
@@ -109,7 +120,7 @@ func DefaultConfig() (ProcessConfig, error) {
 	if err != nil {
 		return ProcessConfig{}, err
 	}
-	return buildProcessConfig(defaults)
+	return buildProcessConfig(defaults, HTTPConfigOverride{})
 }
 
 func defaultEnvironmentConfig() (environmentConfig, error) {
@@ -143,7 +154,7 @@ func defaultEnvironmentConfig() (environmentConfig, error) {
 	}, nil
 }
 
-func buildProcessConfig(value environmentConfig) (ProcessConfig, error) {
+func buildProcessConfig(value environmentConfig, override HTTPConfigOverride) (ProcessConfig, error) {
 	mcpPath, err := normalizeMCPPath(value.MCPPath)
 	if err != nil {
 		return ProcessConfig{}, err
@@ -218,12 +229,13 @@ func buildProcessConfig(value environmentConfig) (ProcessConfig, error) {
 	}
 
 	config := ProcessConfig{
-		HTTP:      HTTPConfig{Host: value.HTTPHost, Port: value.HTTPPort},
-		MCP:       MCPConfig{Enabled: value.MCPEnabled, Path: mcpPath},
-		Auth:      AuthConfig{Enabled: value.AuthEnabled, Token: value.AuthToken},
-		Dashboard: DashboardConfig{Enabled: value.DashboardEnabled, Scopes: scopes},
-		Logging:   LoggingConfig{Level: strings.ToUpper(value.LoggingLevel), Format: value.LoggingFormat, Access: value.LoggingAccess},
-		Metrics:   MetricsConfig{Enabled: value.MetricsEnabled}, Tracing: TracingConfig{Enabled: value.TracingEnabled},
+		HTTP:                            HTTPConfig{Host: value.HTTPHost, Port: value.HTTPPort},
+		MCP:                             MCPConfig{Enabled: value.MCPEnabled, Path: mcpPath},
+		Auth:                            AuthConfig{Enabled: value.AuthEnabled, Token: value.AuthToken},
+		AllowUnauthenticatedNonLoopback: value.AllowUnauthenticatedNonLoopback,
+		Dashboard:                       DashboardConfig{Enabled: value.DashboardEnabled, Scopes: scopes},
+		Logging:                         LoggingConfig{Level: strings.ToUpper(value.LoggingLevel), Format: value.LoggingFormat, Access: value.LoggingAccess},
+		Metrics:                         MetricsConfig{Enabled: value.MetricsEnabled}, Tracing: TracingConfig{Enabled: value.TracingEnabled},
 		Runtime: RuntimeConfig{
 			ScopeCacheSize: value.ScopeCacheSize, SourceWindowLimit: value.SourceWindowLimit,
 			MemoryExtractionProfile: memory.ExtractionProfile(value.MemoryExtractionProfile),
@@ -259,6 +271,12 @@ func buildProcessConfig(value environmentConfig) (ProcessConfig, error) {
 		},
 		ExternalSkills: ExternalSkillsConfig{HostID: externalHostID, Targets: targets, CodexRoots: roots},
 		SchedulerPath:  value.SchedulerPath,
+	}
+	if override.Host != nil {
+		config.HTTP.Host = *override.Host
+	}
+	if override.Port != nil {
+		config.HTTP.Port = *override.Port
 	}
 	if err := config.Validate(); err != nil {
 		return ProcessConfig{}, err
