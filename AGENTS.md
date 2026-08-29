@@ -165,3 +165,7 @@ source / artifact / trigger / inference
   editing only the lockfile. Regenerate with the package-manager version pinned
   in CI, preserve required license headers, and verify both a frozen install
   and an authoritative audit eliminate every vulnerable dependency path.
+- When a test must cancel while a synchronous foreign-function call is in
+  flight, coordinate entry and release with explicit barriers instead of a
+  fixed sleep. Verify the public error and cleanup side effects under high
+  repetition on every supported architecture.
