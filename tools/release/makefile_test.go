@@ -346,20 +346,42 @@ func TestAPICompatFailsWhenCurrentBundleGenerationFails(t *testing.T) {
 	}
 	const failingBaseline = `#!/bin/sh
 set -eu
-printf 'current bundle generation failed\n' >&2
-exit 23
+mode=''
+for argument in "$@"; do
+	case "$argument" in
+	  '-check') mode='check' ;;
+	  '-output') mode='output' ;;
+	esac
+done
+if [ "$mode" = 'check' ]; then
+	exit 0
+fi
+if [ "$mode" = 'output' ]; then
+	printf 'current bundle generation failed\n' >&2
+	exit 23
+fi
+printf 'unexpected baseline generator arguments: %s\n' "$*" >&2
+exit 64
 `
 	const unexpectedAPIDiff = `#!/bin/sh
 set -eu
+printf '%s\n' "$*" >> "$API_COMPAT_CALL_LOG"
 printf 'apidiff should not run after generator failure\n' >&2
 exit 24
 `
-	output, _, _, err := runAPICompatWithScripts(t, failingBaseline, unexpectedAPIDiff)
+	output, _, apidiffLog, err := runAPICompatWithScripts(t, failingBaseline, unexpectedAPIDiff)
 	if err == nil {
 		t.Fatalf("make api-compat ignored current bundle generation failure:\n%s", output)
 	}
 	if !strings.Contains(output, "current bundle generation failed") {
 		t.Fatalf("generator failure is not actionable:\n%s", output)
+	}
+	payload, readErr := os.ReadFile(apidiffLog)
+	if readErr == nil && strings.TrimSpace(string(payload)) != "" {
+		t.Fatalf("apidiff ran after current bundle generation failed: %q", payload)
+	}
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		t.Fatal(readErr)
 	}
 }
 
