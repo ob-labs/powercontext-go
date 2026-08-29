@@ -192,8 +192,8 @@ func TestServerCommandLayersPartialCLIOverridesOverEnvironment(t *testing.T) {
 		host        string
 		port        int
 	}{
-		{"host override", map[string]string{"POWERCONTEXT_SERVER_HTTP_PORT": "8123"}, []string{"--host", "192.0.2.1"}, "192.0.2.1", 8123},
-		{"port override", map[string]string{"POWERCONTEXT_SERVER_HTTP_HOST": "192.0.2.2"}, []string{"--port", "8124"}, "192.0.2.2", 8124},
+		{"host override", map[string]string{"POWERCONTEXT_SERVER_HTTP_PORT": "8123"}, []string{"--host", "127.0.0.2"}, "127.0.0.2", 8123},
+		{"port override", map[string]string{"POWERCONTEXT_SERVER_HTTP_HOST": "127.0.0.3"}, []string{"--port", "8124"}, "127.0.0.3", 8124},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			for name, value := range test.environment {
@@ -214,6 +214,45 @@ func TestServerCommandLayersPartialCLIOverridesOverEnvironment(t *testing.T) {
 				t.Fatalf("HTTP config = %s:%d, want %s:%d", received.HTTP.Host, received.HTTP.Port, test.host, test.port)
 			}
 		})
+	}
+}
+
+func TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride(t *testing.T) {
+	called := false
+	runner := func(context.Context, *commandState, server.ProcessConfig) error {
+		called = true
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run", "--host", "0.0.0.0"})
+	err := command.ExecuteContext(context.Background())
+	if err == nil || ExitCode(err) != 2 ||
+		!strings.Contains(err.Error(), "POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true") {
+		t.Fatalf("error = %v, exit = %d", err, ExitCode(err))
+	}
+	if called {
+		t.Fatal("unsafe Server configuration reached the runner")
+	}
+}
+
+func TestServerCommandLoopbackOverrideRepairsUnsafeEnvironment(t *testing.T) {
+	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
+	t.Setenv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK", "false")
+	var received server.ProcessConfig
+	runner := func(_ context.Context, _ *commandState, config server.ProcessConfig) error {
+		received = config
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run", "--host", "127.0.0.1"})
+	if err := command.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if received.HTTP.Host != "127.0.0.1" {
+		t.Fatalf("HTTP host = %q, want repaired loopback bind", received.HTTP.Host)
 	}
 }
 
