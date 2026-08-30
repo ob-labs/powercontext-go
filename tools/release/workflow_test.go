@@ -216,6 +216,62 @@ func TestDependencyReviewRejectsUnsafePullRequestDependencyChanges(t *testing.T)
 	}
 }
 
+func TestMigrationRaceDebtValidatesTheLedgerBeforeTheFullRaceSuite(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Name           string `yaml:"name"`
+			RunsOn         string `yaml:"runs-on"`
+			TimeoutMinutes int    `yaml:"timeout-minutes"`
+			Steps          []struct {
+				Name string `yaml:"name"`
+				Uses string `yaml:"uses"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["race-debt"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no race-debt job")
+	}
+	if job.Name != "Race debt" || job.RunsOn != "ubuntu-24.04" || job.TimeoutMinutes != 30 {
+		t.Fatalf(
+			"race-debt job identity = (%q, %q, %d), want (%q, %q, %d)",
+			job.Name, job.RunsOn, job.TimeoutMinutes,
+			"Race debt", "ubuntu-24.04", 30,
+		)
+	}
+	wantSteps := []struct {
+		name string
+		uses string
+		run  string
+	}{
+		{name: "Check out", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
+		{name: "Set up the Go environment", uses: "./.github/actions/setup-go-env"},
+		{name: "Validate the race-debt ledger", run: "make race-debt-check"},
+		{name: "Run all Go tests with the race detector", run: "make test-race"},
+	}
+	if len(job.Steps) != len(wantSteps) {
+		t.Fatalf("race-debt step count = %d, want %d", len(job.Steps), len(wantSteps))
+	}
+	for index, want := range wantSteps {
+		got := job.Steps[index]
+		if got.Name != want.name || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
+			t.Fatalf(
+				"race-debt step %d = (%q, %q, %q), want (%q, %q, %q)",
+				index, got.Name, got.Uses, strings.TrimSpace(got.Run), want.name, want.uses, want.run,
+			)
+		}
+	}
+}
+
 type migrationWorkflowStep struct {
 	Name  string `yaml:"name"`
 	If    string `yaml:"if"`
@@ -248,10 +304,10 @@ func TestMigrationQualityRejectsWorktreeSideEffects(t *testing.T) {
 		},
 		{
 			name: "not final",
-			old:  "\n  portable-sdk:\n",
+			old:  "\n  race-debt:\n",
 			new: "\n      - name: Later quality step\n" +
 				"        run: true\n\n" +
-				"  portable-sdk:\n",
+				"  race-debt:\n",
 		},
 	}
 	for _, mutation := range mutations {

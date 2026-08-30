@@ -11,7 +11,7 @@ env:
 
 jobs:
   quality:
-    name: Contract, race, fuzz, and module integrity
+    name: Contract, fuzz, and module integrity
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -35,9 +35,6 @@ jobs:
 
       - name: Vet
         run: make vet
-
-      - name: Run standard tests with the race detector
-        run: make test-race
 
       - name: Fuzz high-risk parsers and byte boundaries
         run: |
@@ -68,6 +65,23 @@ jobs:
             fi
             exit 1
           fi
+
+  race-debt:
+    name: Race debt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Validate the race-debt ledger
+        run: make race-debt-check
+
+      - name: Run all Go tests with the race detector
+        run: make test-race
 
   portable-sdk:
     name: Portable SDK cross-builds

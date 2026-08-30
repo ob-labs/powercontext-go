@@ -42,10 +42,23 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "race-debt-check", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
+	}
+}
+
+func TestRaceDebtCheckUsesTheCheckedInLedger(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "race-debt-check", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make race-debt-check dry-run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "go run ./tools/race-debt -file .github/race-debt.json") {
+		t.Fatalf("make race-debt-check does not validate the checked-in ledger:\n%s", output)
 	}
 }
 
