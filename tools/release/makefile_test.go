@@ -63,6 +63,7 @@ func TestDependencySecurityScansTheStandardSourceClosure(t *testing.T) {
 		}
 	}
 }
+
 func TestCleanRemovesOnlyKnownLocalOutputs(t *testing.T) {
 	repository, absoluteErr := filepath.Abs(filepath.Clean(filepath.Join("..", "..")))
 	if absoluteErr != nil {
@@ -92,7 +93,7 @@ func TestCleanRemovesOnlyKnownLocalOutputs(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "keep", "sentinel")); err != nil {
 		t.Fatalf("make clean removed unrelated sentinel: %v", err)
-}
+	}
 }
 
 func TestModuleIntegrityRunsEveryOwnedModule(t *testing.T) {
