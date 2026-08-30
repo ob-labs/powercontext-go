@@ -242,6 +242,11 @@ source / artifact / trigger / inference
   editing only the lockfile. Regenerate with the package-manager version pinned
   in CI, preserve required license headers, and verify both a frozen install
   and an authoritative audit eliminate every vulnerable dependency path.
+- When a locked dependency manifest records public registry or distribution
+  URLs, do not make CI depend on a third-party mirror that can reject a clean
+  runner. Regenerate with the resolver version pinned in CI against the
+  official registry while preserving resolved package versions and hashes, then
+  verify the locked install and reject mirror URLs with a focused contract test.
 - When a Go release artifact is stripped, do not treat a binary scanner's
   module-only fallback as symbol-level evidence. Build an unstripped scan twin
   from the same entrypoint, tags, dependency lock, and version metadata, and
