@@ -1129,6 +1129,9 @@ func TestFmtFailsWhenGoSyntaxIsInvalid(t *testing.T) {
 	if writeModuleErr := os.WriteFile(filepath.Join(temporary, "go.mod"), []byte("module example.com/malformed\n\ngo 1.27.0\n"), 0o644); writeModuleErr != nil {
 		t.Fatal(writeModuleErr)
 	}
+	if writeSumErr := os.WriteFile(filepath.Join(temporary, "go.sum"), nil, 0o644); writeSumErr != nil {
+		t.Fatal(writeSumErr)
+	}
 	if writeSourceErr := os.WriteFile(filepath.Join(temporary, "malformed.go"), []byte("package invalid\n\nfunc broken( {\n"), 0o644); writeSourceErr != nil {
 		t.Fatal(writeSourceErr)
 	}
