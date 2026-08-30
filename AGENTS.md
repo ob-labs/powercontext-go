@@ -235,6 +235,10 @@ source / artifact / trigger / inference
   editing only the lockfile. Regenerate with the package-manager version pinned
   in CI, preserve required license headers, and verify both a frozen install
   and an authoritative audit eliminate every vulnerable dependency path.
+- When a vulnerability gate claims release-artifact coverage, scan the exact
+  binary produced by the release build in binary mode. Verify build-before-scan
+  ordering, scanner arguments, and artifact existence with executable fakes;
+  a green source-mode scan is not release-binary evidence.
 - When a test must cancel while a synchronous foreign-function call is in
   flight, coordinate entry and release with explicit barriers instead of a
   fixed sleep. Verify the public error and cleanup side effects under high
