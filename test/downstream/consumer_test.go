@@ -115,6 +115,57 @@ func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
 	}
 }
 
+func TestPublicClientMemoryPersistsAcrossGracefulServerRestart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	home := t.TempDir()
+	first, firstURL := startServerWithHome(t, ctx, home)
+	firstClient, err := client.New(firstURL, client.Options{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("create first public client: %v", err)
+	}
+	if _, rememberErr := firstClient.RememberMemory(ctx, &v1.RememberMemoryRequest{}); rememberErr == nil {
+		t.Fatal("empty Memory request was accepted")
+	} else {
+		var validationErr *client.RequestValidationError
+		if !errors.As(rememberErr, &validationErr) || validationErr.Path != "/v1/memory/remember" {
+			t.Fatalf("empty Memory request error = %#v", rememberErr)
+		}
+	}
+
+	rememberedResult, err := firstClient.RememberMemory(ctx, &v1.RememberMemoryRequest{
+		ScopeID: downstreamScope,
+		Kind:    "fact",
+		Text:    "A public client persisted this Memory entry.",
+	})
+	if err != nil {
+		t.Fatalf("remember Memory through public client: %v", err)
+	}
+	if _, ok := rememberedResult.(*v1.MemoryMutationResponseHeaders); !ok {
+		t.Fatalf("remember Memory response = %T", rememberedResult)
+	}
+	stopServer(t, first)
+
+	second, secondURL := startServerWithHome(t, ctx, home)
+	t.Cleanup(func() { stopServer(t, second) })
+	secondClient, err := client.New(secondURL, client.Options{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("create restarted public client: %v", err)
+	}
+	listedResult, err := secondClient.ListMemoryEntries(ctx, &v1.ListMemoryEntriesRequest{ScopeID: downstreamScope})
+	if err != nil {
+		t.Fatalf("list Memory through restarted public client: %v", err)
+	}
+	listed, ok := listedResult.(*v1.ListMemoryEntriesResponseHeaders)
+	if !ok {
+		t.Fatalf("list Memory response = %T", listedResult)
+	}
+	if len(listed.Response.Entries) != 1 || listed.Response.Entries[0].Text != "A public client persisted this Memory entry." {
+		t.Fatalf("Memory entries after restart = %#v", listed.Response.Entries)
+	}
+}
+
 func TestServerStartupReportsEarlyChildExit(t *testing.T) {
 	goBinary, err := exec.LookPath("go")
 	if err != nil {
@@ -176,6 +227,13 @@ func currentWorkHandoffRequest() *v1.HandoffCurrentWorkRequest {
 
 func startServer(t *testing.T, ctx context.Context) string {
 	t.Helper()
+	process, serverURL := startServerWithHome(t, ctx, t.TempDir())
+	t.Cleanup(func() { stopServer(t, process) })
+	return serverURL
+}
+
+func startServerWithHome(t *testing.T, ctx context.Context, home string) (*serverProcess, string) {
+	t.Helper()
 	binary := os.Getenv("POWERCONTEXT_DOWNSTREAM_BINARY")
 	if binary == "" {
 		t.Fatal("POWERCONTEXT_DOWNSTREAM_BINARY must name the prebuilt PowerContext Server")
@@ -189,18 +247,16 @@ func startServer(t *testing.T, ctx context.Context) string {
 		t.Fatalf("release loopback port: %v", closeErr)
 	}
 
-	home := t.TempDir()
 	process, err := startServerProcess(ctx, binary, home, port)
 	if err != nil {
 		t.Fatalf("start prebuilt Server: %v", err)
 	}
-	t.Cleanup(func() { stopServer(t, process) })
 
 	serverURL := "http://127.0.0.1:" + strconv.Itoa(port)
 	if err := waitForServer(ctx, process, serverURL); err != nil {
 		t.Fatal(err)
 	}
-	return serverURL
+	return process, serverURL
 }
 
 type serverLogBuffer struct {
