@@ -61,6 +61,83 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			wantError: "least-privilege permissions",
 		},
 		{
+			name: "missing dependency automation",
+			mutate: func(t *testing.T, root string) {
+				if err := os.Remove(filepath.Join(root, ".github", "dependabot.yml")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantError: "read .github/dependabot.yml",
+		},
+		{
+			name: "duplicate dependency ecosystem",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", `package-ecosystem: "github-actions"`, `package-ecosystem: "gomod"`)
+			},
+			wantError: `package ecosystem "gomod" must be configured exactly once`,
+		},
+		{
+			name: "dependency ecosystem outside repository root",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", `directory: "/"`, `directory: "/tools"`)
+			},
+			wantError: `package ecosystem "gomod" must monitor directory "/"`,
+		},
+		{
+			name: "dependency updates more frequent than weekly",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", `interval: "weekly"`, `interval: "daily"`)
+			},
+			wantError: `package ecosystem "gomod" must use a weekly schedule`,
+		},
+		{
+			name: "unbounded dependency pull requests",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", "open-pull-requests-limit: 4", "open-pull-requests-limit: 20")
+			},
+			wantError: `package ecosystem "gomod" must limit open pull requests to 1 through 5`,
+		},
+		{
+			name: "dependency updates without grouping",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", `    groups:
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+`, "")
+			},
+			wantError: `package ecosystem "gomod" must define group "go-minor-patch"`,
+		},
+		{
+			name: "dependency group includes major updates",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", `          - "patch"`, `          - "major"`)
+			},
+			wantError: `group "go-minor-patch" must contain only minor and patch updates`,
+		},
+		{
+			name: "dependency automation with unknown field",
+			mutate: func(t *testing.T, root string) {
+				appendFixtureFile(t, root, ".github/dependabot.yml", "unknown: true\n")
+			},
+			wantError: ".github/dependabot.yml is invalid",
+		},
+		{
+			name: "dependency automation with duplicate field",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", `    directory: "/"
+    schedule:
+`, `    directory: "/"
+    directory: "/"
+    schedule:
+`)
+			},
+			wantError: ".github/dependabot.yml is invalid",
+		},
+		{
 			name: "valid reusable workflow caller",
 			mutate: func(t *testing.T, root string) {
 				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller())
@@ -264,8 +341,41 @@ func writeGovernanceFixture(t *testing.T) string {
 		"problem", "contract_surface", "outcome", "compatibility", "scope", "non_goals", "alternatives", "evidence", "confirmations",
 	}))
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/config.yml", "blank_issues_enabled: false\ncontact_links: []\n")
+	writeFixtureFile(t, root, ".github/dependabot.yml", validDependabotConfig())
 	writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflow(true))
 	return root
+}
+
+func validDependabotConfig() string {
+	return `version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 4
+    groups:
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+    open-pull-requests-limit: 4
+    groups:
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+`
 }
 
 func validPullRequestTemplate(includeRelationship bool) string {
