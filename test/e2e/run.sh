@@ -77,7 +77,7 @@ printf '{"database":"%s","source_sha":"%s"}\n' "$database" "$source_sha" > "$out
 if [ "$database" = sqlite ]; then
     CGO_ENABLED=1 go test -count=1 -tags sqlite_fts5 -json ./test/e2e > "$output/go-test.jsonl"
     make build VERSION=ci COMMIT="$source_sha" BUILD_DATE=1970-01-01T00:00:00Z
-    go run ./tools/process-smoke -binary bin/powercontext -version ci > "$output/process-smoke.log" 2>&1
+    go run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version ci > "$output/process-smoke.log" 2>&1
     exit
 fi
 

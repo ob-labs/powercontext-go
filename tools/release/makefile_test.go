@@ -78,6 +78,73 @@ func TestSmokeTargetsVerifySecurityDefaultsFile(t *testing.T) {
 	}
 }
 
+func TestE2EAcceptancePassesSecurityDefaultsFileToProcessSmoke(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the E2E harness requires a POSIX shell")
+	}
+
+	repository, absoluteErr := filepath.Abs(filepath.Clean(filepath.Join("..", "..")))
+	if absoluteErr != nil {
+		t.Fatal(absoluteErr)
+	}
+	temporary := t.TempDir()
+	bin := filepath.Join(temporary, "bin")
+	if mkdirErr := os.Mkdir(bin, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	callLog := filepath.Join(temporary, "calls.txt")
+	const fakeCommand = `#!/bin/sh
+set -eu
+printf '%s|%s|%s\n' "$(basename "$0")" "${CGO_ENABLED:-}" "$*" >> "$CALL_LOG"
+`
+	for _, name := range []string{"go", "make"} {
+		if writeErr := os.WriteFile(filepath.Join(bin, name), []byte(fakeCommand), 0o755); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+	}
+
+	const sourceSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	command := exec.CommandContext(
+		t.Context(),
+		"sh",
+		filepath.Join(repository, "test", "e2e", "run.sh"),
+		"acceptance",
+	)
+	command.Dir = repository
+	command.Env = append(
+		environmentWithout(
+			"PATH",
+			"CALL_LOG",
+			"CGO_ENABLED",
+			"GITHUB_SHA",
+			"POWERCONTEXT_E2E_DATABASE",
+			"POWERCONTEXT_E2E_OUTPUT",
+		),
+		"PATH="+filepath.ToSlash(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"CALL_LOG="+filepath.ToSlash(callLog),
+		"GITHUB_SHA="+sourceSHA,
+		"POWERCONTEXT_E2E_DATABASE=sqlite",
+		"POWERCONTEXT_E2E_OUTPUT="+filepath.ToSlash(filepath.Join(temporary, "output")),
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run SQLite E2E acceptance harness: %v\n%s", err, output)
+	}
+	payload, readErr := os.ReadFile(callLog)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	want := []string{
+		"go|1|test -count=1 -tags sqlite_fts5 -json ./test/e2e",
+		"make||build VERSION=ci COMMIT=" + sourceSHA + " BUILD_DATE=1970-01-01T00:00:00Z",
+		"go||run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version ci",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SQLite E2E acceptance calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestDependencySecurityScansAnUnstrippedStandardServerBuild(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	temporary := t.TempDir()

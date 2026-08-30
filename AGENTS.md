@@ -160,6 +160,9 @@ source / artifact / trigger / inference
 - When a test invokes a freshly built external binary, disable result caching
   or key it to the binary content. Verify the gate reruns after the binary
   changes without changing the test package.
+- When a release or end-to-end CLI adds a required flag, inventory every direct
+  invocation instead of updating only wrapper targets. Verify each script and
+  Make entrypoint with executable fakes that assert the complete argument list.
 - When a harness recursively removes a temporary home, create the exact
   deletion target itself under any caller-supplied parent. Verify a parent
   sentinel survives failed startup cleanup.
