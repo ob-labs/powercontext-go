@@ -521,7 +521,7 @@ func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) 
 	}
 }
 
-func TestFrozenOracleFixtureGeneratorUsesTemporaryGoldenOutput(t *testing.T) {
+func TestFrozenOracleGeneratorsUseTemporaryGoldenOutput(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
 	if err != nil {
@@ -552,6 +552,9 @@ func TestFrozenOracleFixtureGeneratorUsesTemporaryGoldenOutput(t *testing.T) {
 			`cp "test/conformance/testdata/python-v0.0.2/$name" "$fixture_manifest_root/$name"`,
 			`go run ./tools/fixture-generate -python _oracle -output "$fixture_manifest_root/manifest.json"`,
 			`cmp "$fixture_manifest_root/manifest.json" "test/conformance/testdata/python-v0.0.2/manifest.json"`,
+			`parity_inventory="$RUNNER_TEMP/powercontext-parity-inventory.json"`,
+			`go run ./tools/parity-inventory-generate -upstream _target -output "$parity_inventory"`,
+			`cmp "$parity_inventory" "test/conformance/parity-inventory.json"`,
 		} {
 			if !strings.Contains(step.Run, required) {
 				t.Fatalf("frozen fixture regeneration is missing %q:\n%s", required, step.Run)
