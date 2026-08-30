@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v2"
@@ -84,6 +85,35 @@ func (option *issueOption) UnmarshalYAML(unmarshal func(any) error) error {
 type issueConfig struct {
 	BlankIssuesEnabled *bool `yaml:"blank_issues_enabled"`
 	ContactLinks       []any `yaml:"contact_links"`
+}
+
+type dependabotConfig struct {
+	Version int                `yaml:"version"`
+	Updates []dependabotUpdate `yaml:"updates"`
+}
+
+type dependabotUpdate struct {
+	PackageEcosystem      string                     `yaml:"package-ecosystem"`
+	Directory             string                     `yaml:"directory"`
+	Schedule              dependabotSchedule         `yaml:"schedule"`
+	OpenPullRequestsLimit int                        `yaml:"open-pull-requests-limit"`
+	Groups                map[string]dependabotGroup `yaml:"groups"`
+}
+
+type dependabotSchedule struct {
+	Interval string `yaml:"interval"`
+	Day      string `yaml:"day"`
+}
+
+type dependabotGroup struct {
+	Patterns    []string `yaml:"patterns"`
+	UpdateTypes []string `yaml:"update-types"`
+}
+
+type dependabotExpectation struct {
+	Ecosystem string
+	Day       string
+	Group     string
 }
 
 type workflowContract struct {
@@ -162,6 +192,9 @@ func checkRepository(root string) error {
 		return err
 	}
 	if err := checkIssueConfig(root); err != nil {
+		return err
+	}
+	if err := checkDependabotConfig(root); err != nil {
 		return err
 	}
 	return checkWorkflowContracts(root)
@@ -276,6 +309,68 @@ func checkIssueConfig(root string) error {
 	}
 	if config.ContactLinks == nil {
 		return fmt.Errorf("%s must declare contact_links, even when empty", name)
+	}
+	return nil
+}
+
+func checkDependabotConfig(root string) error {
+	const name = ".github/dependabot.yml"
+	contents, err := readRepositoryFile(root, name)
+	if err != nil {
+		return err
+	}
+	var config dependabotConfig
+	if err := yaml.UnmarshalStrict(contents, &config); err != nil {
+		return fmt.Errorf("%s is invalid: %w", name, err)
+	}
+	if config.Version != 2 {
+		return fmt.Errorf("%s must use version 2", name)
+	}
+	expectations := []dependabotExpectation{
+		{Ecosystem: "gomod", Day: "monday", Group: "go-minor-patch"},
+		{Ecosystem: "github-actions", Day: "tuesday", Group: "actions-minor-patch"},
+	}
+	if len(config.Updates) != len(expectations) {
+		return fmt.Errorf("%s must configure exactly gomod and github-actions", name)
+	}
+	updates := make(map[string][]dependabotUpdate, len(config.Updates))
+	for _, update := range config.Updates {
+		updates[update.PackageEcosystem] = append(updates[update.PackageEcosystem], update)
+	}
+	for _, expectation := range expectations {
+		matches := updates[expectation.Ecosystem]
+		if len(matches) != 1 {
+			return fmt.Errorf("package ecosystem %q must be configured exactly once", expectation.Ecosystem)
+		}
+		if err := checkDependabotUpdate(matches[0], expectation); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkDependabotUpdate(update dependabotUpdate, expectation dependabotExpectation) error {
+	if update.Directory != "/" {
+		return fmt.Errorf("package ecosystem %q must monitor directory %q", expectation.Ecosystem, "/")
+	}
+	if update.Schedule.Interval != "weekly" {
+		return fmt.Errorf("package ecosystem %q must use a weekly schedule", expectation.Ecosystem)
+	}
+	if update.Schedule.Day != expectation.Day {
+		return fmt.Errorf("package ecosystem %q must run on %s", expectation.Ecosystem, expectation.Day)
+	}
+	if update.OpenPullRequestsLimit < 1 || update.OpenPullRequestsLimit > 5 {
+		return fmt.Errorf("package ecosystem %q must limit open pull requests to 1 through 5", expectation.Ecosystem)
+	}
+	group, ok := update.Groups[expectation.Group]
+	if !ok || len(update.Groups) != 1 {
+		return fmt.Errorf("package ecosystem %q must define group %q", expectation.Ecosystem, expectation.Group)
+	}
+	if len(group.Patterns) != 1 || group.Patterns[0] != "*" {
+		return fmt.Errorf("group %q must match every dependency", expectation.Group)
+	}
+	if len(group.UpdateTypes) != 2 || !slices.Contains(group.UpdateTypes, "minor") || !slices.Contains(group.UpdateTypes, "patch") {
+		return fmt.Errorf("group %q must contain only minor and patch updates", expectation.Group)
 	}
 	return nil
 }

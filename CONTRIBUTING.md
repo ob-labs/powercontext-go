@@ -51,6 +51,14 @@ versions are the formatting authority; no mutable global linter installation is 
 Run `make coverage` when a change affects executable Go behavior. It uses race-enabled atomic coverage and rejects a
 material regression from the recorded baseline.
 
+## Dependency updates
+
+Dependabot checks Go modules every Monday and GitHub Actions every Tuesday. Minor and patch updates are grouped within
+each ecosystem; major updates remain separate so their compatibility impact is reviewable. The configuration limits
+the number of open version-update pull requests and follows the live default branch instead of naming a historical
+target branch. Dependency pull requests must not be auto-merged; they must pass the repository's normal review and CI
+contracts.
+
 ## Code and generated contracts
 
 - Match the existing package boundaries, names, and error model. Avoid unrelated refactors or speculative extension
