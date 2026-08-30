@@ -43,6 +43,7 @@ PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 DOWNSTREAM_DIR := test/downstream
 DOWNSTREAM_BINARY := $(CURDIR)/bin/powercontext-downstream$(shell $(GO) env GOEXE)
 MODULE_INVENTORY := test/module-inventory.json
+OWNED_MODULES := . $(DOWNSTREAM_DIR)
 MODULE_PATH := github.com/ob-labs/powercontext-go
 API_BASELINE := test/api-compat/pre-release.apidiff
 API_BASELINE_GENERATOR ?= $(GO) run ./tools/api-baseline
@@ -143,13 +144,21 @@ module-check: ## Verify tidy readonly module metadata and checksums.
 module-inventory: ## Verify every owned Go module has an explicit inventory entry.
 	$(GO) run ./tools/module-integrity -inventory "$(MODULE_INVENTORY)"
 
-module-integrity: lint-tools module-inventory ## Verify root and downstream Go module metadata, builds, and lint.
-	$(MAKE) module-check
-	$(MAKE) lint
-	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" mod tidy -diff
-	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" mod verify
-	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" build -mod=readonly ./...
-	cd "$(DOWNSTREAM_DIR)" && "$(GOLANGCI_LINT)" run --config "$(CURDIR)/.golangci.yml"
+module-integrity: module-inventory lint-tools ## Verify metadata, readonly build, tests, and lint for every owned Go module.
+	@set -eu; \
+	for module in $(OWNED_MODULES); do \
+		printf 'checking Go module %s\n' "$$module"; \
+		GOWORK=off $(GO) -C "$$module" mod tidy -diff; \
+		GOWORK=off $(GO) -C "$$module" mod verify; \
+		GOWORK=off $(GO) -C "$$module" build -mod=readonly ./...; \
+		if [ "$$module" = "$(DOWNSTREAM_DIR)" ]; then \
+			$(GO) build -tags '$(STANDARD_TAGS)' -o "$(DOWNSTREAM_BINARY)" ./cmd/powercontext; \
+			POWERCONTEXT_DOWNSTREAM_BINARY="$(DOWNSTREAM_BINARY)" GOWORK=off $(GO) -C "$$module" test -count=1 -mod=readonly ./...; \
+		else \
+			GOWORK=off $(GO) -C "$$module" test -count=1 -mod=readonly ./...; \
+		fi; \
+		(cd "$$module" && GOWORK=off "$(GOLANGCI_LINT)" run --config "$(CURDIR)/.golangci.yml"); \
+	done
 
 contract-test: check-generated ## Test the generated OpenAPI transport contract.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' \
