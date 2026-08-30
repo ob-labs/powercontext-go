@@ -56,9 +56,7 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 		(options.Edition != "standard" && options.Edition != "full") {
 		return errors.New("licenses requires binary, output, and standard or full edition")
 	}
-	for _, value := range strings.Fields(modules) {
-		options.Modules = append(options.Modules, value)
-	}
+	options.Modules = append(options.Modules, strings.Fields(modules)...)
 	repository, err := filepath.Abs(options.Repository)
 	if err != nil {
 		return err
@@ -71,8 +69,8 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := collectModuleGraphLicenses(&manifest, repository, options.Modules); err != nil {
-		return err
+	if collectErr := collectModuleGraphLicenses(&manifest, repository, options.Modules); collectErr != nil {
+		return collectErr
 	}
 	encoded, err := json.Marshal(&manifest, jsontext.WithIndent("  "))
 	if err != nil {
