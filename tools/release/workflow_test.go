@@ -15,6 +15,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -167,18 +168,86 @@ func TestMigrationQualityRejectsWorktreeSideEffects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contents := string(payload)
-	for _, value := range []string{
-		"Verify repository cleanliness after quality checks",
-		"if: always()",
-		"git diff --exit-code",
-		"git status --short",
-		"test -z \"$(git status --porcelain)\"",
-	} {
-		if !strings.Contains(contents, value) {
-			t.Fatalf("migration quality job is missing %q", value)
-		}
+	if err := validateMigrationQualityCleanliness(payload); err != nil {
+		t.Fatal(err)
 	}
+
+	mutations := []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "wrong job", old: "  quality:\n", new: "  renamed-quality:\n"},
+		{name: "wrong condition", old: "        if: always()\n", new: "        if: success()\n"},
+		{name: "wrong shell", old: "        shell: bash\n", new: "        shell: sh\n"},
+		{
+			name: "incomplete command",
+			old:  "          status=\"$(git status --porcelain)\"\n",
+			new:  "          status=\"\"\n",
+		},
+		{
+			name: "not final",
+			old:  "\n  portable-sdk:\n",
+			new: "\n      - name: Later quality step\n" +
+				"        run: true\n\n" +
+				"  portable-sdk:\n",
+		},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			contents := string(payload)
+			if !strings.Contains(contents, mutation.old) {
+				t.Fatalf("test mutation source %q is missing", mutation.old)
+			}
+			mutant := strings.Replace(contents, mutation.old, mutation.new, 1)
+			if err := validateMigrationQualityCleanliness([]byte(mutant)); err == nil {
+				t.Fatal("invalid migration quality cleanliness contract was accepted")
+			}
+		})
+	}
+}
+
+func validateMigrationQualityCleanliness(payload []byte) error {
+	type workflowStep struct {
+		Name  string `yaml:"name"`
+		If    string `yaml:"if"`
+		Shell string `yaml:"shell"`
+		Run   string `yaml:"run"`
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []workflowStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		return fmt.Errorf("parse migration workflow: %w", err)
+	}
+	quality, ok := workflow.Jobs["quality"]
+	if !ok {
+		return fmt.Errorf("migration-gates.yml has no quality job")
+	}
+	if len(quality.Steps) == 0 {
+		return fmt.Errorf("migration-gates.yml quality job has no steps")
+	}
+
+	got := quality.Steps[len(quality.Steps)-1]
+	got.Run = strings.TrimSpace(got.Run)
+	want := workflowStep{
+		Name:  "Verify repository cleanliness after quality checks",
+		If:    "always()",
+		Shell: "bash",
+		Run: strings.TrimSpace(`
+status="$(git status --porcelain)"
+if test -n "$status"; then
+  printf '%s\n' "$status"
+  exit 1
+fi
+`),
+	}
+	if got != want {
+		return fmt.Errorf("migration-gates.yml final quality step = %#v, want %#v", got, want)
+	}
+	return nil
 }
 
 func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) {

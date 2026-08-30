@@ -183,6 +183,10 @@ source / artifact / trigger / inference
   environment variables in preflight guards with explicit defaults and run
   real failed-pipeline and missing-variable probes on every supported Make
   runtime; source-text checks alone do not prove the execution contract.
+- When an always-run CI cleanliness step must diagnose tracked and untracked
+  side effects, capture one porcelain status before deciding success; never put
+  a fail-fast dirty-tree command ahead of the diagnostic. Verify the parsed
+  workflow contract rejects the wrong job, condition, shell, command, or order.
 - When a governance parser exempts a GitHub Actions reusable-workflow caller
   from ordinary-job requirements, require a nonblank `uses` reference and
   reject every keyword outside GitHub's supported caller-job set. Verify the
