@@ -35,7 +35,14 @@
     },
     "e2e/bub/tests/test_harbor_agent.py": {
       "mode": "retained-host",
-      "reason": "Bub harbor agent installation behavior owned by the retained Bub adapter."
+      "reason": "Bub source-checkout installation behavior adapted to the Go Server architecture without the retired Python SDK dependency.",
+      "cases": {
+        "test_install_bub_command_overrides_release_floor_for_mounted_source": {
+          "evidence": [
+            "py:integrations/bub/tests/test_packaging.py#test_source_checkout_install_uses_local_adapter_without_python_sdk_override"
+          ]
+        }
+      }
     },
     "tests/e2e/test_pydantic_ai_chain.py": {
       "mode": "cross-layer",
