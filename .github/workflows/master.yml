@@ -99,7 +99,7 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-go-env
 
-      - name: Scan the standard release binary for known vulnerabilities
+      - name: Scan the standard Server dependency surface for known vulnerabilities
         run: make dependency-security
 
   coverage:

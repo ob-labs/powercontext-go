@@ -37,7 +37,8 @@ FULL_TAGS := sqlite_fts5,local_embeddings,ORT
 VERSION ?= devel
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
+BUILD_METADATA_LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
+LDFLAGS := -s -w $(BUILD_METADATA_LDFLAGS)
 
 # Deliberate public packages that downstream Go consumers must be able to
 # import without CGO, matching the platform matrix used by CI.
@@ -138,8 +139,11 @@ $(GOVULNCHECK_STAMP): $(GOVULNCHECK)
 
 govulncheck-tools: $(GOVULNCHECK_STAMP) ## Install the pinned Go vulnerability scanner.
 
-dependency-security: govulncheck-tools build ## Scan the standard release binary for known vulnerabilities.
-	"$(GOVULNCHECK)" -mode=binary bin/powercontext
+dependency-security: govulncheck-tools ## Scan an unstripped standard Server build for known vulnerabilities.
+	mkdir -p bin
+	CGO_ENABLED=1 $(GO) build -tags '$(STANDARD_TAGS)' -trimpath \
+		-ldflags '$(BUILD_METADATA_LDFLAGS)' -o bin/powercontext-vulncheck ./cmd/powercontext
+	"$(GOVULNCHECK)" -mode=binary bin/powercontext-vulncheck
 
 generate: ## Regenerate checked-in OpenAPI and MCP outputs.
 	$(GO) generate ./openapi

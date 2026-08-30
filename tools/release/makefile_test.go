@@ -78,7 +78,7 @@ func TestSmokeTargetsVerifySecurityDefaultsFile(t *testing.T) {
 	}
 }
 
-func TestDependencySecurityScansTheBuiltReleaseBinary(t *testing.T) {
+func TestDependencySecurityScansAnUnstrippedStandardServerBuild(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	temporary := t.TempDir()
 	for _, name := range []string{"Makefile", "go.mod"} {
@@ -109,11 +109,17 @@ esac
 if [ "${1:-}" = "build" ]; then
   test "${CGO_ENABLED:-}" = "1"
   case "$*" in
-    "build -tags sqlite_fts5 -trimpath "*"-o bin/powercontext ./cmd/powercontext")
+    "build -tags sqlite_fts5 -trimpath "*"-o bin/powercontext-vulncheck ./cmd/powercontext")
       ;;
     *)
       printf 'unexpected release build: %s\n' "$*" >&2
       exit 30
+      ;;
+  esac
+  case " $* " in
+    *" -s "*|*" -w "*)
+      printf 'vulnerability scan build was stripped: %s\n' "$*" >&2
+      exit 31
       ;;
   esac
   printf 'build\n' >> "$CALL_LOG"
@@ -146,7 +152,7 @@ set -eu
 printf 'scan|%s\n' "$*" >> "$CALL_LOG"
 test "$#" -eq 2
 test "$1" = "-mode=binary"
-test "$2" = "bin/powercontext"
+test "$2" = "bin/powercontext-vulncheck"
 test -f "$2"
 `
 	if err := os.WriteFile(fakeScanner, []byte(fakeScannerScript), 0o755); err != nil {
@@ -180,7 +186,7 @@ test -f "$2"
 		t.Fatal(err)
 	}
 	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
-	want := []string{"build", "scan|-mode=binary bin/powercontext"}
+	want := []string{"build", "scan|-mode=binary bin/powercontext-vulncheck"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("dependency-security calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
