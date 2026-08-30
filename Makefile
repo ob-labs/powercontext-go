@@ -43,6 +43,7 @@ PORTABLE_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 DOWNSTREAM_DIR := test/downstream
 DOWNSTREAM_BINARY := $(CURDIR)/bin/powercontext-downstream$(shell $(GO) env GOEXE)
 MODULE_INVENTORY := test/module-inventory.json
+OWNED_MODULES := . $(DOWNSTREAM_DIR)
 MODULE_PATH := github.com/ob-labs/powercontext-go
 API_BASELINE := test/api-compat/pre-release.apidiff
 API_BASELINE_GENERATOR ?= $(GO) run ./tools/api-baseline
@@ -60,7 +61,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat generate check-generated module-check module-inventory contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -142,6 +143,22 @@ module-check: ## Verify tidy readonly module metadata and checksums.
 
 module-inventory: ## Verify every owned Go module has an explicit inventory entry.
 	$(GO) run ./tools/module-integrity -inventory "$(MODULE_INVENTORY)"
+
+module-integrity: module-inventory lint-tools ## Verify metadata, readonly build, tests, and lint for every owned Go module.
+	@set -eu; \
+	for module in $(OWNED_MODULES); do \
+		printf 'checking Go module %s\n' "$$module"; \
+		GOWORK=off $(GO) -C "$$module" mod tidy -diff; \
+		GOWORK=off $(GO) -C "$$module" mod verify; \
+		GOWORK=off $(GO) -C "$$module" build -mod=readonly ./...; \
+		if [ "$$module" = "$(DOWNSTREAM_DIR)" ]; then \
+			$(GO) build -tags '$(STANDARD_TAGS)' -o "$(DOWNSTREAM_BINARY)" ./cmd/powercontext; \
+			POWERCONTEXT_DOWNSTREAM_BINARY="$(DOWNSTREAM_BINARY)" GOWORK=off $(GO) -C "$$module" test -count=1 -mod=readonly ./...; \
+		else \
+			GOWORK=off $(GO) -C "$$module" test -count=1 -mod=readonly ./...; \
+		fi; \
+		(cd "$$module" && GOWORK=off "$(GOLANGCI_LINT)" run --config "$(CURDIR)/.golangci.yml"); \
+	done
 
 contract-test: check-generated ## Test the generated OpenAPI transport contract.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' \

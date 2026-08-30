@@ -16,6 +16,8 @@ package main
 
 import (
 	"bytes"
+	"cmp"
+	"encoding/json/v2"
 	"errors"
 	"os"
 	"os/exec"
@@ -40,11 +42,187 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "generated-consumers", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
 	}
+}
+
+func TestModuleIntegrityRunsEveryOwnedModule(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	want := expectedModuleIntegrityCalls(t, repository)
+	got, output, err := runModuleIntegrityProbe(t, repository, "")
+	if err != nil {
+		t.Fatalf("make module-integrity failed: %v\n%s", err, output)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("module-integrity calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestModuleIntegrityStopsAfterModuleVerificationFailure(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	want := expectedModuleIntegrityCalls(t, repository)
+	failure := "-C test/downstream mod verify"
+	failureIndex := slices.IndexFunc(want, func(call string) bool {
+		return strings.Contains(call, failure)
+	})
+	if failureIndex < 0 {
+		t.Fatalf("expected calls do not contain %q", failure)
+	}
+
+	got, output, err := runModuleIntegrityProbe(t, repository, failure)
+	if err == nil {
+		t.Fatalf("make module-integrity ignored a downstream verification failure:\n%s", output)
+	}
+	want = want[:failureIndex+1]
+	if !slices.Equal(got, want) {
+		t.Fatalf("calls after downstream verification failure:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func expectedModuleIntegrityCalls(t *testing.T, repository string) []string {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(repository, "test", "module-inventory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type moduleEntry struct {
+		Path string `json:"path"`
+	}
+	var inventory struct {
+		SchemaVersion int           `json:"schema_version"`
+		Modules       []moduleEntry `json:"modules"`
+	}
+	if decodeErr := json.Unmarshal(payload, &inventory, json.RejectUnknownMembers(true)); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if inventory.SchemaVersion != 1 {
+		t.Fatalf("module inventory schema_version = %d, want 1", inventory.SchemaVersion)
+	}
+	slices.SortFunc(inventory.Modules, func(left, right moduleEntry) int {
+		return cmp.Compare(left.Path, right.Path)
+	})
+
+	repository, err = filepath.Abs(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository = filepath.ToSlash(repository)
+	binary := repository + "/bin/powercontext-downstream"
+	calls := []string{"go|||run ./tools/module-integrity -inventory test/module-inventory.json"}
+	for _, module := range inventory.Modules {
+		calls = append(calls,
+			"go|off||-C "+module.Path+" mod tidy -diff",
+			"go|off||-C "+module.Path+" mod verify",
+			"go|off||-C "+module.Path+" build -mod=readonly ./...",
+		)
+		if module.Path == "test/downstream" {
+			calls = append(calls,
+				"go|||build -tags sqlite_fts5 -o "+binary+" ./cmd/powercontext",
+				"go|off|"+binary+"|-C "+module.Path+" test -count=1 -mod=readonly ./...",
+			)
+		} else {
+			calls = append(calls, "go|off||-C "+module.Path+" test -count=1 -mod=readonly ./...")
+		}
+		directory := repository
+		if module.Path != "." {
+			directory += "/" + module.Path
+		}
+		calls = append(calls, "lint|"+directory+"|run --config "+repository+"/.golangci.yml")
+	}
+	return calls
+}
+
+func runModuleIntegrityProbe(t *testing.T, repository, failure string) ([]string, []byte, error) {
+	t.Helper()
+	temporary := t.TempDir()
+	toolsBin := filepath.Join(temporary, "bin")
+	if err := os.MkdirAll(toolsBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	callLog := filepath.Join(temporary, "calls.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+esac
+
+printf 'go|%s|%s|%s\n' "${GOWORK:-}" "${POWERCONTEXT_DOWNSTREAM_BINARY:-}" "$*" >> "$CALL_LOG"
+case "$*" in
+  *"${FAIL_MATCH:-never-match}"*)
+    exit 23
+    ;;
+esac
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	linter := filepath.Join(toolsBin, "golangci-lint")
+	const linterScript = `#!/bin/sh
+set -eu
+printf 'lint|%s|%s\n' "$PWD" "$*" >> "$CALL_LOG"
+case "$PWD|$*" in
+  *"${FAIL_MATCH:-never-match}"*)
+    exit 24
+    ;;
+esac
+`
+	if err := os.WriteFile(linter, []byte(linterScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stamp := filepath.Join(toolsBin, ".golangci-lint-v2.13.1-go1.27.0")
+	if err := os.WriteFile(stamp, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(
+		t.Context(),
+		"make",
+		"--no-print-directory",
+		"module-integrity",
+		"GO="+filepath.ToSlash(fakeGo),
+		"TOOLS_BIN="+filepath.ToSlash(toolsBin),
+	)
+	command.Dir = repository
+	command.Env = append(
+		os.Environ(),
+		"CALL_LOG="+filepath.ToSlash(callLog),
+		"FAIL_MATCH="+failure,
+		"GOWORK=",
+		"POWERCONTEXT_DOWNSTREAM_BINARY=",
+	)
+	output, commandErr := command.CombinedOutput()
+	payload, err := os.ReadFile(callLog)
+	if err != nil {
+		t.Fatalf("read module-integrity call log: %v\n%s", err, output)
+	}
+	calls := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(payload), `\`, "/")), "\n")
+	for index, call := range calls {
+		parts := strings.SplitN(call, "|", 3)
+		if len(parts) == 3 && parts[0] == "lint" {
+			parts[1] = normalizeShellPath(parts[1])
+			calls[index] = strings.Join(parts, "|")
+		}
+	}
+	return calls, output, commandErr
+}
+
+func normalizeShellPath(path string) string {
+	if runtime.GOOS == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == '/' {
+		return strings.ToUpper(path[1:2]) + ":" + path[2:]
+	}
+	return path
 }
 
 func TestMakefileRejectsFailedPipelines(t *testing.T) {

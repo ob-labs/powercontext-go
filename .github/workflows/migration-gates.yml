@@ -27,8 +27,8 @@ jobs:
       - name: Verify generated contracts
         run: make check-generated
 
-      - name: Verify owned Go module inventory
-        run: make module-inventory
+      - name: Verify owned Go module integrity
+        run: make module-integrity
 
       - name: Verify formatting
         run: make fmt-check
