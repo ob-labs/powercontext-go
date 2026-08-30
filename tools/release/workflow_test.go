@@ -164,6 +164,58 @@ func TestMigrationQualityRunsModuleIntegrity(t *testing.T) {
 	t.Fatal("migration-gates.yml quality job does not execute make module-integrity")
 }
 
+func TestDependencyReviewRejectsUnsafePullRequestDependencyChanges(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			If      string `yaml:"if"`
+			RunsOn  string `yaml:"runs-on"`
+			Timeout int    `yaml:"timeout-minutes"`
+			Steps   []struct {
+				Name string `yaml:"name"`
+				Uses string `yaml:"uses"`
+				With struct {
+					FailOnSeverity     string `yaml:"fail-on-severity"`
+					FailOnScopes       string `yaml:"fail-on-scopes"`
+					LicenseCheck       string `yaml:"license-check"`
+					VulnerabilityCheck string `yaml:"vulnerability-check"`
+				} `yaml:"with"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["dependency-review"]
+	if !ok {
+		t.Fatal("master.yml has no dependency-review job")
+	}
+	if job.If != "github.event_name == 'pull_request'" || job.RunsOn != "ubuntu-24.04" || job.Timeout != 10 {
+		t.Fatalf("dependency-review job contract = if %q, runs-on %q, timeout %d", job.If, job.RunsOn, job.Timeout)
+	}
+	if len(job.Steps) != 2 {
+		t.Fatalf("dependency-review step count = %d, want 2", len(job.Steps))
+	}
+	if job.Steps[0].Name != "Check out" || job.Steps[0].Uses != "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" {
+		t.Fatalf("dependency-review checkout step = %#v", job.Steps[0])
+	}
+	step := job.Steps[1]
+	if step.Name != "Review pull request dependency changes" || step.Uses != "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294" {
+		t.Fatalf("dependency-review step = %#v", step)
+	}
+	if step.With.FailOnSeverity != "low" || step.With.FailOnScopes != "runtime,development,unknown" ||
+		step.With.LicenseCheck != "true" || step.With.VulnerabilityCheck != "true" {
+		t.Fatalf(
+			"dependency-review policy = severity %q, scopes %q, license %q, vulnerability %q",
+			step.With.FailOnSeverity, step.With.FailOnScopes, step.With.LicenseCheck, step.With.VulnerabilityCheck,
+		)
+	}
+}
+
 type migrationWorkflowStep struct {
 	Name  string `yaml:"name"`
 	If    string `yaml:"if"`
