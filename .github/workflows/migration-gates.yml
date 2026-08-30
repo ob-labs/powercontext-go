@@ -217,6 +217,9 @@ jobs:
           done
           go run ./tools/fixture-generate -python _oracle -output "$fixture_manifest_root/manifest.json"
           cmp "$fixture_manifest_root/manifest.json" "test/conformance/testdata/python-v0.0.2/manifest.json"
+          parity_inventory="$RUNNER_TEMP/powercontext-parity-inventory.json"
+          go run ./tools/parity-inventory-generate -upstream _target -output "$parity_inventory"
+          cmp "$parity_inventory" "test/conformance/parity-inventory.json"
           go run ./tools/fixture-generate -python _oracle -check
           go run ./tools/traceability-generate -check
           go run ./tools/parity-inventory-generate -upstream _target -check
