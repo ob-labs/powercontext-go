@@ -55,6 +55,20 @@ jobs:
       - name: Build the standard Docker image
         run: docker build --pull --target powercontext -t powercontext:ci .
 
+      - name: Verify repository cleanliness after quality checks
+        if: always()
+        shell: bash
+        run: |
+          status="$(git status --porcelain)"
+          if test -n "$status"; then
+            count="$(printf '%s\n' "$status" | wc -l | tr -d '[:space:]')"
+            printf '%s\n' "$status" | sed -n '1,100p'
+            if test "$count" -gt 100; then
+              printf '... %s additional paths omitted\n' "$((count - 100))"
+            fi
+            exit 1
+          fi
+
   portable-sdk:
     name: Portable SDK cross-builds
     runs-on: ubuntu-24.04
