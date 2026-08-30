@@ -44,21 +44,27 @@ export function checkGenerated(path = generatedPath) {
   if (normalizeNewlines(actual) !== normalizeNewlines(expected)) throw new Error(DRIFT_MESSAGE)
 }
 
-export function generateOperations() {
+export function generateOperations(outputPath = generatedPath) {
   const yamlPath = syncOpenApi()
   const source = renderGeneratedSource(yamlPath)
-  mkdirSync(dirname(generatedPath), { recursive: true })
-  writeFileSync(generatedPath, source)
-  return generatedPath
+  mkdirSync(dirname(outputPath), { recursive: true })
+  writeFileSync(outputPath, source)
+  return outputPath
 }
 
 function main() {
+  const outputIndex = process.argv.indexOf('--output')
+  const outputArgument = outputIndex === -1 ? undefined : process.argv[outputIndex + 1]
+  if (outputIndex !== -1 && (!outputArgument || outputArgument.startsWith('--'))) {
+    throw new Error('gen-operations: --output requires a path')
+  }
+  const outputPath = outputArgument ?? generatedPath
   if (process.argv.includes('--check')) {
-    checkGenerated()
+    checkGenerated(outputPath)
     console.log('generated operations are current')
     return
   }
-  const path = generateOperations()
+  const path = generateOperations(outputPath)
   console.log(`wrote operations to ${path}`)
 }
 
