@@ -152,7 +152,54 @@
     },
     "tests/test_doctor_integrations.py": {
       "mode": "go-port",
-      "reason": "CLI doctor integrations matrix; the CLI is Go (internal/cli)."
+      "reason": "CLI doctor integrations matrix; the CLI is Go (internal/cli).",
+      "cases": {
+        "test_doctor_integrations_json_includes_every_first_class_host": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsJSONIncludesEveryFirstClassHost"
+          ]
+        },
+        "test_doctor_integrations_treats_missing_clis_as_success": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsTreatsMissingCLIsAsSuccess"
+          ]
+        },
+        "test_doctor_integrations_prints_a_human_matrix": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsPrintsHumanMatrix"
+          ]
+        },
+        "test_doctor_integrations_fails_when_a_present_plugin_is_broken": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsFailsWhenPresentPluginIsBroken"
+          ]
+        },
+        "test_doctor_integrations_fails_when_a_present_cli_cannot_list_plugins": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsFailsWhenPresentCLICannotListPlugins"
+          ]
+        },
+        "test_doctor_integrations_fails_when_a_present_opencode_skill_is_broken": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsFailsWhenPresentOpenCodeSkillIsBroken"
+          ]
+        },
+        "test_doctor_integrations_succeeds_when_every_host_is_missing": {
+          "evidence": [
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsSucceedsWhenEveryHostIsMissing"
+          ]
+        },
+        "test_default_doctor_does_not_scan_first_class_hosts": {
+          "evidence": [
+            "go:internal/cli/system_contract_test.go#TestDoctorChecksOnlyServerByDefault"
+          ]
+        },
+        "test_doctor_codex_still_fails_when_the_cli_is_missing": {
+          "evidence": [
+            "go:internal/cli/system_contract_test.go#TestDoctorCodexReportsMissingCLI"
+          ]
+        }
+      }
     },
     "tests/test_hermes_cli.py": {
       "mode": "go-port",

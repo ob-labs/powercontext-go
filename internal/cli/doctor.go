@@ -59,6 +59,7 @@ func newDoctorCommand(state *commandState) *cobra.Command {
 		},
 	}
 	command.AddCommand(
+		newDoctorIntegrationsCommand(state),
 		&cobra.Command{
 			Use: "codex", Short: "Check the optional Codex CLI and PowerContext plugin.", Args: cobra.NoArgs,
 			RunE: func(command *cobra.Command, _ []string) error {

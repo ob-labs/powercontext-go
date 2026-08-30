@@ -295,8 +295,8 @@ func TestDoctorPreservesDegradedChecks(t *testing.T) {
 
 func TestDoctorCodexReportsMissingCLI(t *testing.T) {
 	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "codex", "--json")
-	if err == nil {
-		t.Fatal("doctor codex unexpectedly succeeded")
+	if err == nil || ExitCode(err) != 1 {
+		t.Fatalf("doctor codex error = %v, exit = %d", err, ExitCode(err))
 	}
 	checks := decodeSystemOutput(t, stdout)["checks"].(map[string]any)
 	if checks["codex"].(map[string]any)["detail"] != "Codex CLI is not installed or is not on PATH" ||
