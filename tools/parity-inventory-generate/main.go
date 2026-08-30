@@ -277,7 +277,7 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 		return err
 	}
 	payload = append(payload, '\n')
-	fullOutput := filepath.Join(root, outputPath)
+	fullOutput := resolveOutputPath(root, outputPath)
 	current, err := os.ReadFile(fullOutput)
 	if err == nil && bytes.Equal(current, payload) {
 		return nil
@@ -289,6 +289,13 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 		return fmt.Errorf("%s is stale; regenerate with tools/parity-inventory-generate", outputPath)
 	}
 	return os.WriteFile(fullOutput, payload, 0o644)
+}
+
+func resolveOutputPath(root, output string) string {
+	if filepath.IsAbs(output) {
+		return output
+	}
+	return filepath.Join(root, output)
 }
 
 func validMode(mode string) bool {
