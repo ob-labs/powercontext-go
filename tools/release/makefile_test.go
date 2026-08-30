@@ -40,9 +40,32 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "generated-consumers", "module-inventory", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
+		}
+	}
+}
+
+func TestModuleIntegrityChecksTheExplicitDownstreamModule(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "module-integrity", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make module-integrity dry-run failed: %v\n%s", err, output)
+	}
+	for _, want := range []string{
+		"go run ./tools/module-integrity -inventory \"test/module-inventory.json\"",
+		"go mod tidy -diff",
+		"go -C \"test/downstream\" mod tidy -diff",
+		"go -C \"test/downstream\" mod verify",
+		"go -C \"test/downstream\" build -mod=readonly ./...",
+		"cd \"test/downstream\" &&",
+		"run --config",
+	} {
+		if !strings.Contains(string(output), want) {
+			t.Fatalf("make module-integrity is missing %q:\n%s", want, output)
 		}
 	}
 }

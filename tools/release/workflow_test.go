@@ -132,7 +132,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 }
 
-func TestMigrationQualityRunsModuleInventory(t *testing.T) {
+func TestMigrationQualityRunsModuleIntegrity(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
 	if err != nil {
@@ -154,11 +154,11 @@ func TestMigrationQualityRunsModuleInventory(t *testing.T) {
 		t.Fatal("migration-gates.yml has no quality job")
 	}
 	for _, step := range quality.Steps {
-		if step.Name == "Verify owned Go module inventory" && strings.TrimSpace(step.Run) == "make module-inventory" {
+		if step.Name == "Verify owned Go module integrity" && strings.TrimSpace(step.Run) == "make module-integrity" {
 			return
 		}
 	}
-	t.Fatal("migration-gates.yml quality job does not execute make module-inventory")
+	t.Fatal("migration-gates.yml quality job does not execute make module-integrity")
 }
 
 func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) {

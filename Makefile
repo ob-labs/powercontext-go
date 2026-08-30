@@ -60,7 +60,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat generate check-generated module-check module-inventory contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -142,6 +142,14 @@ module-check: ## Verify tidy readonly module metadata and checksums.
 
 module-inventory: ## Verify every owned Go module has an explicit inventory entry.
 	$(GO) run ./tools/module-integrity -inventory "$(MODULE_INVENTORY)"
+
+module-integrity: lint-tools module-inventory ## Verify root and downstream Go module metadata, builds, and lint.
+	$(MAKE) module-check
+	$(MAKE) lint
+	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" mod tidy -diff
+	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" mod verify
+	GOWORK=off $(GO) -C "$(DOWNSTREAM_DIR)" build -mod=readonly ./...
+	cd "$(DOWNSTREAM_DIR)" && "$(GOLANGCI_LINT)" run --config "$(CURDIR)/.golangci.yml"
 
 contract-test: check-generated ## Test the generated OpenAPI transport contract.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' \
