@@ -837,6 +837,26 @@ func TestReleaseVerificationRechecksPublishedSurfaces(t *testing.T) {
 	}
 }
 
+func TestEvaluationLockUsesOfficialPyPI(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, "evaluation", "uv.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lockfile := string(payload)
+	if strings.Contains(lockfile, "pypi.tuna.tsinghua.edu.cn") {
+		t.Fatal("evaluation lockfile contains a CI-unavailable PyPI mirror")
+	}
+	for _, required := range []string{
+		`source = { registry = "https://pypi.org/simple" }`,
+		`url = "https://files.pythonhosted.org/`,
+	} {
+		if !strings.Contains(lockfile, required) {
+			t.Errorf("evaluation lockfile is missing official PyPI source evidence %q", required)
+		}
+	}
+}
+
 func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	tests := map[string][]string{
