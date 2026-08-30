@@ -28,6 +28,7 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - revive
     - staticcheck
     - unused
     - wastedassign
@@ -38,6 +39,24 @@ linters:
     govet:
       enable:
         - shadow
+    revive:
+      # Keep only rules that add focused signal beyond govet and staticcheck.
+      # Declaring the rule set explicitly also avoids the high-noise defaults.
+      confidence: 0.8
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+          arguments:
+            - allow-types-before: "*testing.T"
+        - name: identical-branches
+        - name: identical-ifelseif-branches
+        - name: identical-ifelseif-conditions
+        - name: identical-switch-branches
+        - name: identical-switch-conditions
+        - name: inefficient-map-lookup
+        - name: redundant-build-tag
+        - name: redundant-test-main-exit
+        - name: unconditional-recursion
     staticcheck:
       checks:
         - all

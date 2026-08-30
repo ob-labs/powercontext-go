@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	// Register the SQLite driver used by the scheduler store.
 	_ "github.com/mattn/go-sqlite3"
 )
 

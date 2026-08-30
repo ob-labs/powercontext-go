@@ -199,6 +199,10 @@ source / artifact / trigger / inference
   steps by the complete required operation rather than substring presence.
   Keep a valid fixture plus a failing mutant for each boundary, and recheck the
   assumptions against the current official schema before changing the gate.
+- When enabling a syntax-only linter rule for a method or selector, inspect the
+  pinned analyzer implementation and prove it with a repository-shaped mutant
+  using the receiver and call forms present in production. Do not advertise a
+  rule whose matcher ordinary identifier or selector naming can bypass.
 - When a repository inventory prunes generated output while discovering owned
   files, scope name-based exclusions to explicit repository-relative roots
   unless that directory class is unowned at every depth. Verify an owned nested

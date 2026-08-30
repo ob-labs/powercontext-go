@@ -84,9 +84,7 @@ func routedProfileSupportsJSONObject(provider, model string) bool {
 	}
 	downstream, _, _ = strings.Cut(downstream, ":")
 	switch upstream {
-	case "openai":
-		return true
-	case "x-ai", "xai":
+	case "openai", "x-ai", "xai":
 		return true
 	case "google", "vertex":
 		return googleProfileSupportsJSONObject(downstream)
