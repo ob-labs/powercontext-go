@@ -4,7 +4,34 @@
   "files": {
     "e2e/bub/tests/test_bub_transport_trust.py": {
       "mode": "retained-host",
-      "reason": "Bub plugin transport trust behavior; evidence will live in the retained Bub adapter tests once WP2 aligns the shared loopback vectors."
+      "reason": "Bub plugin transport trust behavior owned by the retained Bub adapter.",
+      "cases": {
+        "test_plugin_refuses_a_plaintext_non_loopback_server_by_default": {
+          "evidence": [
+            "py:integrations/bub/tests/test_transport_trust.py#test_plugin_refuses_a_plaintext_non_loopback_server_by_default"
+          ]
+        },
+        "test_trusting_the_transport_supplies_the_client_an_explicit_vouched_transport": {
+          "evidence": [
+            "py:integrations/bub/tests/test_transport_trust.py#test_trusting_the_transport_supplies_the_client_an_explicit_vouched_transport"
+          ]
+        },
+        "test_load_state_carries_the_transport_vouch_to_tool_settings": {
+          "evidence": [
+            "py:integrations/bub/tests/test_transport_trust.py#test_load_state_carries_the_transport_vouch_to_tool_settings"
+          ]
+        },
+        "test_tools_refuse_a_plaintext_non_loopback_server_by_default": {
+          "evidence": [
+            "py:integrations/bub/tests/test_transport_trust.py#test_tools_refuse_a_plaintext_non_loopback_server_by_default"
+          ]
+        },
+        "test_tools_honour_the_operator_transport_vouch": {
+          "evidence": [
+            "py:integrations/bub/tests/test_transport_trust.py#test_tools_honour_the_operator_transport_vouch"
+          ]
+        }
+      }
     },
     "e2e/bub/tests/test_harbor_agent.py": {
       "mode": "retained-host",

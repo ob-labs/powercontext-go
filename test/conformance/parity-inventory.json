@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 645,
-  "pending_case_count": 114,
+  "mapped_case_count": 650,
+  "pending_case_count": 109,
   "entries": [
     {
       "python": {
@@ -31,8 +31,15 @@
         "line": 38
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/bub/tests/test_transport_trust.py",
+          "test": "test_plugin_refuses_a_plaintext_non_loopback_server_by_default"
+        }
+      ]
     },
     {
       "python": {
@@ -41,8 +48,15 @@
         "line": 81
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/bub/tests/test_transport_trust.py",
+          "test": "test_trusting_the_transport_supplies_the_client_an_explicit_vouched_transport"
+        }
+      ]
     },
     {
       "python": {
@@ -51,8 +65,15 @@
         "line": 107
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/bub/tests/test_transport_trust.py",
+          "test": "test_load_state_carries_the_transport_vouch_to_tool_settings"
+        }
+      ]
     },
     {
       "python": {
@@ -61,8 +82,15 @@
         "line": 127
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/bub/tests/test_transport_trust.py",
+          "test": "test_tools_refuse_a_plaintext_non_loopback_server_by_default"
+        }
+      ]
     },
     {
       "python": {
@@ -71,8 +99,15 @@
         "line": 139
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/bub/tests/test_transport_trust.py",
+          "test": "test_tools_honour_the_operator_transport_vouch"
+        }
+      ]
     },
     {
       "python": {
