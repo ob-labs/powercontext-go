@@ -259,6 +259,38 @@ test -f "$2"
 	}
 }
 
+func TestCleanRemovesOnlyKnownLocalOutputs(t *testing.T) {
+	repository, absoluteErr := filepath.Abs(filepath.Clean(filepath.Join("..", "..")))
+	if absoluteErr != nil {
+		t.Fatal(absoluteErr)
+	}
+	root := t.TempDir()
+	for _, directory := range []string{"bin", "dist", "coverage", "site", "keep"} {
+		path := filepath.Join(root, directory)
+		if mkdirErr := os.Mkdir(path, 0o755); mkdirErr != nil {
+			t.Fatal(mkdirErr)
+		}
+		if writeErr := os.WriteFile(filepath.Join(path, "sentinel"), []byte(directory), 0o600); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+	}
+
+	command := exec.CommandContext(t.Context(), "make", "-f", filepath.Join(repository, "Makefile"), "clean")
+	command.Dir = root
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make clean failed: %v\n%s", err, output)
+	}
+	for _, directory := range []string{"bin", "dist", "coverage", "site"} {
+		if _, err := os.Stat(filepath.Join(root, directory)); !os.IsNotExist(err) {
+			t.Fatalf("make clean kept %s: %v", directory, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "keep", "sentinel")); err != nil {
+		t.Fatalf("make clean removed unrelated sentinel: %v", err)
+	}
+}
+
 func TestModuleIntegrityRunsEveryOwnedModule(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	want := expectedModuleIntegrityCalls(t, repository)
