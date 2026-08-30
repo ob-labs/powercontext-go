@@ -781,6 +781,39 @@ func TestCandidateDeliveryWorkflowsExerciseTheirArtifacts(t *testing.T) {
 	}
 }
 
+func TestReleaseProcessSmokeVerifiesPackagedSecurityDefaults(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	tests := map[string][]string{
+		"build-artifacts.yml": {
+			`go run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version "$VERSION"`,
+			`go run ./tools/process-smoke -binary bin/powercontext-full -env-file .env.example -version "$VERSION"`,
+		},
+		"release.yml": {
+			`go run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version "$VERSION"`,
+			`go run ./tools/process-smoke -binary bin/powercontext-full -env-file .env.example -version "$VERSION"`,
+		},
+		"release-verify.yml": {
+			`-env-file "${{ steps.archives.outputs.standard_root }}/.env.example"`,
+			`-env-file "${{ steps.archives.outputs.full_root }}/.env.example"`,
+		},
+	}
+	for name, required := range tests {
+		payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		workflow := strings.Join(strings.Fields(string(payload)), " ")
+		if count := strings.Count(workflow, "go run ./tools/process-smoke"); count != 2 {
+			t.Errorf("%s process-smoke calls = %d, want 2", name, count)
+		}
+		for _, operation := range required {
+			if !strings.Contains(workflow, operation) {
+				t.Errorf("%s is missing complete security-default operation %q", name, operation)
+			}
+		}
+	}
+}
+
 func TestReleaseVerificationRechecksPublishedSurfaces(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release-verify.yml"))

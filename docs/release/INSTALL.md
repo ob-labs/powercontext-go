@@ -5,6 +5,14 @@ authoritative OpenAPI document, `.env.example`, all nine host adapters, embedded
 sqlite-vec, dependency licenses, build metadata, an SPDX JSON SBOM, and an
 internal `SHA256SUMS` file.
 
+Release verification checks the packaged `.env.example` before starting the
+binary. Its security-sensitive defaults keep the Server and Client on
+`127.0.0.1`, leave bearer authentication disabled for that loopback-only
+configuration, and keep unauthenticated non-loopback access disabled. Enabling
+remote access requires an explicit host change together with authentication or
+the documented controlled-network opt-in; never ship an active default bearer
+token in the example file.
+
 Verify the downloaded archive and its detached SBOM against the release-level
 `SHA256SUMS`, extract it, then verify the files inside the archive:
 

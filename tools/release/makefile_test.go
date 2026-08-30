@@ -49,6 +49,35 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	}
 }
 
+func TestSmokeTargetsVerifySecurityDefaultsFile(t *testing.T) {
+	tests := map[string]string{
+		"smoke":      "bin/powercontext",
+		"smoke-full": "bin/powercontext-full",
+	}
+	for target, binary := range tests {
+		t.Run(target, func(t *testing.T) {
+			output, err := runRepositoryMake(
+				t,
+				nil,
+				"",
+				"--dry-run",
+				target,
+				"GO=go",
+				"VERSION=test",
+				"TOKENIZERS_LIB_DIR=/tmp/tokenizers",
+			)
+			if err != nil {
+				t.Fatalf("make %s --dry-run failed: %v\n%s", target, err, output)
+			}
+			operation := `go run ./tools/process-smoke -binary ` + binary +
+				` -env-file .env.example -version "test"`
+			if !strings.Contains(string(output), operation) {
+				t.Fatalf("make %s is missing %q:\n%s", target, operation, output)
+			}
+		})
+	}
+}
+
 func TestDependencySecurityScansTheStandardSourceClosure(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	command := exec.CommandContext(t.Context(), "make", "--dry-run", "dependency-security", "GO=go")

@@ -75,19 +75,21 @@ var baseToolNames = []string{
 
 type options struct {
 	binary  string
+	envFile string
 	version string
 	timeout time.Duration
 }
 
 func main() {
 	binary := flag.String("binary", "bin/powercontext", "built PowerContext executable")
+	envFile := flag.String("env-file", "", "released .env.example with security-sensitive defaults")
 	version := flag.String("version", "devel", "exact version reported by the executable")
 	timeout := flag.Duration("timeout", 60*time.Second, "maximum duration of each server phase")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*(*timeout))
 	defer cancel()
-	if err := run(ctx, options{binary: *binary, version: *version, timeout: *timeout}); err != nil {
+	if err := run(ctx, options{binary: *binary, envFile: *envFile, version: *version, timeout: *timeout}); err != nil {
 		fmt.Fprintln(os.Stderr, "process-smoke:", err)
 		os.Exit(1)
 	}
@@ -100,6 +102,9 @@ func main() {
 func run(ctx context.Context, opts options) error {
 	if opts.timeout <= 0 {
 		return errors.New("timeout must be positive")
+	}
+	if err := verifySecurityDefaults(opts.envFile); err != nil {
+		return err
 	}
 	binary, err := filepath.Abs(opts.binary)
 	if err != nil {
@@ -194,6 +199,67 @@ func run(ctx context.Context, opts options) error {
 		return err
 	}
 	return nil
+}
+
+func verifySecurityDefaults(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return errors.New("released security defaults file is required")
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return errors.New("read released security defaults")
+	}
+	values := make(map[string]string)
+	for line := range strings.SplitSeq(string(payload), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if exported, ok := strings.CutPrefix(line, "export"); ok &&
+			len(exported) > 0 && (exported[0] == ' ' || exported[0] == '\t') {
+			line = strings.TrimSpace(exported)
+		}
+		name, value, ok := strings.Cut(line, "=")
+		name = strings.TrimSpace(name)
+		if !ok || !validEnvironmentName(name) {
+			return errors.New("released security defaults contain an invalid assignment")
+		}
+		if _, exists := values[name]; exists {
+			return fmt.Errorf("released security default %s is declared more than once", name)
+		}
+		values[name] = strings.TrimSpace(value)
+	}
+	for name, expected := range map[string]string{
+		"POWERCONTEXT_SERVER_HTTP_HOST":                          "127.0.0.1",
+		"POWERCONTEXT_SERVER_AUTH_ENABLED":                       "false",
+		"POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK": "false",
+		"POWERCONTEXT_CLIENT_SERVER_URL":                         "http://127.0.0.1:8000",
+	} {
+		value, exists := values[name]
+		if !exists {
+			return fmt.Errorf("released security default %s is missing", name)
+		}
+		if value != expected {
+			return fmt.Errorf("released security default %s does not match the release policy", name)
+		}
+	}
+	if _, exists := values["POWERCONTEXT_SERVER_AUTH_TOKEN"]; exists {
+		return errors.New("released security default POWERCONTEXT_SERVER_AUTH_TOKEN must remain commented")
+	}
+	return nil
+}
+
+func validEnvironmentName(name string) bool {
+	for index, character := range name {
+		if character == '_' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= 'a' && character <= 'z' ||
+			index > 0 && character >= '0' && character <= '9' {
+			continue
+		}
+		return false
+	}
+	return name != ""
 }
 
 func verifyVersion(ctx context.Context, binary, expected string) error {

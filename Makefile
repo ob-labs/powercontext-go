@@ -310,10 +310,10 @@ build-full: ## Build the Full native-asset server binary.
 		-o bin/powercontext-full ./cmd/powercontext
 
 smoke: build ## Build and smoke-test the standard server binary.
-	$(GO) run ./tools/process-smoke -binary bin/powercontext -version "$(VERSION)"
+	$(GO) run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version "$(VERSION)"
 
 smoke-full: build-full ## Build and smoke-test the Full server binary.
-	$(GO) run ./tools/process-smoke -binary bin/powercontext-full -version "$(VERSION)"
+	$(GO) run ./tools/process-smoke -binary bin/powercontext-full -env-file .env.example -version "$(VERSION)"
 
 package-standard: build ## Build a standard release archive and SBOM.
 	$(GO) run ./tools/release package \
