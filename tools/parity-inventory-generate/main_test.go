@@ -64,3 +64,22 @@ func TestDeclaresTestRequiresTypeScriptCall(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveOutputPathKeepsAbsoluteAndRootsRelative(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "repository")
+	absolute := filepath.Join(t.TempDir(), "parity-inventory.json")
+	for _, test := range []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{name: "absolute", output: absolute, want: absolute},
+		{name: "relative", output: filepath.Join("test", "parity-inventory.json"), want: filepath.Join(root, "test", "parity-inventory.json")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := resolveOutputPath(root, test.output); got != test.want {
+				t.Fatalf("resolveOutputPath(%q, %q) = %q, want %q", root, test.output, got, test.want)
+			}
+		})
+	}
+}
