@@ -14,39 +14,67 @@
  * limitations under the License.
  */
 
-import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
-import { checkGenerated, generateOperations, renderGeneratedSource } from '../scripts/gen-operations.mjs'
+import { afterEach, describe, expect, it } from 'vitest'
+import { checkGenerated, renderGeneratedSource } from '../scripts/gen-operations.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const generatorScript = join(repoRoot, 'scripts', 'gen-operations.mjs')
+const tempDirs: string[] = []
+const processTestTimeoutMs = 60_000
+
+function makeTempDir(prefix: string) {
+  const dir = mkdtempSync(join(tmpdir(), prefix))
+  tempDirs.push(dir)
+  return dir
+}
+
+function normalizeNewlines(text: string) {
+  return text.replace(/\r\n/g, '\n')
+}
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 describe('generated operations check', () => {
   it('passes when the committed table matches OpenAPI', () => {
     expect(() => checkGenerated()).not.toThrow()
   })
 
-  it('fails when the committed table has drifted', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'pc-gen-'))
+  it('fails when an explicit CLI output has drifted', () => {
+    const dir = makeTempDir('pc-gen-')
     const drifted = join(dir, 'operations.generated.ts')
     writeFileSync(drifted, 'export const OPERATIONS = {}\n')
-    expect(() => checkGenerated(drifted)).toThrow(/drifted/)
-  })
+    const result = spawnSync(process.execPath, [generatorScript, '--check', '--output', drifted], {
+      encoding: 'utf8',
+    })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Generated API code drifted')
+  }, processTestTimeoutMs)
 
   it('renders the same source the repository currently commits', () => {
-    const committed = readFileSync(join(repoRoot, 'src', 'operations.generated.ts'), 'utf8').replace(/\r\n/g, '\n')
+    const committed = normalizeNewlines(readFileSync(join(repoRoot, 'src', 'operations.generated.ts'), 'utf8'))
     expect(renderGeneratedSource()).toBe(committed)
   })
 
-  it('writes a fresh generated table to an explicit output path', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'pc-gen-output-'))
+  it('writes and checks a fresh generated table through the public CLI', () => {
+    const dir = makeTempDir('pc-gen-output-')
     const output = join(dir, 'operations.generated.ts')
-    expect(generateOperations(output)).toBe(output)
-    expect(existsSync(output)).toBe(true)
-    expect(readFileSync(output, 'utf8')).toBe(renderGeneratedSource())
+    execFileSync(process.execPath, [generatorScript, '--output', output])
+    const committed = normalizeNewlines(readFileSync(join(repoRoot, 'src', 'operations.generated.ts'), 'utf8'))
+    expect(normalizeNewlines(readFileSync(output, 'utf8'))).toBe(committed)
+    execFileSync(
+      process.execPath,
+      [generatorScript, '--check', '--output', output],
+    )
 
     writeFileSync(join(dir, 'consumer.ts'), `
 import { OPERATION_IDS, OPERATIONS } from './operations.generated.ts'
@@ -67,5 +95,19 @@ void operation
       include: ['consumer.ts', 'operations.generated.ts'],
     }))
     execFileSync(process.execPath, [join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', join(dir, 'tsconfig.json')])
-  })
+  }, processTestTimeoutMs)
+
+  it('rejects another option where --output requires a path', () => {
+    const dir = makeTempDir('pc-gen-missing-output-')
+    execFileSync(process.execPath, [generatorScript, '--output', join(dir, '--check')])
+
+    const result = spawnSync(process.execPath, [generatorScript, '--output', '--check'], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('gen-operations: --output requires a path')
+    expect(result.stdout).not.toContain('generated operations are current')
+  }, processTestTimeoutMs)
 })

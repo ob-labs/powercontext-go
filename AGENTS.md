@@ -160,6 +160,10 @@ source / artifact / trigger / inference
 - When a test invokes a freshly built external binary, disable result caching
   or key it to the binary content. Verify the gate reruns after the binary
   changes without changing the test package.
+- When a test synchronously invokes real CLI or compiler subprocesses, measure
+  cold supported-host durations and set a bounded timeout on that test only;
+  do not raise the suite-wide default. Verify the real exit status and output,
+  then prove the focused test completes on the measured slow host.
 - When a release or end-to-end CLI adds a required flag, inventory every direct
   invocation instead of updating only wrapper targets. Verify each script and
   Make entrypoint with executable fakes that assert the complete argument list.
@@ -275,6 +279,10 @@ source / artifact / trigger / inference
   the underlying error matchable and name concrete operator remediation without
   exposing configured values. Verify exit code 2 and that execution never
   reaches the operation runner.
+- When a CLI option consumes the following token as a value, reject a missing
+  value or another option before any read or write. Verify the real CLI exits
+  nonzero with an actionable diagnostic even when an option-named file would
+  otherwise make the malformed command succeed.
 - When isolated host adapters vendor the same transport policy, drive every
   configuration and directly constructible client boundary from one shared
   host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6

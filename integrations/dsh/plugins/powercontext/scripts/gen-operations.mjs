@@ -54,8 +54,11 @@ export function generateOperations(outputPath = generatedPath) {
 
 function main() {
   const outputIndex = process.argv.indexOf('--output')
-  const outputPath = outputIndex === -1 ? generatedPath : process.argv[outputIndex + 1]
-  if (!outputPath) throw new Error('gen-operations: --output requires a path')
+  const outputArgument = outputIndex === -1 ? undefined : process.argv[outputIndex + 1]
+  if (outputIndex !== -1 && (!outputArgument || outputArgument.startsWith('--'))) {
+    throw new Error('gen-operations: --output requires a path')
+  }
+  const outputPath = outputArgument ?? generatedPath
   if (process.argv.includes('--check')) {
     checkGenerated(outputPath)
     console.log('generated operations are current')
