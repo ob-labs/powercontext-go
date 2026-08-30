@@ -140,7 +140,9 @@ source / artifact / trigger / inference
   emit that support as a declared generated artifact and verify a fresh
   temporary module can tidy, verify, and test the complete output.
 - When a Go package has build-tagged implementation variants, keep its package
-  documentation in an untagged `doc.go`. Verify the package `Doc` field with
+  documentation in an untagged `doc.go` and give accompanying C, C++, or
+  assembly sources the same constraints as the Go implementation that owns
+  them. Verify `Doc`, `GoFiles`, `CgoFiles`, and native source fields with
   `go list -e` under every supported `GOOS` and CGO selection.
 - When a query checks `Rows.Err` before returning, its deferred cleanup must
   merge only `Rows.Close`; do not call a helper that reads `Rows.Err` again.
