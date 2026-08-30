@@ -58,7 +58,7 @@ func (r *Runtime) runStage(
 	if operation == nil {
 		return errors.New("runtime: stage operation must not be nil")
 	}
-	stageContext, span := safelyStartStage(r.tracing, ctx, name, attributes)
+	stageContext, span := safelyStartStage(ctx, r.tracing, name, attributes)
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			panicErr := fmt.Errorf("runtime: stage operation panicked with %T", recovered)
@@ -79,8 +79,8 @@ func (r *Runtime) runStage(
 }
 
 func safelyStartStage(
-	tracing StageTracing,
 	ctx context.Context,
+	tracing StageTracing,
 	name string,
 	attributes map[string]TraceAttribute,
 ) (stageContext context.Context, span StageSpan) {
