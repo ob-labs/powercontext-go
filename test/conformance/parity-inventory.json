@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 650,
-  "pending_case_count": 109,
+  "mapped_case_count": 651,
+  "pending_case_count": 108,
   "entries": [
     {
       "python": {
@@ -177,8 +177,15 @@
         "line": 30
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/bub/tests/test_packaging.py",
+          "test": "test_source_checkout_install_uses_local_adapter_without_python_sdk_override"
+        }
+      ]
     },
     {
       "python": {
