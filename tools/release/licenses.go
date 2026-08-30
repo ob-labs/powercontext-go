@@ -127,6 +127,89 @@ func collectLicenses(
 	return dependencies, []byte(notices.String()), nil
 }
 
+func collectModuleGraphLicenses(manifest *dependencyManifest, repository string, modules []string) error {
+	moduleCache, err := goModuleCache(repository)
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(manifest.Modules))
+	for _, record := range manifest.Modules {
+		seen[record.Path+"\x00"+record.Version+"\x00"+record.Replacement] = struct{}{}
+	}
+	for _, modulePath := range modules {
+		if modulePath == "." {
+			continue
+		}
+		dependencies, err := moduleGraphDependencies(repository, modulePath)
+		if err != nil {
+			return err
+		}
+		for _, dependency := range dependencies {
+			if dependency.Version == "" || (dependency.Replace != nil && dependency.Replace.Version == "") {
+				continue
+			}
+			directory, replacement, err := moduleDirectory(dependency, moduleCache, repository)
+			if err != nil {
+				return err
+			}
+			key := dependency.Path + "\x00" + dependency.Version + "\x00" + replacement
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			licenses, err := findLicenseFiles(directory)
+			if err != nil {
+				return fmt.Errorf("%s %s: %w", dependency.Path, dependency.Version, err)
+			}
+			record := dependencyRecord{Path: dependency.Path, Version: dependency.Version, Replacement: replacement}
+			for _, licensePath := range licenses {
+				contents, err := readBoundedFile(licensePath, maxLicenseBytes)
+				if err != nil {
+					return err
+				}
+				hash := sha256.Sum256(contents)
+				record.Licenses = append(record.Licenses, licenseRecord{Name: filepath.Base(licensePath), SHA256: hex.EncodeToString(hash[:])})
+			}
+			manifest.Modules = append(manifest.Modules, record)
+			seen[key] = struct{}{}
+		}
+	}
+	sort.Slice(manifest.Modules, func(left, right int) bool {
+		if manifest.Modules[left].Path == manifest.Modules[right].Path {
+			return manifest.Modules[left].Version < manifest.Modules[right].Version
+		}
+		return manifest.Modules[left].Path < manifest.Modules[right].Path
+	})
+	return nil
+}
+
+func moduleGraphDependencies(repository, modulePath string) ([]*debug.Module, error) {
+	command := exec.Command("go", "-C", modulePath, "list", "-deps", "-test", "-f", "{{if .Module}}{{.Module.Path}}|{{.Module.Version}}|{{if .Module.Replace}}{{.Module.Replace.Path}}|{{.Module.Replace.Version}}{{end}}{{end}}", "./...")
+	command.Dir = repository
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list module graph for %s: %w", modulePath, err)
+	}
+	var result []*debug.Module
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "|")
+		if len(fields) < 2 || fields[0] == "" {
+			return nil, fmt.Errorf("module graph for %s contains malformed entry", modulePath)
+		}
+		dependency := &debug.Module{Path: fields[0], Version: fields[1]}
+		if len(fields) >= 3 && fields[2] != "" {
+			dependency.Replace = &debug.Module{Path: fields[2]}
+			if len(fields) >= 4 {
+				dependency.Replace.Version = fields[3]
+			}
+		}
+		result = append(result, dependency)
+	}
+	return result, nil
+}
+
 func goModuleCache(repository string) (string, error) {
 	command := exec.Command("go", "env", "GOMODCACHE")
 	command.Dir = repository

@@ -41,6 +41,7 @@ func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
 	var stdout bytes.Buffer
 	if inventoryErr := runLicenseInventory([]string{
 		"-binary", binary, "-edition", "standard", "-output", output, "-repository", repository,
+		"-modules", "test/downstream",
 	}, &stdout); inventoryErr != nil {
 		t.Fatal(inventoryErr)
 	}

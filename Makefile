@@ -171,9 +171,9 @@ license-fix: ## Repair eligible source headers and recheck them.
 	$(LICENSE_EYE) -c .licenserc.yaml header fix
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 
-license-dependencies: build ## Build bounded dependency-license evidence for the standard binary.
+license-dependencies: build ## Build dependency-license evidence for every owned Go module.
 	@$(RM) "$(LICENSE_DEPENDENCY_OUTPUT)"
-	$(GO) run ./tools/release licenses -binary bin/powercontext -edition standard -output "$(LICENSE_DEPENDENCY_OUTPUT)"
+	$(GO) run ./tools/release licenses -binary bin/powercontext -edition standard -output "$(LICENSE_DEPENDENCY_OUTPUT)" -modules "$(OWNED_MODULES)"
 
 fmt: lint-tools ## Format supported source with the pinned formatter set.
 	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
