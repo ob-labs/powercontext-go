@@ -223,6 +223,9 @@ source / artifact / trigger / inference
   drift, and pin an `apidiff` build that uses the same `x/tools` export format
   as the writer. Verify deterministic regeneration on Windows and Linux and
   prove that removing a real exported identifier fails the public API gate.
+- When a dependency audit inspects owned Go module graphs, use readonly package
+  resolution and verify `go.mod` and `go.sum` remain unchanged; do not download
+  graph metadata in a way that expands a checked-in module manifest.
 - When a CI Makefile target iterates over a platform, package, or owned-module matrix, verify
   a successful fake command observes every required entry and intended
   environment. Make a non-final entry fail, then verify the target exits

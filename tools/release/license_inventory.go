@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type licenseInventoryOptions struct {
@@ -29,6 +30,7 @@ type licenseInventoryOptions struct {
 	Edition    string
 	Output     string
 	Repository string
+	Modules    []string
 }
 
 type licenseInventoryResult struct {
@@ -45,6 +47,8 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 	flags.StringVar(&options.Edition, "edition", "standard", "standard or full")
 	flags.StringVar(&options.Output, "output", "", "new dependency-license manifest path")
 	flags.StringVar(&options.Repository, "repository", ".", "repository root")
+	var modules string
+	flags.StringVar(&modules, "modules", "", "space-separated owned Go module directories beyond the root binary")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
@@ -52,6 +56,7 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 		(options.Edition != "standard" && options.Edition != "full") {
 		return errors.New("licenses requires binary, output, and standard or full edition")
 	}
+	options.Modules = append(options.Modules, strings.Fields(modules)...)
 	repository, err := filepath.Abs(options.Repository)
 	if err != nil {
 		return err
@@ -63,6 +68,9 @@ func runLicenseInventory(arguments []string, output io.Writer) error {
 	manifest, _, err := collectLicenses(options.Binary, repository, options.Edition, assets)
 	if err != nil {
 		return err
+	}
+	if collectErr := collectModuleGraphLicenses(&manifest, repository, options.Modules); collectErr != nil {
+		return collectErr
 	}
 	encoded, err := json.Marshal(&manifest, jsontext.WithIndent("  "))
 	if err != nil {
