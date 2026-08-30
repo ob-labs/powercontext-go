@@ -379,7 +379,7 @@ updates:
 }
 
 func validPullRequestTemplate(includeRelationship bool) string {
-	parts := []string{"## Tracking", "Closes #", "## Behavior and compatibility", "## Validation", "git diff --check", "## AI usage"}
+	parts := []string{"## Tracking", "Closes #", "## Behavior and compatibility", "## Validation", "git diff --check", "Formatter evidence", "Generated-consumer evidence", "Compatibility evidence", "## AI usage"}
 	if includeRelationship {
 		parts = append(parts, "Part of #")
 	}

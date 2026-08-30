@@ -35,6 +35,9 @@ List the exact commands run against the submitted Head and their results.
 
 - [ ] `git diff --check`
 - [ ] `git status --short` was inspected after validation.
+- [ ] Formatter evidence (`make fmt-check` or an explained equivalent) is recorded.
+- [ ] Generated-consumer evidence (`make generated-consumers` when generator outputs change, or an explained equivalent) is recorded.
+- [ ] Compatibility evidence (`make api-compat` for public Go changes, relevant contract/downstream checks otherwise) is recorded.
 - [ ] Relevant generated, race, compatibility, process, adapter, documentation, or release checks were run.
 - [ ] Any skipped or unavailable check is identified above and is not represented as passing.
 
