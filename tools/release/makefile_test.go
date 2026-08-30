@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json/v2"
 	"errors"
 	"os"
@@ -87,11 +88,12 @@ func expectedModuleIntegrityCalls(t *testing.T, repository string) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	type moduleEntry struct {
+		Path string `json:"path"`
+	}
 	var inventory struct {
-		SchemaVersion int `json:"schema_version"`
-		Modules       []struct {
-			Path string `json:"path"`
-		} `json:"modules"`
+		SchemaVersion int           `json:"schema_version"`
+		Modules       []moduleEntry `json:"modules"`
 	}
 	if decodeErr := json.Unmarshal(payload, &inventory, json.RejectUnknownMembers(true)); decodeErr != nil {
 		t.Fatal(decodeErr)
@@ -99,6 +101,9 @@ func expectedModuleIntegrityCalls(t *testing.T, repository string) []string {
 	if inventory.SchemaVersion != 1 {
 		t.Fatalf("module inventory schema_version = %d, want 1", inventory.SchemaVersion)
 	}
+	slices.SortFunc(inventory.Modules, func(left, right moduleEntry) int {
+		return cmp.Compare(left.Path, right.Path)
+	})
 
 	repository, err = filepath.Abs(repository)
 	if err != nil {
