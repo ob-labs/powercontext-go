@@ -49,7 +49,7 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	}
 }
 
-func TestDependencySecurityScansTheBuiltReleaseBinary(t *testing.T) {
+func TestDependencySecurityScansTheStandardSourceClosure(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	command := exec.CommandContext(t.Context(), "make", "--dry-run", "dependency-security", "GO=go")
 	command.Dir = repository
@@ -57,7 +57,7 @@ func TestDependencySecurityScansTheBuiltReleaseBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make dependency-security dry-run failed: %v\n%s", err, output)
 	}
-	for _, want := range []string{"golang.org/x/vuln/cmd/govulncheck@v1.7.0", "build -tags 'sqlite_fts5'", "govulncheck", "-mode=binary", "bin/powercontext"} {
+	for _, want := range []string{"golang.org/x/vuln/cmd/govulncheck@v1.7.0", "build -tags 'sqlite_fts5'", "govulncheck", "-tags \"sqlite_fts5\"", "./..."} {
 		if !strings.Contains(string(output), want) {
 			t.Fatalf("make dependency-security is missing %q:\n%s", want, output)
 		}

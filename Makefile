@@ -138,8 +138,8 @@ $(GOVULNCHECK_STAMP): $(GOVULNCHECK)
 
 govulncheck-tools: $(GOVULNCHECK_STAMP) ## Install the pinned Go vulnerability scanner.
 
-dependency-security: govulncheck-tools build ## Scan the standard release binary for known vulnerabilities.
-	"$(GOVULNCHECK)" -mode=binary bin/powercontext
+dependency-security: govulncheck-tools build ## Scan the standard release source closure for known vulnerabilities.
+	"$(GOVULNCHECK)" -tags "$(STANDARD_TAGS)" ./...
 
 generate: ## Regenerate checked-in OpenAPI and MCP outputs.
 	$(GO) generate ./openapi
