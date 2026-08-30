@@ -297,3 +297,7 @@ source / artifact / trigger / inference
   parsing at a shell comment before deciding that a command exists. Verify a
   fully commented command cannot satisfy executable-documentation evidence and
   that a valid command still reaches the real CLI boundary.
+- When a workflow contract test injects a step by replacing the next-job
+  boundary, anchor the mutation to the target job's actual adjacent boundary
+  after structural changes. Verify the mutant changes that target job and is
+  rejected by the contract validator.
