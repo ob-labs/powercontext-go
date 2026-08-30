@@ -134,8 +134,8 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 	$(GO) run ./tools/traceability-generate -check
 	git diff --exit-code -- openapi api/v1 client/invoker_gen.go internal/mcpapi/schemas_gen.go integrations/dsh/plugins/powercontext/src/operations.generated.ts
 
-generated-consumers: ## Generate and test fresh Go consumers from public generator CLIs.
-	GOWORK=off $(GO) test -count=1 ./tools/generated-consumers
+generated-consumers: lint-tools ## Generate, test, and lint fresh consumers from public generator CLIs.
+	POWERCONTEXT_GOLANGCI_LINT="$(GOLANGCI_LINT)" GOWORK=off $(GO) test -count=1 ./tools/generated-consumers
 
 module-check: ## Verify tidy readonly module metadata and checksums.
 	$(GO) mod tidy -diff

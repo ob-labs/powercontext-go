@@ -368,7 +368,8 @@ func TestGeneratedConsumersTargetRunsFreshConsumerVerification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make generated-consumers dry-run failed: %v\n%s", err, output)
 	}
-	if !strings.Contains(string(output), "go test -count=1 ./tools/generated-consumers") {
+	if !strings.Contains(string(output), "POWERCONTEXT_GOLANGCI_LINT=") ||
+		!strings.Contains(string(output), "go test -count=1 ./tools/generated-consumers") {
 		t.Fatalf("make generated-consumers does not run the uncached fresh-consumer check:\n%s", output)
 	}
 }
