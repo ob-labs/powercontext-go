@@ -61,6 +61,145 @@ func TestGeneratedRememberMemorySchema(t *testing.T) {
 }
 `
 
+const generatedTraceabilityConsumerTest = `package generatedconsumer
+
+import (
+	"encoding/json/v2"
+	"fmt"
+	"os"
+	"slices"
+	"testing"
+)
+
+type traceabilityTable struct {
+	SchemaVersion               int                 ` + "`json:\"schema_version\"`" + `
+	OracleCommit                string              ` + "`json:\"oracle_commit\"`" + `
+	PythonTestFileCount         int                 ` + "`json:\"python_test_file_count\"`" + `
+	PythonTestCaseCount         int                 ` + "`json:\"python_test_case_count\"`" + `
+	CaseSpecificEvidenceCount   int                 ` + "`json:\"case_specific_evidence_count\"`" + `
+	FileSupportingEvidenceCount int                 ` + "`json:\"file_supporting_evidence_count\"`" + `
+	CaseSpecificEvidenceMinimum int                 ` + "`json:\"case_specific_evidence_minimum\"`" + `
+	Entries                     []traceabilityEntry ` + "`json:\"entries\"`" + `
+}
+
+type traceabilityEntry struct {
+	Python        pythonIdentity         ` + "`json:\"python\"`" + `
+	Mode          string                 ` + "`json:\"mode\"`" + `
+	EvidenceLevel string                 ` + "`json:\"evidence_level\"`" + `
+	Evidence      []traceabilityEvidence ` + "`json:\"evidence\"`" + `
+}
+
+type pythonIdentity struct {
+	File string ` + "`json:\"file\"`" + `
+	Name string ` + "`json:\"name\"`" + `
+	Line int    ` + "`json:\"line\"`" + `
+}
+
+type traceabilityEvidence struct {
+	Kind string ` + "`json:\"kind\"`" + `
+	File string ` + "`json:\"file\"`" + `
+	Test string ` + "`json:\"test\"`" + `
+}
+
+func TestGeneratedTraceabilityTable(t *testing.T) {
+	payload, readErr := os.ReadFile("traceability.json")
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	table, decodeErr := decodeTraceabilityTable(payload)
+	if decodeErr != nil {
+		t.Fatalf("decode traceability table: %v", decodeErr)
+	}
+	if validateErr := validateTraceabilityTable(table); validateErr != nil {
+		t.Fatal(validateErr)
+	}
+}
+
+func TestTraceabilityEntryValidationRejectsIncompleteValues(t *testing.T) {
+	valid := traceabilityEntry{
+		Python:        pythonIdentity{File: "tests/test_example.py", Name: "test_example", Line: 10},
+		Mode:          "go-port",
+		EvidenceLevel: "case-specific",
+		Evidence:      []traceabilityEvidence{{Kind: "go", File: "example_test.go", Test: "TestExample"}},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*traceabilityEntry)
+	}{
+		{name: "missing Python identity", mutate: func(entry *traceabilityEntry) { entry.Python.Name = "" }},
+		{name: "invalid mode", mutate: func(entry *traceabilityEntry) { entry.Mode = "unknown" }},
+		{name: "invalid evidence level", mutate: func(entry *traceabilityEntry) { entry.EvidenceLevel = "file-supporting" }},
+		{name: "missing evidence", mutate: func(entry *traceabilityEntry) { entry.Evidence = nil }},
+		{name: "incomplete evidence", mutate: func(entry *traceabilityEntry) { entry.Evidence[0].File = "" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			entry := valid
+			entry.Evidence = slices.Clone(valid.Evidence)
+			test.mutate(&entry)
+			if validateErr := validateTraceabilityEntry(entry); validateErr == nil {
+				t.Fatal("validation unexpectedly succeeded")
+			}
+		})
+	}
+}
+
+func decodeTraceabilityTable(payload []byte) (traceabilityTable, error) {
+	var table traceabilityTable
+	if decodeErr := json.Unmarshal(payload, &table, json.RejectUnknownMembers(true)); decodeErr != nil {
+		return traceabilityTable{}, decodeErr
+	}
+	return table, nil
+}
+
+func validateTraceabilityTable(table traceabilityTable) error {
+	if table.SchemaVersion != 2 {
+		return fmt.Errorf("schema version = %d, want 2", table.SchemaVersion)
+	}
+	if table.OracleCommit != "3a6cb0151670eaff7dc0293466edd673124e80da" {
+		return fmt.Errorf("oracle commit = %q", table.OracleCommit)
+	}
+	if table.PythonTestFileCount != 109 || table.PythonTestCaseCount != 622 ||
+		table.CaseSpecificEvidenceCount != 622 || table.FileSupportingEvidenceCount != 0 ||
+		table.CaseSpecificEvidenceMinimum != 622 {
+		return fmt.Errorf("traceability summary is inconsistent")
+	}
+	if len(table.Entries) != table.PythonTestCaseCount {
+		return fmt.Errorf("traceability entries = %d, want %d", len(table.Entries), table.PythonTestCaseCount)
+	}
+	for index, entry := range table.Entries {
+		if entryErr := validateTraceabilityEntry(entry); entryErr != nil {
+			return fmt.Errorf("entry %d: %w", index, entryErr)
+		}
+	}
+	return nil
+}
+
+func validateTraceabilityEntry(entry traceabilityEntry) error {
+	if entry.Python.File == "" || entry.Python.Name == "" || entry.Python.Line <= 0 {
+		return fmt.Errorf("Python identity is incomplete")
+	}
+	if !slices.Contains([]string{"cross-layer", "go-port", "retained-host"}, entry.Mode) {
+		return fmt.Errorf("mode = %q", entry.Mode)
+	}
+	if entry.EvidenceLevel != "case-specific" {
+		return fmt.Errorf("evidence level = %q", entry.EvidenceLevel)
+	}
+	if len(entry.Evidence) == 0 {
+		return fmt.Errorf("evidence is empty")
+	}
+	for index, evidence := range entry.Evidence {
+		if !slices.Contains([]string{"go", "py", "ts"}, evidence.Kind) {
+			return fmt.Errorf("evidence %d kind = %q", index, evidence.Kind)
+		}
+		if evidence.File == "" || evidence.Test == "" {
+			return fmt.Errorf("evidence %d is incomplete", index)
+		}
+	}
+	return nil
+}
+`
+
 func TestOpenAPIGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 	repository := repositoryRoot(t)
 	consumer := t.TempDir()
@@ -103,6 +242,153 @@ func TestMCPSchemaGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 	runGo(t, consumer, "mod", "tidy")
 	runGo(t, consumer, "mod", "verify")
 	runGo(t, consumer, "test", "-count=1", "./...")
+}
+
+func TestTraceabilityGeneratorProducesGoldenConsumableTable(t *testing.T) {
+	repository := repositoryRoot(t)
+	consumer := t.TempDir()
+	generated := filepath.Join(consumer, "traceability.json")
+
+	runGo(t, repository,
+		"run", "./tools/traceability-generate",
+		"-root", repository,
+		"-manifest", filepath.Join(repository, "test", "conformance", "testdata", "python-v0.0.2", "manifest.json"),
+		"-rules", filepath.Join(repository, "test", "conformance", "traceability-rules.json"),
+		"-output", generated,
+	)
+
+	compareFile(t, filepath.Join(repository, "test", "conformance", "traceability.json"), generated)
+	prepareTraceabilityConsumer(t, consumer)
+	runGo(t, consumer, "test", "-count=1", "./...")
+	runGo(t, consumer, "vet", "./...")
+	runConsumerLint(t, repository, consumer)
+}
+
+func TestTraceabilityConsumerRejectsSchemaMutants(t *testing.T) {
+	repository := repositoryRoot(t)
+	payload, readErr := os.ReadFile(filepath.Join(repository, "test", "conformance", "traceability.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	tests := []struct {
+		name       string
+		mutate     func([]byte) []byte
+		wantOutput string
+	}{
+		{
+			name: "unknown top-level field",
+			mutate: func(payload []byte) []byte {
+				return replaceOnce(t, payload, []byte("{"), []byte(`{"unexpected":true,`))
+			},
+			wantOutput: "decode traceability table",
+		},
+		{
+			name: "duplicate top-level field",
+			mutate: func(payload []byte) []byte {
+				return replaceOnce(t, payload, []byte(`"schema_version": 2,`), []byte(`"schema_version": 2, "schema_version": 2,`))
+			},
+			wantOutput: "decode traceability table",
+		},
+		{
+			name: "unknown entry field",
+			mutate: func(payload []byte) []byte {
+				return replaceOnce(t, payload, []byte(`"python": {`), []byte(`"unexpected": true, "python": {`))
+			},
+			wantOutput: "decode traceability table",
+		},
+		{
+			name: "missing evidence field",
+			mutate: func(payload []byte) []byte {
+				return replaceOnce(t, payload, []byte(`"evidence": [`), []byte(`"missing_evidence": [`))
+			},
+			wantOutput: "decode traceability table",
+		},
+		{
+			name: "empty evidence object",
+			mutate: func(payload []byte) []byte {
+				return clearFirstJSONStringValue(t, payload, "kind")
+			},
+			wantOutput: "evidence 0 kind",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			consumer := t.TempDir()
+			mutated := test.mutate(slices.Clone(payload))
+			generated := filepath.Join(consumer, "traceability.json")
+			writeFile(t, generated, string(mutated))
+			prepareTraceabilityConsumer(t, consumer)
+			runGoExpectFailure(t, consumer, test.wantOutput, "test", "-count=1", "./...")
+		})
+	}
+}
+
+func prepareTraceabilityConsumer(t *testing.T, consumer string) {
+	t.Helper()
+	writeFile(t, filepath.Join(consumer, "go.mod"), "module example.com/powercontext-traceability-consumer\n\ngo 1.27.0\n")
+	writeFile(t, filepath.Join(consumer, "consumer_test.go"), generatedTraceabilityConsumerTest)
+	runGo(t, consumer, "mod", "tidy")
+	runGo(t, consumer, "mod", "verify")
+}
+
+func replaceOnce(t *testing.T, payload, old, replacement []byte) []byte {
+	t.Helper()
+	mutated := bytes.Replace(payload, old, replacement, 1)
+	if bytes.Equal(mutated, payload) {
+		t.Fatalf("traceability payload does not contain %q", old)
+	}
+	return mutated
+}
+
+func clearFirstJSONStringValue(t *testing.T, payload []byte, key string) []byte {
+	t.Helper()
+	prefix := []byte(`"` + key + `": "`)
+	start := bytes.Index(payload, prefix)
+	if start < 0 {
+		t.Fatalf("traceability payload does not contain string field %q", key)
+	}
+	valueStart := start + len(prefix)
+	valueEnd := bytes.IndexByte(payload[valueStart:], '"')
+	if valueEnd < 0 {
+		t.Fatalf("traceability field %q has no closing quote", key)
+	}
+	mutated := slices.Clone(payload[:valueStart])
+	return append(mutated, payload[valueStart+valueEnd:]...)
+}
+
+func runGoExpectFailure(t *testing.T, directory, wantOutput string, arguments ...string) {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), "go", arguments...)
+	command.Dir = directory
+	command.Env = append(os.Environ(), "GOWORK=off")
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("Go command unexpectedly succeeded:\n%s", output)
+	}
+	if !bytes.Contains(output, []byte(wantOutput)) {
+		t.Fatalf("Go command output is missing %q:\n%s", wantOutput, output)
+	}
+}
+
+func runConsumerLint(t *testing.T, repository, consumer string) {
+	t.Helper()
+	linter := os.Getenv("POWERCONTEXT_GOLANGCI_LINT")
+	if linter == "" {
+		return
+	}
+	config := filepath.Join(repository, ".golangci.yml")
+	for _, arguments := range [][]string{
+		{"fmt", "--diff", "--config", config},
+		{"run", "--config", config},
+	} {
+		command := exec.CommandContext(t.Context(), linter, arguments...)
+		command.Dir = consumer
+		command.Env = append(os.Environ(), "GOWORK=off")
+		output, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("check generated consumer with %v: %v\n%s", arguments, err, output)
+		}
+	}
 }
 
 func repositoryRoot(t *testing.T) string {
