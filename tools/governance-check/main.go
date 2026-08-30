@@ -155,7 +155,7 @@ func checkRepository(root string) error {
 		return err
 	}
 	if err := requirePhrases(root, ".github/pull_request_template.md", []string{
-		"## Tracking", "Part of #", "Closes #", "## Behavior and compatibility", "## Validation", "git diff --check", "## AI usage",
+		"## Tracking", "Part of #", "Closes #", "## Behavior and compatibility", "## Validation", "git diff --check", "Formatter evidence", "Generated-consumer evidence", "Compatibility evidence", "## AI usage",
 	}); err != nil {
 		return err
 	}
