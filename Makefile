@@ -22,6 +22,9 @@ GOLANGCI_LINT_STAMP = $(TOOLS_BIN)/.golangci-lint-$(GOLANGCI_LINT_VERSION)-$(PRO
 APIDIFF_VERSION := v0.0.0-20260824195058-e88cd73687aa
 APIDIFF := $(TOOLS_BIN)/apidiff$(shell $(GO) env GOEXE)
 APIDIFF_STAMP = $(TOOLS_BIN)/.apidiff-$(APIDIFF_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+GOVULNCHECK_VERSION := v1.7.0
+GOVULNCHECK := $(TOOLS_BIN)/govulncheck$(shell $(GO) env GOEXE)
+GOVULNCHECK_STAMP = $(TOOLS_BIN)/.govulncheck-$(GOVULNCHECK_VERSION)-$(PROJECT_GO_TOOLCHAIN)
 
 COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
@@ -61,7 +64,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -123,6 +126,20 @@ api-compat: api-compat-tools ## Reject incompatible changes to deliberate public
 	fi
 	@POWERCONTEXT_APIDIFF="$(APIDIFF)" GOFLAGS="$(API_COMPAT_GOFLAGS)" \
 		$(GO) test -count=1 ./tools/api-baseline -run '^TestAPIDiffRejectsRemovedExportedIdentifier$$'
+
+$(GOVULNCHECK): Makefile go.mod
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+$(GOVULNCHECK_STAMP): $(GOVULNCHECK)
+	@$(GO) version -m "$(GOVULNCHECK)" | awk '$$1 == "mod" && $$2 == "golang.org/x/vuln" && $$3 == "$(GOVULNCHECK_VERSION)" { found = 1 } END { exit !found }'
+	@touch "$@"
+
+govulncheck-tools: $(GOVULNCHECK_STAMP) ## Install the pinned Go vulnerability scanner.
+
+dependency-security: govulncheck-tools build ## Scan the standard release source closure for known vulnerabilities.
+	"$(GOVULNCHECK)" -tags "$(STANDARD_TAGS)" ./...
 
 generate: ## Regenerate checked-in OpenAPI and MCP outputs.
 	$(GO) generate ./openapi

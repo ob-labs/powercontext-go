@@ -42,9 +42,24 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
+		}
+	}
+}
+
+func TestDependencySecurityScansTheStandardSourceClosure(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "dependency-security", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make dependency-security dry-run failed: %v\n%s", err, output)
+	}
+	for _, want := range []string{"golang.org/x/vuln/cmd/govulncheck@v1.7.0", "build -tags 'sqlite_fts5'", "govulncheck", "-tags \"sqlite_fts5\"", "./..."} {
+		if !strings.Contains(string(output), want) {
+			t.Fatalf("make dependency-security is missing %q:\n%s", want, output)
 		}
 	}
 }
