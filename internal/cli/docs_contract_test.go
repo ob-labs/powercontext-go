@@ -86,6 +86,13 @@ func TestDocumentedServerRunCommandsStart(t *testing.T) {
 	}
 }
 
+func TestParseDocumentedServerRunRejectsCommentedCommand(t *testing.T) {
+	fields := strings.Fields("# ./bin/powercontext server run --host 0.0.0.0")
+	if _, ok := parseDocumentedServerRun(fields); ok {
+		t.Fatal("commented Server command was treated as executable documentation")
+	}
+}
+
 func readDocumentedServerRuns(t *testing.T) []documentedServerRun {
 	t.Helper()
 	payload, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
@@ -111,6 +118,12 @@ func readDocumentedServerRuns(t *testing.T) []documentedServerRun {
 }
 
 func parseDocumentedServerRun(fields []string) (documentedServerRun, bool) {
+	for index, field := range fields {
+		if strings.HasPrefix(field, "#") {
+			fields = fields[:index]
+			break
+		}
+	}
 	environment := make(map[string]string)
 	index := 0
 	for index < len(fields) && documentedEnvToken.MatchString(fields[index]) {

@@ -259,3 +259,7 @@ source / artifact / trigger / inference
   host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6
   loopback, remote plaintext rejection, and each explicit trusted-transport
   exception in the adapter's native test suite.
+- When a documentation contract test extracts executable shell commands, stop
+  parsing at a shell comment before deciding that a command exists. Verify a
+  fully commented command cannot satisfy executable-documentation evidence and
+  that a valid command still reaches the real CLI boundary.
