@@ -80,6 +80,28 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  dependency-security:
+    name: dependency-security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Scan the standard release binary for known vulnerabilities
+        run: make dependency-security
+
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
