@@ -204,6 +204,19 @@ jobs:
           _oracle/.venv/bin/python test/conformance/python_scheduler_fixture.py \
             compare "$fixture_root/scheduler.db" \
             --expected test/conformance/testdata/python-v0.0.2/scheduler.db
+          # SQLite database bytes encode the writer's SQLite version and page
+          # layout. The generator manifest must use the committed canonical
+          # database bytes after the regenerated databases pass semantic checks.
+          fixture_manifest_root="$RUNNER_TEMP/powercontext-oracle-fixture-manifest"
+          mkdir -p "$fixture_manifest_root"
+          for name in authority-rows.json domain-contract.json handoff-report-digests.json; do
+            cp "$fixture_root/$name" "$fixture_manifest_root/$name"
+          done
+          for name in authority.db scheduler.db provider-matrix.json; do
+            cp "test/conformance/testdata/python-v0.0.2/$name" "$fixture_manifest_root/$name"
+          done
+          go run ./tools/fixture-generate -python _oracle -output "$fixture_manifest_root/manifest.json"
+          cmp "$fixture_manifest_root/manifest.json" "test/conformance/testdata/python-v0.0.2/manifest.json"
           go run ./tools/fixture-generate -python _oracle -check
           go run ./tools/traceability-generate -check
           go run ./tools/parity-inventory-generate -upstream _target -check
