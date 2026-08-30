@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 643,
-  "pending_case_count": 116,
+  "mapped_case_count": 645,
+  "pending_case_count": 114,
   "entries": [
     {
       "python": {
@@ -8507,8 +8507,15 @@
         "line": 103
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/docs_contract_test.go",
+          "test": "TestRemoteAccessDocumentationIncludesNonLoopbackServerCommand"
+        }
+      ]
     },
     {
       "python": {
@@ -8517,8 +8524,15 @@
         "line": 110
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/docs_contract_test.go",
+          "test": "TestDocumentedServerRunCommandsStart"
+        }
+      ]
     },
     {
       "python": {

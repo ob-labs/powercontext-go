@@ -102,7 +102,19 @@
     },
     "tests/test_docs_remote_access_contract.py": {
       "mode": "go-port",
-      "reason": "Documentation contract for non-loopback binds owned by this repository."
+      "reason": "Documentation contract for non-loopback binds owned by this repository.",
+      "cases": {
+        "test_docs_expose_a_non_loopback_bind_command": {
+          "evidence": [
+            "go:internal/cli/docs_contract_test.go#TestRemoteAccessDocumentationIncludesNonLoopbackServerCommand"
+          ]
+        },
+        "test_documented_server_run_command_starts": {
+          "evidence": [
+            "go:internal/cli/docs_contract_test.go#TestDocumentedServerRunCommandsStart"
+          ]
+        }
+      }
     },
     "tests/test_doctor_integrations.py": {
       "mode": "go-port",

@@ -92,6 +92,15 @@ front of the Server; controlled networks or deployments with upstream TLS may
 instead opt in explicitly with
 `POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=true`.
 
+For an authenticated non-loopback bind behind a TLS terminator, replace the
+example token before starting the Server:
+
+```sh
+POWERCONTEXT_SERVER_AUTH_ENABLED=true \
+POWERCONTEXT_SERVER_AUTH_TOKEN='replace-with-a-strong-token' \
+./bin/powercontext server run --host 0.0.0.0
+```
+
 The Go Client likewise rejects plaintext HTTP to a non-loopback Server unless
 the caller supplies its own `http.Client` and explicitly sets
 `TrustTransportSecurity` for a separately secured transport.
