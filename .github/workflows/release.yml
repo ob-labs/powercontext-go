@@ -141,8 +141,8 @@ jobs:
           POWERCONTEXT_ONNXRUNTIME_LIBRARY_DIR: ${{ steps.native.outputs.onnxruntime-lib-dir }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          go run ./tools/process-smoke -binary bin/powercontext -version "$VERSION"
-          go run ./tools/process-smoke -binary bin/powercontext-full -version "$VERSION"
+          go run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version "$VERSION"
+          go run ./tools/process-smoke -binary bin/powercontext-full -env-file .env.example -version "$VERSION"
 
       - name: Build the platform checksum manifest
         run: |

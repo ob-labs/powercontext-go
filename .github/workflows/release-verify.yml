@@ -162,6 +162,7 @@ jobs:
         run: |
           go run ./tools/process-smoke \
             -binary "${{ steps.archives.outputs.standard_root }}/bin/powercontext" \
+            -env-file "${{ steps.archives.outputs.standard_root }}/.env.example" \
             -version "$VERSION"
 
       - name: Exercise the released Full binary
@@ -172,6 +173,7 @@ jobs:
         run: |
           go run ./tools/process-smoke \
             -binary "${{ steps.archives.outputs.full_root }}/bin/powercontext" \
+            -env-file "${{ steps.archives.outputs.full_root }}/.env.example" \
             -version "$VERSION"
 
       - name: Verify immutable GHCR image manifests

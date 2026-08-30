@@ -15,10 +15,110 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 )
+
+const validSecurityDefaults = `
+POWERCONTEXT_SERVER_HTTP_HOST=127.0.0.1
+POWERCONTEXT_SERVER_AUTH_ENABLED=false
+POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=false
+POWERCONTEXT_CLIENT_SERVER_URL=http://127.0.0.1:8000
+`
+
+func TestReleaseSecurityDefaultsAcceptRepositoryExample(t *testing.T) {
+	if err := verifySecurityDefaults(filepath.Join("..", "..", ".env.example")); err != nil {
+		t.Fatalf("verify repository security defaults: %v", err)
+	}
+}
+
+func TestReleaseSecurityDefaultsRejectUnsafeOrAmbiguousValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		contents   string
+		wantField  string
+		secretText string
+	}{
+		{
+			name:      "remote Server host",
+			contents:  strings.Replace(validSecurityDefaults, "127.0.0.1", "0.0.0.0", 1),
+			wantField: "POWERCONTEXT_SERVER_HTTP_HOST",
+		},
+		{
+			name:      "authentication enabled by default",
+			contents:  strings.Replace(validSecurityDefaults, "AUTH_ENABLED=false", "AUTH_ENABLED=true", 1),
+			wantField: "POWERCONTEXT_SERVER_AUTH_ENABLED",
+		},
+		{
+			name:      "non-loopback opt-in enabled",
+			contents:  strings.Replace(validSecurityDefaults, "NON_LOOPBACK=false", "NON_LOOPBACK=true", 1),
+			wantField: "POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK",
+		},
+		{
+			name:      "remote plaintext Client URL",
+			contents:  strings.Replace(validSecurityDefaults, "http://127.0.0.1:8000", "http://memory.example:8000", 1),
+			wantField: "POWERCONTEXT_CLIENT_SERVER_URL",
+		},
+		{
+			name:       "active example bearer token",
+			contents:   validSecurityDefaults + "POWERCONTEXT_SERVER_AUTH_TOKEN=secret-sentinel\n",
+			wantField:  "POWERCONTEXT_SERVER_AUTH_TOKEN",
+			secretText: "secret-sentinel",
+		},
+		{
+			name:       "exported example bearer token",
+			contents:   validSecurityDefaults + "export POWERCONTEXT_SERVER_AUTH_TOKEN=secret-sentinel\n",
+			wantField:  "POWERCONTEXT_SERVER_AUTH_TOKEN",
+			secretText: "secret-sentinel",
+		},
+		{
+			name:       "tab-exported example bearer token",
+			contents:   validSecurityDefaults + "export\tPOWERCONTEXT_SERVER_AUTH_TOKEN=secret-sentinel\n",
+			wantField:  "POWERCONTEXT_SERVER_AUTH_TOKEN",
+			secretText: "secret-sentinel",
+		},
+		{
+			name:       "duplicate Server host",
+			contents:   validSecurityDefaults + "POWERCONTEXT_SERVER_HTTP_HOST=127.0.0.2\n",
+			wantField:  "POWERCONTEXT_SERVER_HTTP_HOST",
+			secretText: "127.0.0.2",
+		},
+		{
+			name:      "missing Client URL",
+			contents:  strings.Replace(validSecurityDefaults, "POWERCONTEXT_CLIENT_SERVER_URL=http://127.0.0.1:8000\n", "", 1),
+			wantField: "POWERCONTEXT_CLIENT_SERVER_URL",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ".env.example")
+			if err := os.WriteFile(path, []byte(strings.TrimSpace(test.contents)+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := verifySecurityDefaults(path)
+			if err == nil || !strings.Contains(err.Error(), test.wantField) {
+				t.Fatalf("verifySecurityDefaults() error = %v, want field %s", err, test.wantField)
+			}
+			if test.secretText != "" && strings.Contains(err.Error(), test.secretText) {
+				t.Fatalf("verifySecurityDefaults() exposed configured value in %q", err)
+			}
+		})
+	}
+}
+
+func TestReleaseSecurityDefaultsReadFailureDoesNotExposePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "private-config", ".env.example")
+	err := verifySecurityDefaults(path)
+	if err == nil {
+		t.Fatal("verifySecurityDefaults() accepted a missing file")
+	}
+	if strings.Contains(err.Error(), path) {
+		t.Fatalf("verifySecurityDefaults() exposed local path in %q", err)
+	}
+}
 
 func TestIsolatedEnvironmentRemovesPowerContextContamination(t *testing.T) {
 	source := []string{
