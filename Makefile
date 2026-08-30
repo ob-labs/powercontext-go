@@ -73,7 +73,7 @@ PUBLIC_API_PACKAGES := \
 help: ## Show supported development, verification, and release commands.
 	@awk 'BEGIN { FS = ":.*##"; print "Supported targets:" } /^[[:alnum:]_-]+:.*##/ { printf "  %-28s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-$(GOLANGCI_LINT): Makefile go.mod
+$(GOLANGCI_LINT): Makefile go.mod go.sum
 	@mkdir -p "$(TOOLS_BIN)"
 	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
 		$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
@@ -92,7 +92,7 @@ lint-fix: lint-tools ## Format and apply supported automatic lint fixes.
 	"$(GOLANGCI_LINT)" fmt
 	"$(GOLANGCI_LINT)" run --fix
 
-$(APIDIFF): Makefile go.mod
+$(APIDIFF): Makefile go.mod go.sum
 	@mkdir -p "$(TOOLS_BIN)"
 	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
 		$(GO) install golang.org/x/exp/cmd/apidiff@$(APIDIFF_VERSION)

@@ -1035,6 +1035,7 @@ chmod +x "$GOBIN/golangci-lint"
 	for _, arguments := range [][]string{
 		{"lint-tools", "GO=" + fakeGo, "TOOLS_BIN=" + toolsBin},
 		{"lint-tools", "-W", "go.mod", "GO=" + fakeGo, "TOOLS_BIN=" + toolsBin},
+		{"lint-tools", "-W", "go.sum", "GO=" + fakeGo, "TOOLS_BIN=" + toolsBin},
 	} {
 		command := exec.CommandContext(t.Context(), "make", arguments...)
 		command.Dir = repository
@@ -1052,8 +1053,8 @@ chmod +x "$GOBIN/golangci-lint"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
-		t.Fatalf("lint tool install count = %d, want 2 after go.mod changes", count)
+	if count != 3 {
+		t.Fatalf("lint tool install count = %d, want 3 after go.mod and go.sum changes", count)
 	}
 }
 
