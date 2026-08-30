@@ -48,7 +48,6 @@ linters:
         - name: context-as-argument
           arguments:
             - allow-types-before: "*testing.T"
-        - name: forbidden-call-in-wg-go
         - name: identical-branches
         - name: identical-ifelseif-branches
         - name: identical-ifelseif-conditions
