@@ -192,12 +192,12 @@ func removeSupersededPiPackages(
 			continue
 		}
 		remove := ""
-		if hasRemotePackageScheme(listing.source) {
+		removeSource := hasRemotePackageScheme(listing.source) ||
+			(listing.path == "" && filepath.IsAbs(listing.source))
+		if removeSource {
 			remove = listing.source
 		} else if listing.path != "" {
 			remove = listing.path
-		} else if filepath.IsAbs(listing.source) {
-			remove = listing.source
 		}
 		if remove != "" {
 			if _, err := commands.Run(ctx, executable, "remove", remove); err != nil {
