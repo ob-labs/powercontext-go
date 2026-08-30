@@ -23,7 +23,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fatal(errors.New("usage: release <asset|package|metadata|checksum|licenses|verify> [flags]"))
+		fatal(errors.New("usage: release <asset|package|metadata|checksum|licenses|verify|verify-evidence> [flags]"))
 	}
 	var err error
 	switch os.Args[1] {
@@ -39,6 +39,8 @@ func main() {
 		err = runLicenseInventory(os.Args[2:], os.Stdout)
 	case "verify":
 		err = runVerify(os.Args[2:])
+	case "verify-evidence":
+		err = runVerifyEvidence(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown release command %q", os.Args[1])
 	}

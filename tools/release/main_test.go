@@ -22,6 +22,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -66,6 +67,135 @@ func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
 	if len(manifest.Native[0].Licenses) != 1 || manifest.Native[0].Path != "github.com/asg017/sqlite-vec" {
 		t.Fatalf("native license evidence = %#v", manifest.Native)
 	}
+}
+
+func TestReleaseEvidenceVerifierRejectsSBOMModuleOmission(t *testing.T) {
+	root := t.TempDir()
+	writeReleaseEvidenceFixture(t, root, true, `{"spdxVersion":"SPDX-2.3","packages":[]}`)
+
+	output, commandErr := runReleaseEvidenceVerifier(t, root)
+	if commandErr == nil {
+		t.Fatalf("release evidence verifier accepted an SBOM without the manifest module:\n%s", output)
+	}
+	if !strings.Contains(string(output), "missing Go module") {
+		t.Fatalf("release evidence verifier did not report the omitted Go module:\n%s", output)
+	}
+}
+
+func TestReleaseEvidenceVerifierRejectsLicenseRecordMissingFromNotice(t *testing.T) {
+	root := t.TempDir()
+	writeReleaseEvidenceFixture(t, root, false, `{
+  "spdxVersion": "SPDX-2.3",
+  "packages": [{"externalRefs": [{
+    "referenceCategory": "PACKAGE-MANAGER",
+    "referenceType": "purl",
+    "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
+  }]}]
+}`)
+
+	output, commandErr := runReleaseEvidenceVerifier(t, root)
+	if commandErr == nil {
+		t.Fatalf("release evidence verifier accepted a missing license notice:\n%s", output)
+	}
+	if !strings.Contains(string(output), "missing license notice") {
+		t.Fatalf("release evidence verifier did not report the missing license notice:\n%s", output)
+	}
+}
+
+func TestReleaseEvidenceVerifierAcceptsReconciledEvidence(t *testing.T) {
+	root := t.TempDir()
+	writeReleaseEvidenceFixture(t, root, true, `{
+  "spdxVersion": "SPDX-2.3",
+  "packages": [{"externalRefs": [{
+    "referenceCategory": "PACKAGE-MANAGER",
+    "referenceType": "purl",
+    "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
+  }]}]
+}`)
+
+	output, commandErr := runReleaseEvidenceVerifier(t, root)
+	if commandErr != nil {
+		t.Fatalf("release evidence verifier rejected reconciled evidence: %v\n%s", commandErr, output)
+	}
+}
+
+func TestReleaseEvidenceVerifierRejectsDependencyWithoutLicenseRecord(t *testing.T) {
+	root := t.TempDir()
+	writeReleaseEvidenceFixture(t, root, true, `{
+  "spdxVersion": "SPDX-2.3",
+  "packages": [{"externalRefs": [{
+    "referenceCategory": "PACKAGE-MANAGER",
+    "referenceType": "purl",
+    "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
+  }]}]
+}`)
+	manifest := dependencyManifest{
+		SchemaVersion: 1,
+		Modules:       []dependencyRecord{{Path: "example.com/covered", Version: "v1.2.3"}},
+		Native: []dependencyRecord{{
+			Path: "example.com/native", Version: "v4.5.6",
+			Licenses: []licenseRecord{{Name: "NOTICE", SHA256: strings.Repeat("b", 64)}},
+		}},
+	}
+	dependencies, err := json.Marshal(&manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "DEPENDENCIES.json"), dependencies, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	output, commandErr := runReleaseEvidenceVerifier(t, root)
+	if commandErr == nil {
+		t.Fatalf("release evidence verifier accepted a dependency without license records:\n%s", output)
+	}
+	if !strings.Contains(string(output), "missing license record") {
+		t.Fatalf("release evidence verifier did not report the missing license record:\n%s", output)
+	}
+}
+
+func writeReleaseEvidenceFixture(t *testing.T, root string, includeNotices bool, sbom string) {
+	t.Helper()
+	manifest := dependencyManifest{
+		SchemaVersion: 1,
+		Modules: []dependencyRecord{{
+			Path: "example.com/covered", Version: "v1.2.3",
+			Licenses: []licenseRecord{{Name: "LICENSE", SHA256: strings.Repeat("a", 64)}},
+		}},
+		Native: []dependencyRecord{{
+			Path: "example.com/native", Version: "v4.5.6",
+			Licenses: []licenseRecord{{Name: "NOTICE", SHA256: strings.Repeat("b", 64)}},
+		}},
+	}
+	dependencies, err := json.Marshal(&manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "DEPENDENCIES.json"), dependencies, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if includeNotices {
+		var notices strings.Builder
+		for _, dependency := range append(slices.Clone(manifest.Modules), manifest.Native...) {
+			writeNoticeHeader(&notices, dependency.Path, dependency.Version)
+			for _, license := range dependency.Licenses {
+				writeLicense(&notices, license.Name, []byte("license text\n"))
+			}
+		}
+		if err := os.WriteFile(filepath.Join(root, "THIRD-PARTY-LICENSES.txt"), []byte(notices.String()), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "SBOM.spdx.json"), []byte(sbom), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runReleaseEvidenceVerifier(t *testing.T, root string) ([]byte, error) {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), "go", "run", ".", "verify-evidence", "-root", root)
+	command.Dir = "."
+	return command.CombinedOutput()
 }
 
 func TestGenerateSBOMUsesStablePublicIdentity(t *testing.T) {

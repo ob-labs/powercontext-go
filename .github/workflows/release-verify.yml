@@ -141,13 +141,7 @@ jobs:
               --arg version "$VERSION" \
               '.schema_version == 1 and .product == "PowerContext" and .edition == $edition and .version == $version and .commit == $commit and .build_date == $build_date and .target == "linux-amd64" and .cgo_enabled == true' \
               "$root/BUILD-INFO.json" >/dev/null
-            test -s "$root/DEPENDENCIES.json"
-            test -s "$root/THIRD-PARTY-LICENSES.txt"
-            test -s "$root/SBOM.spdx.json"
-            jq -e \
-              '.schema_version == 1 and (.go_modules | length) > 0 and (.native_dependencies | length) > 0' \
-              "$root/DEPENDENCIES.json" >/dev/null
-            jq -e '.spdxVersion != null and (.packages | length) > 0' "$root/SBOM.spdx.json" >/dev/null
+            go run ./tools/release verify-evidence -root "$root"
             test "$("$root/bin/powercontext" --version)" = "$VERSION"
             echo "${edition}_root=$root" >> "$GITHUB_OUTPUT"
           }
