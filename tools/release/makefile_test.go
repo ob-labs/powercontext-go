@@ -1035,6 +1035,7 @@ chmod +x "$GOBIN/golangci-lint"
 	for _, arguments := range [][]string{
 		{"lint-tools", "GO=" + fakeGo, "TOOLS_BIN=" + toolsBin},
 		{"lint-tools", "-W", "go.mod", "GO=" + fakeGo, "TOOLS_BIN=" + toolsBin},
+		{"lint-tools", "-W", "go.sum", "GO=" + fakeGo, "TOOLS_BIN=" + toolsBin},
 	} {
 		command := exec.CommandContext(t.Context(), "make", arguments...)
 		command.Dir = repository
@@ -1052,8 +1053,8 @@ chmod +x "$GOBIN/golangci-lint"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
-		t.Fatalf("lint tool install count = %d, want 2 after go.mod changes", count)
+	if count != 3 {
+		t.Fatalf("lint tool install count = %d, want 3 after go.mod and go.sum changes", count)
 	}
 }
 
@@ -1127,6 +1128,9 @@ func TestFmtFailsWhenGoSyntaxIsInvalid(t *testing.T) {
 	}
 	if writeModuleErr := os.WriteFile(filepath.Join(temporary, "go.mod"), []byte("module example.com/malformed\n\ngo 1.27.0\n"), 0o644); writeModuleErr != nil {
 		t.Fatal(writeModuleErr)
+	}
+	if writeSumErr := os.WriteFile(filepath.Join(temporary, "go.sum"), nil, 0o644); writeSumErr != nil {
+		t.Fatal(writeSumErr)
 	}
 	if writeSourceErr := os.WriteFile(filepath.Join(temporary, "malformed.go"), []byte("package invalid\n\nfunc broken( {\n"), 0o644); writeSourceErr != nil {
 		t.Fatal(writeSourceErr)
