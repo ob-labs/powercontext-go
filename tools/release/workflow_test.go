@@ -521,6 +521,47 @@ func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) 
 	}
 }
 
+func TestFrozenOracleFixtureGeneratorUsesTemporaryGoldenOutput(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string `yaml:"name"`
+				Run  string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	oracle, ok := workflow.Jobs["frozen-oracle"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no frozen-oracle job")
+	}
+	for _, step := range oracle.Steps {
+		if step.Name != "Regenerate and compare frozen fixtures" {
+			continue
+		}
+		for _, required := range []string{
+			`fixture_manifest_root="$RUNNER_TEMP/powercontext-oracle-fixture-manifest"`,
+			`cp "$fixture_root/$name" "$fixture_manifest_root/$name"`,
+			`cp "test/conformance/testdata/python-v0.0.2/$name" "$fixture_manifest_root/$name"`,
+			`go run ./tools/fixture-generate -python _oracle -output "$fixture_manifest_root/manifest.json"`,
+			`cmp "$fixture_manifest_root/manifest.json" "test/conformance/testdata/python-v0.0.2/manifest.json"`,
+		} {
+			if !strings.Contains(step.Run, required) {
+				t.Fatalf("frozen fixture regeneration is missing %q:\n%s", required, step.Run)
+			}
+		}
+		return
+	}
+	t.Fatal("frozen-oracle job has no fixture regeneration step")
+}
+
 func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
