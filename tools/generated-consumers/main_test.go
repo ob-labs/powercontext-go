@@ -61,6 +61,64 @@ func TestGeneratedRememberMemorySchema(t *testing.T) {
 }
 `
 
+const generatedTraceabilityConsumerTest = `package generatedconsumer
+
+import (
+	"encoding/json"
+	"os"
+	"testing"
+)
+
+func TestGeneratedTraceabilityTable(t *testing.T) {
+	payload, err := os.ReadFile("traceability.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &table); err != nil {
+		t.Fatal(err)
+	}
+	var schemaVersion, pythonTestCaseCount, caseSpecificEvidenceCount int
+	if err := json.Unmarshal(table["schema_version"], &schemaVersion); err != nil {
+		t.Fatal(err)
+	}
+	if schemaVersion != 2 {
+		t.Fatalf("schema version = %d, want 2", schemaVersion)
+	}
+	var oracleCommit string
+	if err := json.Unmarshal(table["oracle_commit"], &oracleCommit); err != nil {
+		t.Fatal(err)
+	}
+	if oracleCommit != "3a6cb0151670eaff7dc0293466edd673124e80da" {
+		t.Fatalf("oracle commit = %q", oracleCommit)
+	}
+	for key, target := range map[string]*int{
+		"python_test_case_count": &pythonTestCaseCount,
+		"case_specific_evidence_count": &caseSpecificEvidenceCount,
+	} {
+		if err := json.Unmarshal(table[key], target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var entries []map[string]json.RawMessage
+	if err := json.Unmarshal(table["entries"], &entries); err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != pythonTestCaseCount || caseSpecificEvidenceCount != len(entries) {
+		t.Fatalf("traceability counts are inconsistent")
+	}
+	for _, entry := range entries {
+		var evidence []json.RawMessage
+		if err := json.Unmarshal(entry["evidence"], &evidence); err != nil {
+			t.Fatal(err)
+		}
+		if len(evidence) == 0 {
+			t.Fatal("traceability entry has no evidence")
+		}
+	}
+}
+`
+
 func TestOpenAPIGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 	repository := repositoryRoot(t)
 	consumer := t.TempDir()
@@ -99,6 +157,28 @@ func TestMCPSchemaGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 	compareFile(t, filepath.Join(repository, "internal", "mcpapi", "schemas_gen.go"), generated)
 	writeFile(t, filepath.Join(consumer, "go.mod"), "module example.com/powercontext-generated-mcp\n\ngo 1.27.0\n")
 	writeFile(t, filepath.Join(consumer, "schemas_gen_test.go"), generatedMCPSchemaConsumerTest)
+
+	runGo(t, consumer, "mod", "tidy")
+	runGo(t, consumer, "mod", "verify")
+	runGo(t, consumer, "test", "-count=1", "./...")
+}
+
+func TestTraceabilityGeneratorProducesGoldenConsumableTable(t *testing.T) {
+	repository := repositoryRoot(t)
+	consumer := t.TempDir()
+	generated := filepath.Join(consumer, "traceability.json")
+
+	runGo(t, repository,
+		"run", "./tools/traceability-generate",
+		"-root", repository,
+		"-manifest", filepath.Join(repository, "test", "conformance", "testdata", "python-v0.0.2", "manifest.json"),
+		"-rules", filepath.Join(repository, "test", "conformance", "traceability-rules.json"),
+		"-output", generated,
+	)
+
+	compareFile(t, filepath.Join(repository, "test", "conformance", "traceability.json"), generated)
+	writeFile(t, filepath.Join(consumer, "go.mod"), "module example.com/powercontext-traceability-consumer\n\ngo 1.27.0\n")
+	writeFile(t, filepath.Join(consumer, "consumer_test.go"), generatedTraceabilityConsumerTest)
 
 	runGo(t, consumer, "mod", "tidy")
 	runGo(t, consumer, "mod", "verify")
