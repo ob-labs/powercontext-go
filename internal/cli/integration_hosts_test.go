@@ -30,8 +30,10 @@ func TestSetupAndDoctorExposeCurrentHostMatrix(t *testing.T) {
 	command := newCommandWithAllDependencies(
 		VersionInfo{Version: "test"}, &strings.Builder{}, &strings.Builder{}, nil, nil, &scriptedSystemCommands{t: t},
 	)
-	want := []string{"claude-code", "codex", "dsh", "hermes", "openclaw", "opencode", "pi"}
-	for _, parentName := range []string{"setup", "doctor"} {
+	for parentName, want := range map[string][]string{
+		"setup":  {"claude-code", "codex", "dsh", "hermes", "openclaw", "opencode", "pi"},
+		"doctor": {"claude-code", "codex", "dsh", "hermes", "integrations", "openclaw", "opencode", "pi"},
+	} {
 		parent, _, err := command.Find([]string{parentName})
 		if err != nil {
 			t.Fatal(err)

@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 651,
-  "pending_case_count": 108,
+  "mapped_case_count": 660,
+  "pending_case_count": 99,
   "entries": [
     {
       "python": {
@@ -8583,8 +8583,15 @@
         "line": 125
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsJSONIncludesEveryFirstClassHost"
+        }
+      ]
     },
     {
       "python": {
@@ -8593,8 +8600,15 @@
         "line": 140
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsTreatsMissingCLIsAsSuccess"
+        }
+      ]
     },
     {
       "python": {
@@ -8603,8 +8617,15 @@
         "line": 155
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsPrintsHumanMatrix"
+        }
+      ]
     },
     {
       "python": {
@@ -8613,8 +8634,15 @@
         "line": 167
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsFailsWhenPresentPluginIsBroken"
+        }
+      ]
     },
     {
       "python": {
@@ -8623,8 +8651,15 @@
         "line": 181
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsFailsWhenPresentCLICannotListPlugins"
+        }
+      ]
     },
     {
       "python": {
@@ -8633,8 +8668,15 @@
         "line": 194
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsFailsWhenPresentOpenCodeSkillIsBroken"
+        }
+      ]
     },
     {
       "python": {
@@ -8643,8 +8685,15 @@
         "line": 206
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/doctor_integrations_test.go",
+          "test": "TestDoctorIntegrationsSucceedsWhenEveryHostIsMissing"
+        }
+      ]
     },
     {
       "python": {
@@ -8653,8 +8702,15 @@
         "line": 216
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/system_contract_test.go",
+          "test": "TestDoctorChecksOnlyServerByDefault"
+        }
+      ]
     },
     {
       "python": {
@@ -8663,8 +8719,15 @@
         "line": 243
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/system_contract_test.go",
+          "test": "TestDoctorCodexReportsMissingCLI"
+        }
+      ]
     },
     {
       "python": {
