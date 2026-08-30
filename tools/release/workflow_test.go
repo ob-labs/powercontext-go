@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -162,6 +163,13 @@ func TestMigrationQualityRunsModuleIntegrity(t *testing.T) {
 	t.Fatal("migration-gates.yml quality job does not execute make module-integrity")
 }
 
+type migrationWorkflowStep struct {
+	Name  string `yaml:"name"`
+	If    string `yaml:"if"`
+	Shell string `yaml:"shell"`
+	Run   string `yaml:"run"`
+}
+
 func TestMigrationQualityRejectsWorktreeSideEffects(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
@@ -207,39 +215,131 @@ func TestMigrationQualityRejectsWorktreeSideEffects(t *testing.T) {
 	}
 }
 
-func validateMigrationQualityCleanliness(payload []byte) error {
-	type workflowStep struct {
-		Name  string `yaml:"name"`
-		If    string `yaml:"if"`
-		Shell string `yaml:"shell"`
-		Run   string `yaml:"run"`
+func TestMigrationQualityCleanlinessCommandReportsBoundedGitStatus(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	var workflow struct {
-		Jobs map[string]struct {
-			Steps []workflowStep `yaml:"steps"`
-		} `yaml:"jobs"`
+	step, err := migrationQualityCleanlinessStep(payload)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := yaml.Unmarshal(payload, &workflow); err != nil {
-		return fmt.Errorf("parse migration workflow: %w", err)
-	}
-	quality, ok := workflow.Jobs["quality"]
-	if !ok {
-		return fmt.Errorf("migration-gates.yml has no quality job")
-	}
-	if len(quality.Steps) == 0 {
-		return fmt.Errorf("migration-gates.yml quality job has no steps")
+	bash := workflowBash(t)
+
+	tests := []struct {
+		name         string
+		mutate       func(t *testing.T, root string)
+		wantDirty    bool
+		wantOutput   string
+		maximumLines int
+	}{
+		{name: "clean"},
+		{
+			name: "unstaged tracked file",
+			mutate: func(t *testing.T, root string) {
+				writeWorkflowFixture(t, filepath.Join(root, "tracked.txt"), "changed\n")
+			},
+			wantDirty:  true,
+			wantOutput: " M tracked.txt",
+		},
+		{
+			name: "staged tracked file",
+			mutate: func(t *testing.T, root string) {
+				writeWorkflowFixture(t, filepath.Join(root, "tracked.txt"), "changed\n")
+				runWorkflowGit(t, root, "add", "tracked.txt")
+			},
+			wantDirty:  true,
+			wantOutput: "M  tracked.txt",
+		},
+		{
+			name: "untracked file",
+			mutate: func(t *testing.T, root string) {
+				writeWorkflowFixture(t, filepath.Join(root, "untracked.txt"), "new\n")
+			},
+			wantDirty:  true,
+			wantOutput: "?? untracked.txt",
+		},
+		{
+			name: "bounded diagnostics",
+			mutate: func(t *testing.T, root string) {
+				for index := range 105 {
+					writeWorkflowFixture(t, filepath.Join(root, fmt.Sprintf("untracked-%03d.txt", index)), "new\n")
+				}
+			},
+			wantDirty:    true,
+			wantOutput:   "... 5 additional paths omitted",
+			maximumLines: 101,
+		},
 	}
 
-	got := quality.Steps[len(quality.Steps)-1]
-	got.Run = strings.TrimSpace(got.Run)
-	want := workflowStep{
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := initializeWorkflowGitRepository(t)
+			if test.mutate != nil {
+				test.mutate(t, root)
+			}
+			before := workflowGitStatus(t, root)
+			command := exec.CommandContext(t.Context(), bash, "-eu", "-o", "pipefail", "-c", step.Run)
+			command.Dir = root
+			output, commandErr := command.CombinedOutput()
+			after := workflowGitStatus(t, root)
+			if after != before {
+				t.Fatalf("cleanliness command changed repository status\nbefore:\n%s\nafter:\n%s", before, after)
+			}
+			if test.wantDirty && commandErr == nil {
+				t.Fatalf("cleanliness command accepted a dirty repository:\n%s", output)
+			}
+			if !test.wantDirty && commandErr != nil {
+				t.Fatalf("cleanliness command rejected a clean repository: %v\n%s", commandErr, output)
+			}
+			if test.wantOutput != "" && !strings.Contains(string(output), test.wantOutput) {
+				t.Fatalf("cleanliness output is missing %q:\n%s", test.wantOutput, output)
+			}
+			if test.maximumLines > 0 {
+				lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+				if len(lines) > test.maximumLines {
+					t.Fatalf("cleanliness diagnostics have %d lines, want at most %d", len(lines), test.maximumLines)
+				}
+			}
+		})
+	}
+}
+
+func workflowBash(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		return "bash"
+	}
+	command := exec.CommandContext(t.Context(), "git", "--exec-path")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("locate Git executable directory: %v", err)
+	}
+	bash := filepath.Clean(filepath.Join(strings.TrimSpace(string(output)), "..", "..", "..", "bin", "bash.exe"))
+	if _, statErr := os.Stat(bash); statErr != nil {
+		t.Fatalf("locate Git Bash at %s: %v", bash, statErr)
+	}
+	return bash
+}
+
+func validateMigrationQualityCleanliness(payload []byte) error {
+	got, err := migrationQualityCleanlinessStep(payload)
+	if err != nil {
+		return err
+	}
+	want := migrationWorkflowStep{
 		Name:  "Verify repository cleanliness after quality checks",
 		If:    "always()",
 		Shell: "bash",
 		Run: strings.TrimSpace(`
 status="$(git status --porcelain)"
 if test -n "$status"; then
-  printf '%s\n' "$status"
+  count="$(printf '%s\n' "$status" | wc -l | tr -d '[:space:]')"
+  printf '%s\n' "$status" | sed -n '1,100p'
+  if test "$count" -gt 100; then
+    printf '... %s additional paths omitted\n' "$((count - 100))"
+  fi
   exit 1
 fi
 `),
@@ -248,6 +348,65 @@ fi
 		return fmt.Errorf("migration-gates.yml final quality step = %#v, want %#v", got, want)
 	}
 	return nil
+}
+
+func migrationQualityCleanlinessStep(payload []byte) (migrationWorkflowStep, error) {
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []migrationWorkflowStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		return migrationWorkflowStep{}, fmt.Errorf("parse migration workflow: %w", err)
+	}
+	quality, ok := workflow.Jobs["quality"]
+	if !ok {
+		return migrationWorkflowStep{}, fmt.Errorf("migration-gates.yml has no quality job")
+	}
+	if len(quality.Steps) == 0 {
+		return migrationWorkflowStep{}, fmt.Errorf("migration-gates.yml quality job has no steps")
+	}
+
+	got := quality.Steps[len(quality.Steps)-1]
+	got.Run = strings.TrimSpace(got.Run)
+	return got, nil
+}
+
+func initializeWorkflowGitRepository(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	runWorkflowGit(t, root, "init", "--quiet")
+	runWorkflowGit(t, root, "config", "user.email", "ci@example.invalid")
+	runWorkflowGit(t, root, "config", "user.name", "CI")
+	writeWorkflowFixture(t, filepath.Join(root, "tracked.txt"), "original\n")
+	runWorkflowGit(t, root, "add", "tracked.txt")
+	runWorkflowGit(t, root, "commit", "--quiet", "-m", "initial")
+	return root
+}
+
+func runWorkflowGit(t *testing.T, root string, arguments ...string) {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), "git", append([]string{"-C", root}, arguments...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", arguments, err, output)
+	}
+}
+
+func workflowGitStatus(t *testing.T, root string) string {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), "git", "-C", root, "status", "--porcelain")
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status: %v\n%s", err, output)
+	}
+	return string(output)
+}
+
+func writeWorkflowFixture(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) {

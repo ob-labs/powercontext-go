@@ -185,8 +185,9 @@ source / artifact / trigger / inference
   runtime; source-text checks alone do not prove the execution contract.
 - When an always-run CI cleanliness step must diagnose tracked and untracked
   side effects, capture one porcelain status before deciding success; never put
-  a fail-fast dirty-tree command ahead of the diagnostic. Verify the parsed
-  workflow contract rejects the wrong job, condition, shell, command, or order.
+  a fail-fast dirty-tree command ahead of the diagnostic. Print only a bounded
+  prefix plus the omitted-path count. Verify both the parsed workflow contract
+  and real clean, staged, unstaged, untracked, and over-limit repositories.
 - When a governance parser exempts a GitHub Actions reusable-workflow caller
   from ordinary-job requirements, require a nonblank `uses` reference and
   reject every keyword outside GitHub's supported caller-job set. Verify the
