@@ -160,6 +160,9 @@ source / artifact / trigger / inference
 - When a test invokes a freshly built external binary, disable result caching
   or key it to the binary content. Verify the gate reruns after the binary
   changes without changing the test package.
+- When a release or end-to-end CLI adds a required flag, inventory every direct
+  invocation instead of updating only wrapper targets. Verify each script and
+  Make entrypoint with executable fakes that assert the complete argument list.
 - When a harness recursively removes a temporary home, create the exact
   deletion target itself under any caller-supplied parent. Verify a parent
   sentinel survives failed startup cleanup.
@@ -235,6 +238,10 @@ source / artifact / trigger / inference
   editing only the lockfile. Regenerate with the package-manager version pinned
   in CI, preserve required license headers, and verify both a frozen install
   and an authoritative audit eliminate every vulnerable dependency path.
+- When a Go release artifact is stripped, do not treat a binary scanner's
+  module-only fallback as symbol-level evidence. Build an unstripped scan twin
+  from the same entrypoint, tags, dependency lock, and version metadata, and
+  verify build-before-scan ordering and exact arguments with executable fakes.
 - When a test must cancel while a synchronous foreign-function call is in
   flight, coordinate entry and release with explicit barriers instead of a
   fixed sleep. Verify the public error and cleanup side effects under high

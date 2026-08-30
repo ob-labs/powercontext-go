@@ -78,18 +78,184 @@ func TestSmokeTargetsVerifySecurityDefaultsFile(t *testing.T) {
 	}
 }
 
-func TestDependencySecurityScansTheStandardSourceClosure(t *testing.T) {
-	repository := filepath.Clean(filepath.Join("..", ".."))
-	command := exec.CommandContext(t.Context(), "make", "--dry-run", "dependency-security", "GO=go")
+func TestE2EAcceptancePassesSecurityDefaultsFileToProcessSmoke(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the E2E harness requires a POSIX shell")
+	}
+
+	repository, absoluteErr := filepath.Abs(filepath.Clean(filepath.Join("..", "..")))
+	if absoluteErr != nil {
+		t.Fatal(absoluteErr)
+	}
+	temporary := t.TempDir()
+	bin := filepath.Join(temporary, "bin")
+	if mkdirErr := os.Mkdir(bin, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	callLog := filepath.Join(temporary, "calls.txt")
+	const fakeCommand = `#!/bin/sh
+set -eu
+printf '%s|%s|%s\n' "$(basename "$0")" "${CGO_ENABLED:-}" "$*" >> "$CALL_LOG"
+`
+	for _, name := range []string{"go", "make"} {
+		if writeErr := os.WriteFile(filepath.Join(bin, name), []byte(fakeCommand), 0o755); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+	}
+
+	const sourceSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	command := exec.CommandContext(
+		t.Context(),
+		"sh",
+		filepath.Join(repository, "test", "e2e", "run.sh"),
+		"acceptance",
+	)
 	command.Dir = repository
+	command.Env = append(
+		environmentWithout(
+			"PATH",
+			"CALL_LOG",
+			"CGO_ENABLED",
+			"GITHUB_SHA",
+			"POWERCONTEXT_E2E_DATABASE",
+			"POWERCONTEXT_E2E_OUTPUT",
+		),
+		"PATH="+filepath.ToSlash(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"CALL_LOG="+filepath.ToSlash(callLog),
+		"GITHUB_SHA="+sourceSHA,
+		"POWERCONTEXT_E2E_DATABASE=sqlite",
+		"POWERCONTEXT_E2E_OUTPUT="+filepath.ToSlash(filepath.Join(temporary, "output")),
+	)
 	output, err := command.CombinedOutput()
 	if err != nil {
-		t.Fatalf("make dependency-security dry-run failed: %v\n%s", err, output)
+		t.Fatalf("run SQLite E2E acceptance harness: %v\n%s", err, output)
 	}
-	for _, want := range []string{"golang.org/x/vuln/cmd/govulncheck@v1.7.0", "build -tags 'sqlite_fts5'", "govulncheck", "-tags \"sqlite_fts5\"", "./..."} {
-		if !strings.Contains(string(output), want) {
-			t.Fatalf("make dependency-security is missing %q:\n%s", want, output)
+	payload, readErr := os.ReadFile(callLog)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	want := []string{
+		"go|1|test -count=1 -tags sqlite_fts5 -json ./test/e2e",
+		"make||build VERSION=ci COMMIT=" + sourceSHA + " BUILD_DATE=1970-01-01T00:00:00Z",
+		"go||run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version ci",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SQLite E2E acceptance calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestDependencySecurityScansAnUnstrippedStandardServerBuild(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	temporary := t.TempDir()
+	for _, name := range []string{"Makefile", "go.mod"} {
+		payload, err := os.ReadFile(filepath.Join(repository, name))
+		if err != nil {
+			t.Fatal(err)
 		}
+		if err := os.WriteFile(filepath.Join(temporary, name), payload, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	callLog := filepath.Join(temporary, "calls.txt")
+	fakeGo := filepath.Join(temporary, "go")
+	const fakeGoScript = `#!/bin/sh
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "env GOVERSION")
+    printf 'go1.27.0\n'
+    exit 0
+    ;;
+esac
+
+if [ "${1:-}" = "build" ]; then
+  test "${CGO_ENABLED:-}" = "1"
+  case "$*" in
+    "build -tags sqlite_fts5 -trimpath "*"-o bin/powercontext-vulncheck ./cmd/powercontext")
+      ;;
+    *)
+      printf 'unexpected release build: %s\n' "$*" >&2
+      exit 30
+      ;;
+  esac
+  case " $* " in
+    *" -s "*|*" -w "*)
+      printf 'vulnerability scan build was stripped: %s\n' "$*" >&2
+      exit 31
+      ;;
+  esac
+  printf 'build\n' >> "$CALL_LOG"
+  output=
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "-o" ]; then
+      shift
+      output=$1
+      break
+    fi
+    shift
+  done
+  test -n "$output"
+  mkdir -p "$(dirname "$output")"
+  printf 'release-binary\n' > "$output"
+  exit 0
+fi
+
+printf 'unexpected go invocation: %s\n' "$*" >&2
+exit 29
+`
+	if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeScanner := filepath.Join(temporary, "govulncheck")
+	const fakeScannerScript = `#!/bin/sh
+set -eu
+
+printf 'scan|%s\n' "$*" >> "$CALL_LOG"
+test "$#" -eq 2
+test "$1" = "-mode=binary"
+test "$2" = "bin/powercontext-vulncheck"
+test -f "$2"
+`
+	if err := os.WriteFile(fakeScanner, []byte(fakeScannerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stamp := filepath.Join(temporary, ".govulncheck-stamp")
+	if err := os.WriteFile(stamp, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	command := exec.CommandContext(
+		t.Context(),
+		"make",
+		"--no-print-directory",
+		"dependency-security",
+		"GO="+filepath.ToSlash(fakeGo),
+		"GOVULNCHECK="+filepath.ToSlash(fakeScanner),
+		"GOVULNCHECK_STAMP="+filepath.ToSlash(stamp),
+		"VERSION=probe",
+		"COMMIT=probe",
+		"BUILD_DATE=1970-01-01T00:00:00Z",
+	)
+	command.Dir = temporary
+	command.Env = append(os.Environ(), "CALL_LOG="+filepath.ToSlash(callLog))
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make dependency-security failed: %v\n%s", err, output)
+	}
+	payload, err := os.ReadFile(callLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	want := []string{"build", "scan|-mode=binary bin/powercontext-vulncheck"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("dependency-security calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 
