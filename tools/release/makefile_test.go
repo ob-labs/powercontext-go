@@ -61,8 +61,8 @@ func TestDependencySecurityScansTheStandardSourceClosure(t *testing.T) {
 		if !strings.Contains(string(output), want) {
 			t.Fatalf("make dependency-security is missing %q:\n%s", want, output)
 		}
+	}
 }
-
 func TestCleanRemovesOnlyKnownLocalOutputs(t *testing.T) {
 	repository, absoluteErr := filepath.Abs(filepath.Clean(filepath.Join("..", "..")))
 	if absoluteErr != nil {
