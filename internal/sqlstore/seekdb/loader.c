@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+//go:build cgo && (darwin || linux)
+
 #include "loader.h"
 
 #include <dlfcn.h>

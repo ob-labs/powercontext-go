@@ -280,7 +280,7 @@ func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 	}
 }
 
-func TestWindowsContractExercisesAPIBaselineReplacement(t *testing.T) {
+func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "windows-contract.yml"))
 	if err != nil {
@@ -302,7 +302,7 @@ func TestWindowsContractExercisesAPIBaselineReplacement(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-contract.yml has no windows-contract job")
 	}
-	setupIndex, testIndex := -1, -1
+	setupIndex, apiTestIndex, seekDBTestIndex := -1, -1, -1
 	for index, step := range job.Steps {
 		switch step.Name {
 		case "Set up the Go environment":
@@ -311,12 +311,21 @@ func TestWindowsContractExercisesAPIBaselineReplacement(t *testing.T) {
 			}
 		case "Verify API baseline replacement on Windows":
 			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'" {
-				testIndex = index
+				apiTestIndex = index
+			}
+		case "Verify seekDB build selection on Windows":
+			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/release -run '^TestSeekDBBuildConstraintsSelectImplementationAndNativeSourcesTogether$'" {
+				seekDBTestIndex = index
 			}
 		}
 	}
-	if setupIndex < 0 || testIndex <= setupIndex {
-		t.Fatalf("Windows API baseline steps = setup %d, test %d, want ordered setup and replacement test", setupIndex, testIndex)
+	if setupIndex < 0 || apiTestIndex <= setupIndex || seekDBTestIndex <= apiTestIndex {
+		t.Fatalf(
+			"Windows targeted Go steps = setup %d, API %d, seekDB %d, want ordered setup and regression tests",
+			setupIndex,
+			apiTestIndex,
+			seekDBTestIndex,
+		)
 	}
 }
 

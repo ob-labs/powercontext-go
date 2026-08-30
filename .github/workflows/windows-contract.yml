@@ -31,6 +31,9 @@ jobs:
       - name: Verify API baseline replacement on Windows
         run: go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'
 
+      - name: Verify seekDB build selection on Windows
+        run: go test -count=1 ./tools/release -run '^TestSeekDBBuildConstraintsSelectImplementationAndNativeSourcesTogether$'
+
       - name: Verify LF attributes and frozen fixture hashes
         shell: pwsh
         run: |
