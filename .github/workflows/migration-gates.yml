@@ -55,6 +55,14 @@ jobs:
       - name: Build the standard Docker image
         run: docker build --pull --target powercontext -t powercontext:ci .
 
+      - name: Verify repository cleanliness after quality checks
+        if: always()
+        shell: bash
+        run: |
+          git diff --exit-code
+          git status --short
+          test -z "$(git status --porcelain)"
+
   portable-sdk:
     name: Portable SDK cross-builds
     runs-on: ubuntu-24.04

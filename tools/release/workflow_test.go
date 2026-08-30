@@ -161,6 +161,26 @@ func TestMigrationQualityRunsModuleIntegrity(t *testing.T) {
 	t.Fatal("migration-gates.yml quality job does not execute make module-integrity")
 }
 
+func TestMigrationQualityRejectsWorktreeSideEffects(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	for _, value := range []string{
+		"Verify repository cleanliness after quality checks",
+		"if: always()",
+		"git diff --exit-code",
+		"git status --short",
+		"test -z \"$(git status --porcelain)\"",
+	} {
+		if !strings.Contains(contents, value) {
+			t.Fatalf("migration quality job is missing %q", value)
+		}
+	}
+}
+
 func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
