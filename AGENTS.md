@@ -306,3 +306,7 @@ source / artifact / trigger / inference
   terminal query instead of treating every character device as a TTY. Verify
   null devices and pipes remain non-interactive while a controlled terminal
   input still enables the prompt path.
+- When setup returns a host-home path after resolving symlinks, compare tests
+  against the same resolved path rather than the raw input path. Verify a
+  symlinked temporary-root path and an ordinary path so platform aliases such
+  as macOS `/var` cannot cause a false setup failure.
