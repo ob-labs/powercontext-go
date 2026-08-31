@@ -21,20 +21,49 @@ import (
 	"testing"
 )
 
-func TestValidateInventoryAcceptsEveryOwnedModule(t *testing.T) {
+func TestValidateInventoryAcceptsClassifiedOwnedModules(t *testing.T) {
 	root := t.TempDir()
 	writeModule(t, root, ".")
 	writeModule(t, root, "test/downstream")
 	inventory := writeInventory(t, root, `{
-  "schema_version": 1,
+  "schema_version": 2,
   "modules": [
-    {"path": "."},
-    {"path": "test/downstream"}
-  ]
+    {"path": ".", "kind": "production"},
+    {"path": "test/downstream", "kind": "external-consumer"}
+  ],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
 }`)
 
 	if err := validateInventory(t.Context(), root, inventory); err != nil {
 		t.Fatalf("validate complete module inventory: %v", err)
+	}
+}
+
+func TestReadInventoryRejectsMixedModuleClassifications(t *testing.T) {
+	tests := map[string]string{
+		"production test module": `{
+  "schema_version": 2,
+  "modules": [{"path": "test/downstream", "kind": "production"}],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
+}`,
+		"consumer outside test": `{
+  "schema_version": 2,
+  "modules": [{"path": ".", "kind": "external-consumer"}],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
+}`,
+		"persistent generated consumer": `{
+  "schema_version": 2,
+  "modules": [{"path": ".", "kind": "production"}],
+  "generated_consumers": {"mode": "checked-in", "package": "tools/generated-consumers"}
+}`,
+	}
+	for name, contents := range tests {
+		t.Run(name, func(t *testing.T) {
+			inventory := writeInventory(t, t.TempDir(), contents)
+			if _, err := readInventory(t.Context(), inventory); err == nil {
+				t.Fatal("readInventory accepted an invalid module classification")
+			}
+		})
 	}
 }
 
@@ -43,10 +72,11 @@ func TestValidateInventoryRejectsUninventoriedNestedModule(t *testing.T) {
 	writeModule(t, root, ".")
 	writeModule(t, root, "test/downstream")
 	inventory := writeInventory(t, root, `{
-  "schema_version": 1,
+  "schema_version": 2,
   "modules": [
-    {"path": "."}
-  ]
+    {"path": ".", "kind": "production"}
+  ],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
 }`)
 
 	err := validateInventory(t.Context(), root, inventory)
@@ -60,10 +90,11 @@ func TestValidateInventoryRejectsOwnedModuleBelowGeneratedLikeDirectory(t *testi
 	writeModule(t, root, ".")
 	writeModule(t, root, "tools/bin/owned")
 	inventory := writeInventory(t, root, `{
-  "schema_version": 1,
+  "schema_version": 2,
   "modules": [
-    {"path": "."}
-  ]
+    {"path": ".", "kind": "production"}
+  ],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
 }`)
 
 	err := validateInventory(t.Context(), root, inventory)
@@ -103,10 +134,11 @@ func TestValidateInventoryRejectsRepositoryParentPath(t *testing.T) {
 	root := t.TempDir()
 	writeModule(t, root, ".")
 	inventory := writeInventory(t, root, `{
-  "schema_version": 1,
+  "schema_version": 2,
   "modules": [
-    {"path": ".."}
-  ]
+    {"path": "..", "kind": "production"}
+  ],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
 }`)
 
 	err := validateInventory(t.Context(), root, inventory)
@@ -135,11 +167,12 @@ func TestValidateInventoryRejectsInvalidChecksum(t *testing.T) {
 			writeModule(t, root, "test/downstream")
 			invalidate(t, filepath.Join(root, "test", "downstream", "go.sum"))
 			inventory := writeInventory(t, root, `{
-  "schema_version": 1,
+  "schema_version": 2,
   "modules": [
-    {"path": "."},
-    {"path": "test/downstream"}
-  ]
+    {"path": ".", "kind": "production"},
+    {"path": "test/downstream", "kind": "external-consumer"}
+  ],
+  "generated_consumers": {"mode": "temporary", "package": "tools/generated-consumers"}
 }`)
 
 			err := validateInventory(t.Context(), root, inventory)
