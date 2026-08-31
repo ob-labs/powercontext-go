@@ -56,6 +56,7 @@ func run(arguments []string, output io.Writer) error {
 	flags := flag.NewFlagSet("race-debt", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	path := flags.String("file", defaultLedgerPath, "path to the race-debt ledger")
+	baselinePath := flags.String("baseline", "", "optional approved race-debt ledger that the current ledger may only shrink")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
@@ -63,21 +64,42 @@ func run(arguments []string, output io.Writer) error {
 		return fmt.Errorf("unexpected argument %q", flags.Arg(0))
 	}
 
-	contents, err := os.ReadFile(*path)
+	value, err := readLedger(*path)
 	if err != nil {
-		return fmt.Errorf("read ledger: %w", err)
-	}
-	var value ledger
-	decodeErr := json.Unmarshal(contents, &value, json.RejectUnknownMembers(true))
-	if decodeErr != nil {
-		return fmt.Errorf("parse ledger: %w", decodeErr)
+		return err
 	}
 	validationErr := validate(value, time.Now().UTC())
 	if validationErr != nil {
 		return validationErr
 	}
+	if *baselinePath != "" {
+		baseline, baselineErr := readLedger(*baselinePath)
+		if baselineErr != nil {
+			return fmt.Errorf("read baseline: %w", baselineErr)
+		}
+		baselineValidationErr := validate(baseline, time.Now().UTC())
+		if baselineValidationErr != nil {
+			return fmt.Errorf("validate baseline: %w", baselineValidationErr)
+		}
+		if policyErr := requireNoNewExclusions(value, baseline); policyErr != nil {
+			return policyErr
+		}
+	}
 	_, err = fmt.Fprintf(output, "race debt: %d temporary exclusions verified\n", len(value.Exclusions))
 	return err
+}
+
+func readLedger(path string) (ledger, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return ledger{}, fmt.Errorf("read ledger: %w", err)
+	}
+	var value ledger
+	decodeErr := json.Unmarshal(contents, &value, json.RejectUnknownMembers(true))
+	if decodeErr != nil {
+		return ledger{}, fmt.Errorf("parse ledger: %w", decodeErr)
+	}
+	return value, nil
 }
 
 func validate(value ledger, now time.Time) error {
@@ -119,13 +141,31 @@ func validate(value ledger, now time.Time) error {
 		if now.After(expires.AddDate(0, 0, 1)) {
 			return fmt.Errorf("%s.expires has passed; remove or renew the exclusion through its Issue", prefix)
 		}
-		key := entry.Package + "#" + entry.Test
+		key := exclusionKey(entry)
 		if _, ok := seen[key]; ok {
 			return fmt.Errorf("%s duplicates %q", prefix, key)
 		}
 		seen[key] = struct{}{}
 	}
 	return nil
+}
+
+func requireNoNewExclusions(current, baseline ledger) error {
+	approved := make(map[string]struct{}, len(baseline.Exclusions))
+	for _, entry := range baseline.Exclusions {
+		approved[exclusionKey(entry)] = struct{}{}
+	}
+	for _, entry := range current.Exclusions {
+		key := exclusionKey(entry)
+		if _, ok := approved[key]; !ok {
+			return fmt.Errorf("new temporary exclusion %q requires a reviewed policy change", key)
+		}
+	}
+	return nil
+}
+
+func exclusionKey(entry exclusion) string {
+	return entry.Package + "#" + entry.Test
 }
 
 func validateIssue(value string) error {

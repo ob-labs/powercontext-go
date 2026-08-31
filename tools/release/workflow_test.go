@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -228,9 +229,11 @@ func TestMigrationRaceDebtValidatesTheLedgerBeforeTheFullRaceSuite(t *testing.T)
 			RunsOn         string `yaml:"runs-on"`
 			TimeoutMinutes int    `yaml:"timeout-minutes"`
 			Steps          []struct {
-				Name string `yaml:"name"`
-				Uses string `yaml:"uses"`
-				Run  string `yaml:"run"`
+				Name string            `yaml:"name"`
+				If   string            `yaml:"if"`
+				Env  map[string]string `yaml:"env"`
+				Uses string            `yaml:"uses"`
+				Run  string            `yaml:"run"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
@@ -250,11 +253,24 @@ func TestMigrationRaceDebtValidatesTheLedgerBeforeTheFullRaceSuite(t *testing.T)
 	}
 	wantSteps := []struct {
 		name string
+		if_  string
+		env  map[string]string
 		uses string
 		run  string
 	}{
 		{name: "Check out", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
 		{name: "Set up the Go environment", uses: "./.github/actions/setup-go-env"},
+		{
+			name: "Reject new temporary race exclusions",
+			if_:  "github.event_name == 'pull_request'",
+			env:  map[string]string{"BASE_SHA": "${{ github.event.pull_request.base.sha }}"},
+			run: strings.TrimSpace(`
+git fetch --no-tags --depth=1 origin "$BASE_SHA"
+baseline="$RUNNER_TEMP/race-debt-base.json"
+git show "$BASE_SHA:.github/race-debt.json" > "$baseline"
+make race-debt-check RACE_DEBT_BASELINE="$baseline"
+`),
+		},
 		{name: "Validate the race-debt ledger", run: "make race-debt-check"},
 		{name: "Run all Go tests with the race detector", run: "make test-race"},
 	}
@@ -263,10 +279,10 @@ func TestMigrationRaceDebtValidatesTheLedgerBeforeTheFullRaceSuite(t *testing.T)
 	}
 	for index, want := range wantSteps {
 		got := job.Steps[index]
-		if got.Name != want.name || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
+		if got.Name != want.name || got.If != want.if_ || !maps.Equal(got.Env, want.env) || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
 			t.Fatalf(
-				"race-debt step %d = (%q, %q, %q), want (%q, %q, %q)",
-				index, got.Name, got.Uses, strings.TrimSpace(got.Run), want.name, want.uses, want.run,
+				"race-debt step %d = (%q, %q, %#v, %q, %q), want (%q, %q, %#v, %q, %q)",
+				index, got.Name, got.If, got.Env, got.Uses, strings.TrimSpace(got.Run), want.name, want.if_, want.env, want.uses, want.run,
 			)
 		}
 	}
