@@ -240,8 +240,10 @@ jobs:
           version: "0.10.12"
           enable-cache: true
 
-      - name: Install the locked Oracle environment
-        run: uv sync --project _oracle --locked --extra server
+      - name: Install the locked Oracle and release target environments
+        run: |
+          uv sync --project _oracle --locked --extra server
+          uv sync --project _target --locked --extra server
 
       - name: Run the frozen Python suite
         run: _oracle/.venv/bin/python -m pytest _oracle/tests
@@ -290,6 +292,40 @@ jobs:
             -check-delta \
             -previous-upstream _previous_target \
             -release-upstream _target
+
+      - name: Regenerate and compare release fixtures
+        run: |
+          fixture_root="$RUNNER_TEMP/powercontext-release-fixtures"
+          mkdir -p "$fixture_root"
+          _target/.venv/bin/python test/conformance/python_oracle_fixture.py \
+            generate "$fixture_root/authority.db" --snapshot "$fixture_root/authority-rows.json" \
+            --baseline v0.1.0
+          _target/.venv/bin/python test/conformance/python_scheduler_fixture.py \
+            generate "$fixture_root/scheduler.db"
+          _target/.venv/bin/python test/conformance/python_domain_contract_fixture.py \
+            "$fixture_root/domain-contract.json" --baseline v0.1.0 \
+            --oracle-commit 7b736206a53a6de6f43d4b517893ee1a80e7183d
+          _target/.venv/bin/python test/conformance/python_handoff_report_v002_fixture.py \
+            "$fixture_root/handoff-report-digests.json" --baseline v0.1.0 \
+            --oracle-commit 7b736206a53a6de6f43d4b517893ee1a80e7183d
+          for name in authority-rows.json domain-contract.json handoff-report-digests.json; do
+            cmp "$fixture_root/$name" "test/conformance/testdata/python-v0.1.0/$name"
+          done
+          _target/.venv/bin/python test/conformance/python_scheduler_fixture.py \
+            compare "$fixture_root/scheduler.db" \
+            --expected test/conformance/testdata/python-v0.1.0/scheduler.db
+          fixture_manifest_root="$RUNNER_TEMP/powercontext-release-fixture-manifest"
+          mkdir -p "$fixture_manifest_root"
+          for name in authority-rows.json domain-contract.json handoff-report-digests.json; do
+            cp "$fixture_root/$name" "$fixture_manifest_root/$name"
+          done
+          for name in authority.db scheduler.db provider-matrix.json; do
+            cp "test/conformance/testdata/python-v0.1.0/$name" "$fixture_manifest_root/$name"
+          done
+          go run ./tools/fixture-generate -python _target \
+            -output "$fixture_manifest_root/manifest.json" \
+            -oracle-commit 7b736206a53a6de6f43d4b517893ee1a80e7183d
+          cmp "$fixture_manifest_root/manifest.json" "test/conformance/testdata/python-v0.1.0/manifest.json"
 
       - name: Run Python to Go to Python compatibility tests
         env:

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "pydantic_ai_version": "2.29.0",
+  "generation": [
+    "alibaba", "anthropic", "azure", "azure-responses", "bedrock", "bedrock-mantle",
+    "cerebras", "cohere", "crusoe", "deepseek", "fireworks", "github", "google",
+    "google-cloud", "groq", "heroku", "huggingface", "litellm", "mistral",
+    "moonshotai", "nebius", "ollama", "openai", "openai-chat", "openai-responses",
+    "openrouter", "ovhcloud", "sambanova", "snowflake", "together", "vercel", "xai", "zai"
+  ],
+  "embedding": [
+    "alibaba", "azure", "bedrock", "cerebras", "cohere", "crusoe", "deepseek", "fireworks",
+    "github", "google", "google-cloud", "heroku", "litellm", "moonshotai", "nebius",
+    "ollama", "openai", "openrouter", "ovhcloud", "sambanova", "sentence-transformers",
+    "snowflake", "together", "vercel", "voyageai", "zai"
+  ],
+  "gateway": [
+    "anthropic", "bedrock", "chat", "converse", "google", "google-cloud", "groq",
+    "openai", "openai-chat", "openai-responses", "responses"
+  ]
+}

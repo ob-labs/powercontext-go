@@ -105,8 +105,8 @@ def encoded_cell(value: Any) -> Any:
     return value
 
 
-def semantic_snapshot(database_path: Path) -> dict[str, Any]:
-    result: dict[str, Any] = {"schema": "powercontext.python-v0.0.2.sqlite-authority.v2", "tables": {}}
+def semantic_snapshot(database_path: Path, baseline: str) -> dict[str, Any]:
+    result: dict[str, Any] = {"schema": f"powercontext.python-{baseline}.sqlite-authority.v2", "tables": {}}
     with sqlite3.connect(database_path) as connection:
         schema_objects = [
             {"type": row[0], "name": row[1], "sql": row[2]}
@@ -160,15 +160,17 @@ def main() -> None:
     parser.add_argument("mode", choices=("generate", "verify"))
     parser.add_argument("database", type=Path)
     parser.add_argument("--snapshot", type=Path)
+    parser.add_argument("--baseline", default="v0.0.2")
     arguments = parser.parse_args()
     if arguments.mode == "generate":
         asyncio.run(generate(arguments.database))
         if arguments.snapshot is None:
             parser.error("generate requires --snapshot")
-        snapshot = semantic_snapshot(arguments.database)
+        snapshot = semantic_snapshot(arguments.database, arguments.baseline)
         arguments.snapshot.write_text(
             json.dumps(snapshot, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         return
     asyncio.run(verify(arguments.database))

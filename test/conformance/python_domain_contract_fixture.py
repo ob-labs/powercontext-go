@@ -368,10 +368,12 @@ def memory_canonical_contract() -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
+    parser.add_argument("--baseline", default="v0.0.2")
+    parser.add_argument("--oracle-commit", default=ORACLE_COMMIT)
     arguments = parser.parse_args()
     fixture = {
-        "schema": "powercontext.python-v0.0.2.domain-contract.v1",
-        "oracle_commit": ORACLE_COMMIT,
+        "schema": f"powercontext.python-{arguments.baseline}.domain-contract.v1",
+        "oracle_commit": arguments.oracle_commit,
         "constants": constants(),
         "error_mappings": error_mappings(),
         "memory_canonical": memory_canonical_contract(),
@@ -379,6 +381,7 @@ def main() -> None:
     arguments.output.write_text(
         json.dumps(fixture, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 

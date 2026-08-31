@@ -1,0 +1,454 @@
+{
+  "constants": {
+    "powercontext.builtin.artifacts.experience.incubation.EXPERIENCE_INCUBATION_CURSOR_NAME": "experience-incubation",
+    "powercontext.builtin.artifacts.experience.incubation.EXPERIENCE_INCUBATION_REASON": "Incubated from bounded task-outcome evidence by the configured Experience pipeline.",
+    "powercontext.builtin.artifacts.experience.incubation.EXPERIENCE_INCUBATION_WINDOW_LIMIT": 32,
+    "powercontext.builtin.artifacts.experience.incubation.MAX_EXPERIENCE_CANDIDATE_EVIDENCE": 32,
+    "powercontext.builtin.artifacts.experience.incubation.MAX_EXPERIENCE_INCUBATION_SOURCES": 100,
+    "powercontext.builtin.artifacts.experience.incubation.MAX_EXPERIENCE_INCUBATION_SOURCE_CHARS": 64000,
+    "powercontext.builtin.artifacts.experience.incubation.TASK_OUTCOME_SOURCE_KIND": "task-outcome",
+    "powercontext.builtin.artifacts.experience.models.MAX_EXPERIENCE_FIELD_LENGTH": 8000,
+    "powercontext.builtin.artifacts.generation.MAX_GENERATION_EVIDENCE": 32,
+    "powercontext.builtin.artifacts.generation.MAX_GENERATION_EVIDENCE_CHARS": 64000,
+    "powercontext.builtin.artifacts.handoff.models.DEFAULT_HANDOFF_MAX_BYTES": 8000,
+    "powercontext.builtin.artifacts.handoff.models.MAX_HANDOFF_BYTES": 32768,
+    "powercontext.builtin.artifacts.handoff.models.MAX_HANDOFF_CITATIONS": 32,
+    "powercontext.builtin.artifacts.handoff.models.MAX_HANDOFF_OMISSIONS": 64,
+    "powercontext.builtin.artifacts.handoff.models.MAX_HANDOFF_STATE_STATEMENTS": 64,
+    "powercontext.builtin.artifacts.handoff.models.MAX_HANDOFF_TEXT_LENGTH": 8192,
+    "powercontext.builtin.artifacts.handoff.models.MIN_HANDOFF_MAX_BYTES": 512,
+    "powercontext.builtin.artifacts.skill.external.MAX_EXTERNAL_SKILL_FILES": 256,
+    "powercontext.builtin.artifacts.skill.external.MAX_EXTERNAL_SKILL_MANIFEST_BYTES": 131072,
+    "powercontext.builtin.artifacts.skill.external.MAX_EXTERNAL_SKILL_PACKAGE_BYTES": 4194304,
+    "powercontext.builtin.artifacts.skill.models.MAX_SKILL_DESCRIPTION_LENGTH": 2000,
+    "powercontext.builtin.artifacts.skill.models.MAX_SKILL_INSTRUCTIONS_LENGTH": 32000,
+    "powercontext.builtin.artifacts.skill.models.MAX_SKILL_NAME_LENGTH": 128,
+    "powercontext.builtin.artifacts.skill.models.MAX_SKILL_VALIDATION_ITEMS": 32,
+    "powercontext.builtin.artifacts.skill.models.MAX_SKILL_VALIDATION_ITEM_LENGTH": 2000,
+    "powercontext.builtin.handoff_report.catalog_store.DEFAULT_CATALOG_PAGE_SIZE": 50,
+    "powercontext.builtin.handoff_report.catalog_store.MAX_CATALOG_PAGE_SIZE": 100,
+    "powercontext.builtin.handoff_report.models.MAX_PROJECT_KEY_LENGTH": 64,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_AGENT_LABEL_LENGTH": 128,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_DESCRIPTION_LENGTH": 2000,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_EVIDENCE_REFS": 32,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_EXTERNAL_ID_LENGTH": 256,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_EXTERNAL_REFS": 32,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_ID_LENGTH": 256,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_LABELS": 32,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_LABEL_LENGTH": 128,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_NORMALIZED_REMOTE_LENGTH": 2048,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_PROVIDER_LENGTH": 64,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_REPOSITORY_ID_LENGTH": 256,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_SOURCE_SUMMARY_LENGTH": 2000,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_SUBPATH_LENGTH": 1024,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_TITLE_LENGTH": 256,
+    "powercontext.builtin.handoff_report.models.MAX_REPORT_URL_LENGTH": 2048,
+    "powercontext.builtin.handoff_report.models.MAX_WORKSPACE_INSTANCE_ID_LENGTH": 256,
+    "powercontext.builtin.handoff_report.models.MAX_WORKSTREAM_KEY_LENGTH": 64,
+    "powercontext.builtin.handoff_report.report.MAX_REPORT_ACTIVITIES": 5000,
+    "powercontext.builtin.handoff_report.report.MAX_REPORT_WORKSTREAMS": 100,
+    "powercontext.builtin.handoff_report.selection.DEFAULT_HANDOFF_SELECTION_ATTEMPTS": 3,
+    "powercontext.builtin.handoff_report.selection.MAX_HANDOFF_SELECTION_ATTEMPTS": 5,
+    "powercontext.builtin.review.models.DEFAULT_CANDIDATE_PAGE_SIZE": 50,
+    "powercontext.builtin.review.models.MAX_CANDIDATE_EVIDENCE": 32,
+    "powercontext.builtin.review.models.MAX_CANDIDATE_PAGE_SIZE": 100,
+    "powercontext.builtin.review.models.MAX_CANDIDATE_REASON_LENGTH": 2000,
+    "powercontext.builtin.runtime.models.PREPARED_CONTEXT_SCHEMA": "powercontext.prepared-context.v1",
+    "powercontext.builtin.runtime.readiness.READINESS_PROBE_CACHE_SECONDS": 300.0,
+    "powercontext.builtin.runtime.readiness.READINESS_PROBE_TIMEOUT_SECONDS": 2.0,
+    "powercontext.builtin.runtime.readiness.READINESS_PROBE_TRANSIENT_CACHE_SECONDS": 30.0,
+    "powercontext.builtin.runtime.scheduler.EXPERIENCE_INCUBATION_JOB_ID": "powercontext.experience.incubation.v1",
+    "powercontext.builtin.runtime.scheduler.SCHEDULER_TABLE": "powercontext_scheduler_jobs",
+    "powercontext.builtin.runtime.scheduler.SOURCE_WINDOW_JOB_ID": "powercontext.memory.source-window.v1",
+    "powercontext.builtin.sources.content.CONTENT_SOURCE_NAME": "content",
+    "powercontext.builtin.sources.external_skill.EXTERNAL_SKILL_SNAPSHOT_SOURCE_NAME": "external-skill-snapshot",
+    "powercontext.builtin.triggers.handoff.HANDOFF_BOUNDARY_TRIGGER_NAME": "handoff-participant-boundary",
+    "powercontext.builtin.triggers.source_window.SOURCE_WINDOW_TRIGGER_NAME": "memory-source-window",
+    "powercontext.limits.MAX_ARTIFACT_FAMILY_LENGTH": 128,
+    "powercontext.limits.MAX_ARTIFACT_ID_LENGTH": 128,
+    "powercontext.limits.MAX_BINDING_NAME_LENGTH": 128,
+    "powercontext.limits.MAX_EXTERNAL_SKILL_DESCRIPTION_LENGTH": 2000,
+    "powercontext.limits.MAX_EXTERNAL_SKILL_HOST_ID_LENGTH": 128,
+    "powercontext.limits.MAX_EXTERNAL_SKILL_LOCATOR_LENGTH": 2000,
+    "powercontext.limits.MAX_EXTERNAL_SKILL_NAME_LENGTH": 128,
+    "powercontext.limits.MAX_SCOPE_ID_LENGTH": 256,
+    "powercontext.limits.MAX_SOURCE_ID_LENGTH": 256,
+    "powercontext.limits.MAX_SOURCE_TYPE_LENGTH": 128,
+    "powercontext.server.app.MAX_HANDOFF_REPORT_BYTES": 10485760,
+    "powercontext.server.app.REPORT_DIGEST_HEADER": "X-PowerContext-Report-Digest",
+    "powercontext.server.app.REPORT_SELECTION_DIGEST_HEADER": "X-PowerContext-Selection-Digest",
+    "powercontext.server.app.REQUEST_ID_HEADER": "X-PowerContext-Request-ID",
+    "powercontext.server.mcp.MCP_PATH": "/mcp",
+    "powercontext.server.mcp.MCP_SERVER_NAME": "PowerContext Server"
+  },
+  "error_mappings": {
+    "activity_conflict": {
+      "code": "activity_event_conflict",
+      "details": {
+        "source": "coding_session",
+        "source_event_id": "session-1"
+      },
+      "message": "The Activity idempotency key already identifies different content.",
+      "python_type": "powercontext.builtin.handoff_report.repository.ActivityEventConflictError",
+      "status": 409
+    },
+    "artifact_not_found": {
+      "code": "artifact_not_found",
+      "details": null,
+      "message": "The requested Artifact was not found.",
+      "python_type": "powercontext.errors.ArtifactNotFoundError",
+      "status": 404
+    },
+    "artifact_target_conflict": {
+      "code": "artifact_conflict",
+      "details": {
+        "current": {
+          "artifact_id": "exp-1",
+          "family": "experience",
+          "revision": 2
+        }
+      },
+      "message": "The Candidate target Artifact is stale.",
+      "python_type": "powercontext.builtin.review.errors.ArtifactTargetConflictError",
+      "status": 409
+    },
+    "candidate_conflict": {
+      "code": "candidate_conflict",
+      "details": {
+        "current_version": 4,
+        "expected_version": 2
+      },
+      "message": "The Candidate version is stale.",
+      "python_type": "powercontext.builtin.review.errors.CandidateConflictError",
+      "status": 409
+    },
+    "candidate_not_found": {
+      "code": "candidate_not_found",
+      "details": null,
+      "message": "The requested Candidate was not found.",
+      "python_type": "powercontext.builtin.review.errors.CandidateNotFoundError",
+      "status": 404
+    },
+    "candidate_terminal": {
+      "code": "candidate_terminal",
+      "details": {
+        "status": "approved"
+      },
+      "message": "The Candidate is already terminal.",
+      "python_type": "powercontext.builtin.review.errors.CandidateTerminalError",
+      "status": 409
+    },
+    "capability_not_supported": {
+      "code": "capability_not_supported",
+      "details": {
+        "capability": "vector"
+      },
+      "message": "The requested capability is unavailable.",
+      "python_type": "powercontext.builtin.artifacts.memory.errors.CapabilityNotSupportedError",
+      "status": 422
+    },
+    "external_not_found": {
+      "code": "external_skill_not_found",
+      "details": null,
+      "message": "The external Skill was not found.",
+      "python_type": "powercontext.builtin.artifacts.skill.external.ExternalSkillNotFoundError",
+      "status": 404
+    },
+    "external_registry_unavailable": {
+      "code": "external_skill_registry_unavailable",
+      "details": null,
+      "message": "The external Skill Registry is unavailable.",
+      "python_type": "powercontext.builtin.artifacts.skill.external.ExternalSkillRegistryUnavailableError",
+      "status": 503
+    },
+    "external_snapshot_unavailable": {
+      "code": "external_skill_snapshot_unavailable",
+      "details": null,
+      "message": "The exact external Skill snapshot is unavailable.",
+      "python_type": "powercontext.builtin.artifacts.skill.external.ExternalSkillSnapshotUnavailableError",
+      "status": 409
+    },
+    "generation_unavailable": {
+      "code": "generation_unavailable",
+      "details": {
+        "family": "skill"
+      },
+      "message": "Artifact generation is not configured.",
+      "python_type": "powercontext.builtin.review.generation.GenerationCapabilityUnavailableError",
+      "status": 503
+    },
+    "handoff_evidence_not_found": {
+      "code": "handoff_evidence_not_found",
+      "details": null,
+      "message": "Cited Handoff evidence was not found.",
+      "python_type": "powercontext.builtin.artifacts.handoff.errors.HandoffEvidenceUnavailableError",
+      "status": 404
+    },
+    "handoff_generation_unavailable": {
+      "code": "handoff_generation_unavailable",
+      "details": null,
+      "message": "Handoff generation is unavailable.",
+      "python_type": "powercontext.builtin.artifacts.handoff.errors.HandoffGenerationUnavailableError",
+      "status": 503
+    },
+    "handoff_scope_mismatch": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.artifacts.handoff.errors.HandoffScopeMismatchError",
+      "status": 422
+    },
+    "inference_timeout": {
+      "code": "inference_timeout",
+      "details": null,
+      "message": "Model inference timed out.",
+      "python_type": "powercontext.builtin.inference.errors.InferenceTimeoutError",
+      "status": 503
+    },
+    "inference_unavailable": {
+      "code": "inference_unavailable",
+      "details": null,
+      "message": "Model inference is unavailable.",
+      "python_type": "powercontext.builtin.inference.errors.InferenceUnavailableError",
+      "status": 503
+    },
+    "invalid_candidate": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.review.errors.InvalidCandidateError",
+      "status": 422
+    },
+    "invalid_handoff_generation": {
+      "code": "invalid_handoff_generation",
+      "details": {
+        "reason": "budget"
+      },
+      "message": "Handoff generation violated its contract.",
+      "python_type": "powercontext.builtin.artifacts.handoff.errors.InvalidHandoffGenerationError",
+      "status": 500
+    },
+    "invalid_handoff_reference": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.artifacts.handoff.errors.InvalidHandoffReferenceError",
+      "status": 422
+    },
+    "invalid_memory_candidate": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.artifacts.memory.errors.InvalidMemoryCandidateError",
+      "status": 422
+    },
+    "invalid_memory_citation": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.artifacts.memory.errors.InvalidMemoryCitationError",
+      "status": 422
+    },
+    "invalid_memory_evidence": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.artifacts.memory.errors.InvalidMemoryEvidenceError",
+      "status": 422
+    },
+    "invalid_runtime_request": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.runtime.errors.InvalidRuntimeRequestError",
+      "status": 422
+    },
+    "memory_inactive": {
+      "code": "memory_entry_inactive",
+      "details": null,
+      "message": "The Memory entry is inactive.",
+      "python_type": "powercontext.builtin.artifacts.memory.errors.MemoryEntryInactiveError",
+      "status": 409
+    },
+    "memory_not_found": {
+      "code": "memory_not_found",
+      "details": null,
+      "message": "The requested Memory value was not found.",
+      "python_type": "powercontext.builtin.artifacts.memory.errors.MemoryEntryNotFoundError",
+      "status": 404
+    },
+    "project_conflict": {
+      "code": "project_conflict",
+      "details": {
+        "current_version": 4,
+        "expected_version": 2,
+        "project_id": "project-1"
+      },
+      "message": "The Handoff Report catalog value is stale or conflicting.",
+      "python_type": "powercontext.builtin.handoff_report.errors.ProjectConflictError",
+      "status": 409
+    },
+    "project_not_found": {
+      "code": "project_not_found",
+      "details": null,
+      "message": "The requested Handoff Report catalog value was not found.",
+      "python_type": "powercontext.builtin.handoff_report.errors.ProjectNotFoundError",
+      "status": 404
+    },
+    "report_busy": {
+      "code": "handoff_report_busy",
+      "details": {
+        "attempts": 3
+      },
+      "message": "Handoff heads changed while the report was being assembled.",
+      "python_type": "powercontext.builtin.handoff_report.errors.HandoffReportBusyError",
+      "status": 409
+    },
+    "report_inconsistent": {
+      "code": "handoff_report_inconsistent",
+      "details": {
+        "scope_id": "scope-1"
+      },
+      "message": "The frozen Handoff selection could not be read consistently.",
+      "python_type": "powercontext.builtin.handoff_report.errors.HandoffReportInconsistentError",
+      "status": 409
+    },
+    "report_invalid_activity": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.handoff_report.repository.InvalidActivityEventError",
+      "status": 422
+    },
+    "report_invalid_catalog": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.handoff_report.errors.HandoffReportCatalogArgumentError",
+      "status": 422
+    },
+    "report_invalid_repository": {
+      "code": "invalid_request",
+      "details": null,
+      "message": "The request is invalid.",
+      "python_type": "powercontext.builtin.handoff_report.repository.InvalidActivityRepositoryArgumentError",
+      "status": 422
+    },
+    "report_too_large": {
+      "code": "handoff_report_too_large",
+      "details": {
+        "estimated_bytes": 10485761,
+        "selected_activities": 3,
+        "selected_workstreams": 2
+      },
+      "message": "The Handoff Report is too large; narrow the Workstream or Activity selection.",
+      "python_type": "powercontext.builtin.handoff_report.errors.HandoffReportTooLargeError",
+      "status": 413
+    },
+    "report_unavailable": {
+      "code": "handoff_report_unavailable",
+      "details": null,
+      "message": "Handoff Report is unavailable.",
+      "python_type": "powercontext.builtin.handoff_report.errors.HandoffReportEvidenceCheckUnavailableError",
+      "status": 503
+    },
+    "revision_conflict": {
+      "code": "revision_conflict",
+      "details": null,
+      "message": "The Memory Revision is stale.",
+      "python_type": "powercontext.errors.RevisionConflictError",
+      "status": 409
+    },
+    "runtime_not_ready": {
+      "code": "runtime_not_ready",
+      "details": null,
+      "message": "The Runtime is not ready.",
+      "python_type": "powercontext.server.app._RuntimeNotReadyError",
+      "status": 503
+    },
+    "scope_already_grouped": {
+      "code": "scope_already_grouped",
+      "details": {
+        "project_id": "project-1",
+        "scope_id": "scope-1"
+      },
+      "message": "The Handoff Report catalog value is stale or conflicting.",
+      "python_type": "powercontext.builtin.handoff_report.errors.ScopeAlreadyGroupedError",
+      "status": 409
+    },
+    "source_conflict": {
+      "code": "source_conflict",
+      "details": null,
+      "message": "The Source identity has different content.",
+      "python_type": "powercontext.errors.SourceConflictError",
+      "status": 409
+    },
+    "unknown": {
+      "code": "internal_error",
+      "details": null,
+      "message": "The Server failed.",
+      "python_type": "builtins.RuntimeError",
+      "status": 500
+    },
+    "workspace_conflict": {
+      "code": "workspace_binding_conflict",
+      "details": {
+        "current_version": 4,
+        "expected_version": 2,
+        "workspace_instance_id": "workspace-1"
+      },
+      "message": "The Handoff Report catalog value is stale or conflicting.",
+      "python_type": "powercontext.builtin.handoff_report.errors.WorkspaceBindingConflictError",
+      "status": 409
+    },
+    "workspace_not_found": {
+      "code": "workspace_not_bound",
+      "details": null,
+      "message": "The requested Handoff Report catalog value was not found.",
+      "python_type": "powercontext.builtin.handoff_report.errors.WorkspaceBindingNotFoundError",
+      "status": 404
+    },
+    "workstream_conflict": {
+      "code": "workstream_conflict",
+      "details": {
+        "current_version": 4,
+        "expected_version": 2,
+        "scope_id": "scope-1"
+      },
+      "message": "The Handoff Report catalog value is stale or conflicting.",
+      "python_type": "powercontext.builtin.handoff_report.errors.WorkstreamConflictError",
+      "status": 409
+    },
+    "workstream_not_found": {
+      "code": "scope_not_grouped",
+      "details": null,
+      "message": "The requested Handoff Report catalog value was not found.",
+      "python_type": "powercontext.builtin.handoff_report.errors.WorkstreamNotFoundError",
+      "status": 404
+    }
+  },
+  "memory_canonical": {
+    "embedding": {
+      "hash": "bf1c1f8da8d2d4e129a44f463de7ce1cff7dd4d85f3d85c2bf3fe0f1530a0488",
+      "overflow_stable_unit": [
+        0.7071067811865475,
+        0.7071067811865475
+      ]
+    },
+    "entry": {
+      "bytes": "{\"artifact_refs\":[{\"artifact_id\":\"z\",\"family\":\"experience\",\"revision\":2}],\"kind\":\"fact\",\"source_refs\":[{\"source_id\":\"a\",\"source_type\":\"content\"},{\"source_id\":\"b\",\"source_type\":\"content\"}],\"text\":\"Café\"}",
+      "hash": "343ef8f0690bb884a78559531129163e307e4159aaa55b91582967a025e2a2d4"
+    },
+    "memory": {
+      "bytes": "{\"changes\":[{\"entry_id\":\"entry-a\",\"from_entry_version_id\":null,\"op\":\"add\",\"reason\":\"introduced\",\"to_entry_version_id\":\"version-a1\"}],\"manifest\":{\"entries\":[{\"entry_content_hash\":\"343ef8f0690bb884a78559531129163e307e4159aaa55b91582967a025e2a2d4\",\"entry_id\":\"entry-a\",\"entry_version_id\":\"version-a1\",\"state\":\"active\"}],\"format\":\"flat-v1\"},\"schema\":\"powercontext.memory.v1\"}",
+      "hash": "c76a847b7682a59c8d77b4be9439f5bd57485bd3b826383b757a45bdf8e846e7"
+    },
+    "normalization": {
+      "kind": "integration-kind",
+      "reason": "user requested",
+      "text": "durable"
+    }
+  },
+  "oracle_commit": "7b736206a53a6de6f43d4b517893ee1a80e7183d",
+  "schema": "powercontext.python-v0.1.0.domain-contract.v1"
+}

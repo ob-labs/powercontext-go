@@ -75,6 +75,46 @@ func TestFrozenOracleManifestAndFixtureHashes(t *testing.T) {
 	}
 }
 
+func TestReleaseV010ManifestAndFixtureHashes(t *testing.T) {
+	root := filepath.Join("testdata", "python-v0.1.0")
+	contents, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest oracleManifest
+	if unmarshalErr := json.Unmarshal(contents, &manifest); unmarshalErr != nil {
+		t.Fatal(unmarshalErr)
+	}
+	if manifest.SchemaVersion != 3 || manifest.OracleCommit != "7b736206a53a6de6f43d4b517893ee1a80e7183d" {
+		t.Fatalf("unexpected v0.1.0 manifest identity: %#v", manifest)
+	}
+	if manifest.TestFileCount != 132 || manifest.TestCaseCount != 812 {
+		t.Fatalf("v0.1.0 Python test inventory = %d files/%d cases", manifest.TestFileCount, manifest.TestCaseCount)
+	}
+	if len(manifest.FixtureSHA256) != 6 {
+		t.Fatalf("v0.1.0 fixture hash inventory = %d, want 6", len(manifest.FixtureSHA256))
+	}
+	for name, expected := range manifest.FixtureSHA256 {
+		if got := fileSHA256(t, filepath.Join(root, name)); got != expected {
+			t.Errorf("v0.1.0 %s SHA-256 = %s, want %s", name, got, expected)
+		}
+	}
+	var authority struct {
+		Schema       string `json:"schema"`
+		SchemaSHA256 string `json:"schema_sha256"`
+	}
+	authorityBytes, err := os.ReadFile(filepath.Join(root, "authority-rows.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(authorityBytes, &authority); err != nil {
+		t.Fatal(err)
+	}
+	if authority.Schema != "powercontext.python-v0.1.0.sqlite-authority.v2" || authority.SchemaSHA256 != manifest.SQLiteSchemaSHA256 {
+		t.Errorf("v0.1.0 SQLite authority = %#v, want schema hash %s", authority, manifest.SQLiteSchemaSHA256)
+	}
+}
+
 func fileSHA256(t *testing.T, path string) string {
 	t.Helper()
 	contents, err := os.ReadFile(path)

@@ -1,0 +1,703 @@
+{
+  "schema": "powercontext.python-v0.1.0.sqlite-authority.v2",
+  "schema_objects": [
+    {
+      "name": "pc_artifact_candidate_heads",
+      "sql": "CREATE TABLE pc_artifact_candidate_heads (\n\tscope_id VARCHAR(256) NOT NULL, \n\tcandidate_id VARCHAR(128) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\tresult_family VARCHAR(128), \n\tresult_artifact_id VARCHAR(128), \n\tresult_revision INTEGER, \n\tdecision_reason TEXT, \n\tPRIMARY KEY (scope_id, candidate_id), \n\tFOREIGN KEY(scope_id, candidate_id, version) REFERENCES pc_artifact_candidate_versions (scope_id, candidate_id, version) ON DELETE RESTRICT, \n\tFOREIGN KEY(scope_id, result_family, result_artifact_id, result_revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE RESTRICT, \n\tCONSTRAINT ck_pc_artifact_candidate_heads_status CHECK (status IN ('pending', 'approved', 'rejected')), \n\tCONSTRAINT ck_pc_artifact_candidate_heads_terminal_result CHECK ((status = 'approved' AND result_family IS NOT NULL AND result_artifact_id IS NOT NULL AND result_revision > 0 AND decision_reason IS NULL) OR (status = 'rejected' AND result_family IS NULL AND result_artifact_id IS NULL AND result_revision IS NULL AND decision_reason IS NOT NULL) OR (status = 'pending' AND result_family IS NULL AND result_artifact_id IS NULL AND result_revision IS NULL AND decision_reason IS NULL))\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_artifact_candidate_versions",
+      "sql": "CREATE TABLE pc_artifact_candidate_versions (\n\tscope_id VARCHAR(256) NOT NULL, \n\tcandidate_id VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tproposal BLOB NOT NULL, \n\tsource_refs BLOB NOT NULL, \n\tartifact_refs BLOB NOT NULL, \n\ttarget_family VARCHAR(128), \n\ttarget_artifact_id VARCHAR(128), \n\ttarget_revision INTEGER, \n\treason TEXT, \n\tPRIMARY KEY (scope_id, candidate_id, version), \n\tFOREIGN KEY(scope_id, target_family, target_artifact_id, target_revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE RESTRICT, \n\tCONSTRAINT ck_pc_artifact_candidate_versions_version_positive CHECK (version > 0), \n\tCONSTRAINT ck_pc_artifact_candidate_versions_target_complete CHECK ((target_family IS NULL AND target_artifact_id IS NULL AND target_revision IS NULL) OR (target_family IS NOT NULL AND target_artifact_id IS NOT NULL AND target_revision > 0))\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_artifact_heads",
+      "sql": "CREATE TABLE pc_artifact_heads (\n\tscope_id VARCHAR(256) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tartifact_id VARCHAR(128) NOT NULL, \n\trevision INTEGER NOT NULL, \n\tsearchable_text TEXT, \n\tPRIMARY KEY (scope_id, family, artifact_id), \n\tFOREIGN KEY(scope_id, family, artifact_id, revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE RESTRICT, \n\tCONSTRAINT ck_pc_artifact_heads_revision_positive CHECK (revision > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_artifact_lineage_artifacts",
+      "sql": "CREATE TABLE pc_artifact_lineage_artifacts (\n\tscope_id VARCHAR(256) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tartifact_id VARCHAR(128) NOT NULL, \n\trevision INTEGER NOT NULL, \n\tordinal INTEGER NOT NULL, \n\tupstream_family VARCHAR(128) NOT NULL, \n\tupstream_artifact_id VARCHAR(128) NOT NULL, \n\tupstream_revision INTEGER NOT NULL, \n\tPRIMARY KEY (scope_id, family, artifact_id, revision, ordinal), \n\tFOREIGN KEY(scope_id, family, artifact_id, revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE CASCADE, \n\tFOREIGN KEY(scope_id, upstream_family, upstream_artifact_id, upstream_revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE RESTRICT\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_artifact_lineage_sources",
+      "sql": "CREATE TABLE pc_artifact_lineage_sources (\n\tscope_id VARCHAR(256) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tartifact_id VARCHAR(128) NOT NULL, \n\trevision INTEGER NOT NULL, \n\tordinal INTEGER NOT NULL, \n\tsource_type VARCHAR(128) NOT NULL, \n\tsource_id VARCHAR(256) NOT NULL, \n\tPRIMARY KEY (scope_id, family, artifact_id, revision, ordinal), \n\tFOREIGN KEY(scope_id, family, artifact_id, revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE CASCADE, \n\tFOREIGN KEY(scope_id, source_type, source_id) REFERENCES pc_sources (scope_id, source_type, source_id) ON DELETE RESTRICT\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_artifacts",
+      "sql": "CREATE TABLE pc_artifacts (\n\tscope_id VARCHAR(256) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tartifact_id VARCHAR(128) NOT NULL, \n\trevision INTEGER NOT NULL, \n\tcontent BLOB NOT NULL, \n\tPRIMARY KEY (scope_id, family, artifact_id, revision)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_experience_fts",
+      "sql": "CREATE VIRTUAL TABLE pc_experience_fts USING fts5(\n    scope_id UNINDEXED,\n    artifact_id UNINDEXED,\n    revision UNINDEXED,\n    searchable_text,\n    tokenize='unicode61'\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_experience_fts_config",
+      "sql": "CREATE TABLE 'pc_experience_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID",
+      "type": "table"
+    },
+    {
+      "name": "pc_experience_fts_content",
+      "sql": "CREATE TABLE 'pc_experience_fts_content'(id INTEGER PRIMARY KEY, c0, c1, c2, c3)",
+      "type": "table"
+    },
+    {
+      "name": "pc_experience_fts_data",
+      "sql": "CREATE TABLE 'pc_experience_fts_data'(id INTEGER PRIMARY KEY, block BLOB)",
+      "type": "table"
+    },
+    {
+      "name": "pc_experience_fts_docsize",
+      "sql": "CREATE TABLE 'pc_experience_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)",
+      "type": "table"
+    },
+    {
+      "name": "pc_experience_fts_idx",
+      "sql": "CREATE TABLE 'pc_experience_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID",
+      "type": "table"
+    },
+    {
+      "name": "pc_external_skill_registrations",
+      "sql": "CREATE TABLE pc_external_skill_registrations (\n\tscope_id VARCHAR(256) NOT NULL, \n\texternal_skill_id VARCHAR(128) NOT NULL, \n\tprovider VARCHAR(128) NOT NULL, \n\tagent_kind VARCHAR(128) NOT NULL, \n\thost_id VARCHAR(128) NOT NULL, \n\tinstallation_scope VARCHAR(16) NOT NULL, \n\tlocator VARCHAR(2000) NOT NULL, \n\tlocator_hash VARCHAR(64) NOT NULL, \n\tfingerprint VARCHAR(64) NOT NULL, \n\tname VARCHAR(128) NOT NULL, \n\tdescription VARCHAR(2000) NOT NULL, \n\tPRIMARY KEY (scope_id, external_skill_id), \n\tCONSTRAINT uq_pc_external_skill_registrations_binding UNIQUE (scope_id, provider, host_id, installation_scope, locator_hash), \n\tCONSTRAINT ck_pc_external_skill_registrations_scope CHECK (installation_scope IN ('user', 'project', 'plugin'))\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_activities",
+      "sql": "CREATE TABLE pc_handoff_report_activities (\n\tproject_id VARCHAR(256) NOT NULL, \n\tcursor BIGINT NOT NULL, \n\tevent_id VARCHAR(256) NOT NULL, \n\tscope_id VARCHAR(256), \n\tsource VARCHAR(64) NOT NULL, \n\tsource_event_id VARCHAR(256) NOT NULL, \n\toccurred_at VARCHAR(32), \n\tobserved_at VARCHAR(32) NOT NULL, \n\tperiod_at VARCHAR(32), \n\ttime_basis VARCHAR(32) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tPRIMARY KEY (project_id, cursor), \n\tCONSTRAINT uq_pc_handoff_report_activities_source_event UNIQUE (source, source_event_id), \n\tUNIQUE (event_id)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_activity_heads",
+      "sql": "CREATE TABLE pc_handoff_report_activity_heads (\n\tproject_id VARCHAR(256) NOT NULL, \n\tcursor BIGINT NOT NULL, \n\tPRIMARY KEY (project_id)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_project_revisions",
+      "sql": "CREATE TABLE pc_handoff_report_project_revisions (\n\tproject_id VARCHAR(256) NOT NULL, \n\tversion INTEGER NOT NULL, \n\teffective_at VARCHAR(32) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tPRIMARY KEY (project_id, version), \n\tCONSTRAINT ck_pc_handoff_report_project_revisions_version_positive CHECK (version > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_projects",
+      "sql": "CREATE TABLE pc_handoff_report_projects (\n\tproject_id VARCHAR(256) NOT NULL, \n\tproject_key VARCHAR(64) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tcatalog_state VARCHAR(16) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tPRIMARY KEY (project_id), \n\tCONSTRAINT ck_pc_handoff_report_projects_version_positive CHECK (version > 0), \n\tUNIQUE (project_key)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_workspace_bindings",
+      "sql": "CREATE TABLE pc_handoff_report_workspace_bindings (\n\tworkspace_instance_id VARCHAR(256) NOT NULL, \n\tproject_id VARCHAR(256) NOT NULL, \n\tprovider VARCHAR(32) NOT NULL, \n\trepository_id VARCHAR(256), \n\tnormalized_remote VARCHAR(2048), \n\tsubpath VARCHAR(1024), \n\tstate VARCHAR(16) NOT NULL, \n\tconfirmed_at VARCHAR(32) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tpayload TEXT NOT NULL, \n\tPRIMARY KEY (workspace_instance_id), \n\tCONSTRAINT ck_pc_handoff_report_workspace_bindings_version_positive CHECK (version > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_workstream_revisions",
+      "sql": "CREATE TABLE pc_handoff_report_workstream_revisions (\n\tscope_id VARCHAR(256) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tproject_id VARCHAR(256) NOT NULL, \n\teffective_at VARCHAR(32) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tPRIMARY KEY (scope_id, version), \n\tCONSTRAINT ck_pc_handoff_report_workstream_revisions_version_positive CHECK (version > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_handoff_report_workstreams",
+      "sql": "CREATE TABLE pc_handoff_report_workstreams (\n\tscope_id VARCHAR(256) NOT NULL, \n\tproject_id VARCHAR(256) NOT NULL, \n\tworkstream_key VARCHAR(64), \n\tversion INTEGER NOT NULL, \n\tcatalog_state VARCHAR(16) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tPRIMARY KEY (scope_id), \n\tCONSTRAINT uq_pc_handoff_report_workstreams_project_key UNIQUE (project_id, workstream_key), \n\tCONSTRAINT ck_pc_handoff_report_workstreams_version_positive CHECK (version > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_fts",
+      "sql": "CREATE VIRTUAL TABLE pc_memory_entry_fts USING fts5(\n    scope_id UNINDEXED,\n    memory_artifact_id UNINDEXED,\n    head_revision UNINDEXED,\n    entry_id UNINDEXED,\n    entry_version_id UNINDEXED,\n    searchable_text,\n    tokenize='unicode61'\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_fts_config",
+      "sql": "CREATE TABLE 'pc_memory_entry_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_fts_content",
+      "sql": "CREATE TABLE 'pc_memory_entry_fts_content'(id INTEGER PRIMARY KEY, c0, c1, c2, c3, c4, c5)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_fts_data",
+      "sql": "CREATE TABLE 'pc_memory_entry_fts_data'(id INTEGER PRIMARY KEY, block BLOB)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_fts_docsize",
+      "sql": "CREATE TABLE 'pc_memory_entry_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_fts_idx",
+      "sql": "CREATE TABLE 'pc_memory_entry_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_heads",
+      "sql": "CREATE TABLE pc_memory_entry_heads (\n\tscope_id VARCHAR(256) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tmemory_artifact_id VARCHAR(128) NOT NULL, \n\thead_revision INTEGER NOT NULL, \n\tentry_id VARCHAR(128) NOT NULL, \n\tentry_version_id VARCHAR(128) NOT NULL, \n\tentry_content_hash VARCHAR(64) NOT NULL, \n\tsearchable_text TEXT NOT NULL, \n\tPRIMARY KEY (scope_id, memory_artifact_id, entry_id), \n\tFOREIGN KEY(scope_id, family, memory_artifact_id, head_revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE RESTRICT, \n\tFOREIGN KEY(scope_id, memory_artifact_id, entry_id, entry_version_id) REFERENCES pc_memory_entry_versions (scope_id, memory_artifact_id, entry_id, entry_version_id) ON DELETE RESTRICT, \n\tCONSTRAINT ck_pc_memory_entry_heads_revision_positive CHECK (head_revision > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_entry_versions",
+      "sql": "CREATE TABLE pc_memory_entry_versions (\n\tscope_id VARCHAR(256) NOT NULL, \n\tfamily VARCHAR(128) NOT NULL, \n\tmemory_artifact_id VARCHAR(128) NOT NULL, \n\tentry_id VARCHAR(128) NOT NULL, \n\tentry_version_id VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tprevious_version_id VARCHAR(128), \n\tkind VARCHAR(128) NOT NULL, \n\ttext TEXT NOT NULL, \n\tsource_refs BLOB NOT NULL, \n\tartifact_refs BLOB NOT NULL, \n\tentry_content_hash VARCHAR(64) NOT NULL, \n\tcreated_in_revision INTEGER NOT NULL, \n\tPRIMARY KEY (scope_id, memory_artifact_id, entry_version_id), \n\tCONSTRAINT uq_pc_memory_entry_versions_logical_version UNIQUE (scope_id, memory_artifact_id, entry_id, version), \n\tCONSTRAINT uq_pc_memory_entry_versions_identity UNIQUE (scope_id, memory_artifact_id, entry_id, entry_version_id), \n\tFOREIGN KEY(scope_id, family, memory_artifact_id, created_in_revision) REFERENCES pc_artifacts (scope_id, family, artifact_id, revision) ON DELETE RESTRICT, \n\tCONSTRAINT ck_pc_memory_entry_versions_version_positive CHECK (version > 0), \n\tCONSTRAINT ck_pc_memory_entry_versions_revision_positive CHECK (created_in_revision > 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_memory_fts_index",
+      "sql": "CREATE TABLE pc_memory_fts_index (\n\tsingleton INTEGER NOT NULL, \n\tschema_version INTEGER NOT NULL, \n\tPRIMARY KEY (singleton), \n\tCONSTRAINT ck_pc_memory_fts_index_singleton CHECK (singleton = 1)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_model_usage_daily",
+      "sql": "CREATE TABLE pc_model_usage_daily (\n\tscope_id VARCHAR(256) NOT NULL, \n\tusage_date DATE NOT NULL, \n\tpurpose VARCHAR(64) NOT NULL, \n\toperation VARCHAR(16) NOT NULL, \n\trequests BIGINT NOT NULL, \n\tinput_tokens BIGINT NOT NULL, \n\toutput_tokens BIGINT NOT NULL, \n\tinput_complete BOOLEAN NOT NULL, \n\toutput_complete BOOLEAN NOT NULL, \n\tPRIMARY KEY (scope_id, usage_date, purpose, operation), \n\tCONSTRAINT ck_pc_model_usage_daily_operation CHECK (operation IN ('generation', 'embedding')), \n\tCONSTRAINT ck_pc_model_usage_daily_requests_nonnegative CHECK (requests >= 0), \n\tCONSTRAINT ck_pc_model_usage_daily_input_nonnegative CHECK (input_tokens >= 0), \n\tCONSTRAINT ck_pc_model_usage_daily_output_nonnegative CHECK (output_tokens >= 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_recall_token_daily",
+      "sql": "CREATE TABLE pc_recall_token_daily (\n\tscope_id VARCHAR(256) NOT NULL, \n\tusage_date DATE NOT NULL, \n\testimator_id VARCHAR(128) NOT NULL, \n\testimator_version VARCHAR(64) NOT NULL, \n\tpreparations BIGINT NOT NULL, \n\tready_preparations BIGINT NOT NULL, \n\tcomparable_preparations BIGINT NOT NULL, \n\tbaseline_tokens BIGINT NOT NULL, \n\trecalled_tokens BIGINT NOT NULL, \n\tPRIMARY KEY (scope_id, usage_date, estimator_id, estimator_version), \n\tCONSTRAINT ck_pc_recall_token_daily_preparations_nonnegative CHECK (preparations >= 0), \n\tCONSTRAINT ck_pc_recall_token_daily_ready_nonnegative CHECK (ready_preparations >= 0), \n\tCONSTRAINT ck_pc_recall_token_daily_comparable_nonnegative CHECK (comparable_preparations >= 0), \n\tCONSTRAINT ck_pc_recall_token_daily_comparable_ready CHECK (comparable_preparations <= ready_preparations), \n\tCONSTRAINT ck_pc_recall_token_daily_ready_total CHECK (ready_preparations <= preparations), \n\tCONSTRAINT ck_pc_recall_token_daily_baseline_nonnegative CHECK (baseline_tokens >= 0), \n\tCONSTRAINT ck_pc_recall_token_daily_recalled_nonnegative CHECK (recalled_tokens >= 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_source_cursors",
+      "sql": "CREATE TABLE pc_source_cursors (\n\tscope_id VARCHAR(256) NOT NULL, \n\tbinding_name VARCHAR(128) NOT NULL, \n\tcursor BLOB NOT NULL, \n\tgeneration BIGINT NOT NULL, \n\tPRIMARY KEY (scope_id, binding_name), \n\tCONSTRAINT ck_pc_source_cursors_generation_nonnegative CHECK (generation >= 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_source_journal_heads",
+      "sql": "CREATE TABLE pc_source_journal_heads (\n\tscope_id VARCHAR(256) NOT NULL, \n\tposition BIGINT NOT NULL, \n\tPRIMARY KEY (scope_id), \n\tCONSTRAINT ck_pc_source_journal_heads_position_nonnegative CHECK (position >= 0)\n)",
+      "type": "table"
+    },
+    {
+      "name": "pc_sources",
+      "sql": "CREATE TABLE pc_sources (\n\tscope_id VARCHAR(256) NOT NULL, \n\tsource_type VARCHAR(128) NOT NULL, \n\tsource_id VARCHAR(256) NOT NULL, \n\tpayload BLOB NOT NULL, \n\tjournal_position BIGINT NOT NULL, \n\tPRIMARY KEY (scope_id, source_type, source_id), \n\tCONSTRAINT uq_pc_sources_scope_journal_position UNIQUE (scope_id, journal_position)\n)",
+      "type": "table"
+    }
+  ],
+  "schema_sha256": "9a1648fd9930a6e0a942e753f5274ec00546b1d11b7a4b330d7e19ca04d6cbf6",
+  "tables": {
+    "pc_artifact_candidate_heads": {
+      "columns": [
+        "scope_id",
+        "candidate_id",
+        "family",
+        "version",
+        "status",
+        "result_family",
+        "result_artifact_id",
+        "result_revision",
+        "decision_reason"
+      ],
+      "rows": []
+    },
+    "pc_artifact_candidate_versions": {
+      "columns": [
+        "scope_id",
+        "candidate_id",
+        "version",
+        "family",
+        "proposal",
+        "source_refs",
+        "artifact_refs",
+        "target_family",
+        "target_artifact_id",
+        "target_revision",
+        "reason"
+      ],
+      "rows": []
+    },
+    "pc_artifact_heads": {
+      "columns": [
+        "scope_id",
+        "family",
+        "artifact_id",
+        "revision",
+        "searchable_text"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory",
+          "memory",
+          1,
+          null
+        ]
+      ]
+    },
+    "pc_artifact_lineage_artifacts": {
+      "columns": [
+        "scope_id",
+        "family",
+        "artifact_id",
+        "revision",
+        "ordinal",
+        "upstream_family",
+        "upstream_artifact_id",
+        "upstream_revision"
+      ],
+      "rows": []
+    },
+    "pc_artifact_lineage_sources": {
+      "columns": [
+        "scope_id",
+        "family",
+        "artifact_id",
+        "revision",
+        "ordinal",
+        "source_type",
+        "source_id"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory",
+          "memory",
+          1,
+          0,
+          "content",
+          "capture-python-1"
+        ]
+      ]
+    },
+    "pc_artifacts": {
+      "columns": [
+        "scope_id",
+        "family",
+        "artifact_id",
+        "revision",
+        "content"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory",
+          "memory",
+          1,
+          {
+            "base64": "eyJtYW5pZmVzdCI6eyJlbnRyaWVzIjpbeyJlbnRyeV9pZCI6Im1lbV9lbnRfMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDEiLCJlbnRyeV92ZXJzaW9uX2lkIjoibWVtX3Zlcl8wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMiIsImVudHJ5X2NvbnRlbnRfaGFzaCI6ImEyMWRhNzRlMWZiOThjNmQzZjZmODk0ZmI4ZTZlZDQzNmI1NTZiNjA3M2JiYjI1Njk5YTY4NWUwNWY2ZDEyNGQiLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwiZm9ybWF0IjoiZmxhdC12MSJ9LCJjaGFuZ2VzIjpbeyJvcCI6ImFkZCIsImVudHJ5X2lkIjoibWVtX2VudF8wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMSIsImZyb21fZW50cnlfdmVyc2lvbl9pZCI6bnVsbCwidG9fZW50cnlfdmVyc2lvbl9pZCI6Im1lbV92ZXJfMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDIiLCJyZWFzb24iOm51bGx9XSwic2NoZW1hIjoicG93ZXJjb250ZXh0Lm1lbW9yeS52MSJ9"
+          }
+        ]
+      ]
+    },
+    "pc_experience_fts": {
+      "columns": [
+        "scope_id",
+        "artifact_id",
+        "revision",
+        "searchable_text"
+      ],
+      "rows": []
+    },
+    "pc_experience_fts_config": {
+      "columns": [
+        "k",
+        "v"
+      ],
+      "rows": [
+        [
+          "version",
+          4
+        ]
+      ]
+    },
+    "pc_experience_fts_content": {
+      "columns": [
+        "id",
+        "c0",
+        "c1",
+        "c2",
+        "c3"
+      ],
+      "rows": []
+    },
+    "pc_experience_fts_data": {
+      "columns": [
+        "id",
+        "block"
+      ],
+      "rows": [
+        [
+          1,
+          {
+            "base64": ""
+          }
+        ],
+        [
+          10,
+          {
+            "base64": "AAAAAAAAAA=="
+          }
+        ]
+      ]
+    },
+    "pc_experience_fts_docsize": {
+      "columns": [
+        "id",
+        "sz"
+      ],
+      "rows": []
+    },
+    "pc_experience_fts_idx": {
+      "columns": [
+        "segid",
+        "term",
+        "pgno"
+      ],
+      "rows": []
+    },
+    "pc_external_skill_registrations": {
+      "columns": [
+        "scope_id",
+        "external_skill_id",
+        "provider",
+        "agent_kind",
+        "host_id",
+        "installation_scope",
+        "locator",
+        "locator_hash",
+        "fingerprint",
+        "name",
+        "description"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_activities": {
+      "columns": [
+        "project_id",
+        "cursor",
+        "event_id",
+        "scope_id",
+        "source",
+        "source_event_id",
+        "occurred_at",
+        "observed_at",
+        "period_at",
+        "time_basis",
+        "payload"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_activity_heads": {
+      "columns": [
+        "project_id",
+        "cursor"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_project_revisions": {
+      "columns": [
+        "project_id",
+        "version",
+        "effective_at",
+        "payload"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_projects": {
+      "columns": [
+        "project_id",
+        "project_key",
+        "version",
+        "catalog_state",
+        "payload"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_workspace_bindings": {
+      "columns": [
+        "workspace_instance_id",
+        "project_id",
+        "provider",
+        "repository_id",
+        "normalized_remote",
+        "subpath",
+        "state",
+        "confirmed_at",
+        "version",
+        "payload"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_workstream_revisions": {
+      "columns": [
+        "scope_id",
+        "version",
+        "project_id",
+        "effective_at",
+        "payload"
+      ],
+      "rows": []
+    },
+    "pc_handoff_report_workstreams": {
+      "columns": [
+        "scope_id",
+        "project_id",
+        "workstream_key",
+        "version",
+        "catalog_state",
+        "payload"
+      ],
+      "rows": []
+    },
+    "pc_memory_entry_fts": {
+      "columns": [
+        "scope_id",
+        "memory_artifact_id",
+        "head_revision",
+        "entry_id",
+        "entry_version_id",
+        "searchable_text"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory",
+          1,
+          "mem_ent_00000000000000000000000000000001",
+          "mem_ver_00000000000000000000000000000002",
+          "use one atomic café composition boundary"
+        ]
+      ]
+    },
+    "pc_memory_entry_fts_config": {
+      "columns": [
+        "k",
+        "v"
+      ],
+      "rows": [
+        [
+          "version",
+          4
+        ]
+      ]
+    },
+    "pc_memory_entry_fts_content": {
+      "columns": [
+        "id",
+        "c0",
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5"
+      ],
+      "rows": [
+        [
+          1,
+          "project:python-oracle",
+          "memory",
+          1,
+          "mem_ent_00000000000000000000000000000001",
+          "mem_ver_00000000000000000000000000000002",
+          "use one atomic café composition boundary"
+        ]
+      ]
+    },
+    "pc_memory_entry_fts_data": {
+      "columns": [
+        "id",
+        "block"
+      ],
+      "rows": [
+        [
+          1,
+          {
+            "base64": "AQAAAAAABg=="
+          }
+        ],
+        [
+          10,
+          {
+            "base64": "AAAAAAEBAQABAQEB"
+          }
+        ],
+        [
+          137438953473,
+          {
+            "base64": "AAAAUAcwYXRvbWljAQYBBQQBCGJvdW5kYXJ5AQYBBQcBBGNhZmUBBgEFBQIKb21wb3NpdGlvbgEGAQUGAQNvbmUBBgEFAwEDdXNlAQYBBQIEDQ8LEQo="
+          }
+        ]
+      ]
+    },
+    "pc_memory_entry_fts_docsize": {
+      "columns": [
+        "id",
+        "sz"
+      ],
+      "rows": [
+        [
+          1,
+          {
+            "base64": "AAAAAAAG"
+          }
+        ]
+      ]
+    },
+    "pc_memory_entry_fts_idx": {
+      "columns": [
+        "segid",
+        "term",
+        "pgno"
+      ],
+      "rows": [
+        [
+          1,
+          {
+            "base64": ""
+          },
+          2
+        ]
+      ]
+    },
+    "pc_memory_entry_heads": {
+      "columns": [
+        "scope_id",
+        "family",
+        "memory_artifact_id",
+        "head_revision",
+        "entry_id",
+        "entry_version_id",
+        "entry_content_hash",
+        "searchable_text"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory",
+          "memory",
+          1,
+          "mem_ent_00000000000000000000000000000001",
+          "mem_ver_00000000000000000000000000000002",
+          "a21da74e1fb98c6d3f6f894fb8e6ed436b556b6073bbb25699a685e05f6d124d",
+          "use one atomic café composition boundary"
+        ]
+      ]
+    },
+    "pc_memory_entry_versions": {
+      "columns": [
+        "scope_id",
+        "family",
+        "memory_artifact_id",
+        "entry_id",
+        "entry_version_id",
+        "version",
+        "previous_version_id",
+        "kind",
+        "text",
+        "source_refs",
+        "artifact_refs",
+        "entry_content_hash",
+        "created_in_revision"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory",
+          "memory",
+          "mem_ent_00000000000000000000000000000001",
+          "mem_ver_00000000000000000000000000000002",
+          1,
+          null,
+          "decision",
+          "Use one atomic café composition boundary.",
+          {
+            "base64": "W3sic291cmNlX3R5cGUiOiJjb250ZW50Iiwic291cmNlX2lkIjoiY2FwdHVyZS1weXRob24tMSJ9XQ=="
+          },
+          {
+            "base64": "W10="
+          },
+          "a21da74e1fb98c6d3f6f894fb8e6ed436b556b6073bbb25699a685e05f6d124d",
+          1
+        ]
+      ]
+    },
+    "pc_memory_fts_index": {
+      "columns": [
+        "singleton",
+        "schema_version"
+      ],
+      "rows": [
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    "pc_model_usage_daily": {
+      "columns": [
+        "scope_id",
+        "usage_date",
+        "purpose",
+        "operation",
+        "requests",
+        "input_tokens",
+        "output_tokens",
+        "input_complete",
+        "output_complete"
+      ],
+      "rows": []
+    },
+    "pc_recall_token_daily": {
+      "columns": [
+        "scope_id",
+        "usage_date",
+        "estimator_id",
+        "estimator_version",
+        "preparations",
+        "ready_preparations",
+        "comparable_preparations",
+        "baseline_tokens",
+        "recalled_tokens"
+      ],
+      "rows": []
+    },
+    "pc_source_cursors": {
+      "columns": [
+        "scope_id",
+        "binding_name",
+        "cursor",
+        "generation"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "memory-source-window",
+          {
+            "base64": "eyJzZXF1ZW5jZSI6MX0="
+          },
+          1
+        ]
+      ]
+    },
+    "pc_source_journal_heads": {
+      "columns": [
+        "scope_id",
+        "position"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          1
+        ]
+      ]
+    },
+    "pc_sources": {
+      "columns": [
+        "scope_id",
+        "source_type",
+        "source_id",
+        "payload",
+        "journal_position"
+      ],
+      "rows": [
+        [
+          "project:python-oracle",
+          "content",
+          "capture-python-1",
+          {
+            "base64": "eyJuYW1lIjoiY2FwdHVyZS1weXRob24tMSIsIm1hdGVyaWFsaXphdGlvbiI6ImNhcHR1cmVkIiwiZGVzY3JpcHRpb24iOm51bGwsImNvbnRlbnQiOiJVc2Ugb25lIGF0b21pYyBjYWbDqSBjb21wb3NpdGlvbiBib3VuZGFyeS4iLCJtZXRhZGF0YSI6eyJvcmlnaW4iOiJweXRob24iLCJuZXN0ZWQiOnsic3RhYmxlIjp0cnVlfX19"
+          },
+          1
+        ]
+      ]
+    }
+  }
+}
