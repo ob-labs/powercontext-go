@@ -532,7 +532,7 @@ func installWorkBuddySkill(plugin, target, hooksDir string) error {
 		return errors.New("cannot write WorkBuddy Skill ownership manifest")
 	}
 	backup := ""
-	if _, err := os.Lstat(target); err == nil {
+	if _, targetStatErr := os.Lstat(target); targetStatErr == nil {
 		backup, err = os.MkdirTemp(parent, ".project-context-backup-")
 		if err != nil {
 			return errors.New("cannot stage WorkBuddy Skill replacement")
