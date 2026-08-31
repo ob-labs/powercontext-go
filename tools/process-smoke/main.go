@@ -48,6 +48,8 @@ const (
 	smokeScope = "release-verification-private-scope"
 	smokeText  = "PowerContext release verification stores and retrieves this exact private memory."
 	smokeToken = "release-verification-private-token"
+
+	maximumFailureDiagnosticBytes = 32 << 10
 )
 
 var baseToolNames = []string{
@@ -74,10 +76,11 @@ var baseToolNames = []string{
 }
 
 type options struct {
-	binary  string
-	envFile string
-	version string
-	timeout time.Duration
+	binary             string
+	envFile            string
+	version            string
+	timeout            time.Duration
+	failureDiagnostics string
 }
 
 func main() {
@@ -85,11 +88,14 @@ func main() {
 	envFile := flag.String("env-file", "", "released .env.example with security-sensitive defaults")
 	version := flag.String("version", "devel", "exact version reported by the executable")
 	timeout := flag.Duration("timeout", 60*time.Second, "maximum duration of each server phase")
+	failureDiagnostics := flag.String("failure-diagnostics", "", "optional bounded redacted failure diagnostics output")
 	flag.Parse()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*(*timeout))
 	defer cancel()
-	if err := run(ctx, options{binary: *binary, envFile: *envFile, version: *version, timeout: *timeout}); err != nil {
+	if err := run(ctx, options{
+		binary: *binary, envFile: *envFile, version: *version, timeout: *timeout, failureDiagnostics: *failureDiagnostics,
+	}); err != nil {
 		fmt.Fprintln(os.Stderr, "process-smoke:", err)
 		os.Exit(1)
 	}
@@ -99,7 +105,7 @@ func main() {
 	)
 }
 
-func run(ctx context.Context, opts options) error {
+func run(ctx context.Context, opts options) (runErr error) {
 	if opts.timeout <= 0 {
 		return errors.New("timeout must be positive")
 	}
@@ -119,6 +125,14 @@ func run(ctx context.Context, opts options) error {
 		return fmt.Errorf("create smoke directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(root) }() // best-effort cleanup of isolated, disposable state
+	defer func() {
+		if runErr == nil {
+			return
+		}
+		if diagnosticErr := writeFailureDiagnostics(opts.failureDiagnostics, root, runErr); diagnosticErr != nil {
+			runErr = errors.Join(runErr, diagnosticErr)
+		}
+	}()
 
 	baseEnvironment := isolatedEnvironment(os.Environ(), filepath.Join(root, "home"))
 	firstLog := filepath.Join(root, "server-public.log")
@@ -687,4 +701,27 @@ func withLog(cause error, path string) error {
 		return errors.Join(cause, fmt.Errorf("read failed server log: %w", err))
 	}
 	return fmt.Errorf("%w\nPowerContext Server log:\n%s", cause, contents)
+}
+
+func writeFailureDiagnostics(path, root string, cause error) error {
+	if path == "" || cause == nil {
+		return nil
+	}
+	diagnostic := "status=failed\n" + cause.Error()
+	for _, private := range []string{root, smokeScope, smokeText, smokeToken} {
+		if private != "" {
+			diagnostic = strings.ReplaceAll(diagnostic, private, "[redacted]")
+		}
+	}
+	const truncation = "\n[truncated]\n"
+	if len(diagnostic) > maximumFailureDiagnosticBytes {
+		diagnostic = diagnostic[:maximumFailureDiagnosticBytes-len(truncation)] + truncation
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create diagnostics directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(diagnostic), 0o600); err != nil {
+		return fmt.Errorf("write failure diagnostics: %w", err)
+	}
+	return nil
 }
