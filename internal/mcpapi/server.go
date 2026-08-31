@@ -514,6 +514,15 @@ func annotations(name string) *mcp.ToolAnnotations {
 		value.DestructiveHint = &nondestructive
 		value.IdempotentHint = true
 		return value
+	case "approve_artifact_candidate", "reject_artifact_candidate", "revise_artifact_candidate":
+		// These hints let MCP hosts apply their own confirmation policy; they
+		// do not grant authorization. Exact replays are rejected by the
+		// pending-head CAS before another write can occur.
+		return &mcp.ToolAnnotations{
+			DestructiveHint: new(true),
+			IdempotentHint:  true,
+			OpenWorldHint:   &closedWorld,
+		}
 	default:
 		return nil
 	}
