@@ -16,12 +16,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"go/token"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +59,7 @@ func run(arguments []string, output io.Writer) error {
 	flags.SetOutput(io.Discard)
 	path := flags.String("file", defaultLedgerPath, "path to the race-debt ledger")
 	baselinePath := flags.String("baseline", "", "optional approved race-debt ledger that the current ledger may only shrink")
+	exercise := flags.Bool("exercise", false, "run each temporary exclusion without the race detector")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
@@ -83,6 +86,11 @@ func run(arguments []string, output io.Writer) error {
 		}
 		if policyErr := requireNoNewExclusions(value, baseline); policyErr != nil {
 			return policyErr
+		}
+	}
+	if *exercise {
+		if exerciseErr := exerciseWithoutRace(context.Background(), value, output); exerciseErr != nil {
+			return exerciseErr
 		}
 	}
 	_, err = fmt.Fprintf(output, "race debt: %d temporary exclusions verified\n", len(value.Exclusions))
@@ -159,6 +167,18 @@ func requireNoNewExclusions(current, baseline ledger) error {
 		key := exclusionKey(entry)
 		if _, ok := approved[key]; !ok {
 			return fmt.Errorf("new temporary exclusion %q requires a reviewed policy change", key)
+		}
+	}
+	return nil
+}
+
+func exerciseWithoutRace(ctx context.Context, value ledger, output io.Writer) error {
+	for _, entry := range value.Exclusions {
+		command := exec.CommandContext(ctx, "go", "test", entry.Package, "-run", "^"+entry.Test+"$")
+		command.Stdout = output
+		command.Stderr = output
+		if commandErr := command.Run(); commandErr != nil {
+			return fmt.Errorf("exercise temporary exclusion %q without race: %w", exclusionKey(entry), commandErr)
 		}
 	}
 	return nil

@@ -67,7 +67,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/trigger
 
 .PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
-	test unit-test e2e-test test-sqlite race-debt-check test-race test-full test-oceanbase-live real-provider-test \
+	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	portable-sdk-check check-portable generated-consumers downstream-compat package-standard package-full clean
@@ -226,6 +226,9 @@ test-sqlite: ## Run all standard-tag tests against SQLite.
 
 race-debt-check: ## Validate the exact temporary race-test exclusion ledger.
 	$(GO) run ./tools/race-debt -file .github/race-debt.json $(if $(RACE_DEBT_BASELINE),-baseline "$(RACE_DEBT_BASELINE)")
+
+race-debt-functional: ## Exercise each temporary race exclusion without the race detector.
+	$(GO) run ./tools/race-debt -file .github/race-debt.json -exercise
 
 test-race: ## Run all Go tests with the race detector.
 	CGO_ENABLED=1 $(GO) test -race ./...
