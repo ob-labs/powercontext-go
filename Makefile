@@ -69,7 +69,7 @@ PUBLIC_API_PACKAGES := \
 	test unit-test e2e-test test-sqlite race-debt-check test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
-	check-portable generated-consumers downstream-compat package-standard package-full clean
+	portable-sdk-check check-portable generated-consumers downstream-compat package-standard package-full clean
 
 help: ## Show supported development, verification, and release commands.
 	@awk 'BEGIN { FS = ":.*##"; print "Supported targets:" } /^[[:alnum:]_-]+:.*##/ { printf "  %-28s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -338,10 +338,15 @@ package-full: build-full ## Build a Full release archive and SBOM.
 
 check: module-check fmt-check vet ## Run the core module, formatting, and vet checks.
 
+# Prove the deliberate public SDK surface stays free of accidental native,
+# filesystem, environment, process-lifecycle, and SQL dependencies.
+portable-sdk-check: ## Validate direct imports in the pure public SDK boundary.
+	$(GO) run ./tools/portable-sdk-check -root .
+
 # Prove the deliberate public SDK surface stays CGO-free and cross-compilable
 # for every supported platform. A failure here means a public package gained a
 # CGO dependency or platform-specific code that breaks pure-Go consumers.
-check-portable: ## Cross-build the deliberate public SDK packages without CGO.
+check-portable: portable-sdk-check ## Cross-build the deliberate public SDK packages without CGO.
 	@for target in $(PORTABLE_TARGETS); do \
 		os=$${target%/*}; arch=$${target#*/}; \
 		printf 'building portable SDK for %s/%s: ' "$$os" "$$arch"; \

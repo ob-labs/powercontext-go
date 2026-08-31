@@ -42,7 +42,7 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "race-debt-check", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "portable-sdk-check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "race-debt-check", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
@@ -615,6 +615,24 @@ func TestDownstreamCompatDisablesGoTestCaching(t *testing.T) {
 	}
 }
 
+func TestCheckPortableValidatesThePublicSDKDependencyBoundary(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "check-portable", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make check-portable dry-run failed: %v\n%s", err, output)
+	}
+	contents := string(output)
+	check := "go run ./tools/portable-sdk-check -root ."
+	build := "CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build"
+	checkIndex := strings.Index(contents, check)
+	buildIndex := strings.Index(contents, build)
+	if checkIndex < 0 || buildIndex < 0 || checkIndex > buildIndex {
+		t.Fatalf("make check-portable does not validate the dependency boundary before cross-builds:\n%s", output)
+	}
+}
+
 func TestGeneratedConsumersTargetRunsFreshConsumerVerification(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	command := exec.CommandContext(t.Context(), "make", "--dry-run", "generated-consumers", "GO=go")
@@ -990,6 +1008,9 @@ case "${1:-} ${2:-}" in
     printf 'go1.27.0\n'
     exit 0
     ;;
+  "run ./tools/portable-sdk-check")
+    exit 0
+    ;;
 esac
 
 printf '%s|%s|%s|%s\n' "$GOOS" "$GOARCH" "$CGO_ENABLED" "$*" >> "$PORTABLE_CALL_LOG"
@@ -1063,6 +1084,9 @@ case "${1:-} ${2:-}" in
     ;;
   "env GOVERSION")
     printf 'go1.27.0\n'
+    exit 0
+    ;;
+  "run ./tools/portable-sdk-check")
     exit 0
     ;;
 esac
