@@ -163,7 +163,7 @@ func newCommandWithAllDependencies(
 
 	root.AddCommand(
 		newCapabilitiesCommand(state), newStatsCommand(state), newLiveCommand(state), newReadyCommand(state),
-		newCandidateCommand(state), newExperienceCommand(state), newSkillCommand(state), newExternalSkillCommand(state),
+		newCandidateCommand(state), newConfigCommand(state), newExperienceCommand(state), newSkillCommand(state), newExternalSkillCommand(state),
 		newServerCommand(state), newSetupCommand(state), newDoctorCommand(state),
 	)
 	return root
