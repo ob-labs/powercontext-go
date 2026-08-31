@@ -27,7 +27,7 @@ import (
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
-const frozenOpenAPISHA256 = "739e8fa4983399980d6c619490fe1806dc354ac173a5bb3c99250cb080d11b09"
+const activeOpenAPISHA256 = "08b9c71cf286307b4e4573fad7198fec37f963192bfa70f15bac33b228283798"
 
 func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	t.Parallel()
@@ -35,8 +35,11 @@ func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(contents)); got != frozenOpenAPISHA256 {
-		t.Fatalf("OpenAPI SHA-256 = %s, want frozen Oracle %s", got, frozenOpenAPISHA256)
+	if got := fmt.Sprintf("%x", sha256.Sum256(contents)); got != activeOpenAPISHA256 {
+		t.Fatalf("OpenAPI SHA-256 = %s, want active contract %s", got, activeOpenAPISHA256)
+	}
+	if !bytes.Contains(contents, []byte("\n  version: 0.1.0\n")) {
+		t.Fatal("OpenAPI info.version must match the v0.1.0 release")
 	}
 
 	operationIDs := make(map[string]struct{})
