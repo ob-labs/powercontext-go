@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 660,
-  "pending_case_count": 99,
+  "mapped_case_count": 680,
+  "pending_case_count": 79,
   "entries": [
     {
       "python": {
@@ -11671,8 +11671,15 @@
         "line": 89
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupWithoutSubcommandPrintsHelpAndInstallsNothing"
+        }
+      ]
     },
     {
       "python": {
@@ -11681,8 +11688,15 @@
         "line": 100
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectJSONRequiresHostBeforeInstalling"
+        }
+      ]
     },
     {
       "python": {
@@ -11691,8 +11705,15 @@
         "line": 110
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectNonTTYRequiresHostBeforeInstalling"
+        }
+      ]
     },
     {
       "python": {
@@ -11701,8 +11722,15 @@
         "line": 121
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectRejectsUnknownHostBeforeInstalling"
+        }
+      ]
     },
     {
       "python": {
@@ -11711,8 +11739,15 @@
         "line": 132
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags"
+        }
+      ]
     },
     {
       "python": {
@@ -11721,8 +11756,15 @@
         "line": 160
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectContinuesAfterSelectedHostFails"
+        }
+      ]
     },
     {
       "python": {
@@ -11731,8 +11773,15 @@
         "line": 188
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectHumanReportIncludesFailureAndContinues"
+        }
+      ]
     },
     {
       "python": {
@@ -11741,8 +11790,15 @@
         "line": 203
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectReportsSuccessfulRerunAsInstalled"
+        }
+      ]
     },
     {
       "python": {
@@ -11751,8 +11807,15 @@
         "line": 215
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectReadsTTYSelectionByNumber"
+        }
+      ]
     },
     {
       "python": {
@@ -11761,8 +11824,15 @@
         "line": 236
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectCancelsEmptyTTYSelection"
+        }
+      ]
     },
     {
       "python": {
@@ -11771,8 +11841,15 @@
         "line": 246
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectRejectsInvalidTTYTokenBeforeInstalling"
+        }
+      ]
     },
     {
       "python": {
@@ -11781,8 +11858,15 @@
         "line": 257
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags"
+        }
+      ]
     },
     {
       "python": {
@@ -11791,8 +11875,15 @@
         "line": 266
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags"
+        }
+      ]
     },
     {
       "python": {
@@ -11801,8 +11892,20 @@
         "line": 280
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectPassesSourceRefAndClaudeOptions"
+        },
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestOpenClawSetupFlagsPreservePythonDefaults"
+        }
+      ]
     },
     {
       "python": {
@@ -11811,8 +11914,15 @@
         "line": 317
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectPassesServerAndScopeOverridesToOpenClaw"
+        }
+      ]
     },
     {
       "python": {
@@ -11821,8 +11931,25 @@
         "line": 350
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectContinuesAfterPostInstallVerificationFails"
+        },
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectFailsRowsWhenPostInstallVerificationFails"
+        },
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectFailsOpenCodeRowWhenActivationVerificationFails"
+        }
+      ]
     },
     {
       "python": {
@@ -11831,8 +11958,15 @@
         "line": 375
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectContinuesAfterPostInstallVerificationFails"
+        }
+      ]
     },
     {
       "python": {
@@ -11841,8 +11975,15 @@
         "line": 392
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestSetupSelectPrintsHermesNextStepOnlyWhenInstalled"
+        }
+      ]
     },
     {
       "python": {
@@ -11851,8 +11992,15 @@
         "line": 403
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/system_contract_test.go",
+          "test": "TestSetupDSHReportsMissingCLI"
+        }
+      ]
     },
     {
       "python": {
@@ -11861,8 +12009,15 @@
         "line": 412
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/setup_select_test.go",
+          "test": "TestParseSetupHostSelectionAcceptsNamesAndCatalogNumbers"
+        }
+      ]
     },
     {
       "python": {

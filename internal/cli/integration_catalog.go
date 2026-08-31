@@ -27,6 +27,7 @@ type integrationDiagnosticProbe func(context.Context, systemCommandExecutor) map
 
 type integrationHostSpec struct {
 	name            string
+	label           string
 	cliKey          string
 	integrationKeys []string
 	missingDetail   string
@@ -35,31 +36,31 @@ type integrationHostSpec struct {
 
 var firstClassIntegrationHosts = [...]integrationHostSpec{
 	{
-		name: "codex", cliKey: "codex", integrationKeys: []string{"plugin"},
+		name: "codex", label: "Codex", cliKey: "codex", integrationKeys: []string{"plugin"},
 		missingDetail: "Codex CLI is not installed or is not on PATH", probe: runCodexDiagnostics,
 	},
 	{
-		name: "claude-code", cliKey: "claude_code", integrationKeys: []string{"plugin"},
+		name: "claude-code", label: "Claude Code", cliKey: "claude_code", integrationKeys: []string{"plugin"},
 		missingDetail: "Claude Code CLI is not installed or is not on PATH", probe: runClaudeCodeDiagnostics,
 	},
 	{
-		name: "dsh", cliKey: "dsh", integrationKeys: []string{"plugin"},
+		name: "dsh", label: "DeepSeek Harness", cliKey: "dsh", integrationKeys: []string{"plugin"},
 		missingDetail: "DeepSeek Harness CLI is not installed or is not on PATH", probe: runDSHDiagnostics,
 	},
 	{
-		name: "openclaw", cliKey: "openclaw", integrationKeys: []string{"plugin"},
+		name: "openclaw", label: "OpenClaw", cliKey: "openclaw", integrationKeys: []string{"plugin"},
 		missingDetail: "OpenClaw CLI is not installed or is not on PATH", probe: runOpenClawDiagnostics,
 	},
 	{
-		name: "opencode", cliKey: "opencode", integrationKeys: []string{"plugin", "skill"},
+		name: "opencode", label: "OpenCode", cliKey: "opencode", integrationKeys: []string{"plugin", "skill"},
 		missingDetail: "OpenCode CLI is not installed or is not on PATH", probe: runOpenCodeDiagnostics,
 	},
 	{
-		name: "pi", cliKey: "pi", integrationKeys: []string{"package"},
+		name: "pi", label: "Pi", cliKey: "pi", integrationKeys: []string{"package"},
 		missingDetail: "Pi CLI is not installed or is not on PATH", probe: runPiDiagnostics,
 	},
 	{
-		name: "hermes", cliKey: "hermes", integrationKeys: []string{"plugin"},
+		name: "hermes", label: "Hermes", cliKey: "hermes", integrationKeys: []string{"plugin"},
 		missingDetail: "Hermes CLI is not installed or is not on PATH", probe: runHermesDiagnostics,
 	},
 }

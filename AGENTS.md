@@ -301,3 +301,7 @@ source / artifact / trigger / inference
   boundary, anchor the mutation to the target job's actual adjacent boundary
   after structural changes. Verify the mutant changes that target job and is
   rejected by the contract validator.
+- When CLI behavior depends on whether stdin is interactive, use an actual
+  terminal query instead of treating every character device as a TTY. Verify
+  null devices and pipes remain non-interactive while a controlled terminal
+  input still enables the prompt path.

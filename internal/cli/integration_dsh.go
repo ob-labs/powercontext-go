@@ -56,7 +56,7 @@ func newSetupDSHCommand(state *commandState) *cobra.Command {
 				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
 					return writeErr
 				}
-				return alreadyReported(errors.New("DeepSeek Harness diagnostics did not pass"))
+				return alreadyReported(setupVerificationError(checks))
 			}
 			result := map[string]string{"plugin": dshPluginName, "plugin_path": pluginPath, "data_dir": dataDirectory}
 			if state.json {

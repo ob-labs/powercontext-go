@@ -69,7 +69,7 @@ func newSetupPiCommand(state *commandState) *cobra.Command {
 				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
 					return writeErr
 				}
-				return alreadyReported(errors.New("Pi diagnostics did not pass"))
+				return alreadyReported(setupVerificationError(checks))
 			}
 			result := map[string]string{"package": piPackageName, "package_path": packagePath, "data_dir": dataDirectory}
 			if state.json {
