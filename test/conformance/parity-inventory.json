@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 686,
-  "pending_case_count": 126,
+  "mapped_case_count": 702,
+  "pending_case_count": 110,
   "entries": [
     {
       "python": {
@@ -8455,8 +8455,15 @@
         "line": 93
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitShowAndValidateManageOneCredentialFreeEnvironmentFile"
+        }
+      ]
     },
     {
       "python": {
@@ -8485,8 +8492,15 @@
         "line": 162
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigValidateRejectsRelativeSQLitePersistencePath"
+        }
+      ]
     },
     {
       "python": {
@@ -8545,8 +8559,15 @@
         "line": 252
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRedactsStandardSensitiveAssignments"
+        }
+      ]
     },
     {
       "python": {
@@ -8565,8 +8586,15 @@
         "line": 302
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitForceTreatsMarkerTextInsideCredentialAsLiteral"
+        }
+      ]
     },
     {
       "python": {
@@ -8575,8 +8603,15 @@
         "line": 320
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRejectsRepeatedManagedMarkers"
+        }
+      ]
     },
     {
       "python": {
@@ -9151,8 +9186,15 @@
         "line": 29
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentAcceptsShellCompatibleAssignments"
+        }
+      ]
     },
     {
       "python": {
@@ -9161,8 +9203,15 @@
         "line": 33
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentAcceptsShellCompatibleAssignments"
+        }
+      ]
     },
     {
       "python": {
@@ -9171,8 +9220,15 @@
         "line": 37
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentAcceptsShellCompatibleAssignments"
+        }
+      ]
     },
     {
       "python": {
@@ -9211,8 +9267,15 @@
         "line": 55
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+        }
+      ]
     },
     {
       "python": {
@@ -9221,8 +9284,15 @@
         "line": 59
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+        }
+      ]
     },
     {
       "python": {
@@ -9261,8 +9331,15 @@
         "line": 75
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+        }
+      ]
     },
     {
       "python": {
@@ -9281,8 +9358,15 @@
         "line": 84
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+        }
+      ]
     },
     {
       "python": {
@@ -9291,8 +9375,15 @@
         "line": 89
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentRejectsExpansionAndControlInput"
+        }
+      ]
     },
     {
       "python": {
@@ -9301,8 +9392,15 @@
         "line": 94
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+        }
+      ]
     },
     {
       "python": {
@@ -9311,8 +9409,15 @@
         "line": 102
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRejectsInvalidUTF8"
+        }
+      ]
     },
     {
       "python": {
@@ -9321,8 +9426,15 @@
         "line": 110
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitForceRemovesStandaloneManagedAssignments"
+        }
+      ]
     },
     {
       "python": {

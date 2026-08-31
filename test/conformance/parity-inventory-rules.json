@@ -32,7 +32,34 @@
     },
     "tests/test_config_cli.py": {
       "mode": "go-port",
-      "reason": "Managed environment initialization, validation, credential input, and redacted display map to the Go CLI."
+      "reason": "Managed environment initialization, validation, credential input, and redacted display map to the Go CLI.",
+      "cases": {
+        "test_init_validate_and_show_round_trip_managed_environment": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigInitShowAndValidateManageOneCredentialFreeEnvironmentFile"
+          ]
+        },
+        "test_configuration_rejects_relative_persistent_storage": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigValidateRejectsRelativeSQLitePersistencePath"
+          ]
+        },
+        "test_show_redacts_standard_credential_container_variables": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigShowRedactsStandardSensitiveAssignments"
+          ]
+        },
+        "test_managed_marker_text_inside_a_credential_is_not_treated_as_structure": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigInitForceTreatsMarkerTextInsideCredentialAsLiteral"
+          ]
+        },
+        "test_show_reports_malformed_managed_markers_without_a_traceback": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigShowRejectsRepeatedManagedMarkers"
+          ]
+        }
+      }
     },
     "tests/test_dashboard.py": {
       "mode": "go-port",
@@ -40,7 +67,64 @@
     },
     "tests/test_env_file.py": {
       "mode": "go-port",
-      "reason": "Shell-compatible managed environment parsing and stale-value clearing map to the Go CLI configuration parser."
+      "reason": "Shell-compatible managed environment parsing and stale-value clearing map to the Go CLI configuration parser.",
+      "cases": {
+        "test_hash_inside_a_value_is_preserved": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentAcceptsShellCompatibleAssignments"
+          ]
+        },
+        "test_comment_after_an_assignment_is_removed": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentAcceptsShellCompatibleAssignments"
+          ]
+        },
+        "test_quoted_values_keep_hashes_and_spaces": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentAcceptsShellCompatibleAssignments"
+          ]
+        },
+        "test_value_may_start_with_hash_like_shell": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+          ]
+        },
+        "test_backslash_escaped_space_preserves_hash_value": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+          ]
+        },
+        "test_unescaped_tab_starts_a_comment_boundary": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+          ]
+        },
+        "test_export_accepts_shell_whitespace": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+          ]
+        },
+        "test_shell_expansion_is_rejected_instead_of_loaded_literally": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentRejectsExpansionAndControlInput"
+          ]
+        },
+        "test_quoted_and_escaped_expansion_characters_are_literal": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
+          ]
+        },
+        "test_invalid_utf8_is_reported_as_an_environment_file_error": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigShowRejectsInvalidUTF8"
+          ]
+        },
+        "test_environment_context_can_clear_stale_values": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigInitForceRemovesStandaloneManagedAssignments"
+          ]
+        }
+      }
     },
     "tests/test_full_capability_docs.py": {
       "mode": "cross-layer",
