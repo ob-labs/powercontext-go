@@ -62,6 +62,18 @@ def test_config_declares_bounded_request_limits(tmp_path: Path) -> None:
     assert settings.source_max_bytes == 16384
 
 
+def test_config_accepts_the_ipv4_loopback_range(tmp_path: Path) -> None:
+    settings_module = load_settings_module()
+    payload = configuration()
+    payload["server_url"] = "http://127.2.3.4:8000/"
+    configuration_path = tmp_path / "powercontext.json"
+    configuration_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    settings = settings_module.load_settings(configuration_path)
+
+    assert settings.server_url == "http://127.2.3.4:8000"
+
+
 @pytest.mark.parametrize(
     ("changes", "expected_message"),
     [

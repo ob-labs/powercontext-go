@@ -618,10 +618,10 @@ func workBuddyMCPDiagnostic(path string, configuration workBuddyConfiguration) d
 	if !ok {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
 	}
-	if _, ok := servers[workBuddyPluginName].(map[string]any); !ok {
+	entry, entryOK := servers[workBuddyPluginName].(map[string]any)
+	if !entryOK {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
 	}
-	entry := servers[workBuddyPluginName].(map[string]any)
 	if entry["description"] != workBuddyMCPDescription || entry["url"] != configuration.ServerURL+"/mcp" {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server does not match its configuration"}
 	}
@@ -801,8 +801,17 @@ func isOwnedWorkBuddyMCP(entry map[string]any) bool {
 	authorization, _ := headers["Authorization"].(string)
 	description, _ := entry["description"].(string)
 	kind, _ := entry["type"].(string)
-	return kind == "http" && headersOK && authorization == workBuddyAuthorizationTemplate &&
+	return kind == "http" && headersOK && isWorkBuddyAuthorizationTemplate(authorization) &&
 		description == workBuddyMCPDescription
+}
+
+func isWorkBuddyAuthorizationTemplate(value string) bool {
+	name, ok := strings.CutPrefix(value, "${")
+	if !ok {
+		return false
+	}
+	name, ok = strings.CutSuffix(name, ":-}")
+	return ok && workBuddyAuthorizationEnvironmentPattern.MatchString(name)
 }
 
 func workBuddyHookCommand(hooksDir string) string {

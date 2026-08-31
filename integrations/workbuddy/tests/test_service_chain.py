@@ -159,3 +159,32 @@ def test_hook_preserves_the_host_prompt_when_the_live_service_is_unavailable(mon
     }
     assert prompt_secret not in stdout.getvalue()
     assert authorization_secret not in stdout.getvalue()
+
+
+def test_hook_rejects_invalid_persisted_configuration_instead_of_falling_back_to_environment(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    hook = load_hook_module()
+    (tmp_path / "powercontext.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "server_url": "http://127.0.0.1:8000",
+                "authorization": "Bearer persisted-secret",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hook, "_PLUGIN_ROOT", tmp_path)
+    monkeypatch.setenv("POWERCONTEXT_WORKBUDDY_SERVER_URL", "http://127.0.0.1:8000")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "cwd": str(tmp_path), "prompt": "hello"})),
+    )
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    assert hook.main() == 0
+    assert stdout.getvalue() == ""

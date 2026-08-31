@@ -20,12 +20,13 @@
 
 from __future__ import annotations
 
-import os
 import json
 import math
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -293,12 +294,22 @@ def _http_base_url(value: str) -> str:
         raise WorkBuddyConfigurationError("PowerContext Server URL must use HTTP or HTTPS")
     if parsed.query or parsed.fragment:
         raise WorkBuddyConfigurationError("PowerContext Server URL must not contain a query or fragment")
-    if parsed.scheme == "http" and parsed.hostname.lower() not in _LOOPBACK_HOSTS:
+    if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
         raise WorkBuddyConfigurationError("unencrypted PowerContext URLs must be loopback addresses")
     path = parsed.path.rstrip("/")
     if path.endswith("/mcp"):
         path = path.removesuffix("/mcp")
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", "")).rstrip("/")
+
+
+def _is_loopback_host(value: str) -> bool:
+    host = value.lower()
+    if host in _LOOPBACK_HOSTS:
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 __all__ = ["WorkBuddyConfigurationError", "WorkBuddyPluginSettings", "load_settings"]

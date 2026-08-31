@@ -50,7 +50,6 @@ func newSetupCommand(state *commandState) *cobra.Command {
 		newSetupOpenCodeCommand(state),
 		newSetupHermesCommand(state),
 		newSetupOpenClawCommand(state),
-		newSetupWorkBuddyCommand(state),
 	)
 	return command
 }

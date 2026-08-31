@@ -294,6 +294,15 @@ source / artifact / trigger / inference
   host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6
   loopback, remote plaintext rejection, and each explicit trusted-transport
   exception in the adapter's native test suite.
+- When setup owns a credential-free authorization environment reference, treat
+  every syntactically valid generated `${NAME:-}` reference as owned rather
+  than only the default name. Verify repeated setup with a custom authorization
+  environment preserves the no-token persistence contract.
+- When an installed host adapter has a persisted credential-free configuration
+  file, treat an invalid existing file as authoritative failure-open input
+  instead of falling back to legacy environment configuration. Verify through
+  the host hook entrypoint that invalid persisted configuration emits no
+  recalled context.
 - When a documentation contract test extracts executable shell commands, stop
   parsing at a shell comment before deciding that a command exists. Verify a
   fully commented command cannot satisfy executable-documentation evidence and

@@ -92,7 +92,6 @@ func newDoctorCommand(state *commandState) *cobra.Command {
 		newDoctorOpenCodeCommand(state),
 		newDoctorHermesCommand(state),
 		newDoctorOpenClawCommand(state),
-		newDoctorWorkBuddyCommand(state),
 	)
 	return command
 }

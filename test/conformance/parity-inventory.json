@@ -8074,7 +8074,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_workbuddy_test.go",
-          "test": "TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+          "test": "TestSetupWorkBuddyRefusesCredentialBearingMCPEntryBeforeMutation"
         }
       ]
     },
@@ -8091,7 +8091,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_workbuddy_test.go",
-          "test": "TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+          "test": "TestSetupWorkBuddyMigratesLegacyMCPEntry"
         }
       ]
     },

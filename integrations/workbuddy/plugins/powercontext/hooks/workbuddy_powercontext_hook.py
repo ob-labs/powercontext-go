@@ -166,10 +166,9 @@ def main(settings: WorkBuddyPluginSettings | None = None) -> int:
 
 def _settings_from_default_path() -> WorkBuddyPluginSettings:
     configured = _PLUGIN_ROOT / "powercontext.json"
-    try:
-        return load_settings(configured)
-    except WorkBuddyConfigurationError:
+    if not configured.is_file():
         return WorkBuddyPluginSettings.from_environment()
+    return load_settings(configured)
 
 
 def _read_payload() -> dict[str, Any]:

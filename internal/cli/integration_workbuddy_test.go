@@ -180,6 +180,25 @@ func TestSetupWorkBuddyWritesCredentialFreeConfiguration(t *testing.T) {
 	}
 }
 
+func TestSetupWorkBuddyRefreshesOwnedCustomAuthorizationEnvironment(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+
+	for range 2 {
+		if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t},
+			"setup", "workbuddy", "--source", checkout, "--authorization-environment", "WORKBUDDY_TOKEN"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entry := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))["mcpServers"].(map[string]any)[workBuddyPluginName].(map[string]any)
+	if entry["headers"].(map[string]any)["Authorization"] != "${WORKBUDDY_TOKEN:-}" {
+		t.Fatalf("MCP entry = %#v", entry)
+	}
+}
+
 func TestSetupWorkBuddyRejectsRemotePlaintextBeforePythonLookup(t *testing.T) {
 	commands := &scriptedSystemCommands{t: t}
 
