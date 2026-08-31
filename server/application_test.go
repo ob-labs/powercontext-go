@@ -105,6 +105,50 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 	}
 }
 
+func TestApplicationCloseWaitsForInFlightHTTPMemoryFlush(t *testing.T) {
+	config := applicationTestConfig(t)
+	pipeline := &blockingApplicationMemoryPipeline{started: make(chan struct{}), release: make(chan struct{})}
+	application, err := OpenApplication(t.Context(), config, Dependencies{MemoryCandidates: pipeline})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = application.Close(context.Background()) })
+	handler, err := application.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response := postApplicationJSON(t, handler, "/v1/sources/content", map[string]any{
+		"scope_id": "project:shutdown", "source_id": "source-1", "content": "flush while closing",
+	}); response.Code != http.StatusAccepted {
+		t.Fatalf("capture = %d: %s", response.Code, response.Body.String())
+	}
+
+	flush := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		request := httptest.NewRequest(http.MethodPost, "/v1/memory/flush", strings.NewReader(`{"scope_id":"project:shutdown"}`))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		flush <- response
+	}()
+	<-pipeline.started
+
+	closed := make(chan error, 1)
+	go func() { closed <- application.Close(t.Context()) }()
+	select {
+	case err := <-closed:
+		t.Fatalf("Application.Close returned before the in-flight flush completed: %v", err)
+	default:
+	}
+	close(pipeline.release)
+	if response := <-flush; response.Code != http.StatusOK {
+		t.Fatalf("flush = %d: %s", response.Code, response.Body.String())
+	}
+	if err := <-closed; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGoClientExercisesReviewHTTPRuntimeSQLiteVerticalSlice(t *testing.T) {
 	t.Parallel()
 	application, err := OpenApplication(t.Context(), applicationTestConfig(t), Dependencies{})
@@ -1075,6 +1119,28 @@ type noOpMemoryCandidates struct{}
 
 func (noOpMemoryCandidates) Extract(context.Context, memory.CandidateRequest) ([]memory.EntryInput, error) {
 	return nil, nil
+}
+
+type blockingApplicationMemoryPipeline struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *blockingApplicationMemoryPipeline) Extract(ctx context.Context, request memory.CandidateRequest) ([]memory.EntryInput, error) {
+	close(p.started)
+	select {
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	case <-p.release:
+	}
+	entries := make([]memory.EntryInput, 0, len(request.Sources()))
+	for _, value := range request.Sources() {
+		content, ok := value.(source.ContentSource)
+		if ok {
+			entries = append(entries, memory.NewEntryInput(nil, "fact", content.Content(), []source.Value{value}, nil, nil))
+		}
+	}
+	return entries, nil
 }
 
 type noOpExperienceCandidates struct{}
