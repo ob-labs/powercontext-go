@@ -46,10 +46,10 @@ func TestRunOpenCodeProbeExecutesRequestWaitsForNonceAndStopsProcess(t *testing.
 		if endpoint != "http://127.0.0.1:"+strconv.Itoa(port)+"/session" {
 			t.Fatalf("probe endpoint = %q", endpoint)
 		}
-		if _, err := os.Stat(pidPath); errors.Is(err, os.ErrNotExist) {
+		if _, probeStatErr := os.Stat(pidPath); errors.Is(probeStatErr, os.ErrNotExist) {
 			return nil
-		} else if err != nil {
-			return err
+		} else if probeStatErr != nil {
+			return probeStatErr
 		}
 		requests++
 		value := "wrong-nonce"
