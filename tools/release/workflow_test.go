@@ -1171,7 +1171,8 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	tests := map[string][]string{
 		"Makefile": {
-			"github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0",
+			"github.com/apache/skywalking-eyes/cmd/license-eye@$(LICENSE_EYE_VERSION)",
+			"LICENSE_EYE_VERSION := v0.8.0",
 			"license-check:",
 			"header check",
 			"license-fix:",
