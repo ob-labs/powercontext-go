@@ -28,15 +28,22 @@ import (
 	"strings"
 )
 
-const inventorySchemaVersion = 1
+const inventorySchemaVersion = 2
 
 type inventory struct {
-	SchemaVersion int           `json:"schema_version"`
-	Modules       []moduleEntry `json:"modules"`
+	SchemaVersion      int                `json:"schema_version"`
+	Modules            []moduleEntry      `json:"modules"`
+	GeneratedConsumers generatedConsumers `json:"generated_consumers"`
 }
 
 type moduleEntry struct {
 	Path string `json:"path"`
+	Kind string `json:"kind"`
+}
+
+type generatedConsumers struct {
+	Mode    string `json:"mode"`
+	Package string `json:"package"`
 }
 
 func main() {
@@ -106,6 +113,9 @@ func readInventory(ctx context.Context, path string) ([]string, error) {
 	if len(value.Modules) == 0 {
 		return nil, errors.New("module inventory must declare at least one module")
 	}
+	if value.GeneratedConsumers.Mode != "temporary" || value.GeneratedConsumers.Package != "tools/generated-consumers" {
+		return nil, errors.New("module inventory must declare temporary generated consumers from tools/generated-consumers")
+	}
 	paths := make([]string, 0, len(value.Modules))
 	seen := make(map[string]struct{}, len(value.Modules))
 	for _, entry := range value.Modules {
@@ -116,11 +126,30 @@ func readInventory(ctx context.Context, path string) ([]string, error) {
 		if _, exists := seen[path]; exists {
 			return nil, fmt.Errorf("module inventory declares %s more than once", path)
 		}
+		if err := validateModuleKind(path, entry.Kind); err != nil {
+			return nil, err
+		}
 		seen[path] = struct{}{}
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
 	return paths, nil
+}
+
+func validateModuleKind(path, kind string) error {
+	switch kind {
+	case "production":
+		if strings.HasPrefix(path, "test/") {
+			return fmt.Errorf("production module %s must not be under test/", path)
+		}
+	case "external-consumer":
+		if !strings.HasPrefix(path, "test/") {
+			return fmt.Errorf("external-consumer module %s must be under test/", path)
+		}
+	default:
+		return fmt.Errorf("module %s has unsupported kind %q", path, kind)
+	}
+	return nil
 }
 
 func cleanModulePath(path string) (string, error) {

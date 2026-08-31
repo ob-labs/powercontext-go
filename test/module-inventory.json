@@ -1,7 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "modules": [
-    {"path": "."},
-    {"path": "test/downstream"}
-  ]
+    {"path": ".", "kind": "production"},
+    {"path": "test/downstream", "kind": "external-consumer"}
+  ],
+  "generated_consumers": {
+    "mode": "temporary",
+    "package": "tools/generated-consumers"
+  }
 }
