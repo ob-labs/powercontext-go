@@ -809,6 +809,111 @@ func TestFrozenOracleFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
 	}
 }
 
+func TestHostAdapterFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				ID   string            `yaml:"id"`
+				Name string            `yaml:"name"`
+				If   string            `yaml:"if"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+				Env  map[string]string `yaml:"env"`
+				Run  string            `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	hostAdapters, ok := workflow.Jobs["host-adapters"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no host-adapters job")
+	}
+	adapterStepIDs := map[string]bool{}
+	var summary, upload *struct {
+		ID   string
+		Name string
+		If   string
+		Uses string
+		With map[string]string
+		Env  map[string]string
+		Run  string
+	}
+	for index := range hostAdapters.Steps {
+		step := hostAdapters.Steps[index]
+		if step.ID != "" {
+			adapterStepIDs[step.ID] = true
+		}
+		if step.Name == "Write bounded host adapter diagnostics" {
+			summary = &struct {
+				ID   string
+				Name string
+				If   string
+				Uses string
+				With map[string]string
+				Env  map[string]string
+				Run  string
+			}{step.ID, step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
+		}
+		if step.Name == "Upload host adapter diagnostics" {
+			upload = &struct {
+				ID   string
+				Name string
+				If   string
+				Uses string
+				With map[string]string
+				Env  map[string]string
+				Run  string
+			}{step.ID, step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
+		}
+	}
+	for _, id := range []string{"python_adapters", "dsh_server", "dsh_adapter", "pi_adapter", "opencode_adapter", "openclaw_adapter"} {
+		if !adapterStepIDs[id] {
+			t.Fatalf("host adapter step id %q is missing", id)
+		}
+	}
+	if summary == nil || summary.If != "always()" || !strings.Contains(summary.Run, "powercontext-host-adapter-diagnostics") ||
+		summary.Env["PYTHON_ADAPTERS_OUTCOME"] != "${{ steps.python_adapters.outcome }}" ||
+		summary.Env["DSH_SERVER_OUTCOME"] != "${{ steps.dsh_server.outcome }}" ||
+		summary.Env["DSH_ADAPTER_OUTCOME"] != "${{ steps.dsh_adapter.outcome }}" ||
+		summary.Env["PI_ADAPTER_OUTCOME"] != "${{ steps.pi_adapter.outcome }}" ||
+		summary.Env["OPENCODE_ADAPTER_OUTCOME"] != "${{ steps.opencode_adapter.outcome }}" ||
+		summary.Env["OPENCLAW_ADAPTER_OUTCOME"] != "${{ steps.openclaw_adapter.outcome }}" {
+		t.Fatalf("host adapter summary step = %#v", summary)
+	}
+	for _, forbidden := range []string{"cat ", "find ", "GITHUB_TOKEN", "POWERCONTEXT_GO_BINARY", "git diff"} {
+		if strings.Contains(summary.Run, forbidden) {
+			t.Fatalf("host adapter summary exposes %q: %s", forbidden, summary.Run)
+		}
+	}
+	for _, lockfile := range []string{
+		"integrations/bub/uv.lock",
+		"integrations/codex/plugins/powercontext/uv.lock",
+		"integrations/langgraph/uv.lock",
+		"integrations/dsh/plugins/powercontext/pnpm-lock.yaml",
+		"integrations/pi/plugins/powercontext/pnpm-lock.yaml",
+		"integrations/opencode/plugins/powercontext/pnpm-lock.yaml",
+		"integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml",
+	} {
+		if !strings.Contains(summary.Run, lockfile) {
+			t.Fatalf("host adapter summary omits lockfile %q: %s", lockfile, summary.Run)
+		}
+	}
+	if upload == nil || upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" {
+		t.Fatalf("host adapter upload step = %#v", upload)
+	}
+	if upload.With["path"] != "${{ runner.temp }}/powercontext-host-adapter-diagnostics/summary.txt" ||
+		upload.With["if-no-files-found"] != "error" || upload.With["retention-days"] != "14" {
+		t.Fatalf("host adapter upload contract = %#v", upload.With)
+	}
+}
+
 func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))

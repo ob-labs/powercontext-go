@@ -466,6 +466,7 @@ jobs:
           enable-cache: true
 
       - name: Test Python host adapters
+        id: python_adapters
         run: |
           uv run --project integrations/codex/plugins/powercontext --locked --with pytest \
             pytest integrations/codex/tests
@@ -492,9 +493,11 @@ jobs:
             integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml
 
       - name: Build the PowerContext Server for DSH end-to-end tests
+        id: dsh_server
         run: go build -tags sqlite_fts5 -o "$RUNNER_TEMP/powercontext-dsh-e2e" ./cmd/powercontext
 
       - name: Test and rebuild the DSH adapter
+        id: dsh_adapter
         working-directory: integrations/dsh/plugins/powercontext
         env:
           POWERCONTEXT_GO_BINARY: ${{ runner.temp }}/powercontext-dsh-e2e
@@ -507,6 +510,7 @@ jobs:
           git diff --exit-code -- src/operations.generated.ts lib
 
       - name: Test the Pi adapter
+        id: pi_adapter
         working-directory: integrations/pi/plugins/powercontext
         run: |
           pnpm install --frozen-lockfile
@@ -514,6 +518,7 @@ jobs:
           pnpm test
 
       - name: Test and rebuild the OpenCode adapter
+        id: opencode_adapter
         working-directory: integrations/opencode/plugins/powercontext
         run: |
           pnpm install --frozen-lockfile
@@ -523,6 +528,7 @@ jobs:
           git diff --exit-code -- lib
 
       - name: Test and rebuild the OpenClaw adapter
+        id: openclaw_adapter
         working-directory: integrations/openclaw/plugins/memory-powercontext
         run: |
           pnpm install --frozen-lockfile
@@ -530,6 +536,48 @@ jobs:
           pnpm test
           pnpm build
           git diff --exit-code -- dist
+
+      - name: Write bounded host adapter diagnostics
+        if: always()
+        shell: bash
+        env:
+          PYTHON_ADAPTERS_OUTCOME: ${{ steps.python_adapters.outcome }}
+          DSH_SERVER_OUTCOME: ${{ steps.dsh_server.outcome }}
+          DSH_ADAPTER_OUTCOME: ${{ steps.dsh_adapter.outcome }}
+          PI_ADAPTER_OUTCOME: ${{ steps.pi_adapter.outcome }}
+          OPENCODE_ADAPTER_OUTCOME: ${{ steps.opencode_adapter.outcome }}
+          OPENCLAW_ADAPTER_OUTCOME: ${{ steps.openclaw_adapter.outcome }}
+        run: |
+          diagnostics="$RUNNER_TEMP/powercontext-host-adapter-diagnostics"
+          mkdir -p "$diagnostics"
+          {
+            printf 'commit=%s\n' "$GITHUB_SHA"
+            printf 'python_adapters_outcome=%s\n' "$PYTHON_ADAPTERS_OUTCOME"
+            printf 'dsh_server_outcome=%s\n' "$DSH_SERVER_OUTCOME"
+            printf 'dsh_adapter_outcome=%s\n' "$DSH_ADAPTER_OUTCOME"
+            printf 'pi_adapter_outcome=%s\n' "$PI_ADAPTER_OUTCOME"
+            printf 'opencode_adapter_outcome=%s\n' "$OPENCODE_ADAPTER_OUTCOME"
+            printf 'openclaw_adapter_outcome=%s\n' "$OPENCLAW_ADAPTER_OUTCOME"
+            for path in \
+              integrations/bub/uv.lock \
+              integrations/codex/plugins/powercontext/uv.lock \
+              integrations/langgraph/uv.lock \
+              integrations/dsh/plugins/powercontext/pnpm-lock.yaml \
+              integrations/pi/plugins/powercontext/pnpm-lock.yaml \
+              integrations/opencode/plugins/powercontext/pnpm-lock.yaml \
+              integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml; do
+              sha256sum "$path"
+            done
+          } > "$diagnostics/summary.txt"
+
+      - name: Upload host adapter diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: host-adapter-diagnostics-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-host-adapter-diagnostics/summary.txt
+          if-no-files-found: error
+          retention-days: 14
 
   evaluation:
     name: Evaluation control plane and console
