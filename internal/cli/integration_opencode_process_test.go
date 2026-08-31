@@ -42,7 +42,10 @@ func TestRunOpenCodeProbeExecutesRequestWaitsForNonceAndStopsProcess(t *testing.
 	environment := openCodeProbeHelperEnvironment("success", marker, pidPath)
 	t.Cleanup(func() { stopOpenCodeProbeHelper(t, pidPath) })
 	requests := 0
-	requester := func(_ context.Context, endpoint string) error {
+	requester := func(context context.Context, endpoint string) error {
+		if barrierErr := waitForOpenCodeProbeHelperPID(context, pidPath); barrierErr != nil {
+			return barrierErr
+		}
 		requests++
 		if endpoint != "http://127.0.0.1:"+strconv.Itoa(port)+"/session" {
 			t.Fatalf("probe endpoint = %q", endpoint)
