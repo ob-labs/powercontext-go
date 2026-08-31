@@ -512,7 +512,16 @@ func validateMigrationQualityCleanliness(payload []byte) error {
 		Name:  "Verify repository cleanliness after quality checks",
 		If:    "always()",
 		Shell: "bash",
-		Run: strings.TrimSpace(`
+		Run:   boundedGitStatusCleanlinessScript(),
+	}
+	if got != want {
+		return fmt.Errorf("migration-gates.yml final quality step = %#v, want %#v", got, want)
+	}
+	return nil
+}
+
+func boundedGitStatusCleanlinessScript() string {
+	return strings.TrimSpace(`
 status="$(git status --porcelain)"
 if test -n "$status"; then
   count="$(printf '%s\n' "$status" | wc -l | tr -d '[:space:]')"
@@ -522,12 +531,7 @@ if test -n "$status"; then
   fi
   exit 1
 fi
-`),
-	}
-	if got != want {
-		return fmt.Errorf("migration-gates.yml final quality step = %#v, want %#v", got, want)
-	}
-	return nil
+`)
 }
 
 func migrationQualityCleanlinessStep(payload []byte) (migrationWorkflowStep, error) {
@@ -602,9 +606,11 @@ func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) 
 			TimeoutMinutes int               `yaml:"timeout-minutes"`
 			Env            map[string]string `yaml:"env"`
 			Steps          []struct {
-				Name string `yaml:"name"`
-				Uses string `yaml:"uses"`
-				Run  string `yaml:"run"`
+				Name  string `yaml:"name"`
+				If    string `yaml:"if"`
+				Shell string `yaml:"shell"`
+				Uses  string `yaml:"uses"`
+				Run   string `yaml:"run"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
@@ -626,23 +632,31 @@ func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) 
 		t.Fatalf("generated-consumers job Go environment = %#v", job.Env)
 	}
 	wantSteps := []struct {
-		name string
-		uses string
-		run  string
+		name  string
+		if_   string
+		shell string
+		uses  string
+		run   string
 	}{
 		{name: "Check out", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
 		{name: "Set up the Go environment", uses: "./.github/actions/setup-go-env"},
 		{name: "Generate and test fresh Go consumers", run: "make generated-consumers"},
+		{
+			name:  "Verify repository cleanliness after fresh consumer checks",
+			if_:   "always()",
+			shell: "bash",
+			run:   boundedGitStatusCleanlinessScript(),
+		},
 	}
 	if len(job.Steps) != len(wantSteps) {
 		t.Fatalf("generated-consumers step count = %d, want %d", len(job.Steps), len(wantSteps))
 	}
 	for index, want := range wantSteps {
 		got := job.Steps[index]
-		if got.Name != want.name || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
+		if got.Name != want.name || got.If != want.if_ || got.Shell != want.shell || got.Uses != want.uses || strings.TrimSpace(got.Run) != want.run {
 			t.Fatalf(
-				"generated-consumers step %d = (%q, %q, %q), want (%q, %q, %q)",
-				index, got.Name, got.Uses, strings.TrimSpace(got.Run), want.name, want.uses, want.run,
+				"generated-consumers step %d = (%q, %q, %q, %q, %q), want (%q, %q, %q, %q, %q)",
+				index, got.Name, got.If, got.Shell, got.Uses, strings.TrimSpace(got.Run), want.name, want.if_, want.shell, want.uses, want.run,
 			)
 		}
 	}
