@@ -914,6 +914,88 @@ func TestHostAdapterFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
 	}
 }
 
+func TestOceanBaseFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				ID   string            `yaml:"id"`
+				Name string            `yaml:"name"`
+				If   string            `yaml:"if"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+				Env  map[string]string `yaml:"env"`
+				Run  string            `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	oceanBase, ok := workflow.Jobs["oceanbase-live"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no oceanbase-live job")
+	}
+	var summary, upload *struct {
+		Name string
+		If   string
+		Uses string
+		With map[string]string
+		Env  map[string]string
+		Run  string
+	}
+	testStepFound := false
+	for index := range oceanBase.Steps {
+		step := oceanBase.Steps[index]
+		if step.ID == "oceanbase_tests" {
+			testStepFound = true
+		}
+		if step.Name == "Write bounded OceanBase diagnostics" {
+			summary = &struct {
+				Name string
+				If   string
+				Uses string
+				With map[string]string
+				Env  map[string]string
+				Run  string
+			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
+		}
+		if step.Name == "Upload OceanBase diagnostics" {
+			upload = &struct {
+				Name string
+				If   string
+				Uses string
+				With map[string]string
+				Env  map[string]string
+				Run  string
+			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
+		}
+	}
+	if !testStepFound || summary == nil || summary.If != "always()" ||
+		summary.Env["OCEANBASE_TESTS_OUTCOME"] != "${{ steps.oceanbase_tests.outcome }}" ||
+		!strings.Contains(summary.Run, "powercontext-oceanbase-diagnostics") ||
+		!strings.Contains(summary.Run, "go.mod") || !strings.Contains(summary.Run, "go.sum") ||
+		!strings.Contains(summary.Run, "ghcr.io/oceanbase/oceanbase-ce@sha256:31086a6900c21c479c2bcd942b6a28c53b17a51f4e9b9eb8eafcc596adfcd2e3") {
+		t.Fatalf("OceanBase summary step = %#v", summary)
+	}
+	for _, forbidden := range []string{"POWERCONTEXT_TEST_OCEANBASE_URL", "OB_TENANT_PASSWORD", "docker ", "cat "} {
+		if strings.Contains(summary.Run, forbidden) {
+			t.Fatalf("OceanBase summary exposes %q: %s", forbidden, summary.Run)
+		}
+	}
+	if upload == nil || upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" {
+		t.Fatalf("OceanBase upload step = %#v", upload)
+	}
+	if upload.With["path"] != "${{ runner.temp }}/powercontext-oceanbase-diagnostics/summary.txt" ||
+		upload.With["if-no-files-found"] != "error" || upload.With["retention-days"] != "14" {
+		t.Fatalf("OceanBase upload contract = %#v", upload.With)
+	}
+}
+
 func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))

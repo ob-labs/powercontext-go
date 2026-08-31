@@ -370,9 +370,34 @@ jobs:
         uses: ./.github/actions/setup-go-env
 
       - name: Run real OceanBase schema and cursor tests
+        id: oceanbase_tests
         env:
           POWERCONTEXT_TEST_OCEANBASE_URL: mysql+aoceanbase://root%40test:powercontext-e2e@127.0.0.1:2881/powercontext?charset=utf8mb4
         run: make test-oceanbase-live
+
+      - name: Write bounded OceanBase diagnostics
+        if: always()
+        shell: bash
+        env:
+          OCEANBASE_TESTS_OUTCOME: ${{ steps.oceanbase_tests.outcome }}
+        run: |
+          diagnostics="$RUNNER_TEMP/powercontext-oceanbase-diagnostics"
+          mkdir -p "$diagnostics"
+          {
+            printf 'commit=%s\n' "$GITHUB_SHA"
+            printf 'oceanbase_tests_outcome=%s\n' "$OCEANBASE_TESTS_OUTCOME"
+            printf 'oceanbase_image=ghcr.io/oceanbase/oceanbase-ce@sha256:31086a6900c21c479c2bcd942b6a28c53b17a51f4e9b9eb8eafcc596adfcd2e3\n'
+            sha256sum go.mod go.sum
+          } > "$diagnostics/summary.txt"
+
+      - name: Upload OceanBase diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oceanbase-diagnostics-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-oceanbase-diagnostics/summary.txt
+          if-no-files-found: error
+          retention-days: 14
 
   platform:
     name: Standard (${{ matrix.target }})
