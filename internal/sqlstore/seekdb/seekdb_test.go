@@ -19,6 +19,7 @@ package seekdb
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,7 +103,7 @@ func TestOpenClosesNativeInstanceWhenCancellationRepeatsDuringHandshake(t *testi
 	fixture := `
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <unistd.h>
 
 typedef struct {
     const char *transport;
@@ -111,41 +112,36 @@ typedef struct {
     const char *user;
 } SeekDBConnectionOptions;
 
-static void mark(const char *name, const char *value) {
-    const char *path = getenv(name);
-    if (path == NULL) return;
-    FILE *file = fopen(path, "w");
-    if (file == NULL) return;
-    fputs(value, file);
-    fclose(file);
+static void signal_fd(const char *name) {
+    const char *value = getenv(name);
+    if (value == NULL) return;
+    int fd = atoi(value);
+    if (fd < 0) return;
+    char signal = '1';
+    (void)write(fd, &signal, 1);
 }
 
-static void wait_for_release(const char *name) {
-    const char *path = getenv(name);
-    if (path == NULL) return;
-    for (;;) {
-        FILE *file = fopen(path, "r");
-        if (file != NULL) {
-            fclose(file);
-            return;
-        }
-        struct timespec delay = { .tv_sec = 0, .tv_nsec = 1000000 };
-        nanosleep(&delay, NULL);
-    }
+static void wait_for_signal_fd(const char *name) {
+    const char *value = getenv(name);
+    if (value == NULL) return;
+    int fd = atoi(value);
+    if (fd < 0) return;
+    char signal;
+    (void)read(fd, &signal, 1);
 }
 
 int seekdb_open(const char *directory, const char **error, void **out) {
     (void)directory;
     (void)error;
-    mark("POWERCONTEXT_SEEKDB_TEST_OPENED", "opened");
-    wait_for_release("POWERCONTEXT_SEEKDB_TEST_RELEASED");
+    signal_fd("POWERCONTEXT_SEEKDB_TEST_OPENED_FD");
+    wait_for_signal_fd("POWERCONTEXT_SEEKDB_TEST_RELEASE_FD");
     *out = (void *)0x1;
     return 0;
 }
 
 int seekdb_close(void *handle) {
     (void)handle;
-    mark("POWERCONTEXT_SEEKDB_TEST_CLOSED", "closed");
+    signal_fd("POWERCONTEXT_SEEKDB_TEST_CLOSED_FD");
     return 0;
 }
 
@@ -170,15 +166,12 @@ int seekdb_connection_options(void *handle, SeekDBConnectionOptions *out) {
 	}
 
 	for attempt := 0; attempt < 3; attempt++ {
-		opened := filepath.Join(root, "opened-"+strconv.Itoa(attempt))
-		closed := filepath.Join(root, "closed-"+strconv.Itoa(attempt))
-		released := filepath.Join(root, "released-"+strconv.Itoa(attempt))
-		t.Setenv("POWERCONTEXT_SEEKDB_TEST_OPENED", opened)
-		t.Setenv("POWERCONTEXT_SEEKDB_TEST_CLOSED", closed)
-		t.Setenv("POWERCONTEXT_SEEKDB_TEST_RELEASED", released)
-		t.Cleanup(func() {
-			_ = os.WriteFile(released, []byte("released"), 0o600)
-		})
+		opened, openedSignal := seekDBFixturePipe(t)
+		release, releaseSignal := seekDBFixturePipe(t)
+		closed, closedSignal := seekDBFixturePipe(t)
+		t.Setenv("POWERCONTEXT_SEEKDB_TEST_OPENED_FD", strconv.Itoa(int(openedSignal.Fd())))
+		t.Setenv("POWERCONTEXT_SEEKDB_TEST_RELEASE_FD", strconv.Itoa(int(release.Fd())))
+		t.Setenv("POWERCONTEXT_SEEKDB_TEST_CLOSED_FD", strconv.Itoa(int(closedSignal.Fd())))
 		ctx, cancel := context.WithCancel(t.Context())
 		result := make(chan error, 1)
 		go func() {
@@ -188,33 +181,49 @@ int seekdb_connection_options(void *handle, SeekDBConnectionOptions *out) {
 			}
 			result <- openErr
 		}()
-		deadline := time.Now().Add(10 * time.Second)
-		for {
-			if _, statErr := os.Stat(opened); statErr == nil {
-				break
-			}
-			select {
-			case openErr := <-result:
-				t.Fatalf("native open returned before entering the fixture: %v", openErr)
-			default:
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("native open did not start")
-			}
-			time.Sleep(time.Millisecond)
-		}
+		waitSeekDBFixtureSignal(t, opened, "native open")
 		cancel()
 		cancel()
 		cancel()
-		if err := os.WriteFile(released, []byte("released"), 0o600); err != nil {
+		if _, err := releaseSignal.Write([]byte{'1'}); err != nil {
 			t.Fatal(err)
 		}
 		if openErr := <-result; !errors.Is(openErr, context.Canceled) {
 			t.Fatalf("open error = %v, want context cancellation", openErr)
 		}
-		payload, readErr := os.ReadFile(closed)
-		if readErr != nil || string(payload) != "closed" {
-			t.Fatalf("native close marker = %q, error = %v", payload, readErr)
+		waitSeekDBFixtureSignal(t, closed, "native close")
+	}
+}
+
+func seekDBFixturePipe(t *testing.T) (*os.File, *os.File) {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	return reader, writer
+}
+
+func waitSeekDBFixtureSignal(t *testing.T, reader *os.File, name string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		var signal [1]byte
+		_, err := io.ReadFull(reader, signal[:])
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("%s signal: %v", name, err)
 		}
+	case <-ctx.Done():
+		t.Fatalf("%s signal: %v", name, context.Cause(ctx))
 	}
 }
