@@ -217,6 +217,20 @@ jobs:
       - name: Run end-to-end tests
         run: make e2e-test
 
+      - name: Verify repository cleanliness after test execution
+        if: always()
+        shell: bash
+        run: |
+          status="$(git status --porcelain)"
+          if test -n "$status"; then
+            count="$(printf '%s\n' "$status" | wc -l | tr -d '[:space:]')"
+            printf '%s\n' "$status" | sed -n '1,100p'
+            if test "$count" -gt 100; then
+              printf '... %s additional paths omitted\n' "$((count - 100))"
+            fi
+            exit 1
+          fi
+
   pi-package:
     runs-on: ubuntu-latest
     timeout-minutes: 20
