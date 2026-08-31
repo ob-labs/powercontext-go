@@ -116,7 +116,84 @@
     },
     "tests/test_cli_workbuddy.py": {
       "mode": "go-port",
-      "reason": "WorkBuddy setup/doctor CLI commands; the CLI is Go (internal/cli)."
+      "reason": "WorkBuddy setup/doctor CLI commands; the CLI is Go (internal/cli).",
+      "cases": {
+        "test_setup_workbuddy_installs_from_a_local_checkout": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK"
+          ]
+        },
+        "test_setup_workbuddy_preserves_existing_settings_and_mcp": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyPreservesExistingSettingsAndMCP"
+          ]
+        },
+        "test_setup_workbuddy_preserves_remote_authenticated_mcp_configuration": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+          ]
+        },
+        "test_setup_workbuddy_migrates_the_legacy_generated_mcp_entry": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+          ]
+        },
+        "test_setup_workbuddy_preserves_other_hooks_shared_scripts": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+          ]
+        },
+        "test_setup_workbuddy_refuses_an_unowned_skill": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyRefusesUnownedSkillBeforeWriting"
+          ]
+        },
+        "test_setup_workbuddy_refreshes_an_owned_skill": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyRefreshesOwnedSkill"
+          ]
+        },
+        "test_setup_workbuddy_stops_before_writes_when_settings_snapshot_is_unreadable": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyStopsBeforeWritesWhenSettingsSnapshotIsUnreadable"
+          ]
+        },
+        "test_setup_workbuddy_updates_an_existing_powercontext_hook": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+          ]
+        },
+        "test_setup_workbuddy_rolls_back_json_changes_on_failure": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyRollsBackJSONChangesWhenSkillCopyFails"
+          ]
+        },
+        "test_doctor_workbuddy_reports_failures_before_install": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestDoctorWorkBuddyReportsFailuresBeforeInstall"
+          ]
+        },
+        "test_doctor_workbuddy_reports_ok_after_install": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK"
+          ]
+        },
+        "test_setup_workbuddy_rejects_a_missing_plugin": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyRejectsMissingPlugin"
+          ]
+        },
+        "test_setup_workbuddy_remote_checkout_refreshes_the_requested_ref": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestResolveWorkBuddyPluginRefreshesRemoteRequestedRef"
+          ]
+        },
+        "test_workbuddy_home_honors_the_environment_override": {
+          "evidence": [
+            "go:internal/cli/integration_workbuddy_test.go#TestWorkBuddyHomeHonorsEnvironmentOverride"
+          ]
+        }
+      }
     },
     "tests/test_docker_contract.py": {
       "mode": "go-port",

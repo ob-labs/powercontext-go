@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 127,
   "python_test_case_count": 759,
-  "mapped_case_count": 680,
-  "pending_case_count": 79,
+  "mapped_case_count": 695,
+  "pending_case_count": 64,
   "entries": [
     {
       "python": {
@@ -8034,8 +8034,15 @@
         "line": 88
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK"
+        }
+      ]
     },
     {
       "python": {
@@ -8044,8 +8051,15 @@
         "line": 158
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyPreservesExistingSettingsAndMCP"
+        }
+      ]
     },
     {
       "python": {
@@ -8054,8 +8068,15 @@
         "line": 200
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+        }
+      ]
     },
     {
       "python": {
@@ -8064,8 +8085,15 @@
         "line": 234
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+        }
+      ]
     },
     {
       "python": {
@@ -8074,8 +8102,15 @@
         "line": 272
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+        }
+      ]
     },
     {
       "python": {
@@ -8084,8 +8119,15 @@
         "line": 291
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyRefusesUnownedSkillBeforeWriting"
+        }
+      ]
     },
     {
       "python": {
@@ -8094,8 +8136,15 @@
         "line": 314
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyRefreshesOwnedSkill"
+        }
+      ]
     },
     {
       "python": {
@@ -8104,8 +8153,15 @@
         "line": 334
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyStopsBeforeWritesWhenSettingsSnapshotIsUnreadable"
+        }
+      ]
     },
     {
       "python": {
@@ -8114,8 +8170,15 @@
         "line": 353
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+        }
+      ]
     },
     {
       "python": {
@@ -8124,8 +8187,15 @@
         "line": 397
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyRollsBackJSONChangesWhenSkillCopyFails"
+        }
+      ]
     },
     {
       "python": {
@@ -8134,8 +8204,15 @@
         "line": 422
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestDoctorWorkBuddyReportsFailuresBeforeInstall"
+        }
+      ]
     },
     {
       "python": {
@@ -8144,8 +8221,15 @@
         "line": 439
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK"
+        }
+      ]
     },
     {
       "python": {
@@ -8154,8 +8238,15 @@
         "line": 466
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestSetupWorkBuddyRejectsMissingPlugin"
+        }
+      ]
     },
     {
       "python": {
@@ -8164,8 +8255,15 @@
         "line": 479
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestResolveWorkBuddyPluginRefreshesRemoteRequestedRef"
+        }
+      ]
     },
     {
       "python": {
@@ -8174,8 +8272,15 @@
         "line": 501
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_workbuddy_test.go",
+          "test": "TestWorkBuddyHomeHonorsEnvironmentOverride"
+        }
+      ]
     },
     {
       "python": {

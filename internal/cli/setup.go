@@ -42,6 +42,7 @@ func newSetupCommand(state *commandState) *cobra.Command {
 	}
 	command.AddCommand(
 		newSetupSelectCommand(state),
+		newSetupWorkBuddyCommand(state),
 		newSetupCodexCommand(state),
 		newSetupClaudeCodeCommand(state),
 		newSetupDSHCommand(state),
