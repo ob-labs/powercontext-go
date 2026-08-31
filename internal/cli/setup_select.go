@@ -32,6 +32,7 @@ type setupSelectOptions struct {
 	source           string
 	ref              string
 	serverURL        string
+	serverURLSet     bool
 	scopeMode        string
 	capturePrompts   bool
 	noCapturePrompts bool
@@ -61,6 +62,7 @@ func newSetupSelectCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{
 		Use: "select", Short: "Install selected first-class host integrations.", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			options.serverURLSet = command.Flags().Changed("server-url")
 			selected, err := resolveSetupSelection(command, state.json, options.hosts)
 			if err != nil || selected == nil {
 				return err
@@ -146,7 +148,7 @@ func runSelectedSetupHost(
 	}
 	arguments := []string{"--source", options.source, "--ref", options.ref}
 	if host == "claude-code" {
-		if options.serverURL != "" {
+		if options.serverURLSet {
 			arguments = append(arguments, "--server-url", options.serverURL)
 		}
 		if !options.capturePrompts {
@@ -154,7 +156,7 @@ func runSelectedSetupHost(
 		}
 	}
 	if host == "openclaw" {
-		if options.serverURL != "" {
+		if options.serverURLSet {
 			arguments = append(arguments, "--server-url", options.serverURL)
 		}
 		arguments = append(arguments, "--scope-mode", options.scopeMode)

@@ -57,18 +57,46 @@ func TestSetupSelectNonTTYRequiresHostBeforeInstalling(t *testing.T) {
 	assertNoSetupCommands(t, commands)
 }
 
-func TestSetupSelectTreatsNullDeviceAsNonTTY(t *testing.T) {
-	input, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatal(err)
+func TestSetupSelectTreatsNonTerminalFilesAsNonTTY(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		open func(*testing.T) *os.File
+	}{
+		{
+			name: "null device",
+			open: func(t *testing.T) *os.File {
+				input, err := os.Open(os.DevNull)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = input.Close() })
+				return input
+			},
+		},
+		{
+			name: "pipe",
+			open: func(t *testing.T) *os.File {
+				input, output, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := output.Close(); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = input.Close() })
+				return input
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			commands := &scriptedSystemCommands{t: t}
+			_, _, err := executeSystemCLIWithInput(t, commands, test.open(t), "setup", "select")
+			if err == nil || ExitCode(err) != 1 || !strings.Contains(err.Error(), "--host") {
+				t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+			}
+			assertNoSetupCommands(t, commands)
+		})
 	}
-	t.Cleanup(func() { _ = input.Close() })
-	commands := &scriptedSystemCommands{t: t}
-	_, _, err = executeSystemCLIWithInput(t, commands, input, "setup", "select")
-	if err == nil || ExitCode(err) != 1 || !strings.Contains(err.Error(), "--host") {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
-	}
-	assertNoSetupCommands(t, commands)
 }
 
 func TestSetupSelectRejectsUnknownHostBeforeInstalling(t *testing.T) {
@@ -357,6 +385,45 @@ func TestSetupSelectPassesSourceRefAndClaudeOptions(t *testing.T) {
 	options := settings["pluginConfigs"].(map[string]any)[claudePluginID].(map[string]any)["options"].(map[string]any)
 	if options["server_url"] != "https://memory.example" || options["capture_prompts"] != false {
 		t.Fatalf("Claude options = %#v", options)
+	}
+}
+
+func TestSetupSelectPreservesExplicitBlankServerURL(t *testing.T) {
+	for _, test := range []struct {
+		host     string
+		want     string
+		commands func(*testing.T) *scriptedSystemCommands
+	}{
+		{
+			host: "claude-code", want: "PowerContext Server URL must use HTTP or HTTPS",
+			commands: successfulClaudeCommands,
+		},
+		{
+			host: "openclaw", want: "OpenClaw PowerContext Server URL must use HTTP or HTTPS",
+			commands: func(t *testing.T) *scriptedSystemCommands {
+				return &scriptedSystemCommands{
+					t: t, paths: map[string]string{"openclaw": "/usr/bin/openclaw"},
+					results: []systemCommandResult{{output: "OpenClaw 2026.8.1-beta.2\n"}},
+				}
+			},
+		},
+	} {
+		t.Run(test.host, func(t *testing.T) {
+			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
+			t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+			commands := test.commands(t)
+			stdout, _, err := executeSystemCLIWithInput(
+				t, commands, strings.NewReader(""),
+				"setup", "select", "--host", test.host, "--server-url", "", "--json",
+			)
+			if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
+				t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+			}
+			assertSetupRow(t, setupRowsByHost(t, stdout), test.host, "failed", test.want)
+			if len(commands.calls) != 0 {
+				t.Fatalf("explicit blank server URL ran external commands: %v", commands.calls)
+			}
+		})
 	}
 }
 
