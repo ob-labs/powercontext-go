@@ -330,4 +330,7 @@ source / artifact / trigger / inference
   existing unowned bundle as a conflict. Verify an interrupted first install
   leaves only recoverable ownership state, a retry repairs it, and a bounded
   no-model activation lifecycle covers configured, active, inactive, exited,
-  timeout, and cleanup outcomes through real child-process boundaries.
+  timeout, and cleanup outcomes through real child-process boundaries. In a
+  packaged release-consumer test, prove the installed bundle bytes and manifest
+  originate from the release archive rather than asserting a retired installer
+  command.

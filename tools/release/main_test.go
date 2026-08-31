@@ -491,7 +491,8 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 	t.Setenv("PATH", binDirectory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("FAKE_HOST_LOG", commandLog)
 	t.Setenv("FAKE_PI_PACKAGE", filepath.Join(releaseRoot, "integrations", "pi", "plugins", "powercontext"))
-	t.Setenv("FAKE_OPENCODE_CONFIG", filepath.Join(t.TempDir(), "opencode"))
+	openCodeConfig := filepath.Join(t.TempDir(), "opencode")
+	t.Setenv("FAKE_OPENCODE_CONFIG", openCodeConfig)
 
 	for _, host := range []string{"codex", "claude-code", "dsh", "hermes", "opencode", "openclaw", "pi"} {
 		t.Run(host, func(t *testing.T) {
@@ -519,13 +520,33 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 		"codex|plugin marketplace add " + releaseRoot,
 		"claude|plugin marketplace add " + releaseRoot,
 		"dsh|plugin --profile web add " + filepath.Join(releaseRoot, "integrations", "dsh", "plugins", "powercontext"),
-		"opencode|plugin " + filepath.Join(releaseRoot, "integrations", "opencode", "plugins", "powercontext"),
 		"openclaw|plugins install --link --force " + filepath.Join(releaseRoot, "integrations", "openclaw", "plugins", "memory-powercontext"),
 		"pi|install " + filepath.Join(releaseRoot, "integrations", "pi", "plugins", "powercontext"),
 	} {
 		if !strings.Contains(string(commands), expected) {
 			t.Errorf("packaged setup did not consume expected release adapter path %q:\n%s", expected, commands)
 		}
+	}
+	if strings.Contains(string(commands), "opencode|plugin ") {
+		t.Errorf("packaged setup used the retired OpenCode plugin installer:\n%s", commands)
+	}
+	sourceBundle := filepath.Join(releaseRoot, "integrations", "opencode", "plugins", "powercontext", "lib", "index.js")
+	installedBundle := filepath.Join(openCodeConfig, "plugins", "powercontext-opencode.js")
+	sourceContent, sourceErr := os.ReadFile(sourceBundle)
+	installedContent, installedErr := os.ReadFile(installedBundle)
+	if sourceErr != nil || installedErr != nil || !bytes.Equal(sourceContent, installedContent) {
+		t.Fatalf("packaged OpenCode autoload bundle source = %q/%v, installed = %q/%v", sourceContent, sourceErr, installedContent, installedErr)
+	}
+	var manifest struct {
+		Schema      int    `json:"schema"`
+		Owner       string `json:"owner"`
+		Integration string `json:"integration"`
+	}
+	manifestPath := filepath.Join(openCodeConfig, "plugins", ".powercontext-opencode.json")
+	manifestContent, manifestErr := os.ReadFile(manifestPath)
+	if manifestErr != nil || json.Unmarshal(manifestContent, &manifest) != nil || manifest.Schema != 1 ||
+		manifest.Owner != "powercontext" || manifest.Integration != "opencode-plugin" {
+		t.Fatalf("packaged OpenCode ownership manifest = %q, error = %v", manifestContent, manifestErr)
 	}
 }
 
