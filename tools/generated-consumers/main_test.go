@@ -221,6 +221,7 @@ func TestOpenAPIGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 
 	runGo(t, consumer, "mod", "tidy")
 	runGo(t, consumer, "mod", "verify")
+	runGo(t, consumer, "build", "./...")
 	runGo(t, consumer, "test", "-count=1", "./...")
 }
 
@@ -241,6 +242,7 @@ func TestMCPSchemaGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 
 	runGo(t, consumer, "mod", "tidy")
 	runGo(t, consumer, "mod", "verify")
+	runGo(t, consumer, "build", "./...")
 	runGo(t, consumer, "test", "-count=1", "./...")
 }
 
@@ -259,6 +261,7 @@ func TestTraceabilityGeneratorProducesGoldenConsumableTable(t *testing.T) {
 
 	compareFile(t, filepath.Join(repository, "test", "conformance", "traceability.json"), generated)
 	prepareTraceabilityConsumer(t, consumer)
+	runGo(t, consumer, "build", "./...")
 	runGo(t, consumer, "test", "-count=1", "./...")
 	runGo(t, consumer, "vet", "./...")
 	runConsumerLint(t, repository, consumer)
