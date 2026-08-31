@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "server_url": "http://127.0.0.1:8000",
+  "scope_mode": "project",
+  "authorization_environment": "POWERCONTEXT_WORKBUDDY_AUTHORIZATION",
+  "request_timeout_seconds": 1.5,
+  "request_budget_seconds": 3.0,
+  "prepare_max_bytes": 8000,
+  "source_max_bytes": 16384
+}

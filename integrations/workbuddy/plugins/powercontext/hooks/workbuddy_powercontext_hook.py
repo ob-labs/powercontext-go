@@ -46,18 +46,16 @@ sys.path.insert(0, str(_PLUGIN_ROOT))
 sys.path.insert(0, str(_HOOKS_ROOT))
 
 import prepared_context as _prepared_context  # noqa: E402
-from workbuddy_settings import WorkBuddyPluginSettings  # noqa: E402
+from workbuddy_settings import WorkBuddyConfigurationError, WorkBuddyPluginSettings, load_settings  # noqa: E402
 
 if (_HOOKS_ROOT / "powercontext_project_scope.py").is_file():
     from powercontext_project_scope import resolve_scope_id
 else:
     from scripts.project_scope import resolve_scope_id
 
-_MAX_CONTEXT_BYTES = _prepared_context.MAX_CONTEXT_BYTES
 _InvalidResponseError = _prepared_context.InvalidPreparedContextResponse
 _validate_prepared_context = _prepared_context.validate_prepared_context
 _MAX_RESPONSE_BYTES = 1_048_576
-_MAX_SOURCE_LENGTH = 200_000
 _READ_CHUNK_BYTES = 65_536
 _REQUEST_HEADERS = {
     "Accept": "application/json",
@@ -110,7 +108,7 @@ def main(settings: WorkBuddyPluginSettings | None = None) -> int:
     """Process one WorkBuddy hook payload and fail open."""
 
     try:
-        settings = WorkBuddyPluginSettings.from_environment() if settings is None else settings
+        settings = _settings_from_default_path() if settings is None else settings
         payload = _read_payload()
         if not _is_user_prompt_submit(payload.get("hook_event_name")):
             return 0
@@ -119,7 +117,7 @@ def main(settings: WorkBuddyPluginSettings | None = None) -> int:
         context = None
         if prompt is not None and prompt.strip() and isinstance(cwd, str):
             try:
-                scope_id = resolve_scope_id(cwd, configured_scope_id=settings.scope_id)
+                scope_id = resolve_scope_id(cwd, configured_scope_id=settings.scope_id, scope_mode=settings.scope_mode)
             except Exception:
                 scope_id = None
             if scope_id:
@@ -132,7 +130,7 @@ def main(settings: WorkBuddyPluginSettings | None = None) -> int:
                         deadline=http_deadline,
                     )
 
-                if settings.capture_prompts and len(prompt) <= _MAX_SOURCE_LENGTH:
+                if settings.capture_prompts and len(prompt.encode("utf-8")) <= settings.source_max_bytes:
                     with suppress(Exception):
                         captured = _capture_prompt(
                             payload,
@@ -166,6 +164,13 @@ def main(settings: WorkBuddyPluginSettings | None = None) -> int:
     return 0
 
 
+def _settings_from_default_path() -> WorkBuddyPluginSettings:
+    configured = _PLUGIN_ROOT / "powercontext.json"
+    if not configured.is_file():
+        return WorkBuddyPluginSettings.from_environment()
+    return load_settings(configured)
+
+
 def _read_payload() -> dict[str, Any]:
     stdin = sys.stdin
     if hasattr(stdin, "buffer"):
@@ -193,7 +198,7 @@ def _prepare_context(
         {
             "scope_id": scope_id,
             "query": query,
-            "max_bytes": _MAX_CONTEXT_BYTES,
+            "max_bytes": settings.prepare_max_bytes,
         },
         settings=settings,
         deadline=deadline,

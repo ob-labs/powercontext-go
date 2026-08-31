@@ -216,7 +216,7 @@ func writeDiagnostics(state *commandState, values map[string]diagnostic) error {
 	}
 	order := []string{
 		"package", "server_liveness", "server_readiness", "codex", "claude_code", "dsh", "pi", "opencode",
-		"hermes", "openclaw", "plugin", "skill", "activation", "version",
+		"hermes", "openclaw", "workbuddy", "python", "config", "hooks", "settings", "mcp", "plugin", "skill", "activation", "version",
 	}
 	for _, name := range order {
 		value, ok := values[name]

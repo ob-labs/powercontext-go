@@ -15,13 +15,34 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type workBuddyDiagnosticTransport struct {
+	paths []string
+}
+
+func (t *workBuddyDiagnosticTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	t.paths = append(t.paths, request.URL.Path)
+	payload := `{"status":"ok"}`
+	if request.URL.Path == "/health/ready" {
+		payload = `{"status":"ready","checks":{}}`
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(payload)),
+		Request:    request,
+	}, nil
+}
 
 func TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK(t *testing.T) {
 	checkout := filepath.Join(t.TempDir(), "powercontext")
@@ -62,13 +83,17 @@ func TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK(t *testing.T) {
 		t.Fatalf("installed Skill error = %v", statErr)
 	}
 
-	doctorOutput, _, doctorErr := executeSystemCLI(
-		t, nil, &scriptedSystemCommands{t: t}, "doctor", "workbuddy", "--json",
+	var doctorOutput, doctorStderr bytes.Buffer
+	transport := &workBuddyDiagnosticTransport{}
+	doctorCommand := newCommandWithAllDependencies(
+		VersionInfo{Version: "0.0.1"}, &doctorOutput, &doctorStderr, &http.Client{Transport: transport}, nil, &scriptedSystemCommands{t: t},
 	)
+	doctorCommand.SetArgs([]string{"doctor", "workbuddy", "--json"})
+	doctorErr := doctorCommand.ExecuteContext(t.Context())
 	if doctorErr != nil {
 		t.Fatal(doctorErr)
 	}
-	payload := decodeSystemOutput(t, doctorOutput)
+	payload := decodeSystemOutput(t, doctorOutput.String())
 	if payload["ok"] != true || payload["status"] != "ok" {
 		t.Fatalf("doctor result = %#v", payload)
 	}
@@ -108,53 +133,125 @@ func TestSetupWorkBuddyPreservesExistingSettingsAndMCP(t *testing.T) {
 	mcp := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))
 	servers := mcp["mcpServers"].(map[string]any)
 	if servers["other-server"].(map[string]any)["command"] != "other" ||
-		servers[workBuddyPluginName].(map[string]any)["url"] != workBuddyServerURLTemplate {
+		servers[workBuddyPluginName].(map[string]any)["url"] != "http://127.0.0.1:8000/mcp" {
 		t.Fatalf("MCP = %#v", mcp)
 	}
 }
 
-func TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry(t *testing.T) {
-	for _, test := range []struct {
-		name     string
-		existing map[string]any
-		wantURL  string
-		wantAuth string
-	}{
-		{
-			name: "remote authenticated",
-			existing: map[string]any{
-				"type": "http", "url": "https://memory.example.test/mcp",
-				"headers": map[string]any{"Authorization": "Bearer existing-token"}, "disabled": true,
-			},
-			wantURL: "https://memory.example.test/mcp", wantAuth: "Bearer existing-token",
-		},
-		{
-			name: "legacy generated",
-			existing: map[string]any{
-				"type": "http", "url": workBuddyLegacyMCPURL, "headers": map[string]any{},
-				"description": workBuddyMCPDescription, "disabled": false,
-			},
-			wantURL: workBuddyServerURLTemplate, wantAuth: workBuddyAuthorizationTemplate,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			checkout := filepath.Join(t.TempDir(), "powercontext")
-			writeWorkBuddyPlugin(t, checkout)
-			home := filepath.Join(t.TempDir(), "workbuddy")
-			t.Setenv("WORKBUDDY_HOME", home)
-			t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-			writeWorkBuddyTestJSON(t, filepath.Join(home, "mcp.json"), map[string]any{
-				"mcpServers": map[string]any{workBuddyPluginName: test.existing},
-			})
+func TestSetupWorkBuddyWritesCredentialFreeConfiguration(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 
-			if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
-				t.Fatal(err)
-			}
-			entry := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))["mcpServers"].(map[string]any)[workBuddyPluginName].(map[string]any)
-			if entry["url"] != test.wantURL || entry["headers"].(map[string]any)["Authorization"] != test.wantAuth || entry["disabled"] != false {
-				t.Fatalf("MCP entry = %#v", entry)
-			}
-		})
+	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t},
+		"setup", "workbuddy", "--source", checkout, "--server-url", "http://127.0.0.1:8765/", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := decodeSystemOutput(t, stdout)
+	if result["server_url"] != "http://127.0.0.1:8765" || result["scope_mode"] != "project" {
+		t.Fatalf("setup output = %#v", result)
+	}
+
+	configuration := readWorkBuddyJSON(t, filepath.Join(home, "powercontext.json"))
+	if fmt.Sprint(configuration["schema"]) != "1" ||
+		configuration["server_url"] != "http://127.0.0.1:8765" ||
+		configuration["authorization_environment"] != "POWERCONTEXT_WORKBUDDY_AUTHORIZATION" ||
+		configuration["request_timeout_seconds"] != float64(1.5) ||
+		configuration["request_budget_seconds"] != float64(3) ||
+		configuration["prepare_max_bytes"] != float64(8000) ||
+		configuration["source_max_bytes"] != float64(16384) {
+		t.Fatalf("configuration = %#v", configuration)
+	}
+	payload, err := os.ReadFile(filepath.Join(home, "powercontext.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), "Bearer") || strings.Contains(string(payload), "token") {
+		t.Fatalf("configuration persisted a credential: %s", payload)
+	}
+	mcp := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))
+	entry := mcp["mcpServers"].(map[string]any)[workBuddyPluginName].(map[string]any)
+	if entry["url"] != "http://127.0.0.1:8765/mcp" ||
+		entry["headers"].(map[string]any)["Authorization"] != "${POWERCONTEXT_WORKBUDDY_AUTHORIZATION:-}" {
+		t.Fatalf("MCP entry = %#v", entry)
+	}
+}
+
+func TestSetupWorkBuddyRefreshesOwnedCustomAuthorizationEnvironment(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+
+	for range 2 {
+		if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t},
+			"setup", "workbuddy", "--source", checkout, "--authorization-environment", "WORKBUDDY_TOKEN"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entry := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))["mcpServers"].(map[string]any)[workBuddyPluginName].(map[string]any)
+	if entry["headers"].(map[string]any)["Authorization"] != "${WORKBUDDY_TOKEN:-}" {
+		t.Fatalf("MCP entry = %#v", entry)
+	}
+}
+
+func TestSetupWorkBuddyRejectsRemotePlaintextBeforePythonLookup(t *testing.T) {
+	commands := &scriptedSystemCommands{t: t}
+
+	_, _, err := executeSystemCLI(t, nil, commands, "setup", "workbuddy", "--server-url", "http://198.51.100.8:8000")
+	if err == nil || !strings.Contains(err.Error(), "loopback") || len(commands.lookups) != 0 {
+		t.Fatalf("setup error = %v, lookups = %v", err, commands.lookups)
+	}
+}
+
+func TestSetupWorkBuddyRefusesCredentialBearingMCPEntryBeforeMutation(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	original := map[string]any{
+		"mcpServers": map[string]any{workBuddyPluginName: map[string]any{
+			"type": "http", "url": "https://memory.example.test/mcp",
+			"headers": map[string]any{"Authorization": "Bearer existing-token"}, "disabled": true,
+		}},
+	}
+	writeWorkBuddyTestJSON(t, filepath.Join(home, "mcp.json"), original)
+
+	_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
+	if err == nil || !strings.Contains(err.Error(), "not owned by PowerContext") {
+		t.Fatalf("setup error = %v", err)
+	}
+	if got := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json")); fmt.Sprint(got) != fmt.Sprint(original) {
+		t.Fatalf("MCP after refusal = %#v", got)
+	}
+}
+
+func TestSetupWorkBuddyMigratesLegacyMCPEntry(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	writeWorkBuddyTestJSON(t, filepath.Join(home, "mcp.json"), map[string]any{
+		"mcpServers": map[string]any{workBuddyPluginName: map[string]any{
+			"type": "http", "url": workBuddyLegacyMCPURL, "headers": map[string]any{},
+			"description": workBuddyMCPDescription, "disabled": false,
+		}},
+	})
+
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
+	}
+	entry := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))["mcpServers"].(map[string]any)[workBuddyPluginName].(map[string]any)
+	if entry["url"] != "http://127.0.0.1:8000/mcp" ||
+		entry["headers"].(map[string]any)["Authorization"] != workBuddyAuthorizationTemplate ||
+		entry["disabled"] != false {
+		t.Fatalf("MCP entry = %#v", entry)
 	}
 }
 
@@ -373,12 +470,59 @@ func TestBundledWorkBuddyPluginCarriesInstallableHooksSkillAndMCP(t *testing.T) 
 	}
 }
 
+func TestDoctorWorkBuddyChecksTheConfiguredServerReadiness(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	commands := &scriptedSystemCommands{t: t}
+	serverURL := "http://127.0.0.1:8000"
+	if _, _, err := executeSystemCLI(t, nil, commands, "setup", "workbuddy", "--source", checkout, "--server-url", serverURL); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	transport := &workBuddyDiagnosticTransport{}
+	command := newCommandWithAllDependencies(
+		VersionInfo{Version: "0.0.1"}, &stdout, &stderr, &http.Client{Transport: transport}, nil, commands,
+	)
+	command.SetArgs([]string{"doctor", "workbuddy", "--json"})
+	err := command.ExecuteContext(t.Context())
+	if err != nil {
+		t.Fatalf("doctor error = %v, output = %s", err, stdout.String())
+	}
+	checks := decodeSystemOutput(t, stdout.String())["checks"].(map[string]any)
+	if checks["server_liveness"].(map[string]any)["status"] != "ok" || checks["server_readiness"].(map[string]any)["status"] != "ok" {
+		t.Fatalf("doctor checks = %#v", checks)
+	}
+	if strings.Join(transport.paths, ",") != "/health/live,/health/ready" {
+		t.Fatalf("health requests = %v", transport.paths)
+	}
+}
+
+func TestDoctorWorkBuddyRedactsInvalidCredentialConfiguration(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	secret := "workbuddy-should-not-appear"
+	writeTestFile(t, filepath.Join(home, "powercontext.json"), `{"authorization":"Bearer `+secret+`"}`)
+	t.Setenv("WORKBUDDY_HOME", home)
+
+	stdout, stderr, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "workbuddy", "--json")
+	if err == nil {
+		t.Fatal("doctor unexpectedly accepted an invalid WorkBuddy configuration")
+	}
+	if strings.Contains(stdout+stderr+err.Error(), secret) {
+		t.Fatalf("doctor exposed configuration secret: stdout=%q stderr=%q error=%v", stdout, stderr, err)
+	}
+}
+
 func writeWorkBuddyPlugin(t *testing.T, root string) string {
 	t.Helper()
 	plugin := filepath.Join(root, "integrations", "workbuddy", "plugins", "powercontext")
 	for _, name := range []string{"workbuddy_powercontext_hook.py", "workbuddy_settings.py", "prepared_context.py"} {
 		writeTestFile(t, filepath.Join(plugin, "hooks", name), "# "+name+"\n")
 	}
+	writeTestFile(t, filepath.Join(plugin, "powercontext.json.example"), "{}\n")
 	writeTestFile(t, filepath.Join(plugin, "scripts", "project_scope.py"), "def resolve_scope_id(*_args): return 'scope'\n")
 	writeTestFile(t, filepath.Join(plugin, "skills", "project-context", "SKILL.md"), "${POWERCONTEXT_PYTHON} ${POWERCONTEXT_PROJECT_SCOPE_SCRIPT}\n")
 	resolved, err := resolvePath(plugin)

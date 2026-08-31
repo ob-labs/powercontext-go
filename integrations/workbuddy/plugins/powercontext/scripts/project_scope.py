@@ -49,11 +49,15 @@ _WORKSPACE_STATE_DIRECTORY = "powercontext"
 _WORKSPACE_STATE_FILE = "codex-workspace.json"
 
 
-def resolve_scope_id(cwd: str, *, configured_scope_id: str | None = None) -> str:
+def resolve_scope_id(cwd: str, *, configured_scope_id: str | None = None, scope_mode: str = "project") -> str:
     """Return the configured, workspace-bound, or derived scope for one checkout."""
 
     if configured_scope_id:
         return _bounded_explicit(configured_scope_id)
+    if scope_mode == "agent":
+        return "workbuddy:agent"
+    if scope_mode != "project":
+        raise ValueError("WorkBuddy scope mode must be agent or project")  # noqa: TRY003
     bound_scope_id = read_bound_scope_id(cwd)
     if bound_scope_id is not None:
         return bound_scope_id
@@ -223,7 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.clear_workstream:
         clear_workstream_scope(arguments.cwd)
     settings = WorkBuddyPluginSettings.from_environment()
-    print(resolve_scope_id(arguments.cwd, configured_scope_id=settings.scope_id))
+    print(resolve_scope_id(arguments.cwd, configured_scope_id=settings.scope_id, scope_mode=settings.scope_mode))
     return 0
 
 

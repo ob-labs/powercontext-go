@@ -130,12 +130,12 @@
         },
         "test_setup_workbuddy_preserves_remote_authenticated_mcp_configuration": {
           "evidence": [
-            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyRefusesCredentialBearingMCPEntryBeforeMutation"
           ]
         },
         "test_setup_workbuddy_migrates_the_legacy_generated_mcp_entry": {
           "evidence": [
-            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyPreservesRemoteMCPAndMigratesLegacyEntry"
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyMigratesLegacyMCPEntry"
           ]
         },
         "test_setup_workbuddy_preserves_other_hooks_shared_scripts": {
