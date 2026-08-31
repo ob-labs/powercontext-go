@@ -34,6 +34,7 @@ import (
 	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/scheduler"
 )
 
 func TestHTTPAccessLogCorrelatesWithIngressSpanAndSkipsInfrastructure(t *testing.T) {
@@ -283,6 +284,30 @@ func TestScheduledExperienceLogsCandidateCountWithoutScope(t *testing.T) {
 		if _, found := records[0][forbidden]; found {
 			t.Fatalf("scheduled log contains %q: %#v", forbidden, records[0])
 		}
+	}
+}
+
+func TestScheduledDispatchCancellationDoesNotFloodLogs(t *testing.T) {
+	var output bytes.Buffer
+	observer := scheduledRunErrorObserver(newJSONTestLogger(t, &output))
+	for range 3 {
+		observer(scheduler.RunError{Kind: scheduler.SourceWindow, Err: context.Canceled})
+	}
+	if output.Len() != 0 {
+		t.Fatalf("canceled dispatch logs = %s", output.String())
+	}
+
+	observer(scheduler.RunError{Kind: scheduler.SourceWindow, Err: errors.New("secret scheduler failure")})
+	records := decodeLogRecords(t, output.String())
+	if len(records) != 1 {
+		t.Fatalf("records = %#v, want one unexpected dispatch failure", records)
+	}
+	assertLogFields(t, records[0], map[string]any{
+		"level": "ERROR", "event": "background.dispatch.failed", "operation": "source-window",
+		"outcome": "failure", "unit": "background", "error_code": "scheduler",
+	})
+	if strings.Contains(output.String(), "secret scheduler failure") {
+		t.Fatalf("dispatch log leaked error text: %s", output.String())
 	}
 }
 
