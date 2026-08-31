@@ -26,3 +26,6 @@ runs:
       run: |
         go mod download
         go mod verify
+
+    - name: Restore repository-local tools
+      uses: ./.github/actions/setup-tools

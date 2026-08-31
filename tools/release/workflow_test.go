@@ -1017,6 +1017,57 @@ func TestWorkflowsReuseTheGoSetup(t *testing.T) {
 	}
 }
 
+func TestGoSetupRestoresRepositoryLocalToolCache(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	type actionStep struct {
+		Name string            `yaml:"name"`
+		Uses string            `yaml:"uses"`
+		With map[string]string `yaml:"with"`
+	}
+	type compositeAction struct {
+		Name string `yaml:"name"`
+		Runs struct {
+			Steps []actionStep `yaml:"steps"`
+		} `yaml:"runs"`
+	}
+
+	var setupGo compositeAction
+	readCompositeAction(t, filepath.Join(repository, ".github", "actions", "setup-go-env", "action.yml"), &setupGo)
+	if len(setupGo.Runs.Steps) != 3 || setupGo.Runs.Steps[2].Uses != "./.github/actions/setup-tools" {
+		t.Fatalf("setup-go-env steps = %#v, want setup-tools after locked module verification", setupGo.Runs.Steps)
+	}
+
+	var setupTools compositeAction
+	readCompositeAction(t, filepath.Join(repository, ".github", "actions", "setup-tools", "action.yml"), &setupTools)
+	if setupTools.Name != "Setup repository tools" || len(setupTools.Runs.Steps) != 1 {
+		t.Fatalf("setup-tools action = %#v", setupTools)
+	}
+	cache := setupTools.Runs.Steps[0]
+	if cache.Name != "Restore repository-local tool cache" ||
+		cache.Uses != "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" {
+		t.Fatalf("setup-tools cache action = %#v", cache)
+	}
+	if cache.With["path"] != ".tools/bin" {
+		t.Fatalf("setup-tools cache path = %q", cache.With["path"])
+	}
+	for _, required := range []string{"runner.os", "Makefile", "go.mod", "go.sum", ".golangci.yml", "tools/**"} {
+		if !strings.Contains(cache.With["key"], required) {
+			t.Errorf("setup-tools cache key is missing %q: %q", required, cache.With["key"])
+		}
+	}
+}
+
+func readCompositeAction(t *testing.T, path string, destination any) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(payload, destination); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCandidateDeliveryWorkflowsExerciseTheirArtifacts(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	tests := map[string][]string{
