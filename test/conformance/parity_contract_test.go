@@ -251,7 +251,7 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	decodeJSONFile(t, filepath.Join(root, "test", "conformance", "target-delta.json"), &delta)
 	checkout, verify := "", ""
 	previousCheckout, previousVerify := "", ""
-	targetCheckout, targetVerify, deltaVerify := "", "", ""
+	targetCheckout, targetVerify, deltaVerify, releaseFixtureVerify := "", "", "", ""
 	for _, step := range job.Steps {
 		switch step.Name {
 		case "Check out frozen Python Oracle":
@@ -295,6 +295,12 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 				strings.Contains(step.Run, "-release-upstream _target") {
 				deltaVerify = step.Name
 			}
+		case "Regenerate and compare release fixtures":
+			if strings.Contains(step.Run, "-python _target") &&
+				strings.Contains(step.Run, "-oracle-commit "+contract.ReleaseTarget.Commit) &&
+				strings.Contains(step.Run, "test/conformance/testdata/python-v0.1.0/manifest.json") {
+				releaseFixtureVerify = step.Name
+			}
 		}
 	}
 	if checkout == "" {
@@ -317,6 +323,9 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	}
 	if deltaVerify == "" {
 		t.Error("frozen-oracle job does not verify the reviewed target delta")
+	}
+	if releaseFixtureVerify == "" {
+		t.Error("frozen-oracle job does not regenerate and compare the v0.1.0 release fixtures")
 	}
 }
 

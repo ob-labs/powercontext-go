@@ -1,0 +1,280 @@
+{
+  "oracle_commit": "7b736206a53a6de6f43d4b517893ee1a80e7183d",
+  "report": {
+    "activity_cursor": 7,
+    "activity_selection": [
+      "evt-a"
+    ],
+    "baseline_selection": null,
+    "coverage": {
+      "activity_after_handoff_workstreams": 0,
+      "activity_coverage": "captured",
+      "activity_without_handoff_workstreams": 0,
+      "catalog_matched_workstreams": 2,
+      "missing_handoff_workstreams": 1,
+      "reported_with_omissions": 0,
+      "selected_workstreams": 2,
+      "total_included_workstreams": 2,
+      "unassigned_activity_count": 0,
+      "unassigned_activity_events": 0,
+      "unavailable_evidence_workstreams": 1,
+      "unchecked_evidence_workstreams": 1,
+      "unknown_time_events": 0
+    },
+    "end_selection": [
+      {
+        "handoff_ref": {
+          "artifact_id": "handoff",
+          "family": "handoff",
+          "revision": 1
+        },
+        "scope_id": "scope-a",
+        "status": "selected",
+        "workstream_revision": 1
+      },
+      {
+        "handoff_ref": null,
+        "scope_id": "scope-b",
+        "status": "no_handoff",
+        "workstream_revision": 1
+      }
+    ],
+    "format": "json",
+    "generated_at": "2026-08-06T00:00:00Z",
+    "locale": "zh-CN",
+    "normalized_filters": {},
+    "normalized_period": null,
+    "period_comparison": null,
+    "project": {
+      "catalog_state": "included",
+      "default_locale": "zh-CN",
+      "description": null,
+      "project_id": "prj-1",
+      "project_key": "powercontext",
+      "schema": "powercontext.project.v1",
+      "timezone": "Asia/Shanghai",
+      "title": "PowerContext <script>",
+      "version": 1
+    },
+    "project_revision": 1,
+    "renderer_version": "canonical-v1",
+    "report_digest": "sha256:29084e12ef68a81ffa66845f6d843de2ad0cb230be11bbc1848b14e2e0e331ef",
+    "report_kind": "handoff",
+    "schema": "powercontext.handoff-report.v1",
+    "selection_consistency": "optimistic_stable",
+    "selection_digest": "sha256:d1a0d0bd8915f90be468f009b54a49ee89f3fba8f9f5fdec19c4912d6a43f557",
+    "summary": {
+      "blocked_count": 0,
+      "complete_count": 0,
+      "continuable_count": 1,
+      "no_handoff_count": 1
+    },
+    "trust": "untrusted_history",
+    "unassigned_activity": [],
+    "workstreams": [
+      {
+        "activities": [
+          {
+            "agent": null,
+            "event_id": "evt-a",
+            "evidence_refs": [],
+            "observed_at": "2026-08-05T02:00:00Z",
+            "occurred_at": "2026-08-05T01:00:00Z",
+            "project_id": "prj-1",
+            "schema": "powercontext.handoff-report-activity.v1",
+            "scope_id": "scope-a",
+            "session_id": null,
+            "source": "coding_session",
+            "source_event_id": "source-evt-a",
+            "source_ref": null,
+            "summary": null,
+            "time_basis": "source_reported",
+            "title": null,
+            "trust": "untrusted_observation",
+            "vcs_context": null
+          }
+        ],
+        "activity_status": "unknown",
+        "content": {
+          "disposition": "continuable",
+          "next_action": {
+            "citations": [
+              {
+                "kind": "source",
+                "source_ref": {
+                  "source_id": "source-1",
+                  "source_type": "content"
+                }
+              }
+            ],
+            "text": "Add the API."
+          },
+          "objective": "Implement the report.",
+          "omissions": [],
+          "schema": "powercontext.handoff.v1",
+          "state": [
+            {
+              "citations": [
+                {
+                  "kind": "source",
+                  "source_ref": {
+                    "source_id": "source-1",
+                    "source_type": "content"
+                  }
+                }
+              ],
+              "text": "The model exists."
+            }
+          ]
+        },
+        "continuity": {
+          "coverage": {
+            "acknowledgement_records": 0,
+            "active_receipt_ref": null,
+            "contract_records": 0,
+            "handoff_records": 0,
+            "handoff_result_covered": false,
+            "outcome_records": 0,
+            "outcome_state": "not_expected",
+            "transfer_state": "not_applicable"
+          },
+          "events": [],
+          "invalid_record_count": 0,
+          "schema": "powercontext.work-continuity.v1",
+          "scope_id": "scope-a",
+          "selected_handoff": null,
+          "total_event_count": 0,
+          "truncated": false,
+          "trust": "untrusted_history"
+        },
+        "evidence_checks": "not_checked",
+        "evidence_unavailable": true,
+        "handoff_activity_relation": "unknown",
+        "handoff_history": [
+          {
+            "disposition": "continuable",
+            "next_action_excerpt": "Add the API.",
+            "objective_excerpt": "Implement the report.",
+            "omission_count": 0,
+            "reference": {
+              "artifact_id": "handoff",
+              "family": "handoff",
+              "revision": 1
+            },
+            "state_count": 1
+          }
+        ],
+        "handoff_history_truncated": false,
+        "handoff_ref": {
+          "artifact_id": "handoff",
+          "family": "handoff",
+          "revision": 1
+        },
+        "handoff_revision_count": 1,
+        "observed_activity_count": 1,
+        "reporting_status": "evidence_unavailable",
+        "work_status": "continuable",
+        "workstream": {
+          "catalog_state": "included",
+          "external_refs": [],
+          "key": null,
+          "kind": "feature",
+          "labels": [],
+          "project_id": "prj-1",
+          "schema": "powercontext.workstream.v1",
+          "scope_id": "scope-a",
+          "title": "Report",
+          "version": 1
+        }
+      },
+      {
+        "activities": [],
+        "activity_status": "no_observed_activity",
+        "content": null,
+        "continuity": {
+          "coverage": {
+            "acknowledgement_records": 0,
+            "active_receipt_ref": null,
+            "contract_records": 0,
+            "handoff_records": 0,
+            "handoff_result_covered": false,
+            "outcome_records": 0,
+            "outcome_state": "not_expected",
+            "transfer_state": "not_applicable"
+          },
+          "events": [],
+          "invalid_record_count": 0,
+          "schema": "powercontext.work-continuity.v1",
+          "scope_id": "scope-b",
+          "selected_handoff": null,
+          "total_event_count": 0,
+          "truncated": false,
+          "trust": "untrusted_history"
+        },
+        "evidence_checks": "not_checked",
+        "evidence_unavailable": false,
+        "handoff_activity_relation": null,
+        "handoff_history": [],
+        "handoff_history_truncated": false,
+        "handoff_ref": null,
+        "handoff_revision_count": 0,
+        "observed_activity_count": 0,
+        "reporting_status": "no_handoff",
+        "work_status": "no_handoff",
+        "workstream": {
+          "catalog_state": "included",
+          "external_refs": [],
+          "key": null,
+          "kind": "feature",
+          "labels": [],
+          "project_id": "prj-1",
+          "schema": "powercontext.workstream.v1",
+          "scope_id": "scope-b",
+          "title": "Report",
+          "version": 1
+        }
+      }
+    ]
+  },
+  "report_digest": "sha256:29084e12ef68a81ffa66845f6d843de2ad0cb230be11bbc1848b14e2e0e331ef",
+  "schema": "powercontext.python-v0.1.0.handoff-report-digests.v1",
+  "selection_digest": "sha256:d1a0d0bd8915f90be468f009b54a49ee89f3fba8f9f5fdec19c4912d6a43f557",
+  "selection_envelope": {
+    "activity_cursor": 7,
+    "activity_selection": [
+      {
+        "event_id": "evt-a",
+        "observed_at": "2026-08-05T02:00:00.000000Z",
+        "occurred_at": "2026-08-05T01:00:00.000000Z",
+        "source": "coding_session",
+        "source_event_id": "source-evt-a",
+        "time_basis": "source_reported"
+      }
+    ],
+    "baseline_selection": null,
+    "end_selection": [
+      {
+        "handoff_ref": {
+          "artifact_id": "handoff",
+          "family": "handoff",
+          "revision": 1
+        },
+        "scope_id": "scope-a",
+        "status": "selected",
+        "workstream_revision": 1
+      },
+      {
+        "handoff_ref": null,
+        "scope_id": "scope-b",
+        "status": "no_handoff",
+        "workstream_revision": 1
+      }
+    ],
+    "normalized_filters": {},
+    "normalized_period": null,
+    "project_id": "prj-1",
+    "project_revision": 1,
+    "schema": "powercontext.handoff-report-selection.v1",
+    "selection_consistency": "optimistic_stable"
+  }
+}

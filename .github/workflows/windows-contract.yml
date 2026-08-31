@@ -53,6 +53,7 @@ jobs:
             'test/conformance/parity-inventory.json',
             'test/conformance/target-delta.json',
             'test/conformance/testdata/python-v0.0.2/manifest.json',
+            'test/conformance/testdata/python-v0.1.0/manifest.json',
             'artifact/memory/prompts/conversation.txt',
             'evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl'
           )
@@ -67,13 +68,17 @@ jobs:
             }
           }
 
-          $manifestPath = 'test/conformance/testdata/python-v0.0.2/manifest.json'
-          $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
-          foreach ($property in $manifest.fixture_sha256.PSObject.Properties) {
-            $path = Join-Path (Split-Path $manifestPath) $property.Name
-            $actual = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant()
-            if ($actual -ne $property.Value) {
-              throw "frozen fixture SHA-256 mismatch for $($property.Name): got $actual, want $($property.Value)"
+          foreach ($manifestPath in @(
+            'test/conformance/testdata/python-v0.0.2/manifest.json',
+            'test/conformance/testdata/python-v0.1.0/manifest.json'
+          )) {
+            $manifest = Get-Content -Raw $manifestPath | ConvertFrom-Json
+            foreach ($property in $manifest.fixture_sha256.PSObject.Properties) {
+              $path = Join-Path (Split-Path $manifestPath) $property.Name
+              $actual = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant()
+              if ($actual -ne $property.Value) {
+                throw "frozen fixture SHA-256 mismatch for $manifestPath/$($property.Name): got $actual, want $($property.Value)"
+              }
             }
           }
 
@@ -94,6 +99,7 @@ jobs:
             'test/conformance/parity-inventory-rules.json',
             'test/conformance/parity-inventory.json',
             'test/conformance/target-delta.json',
-            'test/conformance/testdata/python-v0.0.2'
+            'test/conformance/testdata/python-v0.0.2',
+            'test/conformance/testdata/python-v0.1.0'
           )
           & git diff --exit-code -- @contractPaths

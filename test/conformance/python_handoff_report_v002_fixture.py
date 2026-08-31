@@ -146,11 +146,16 @@ async def generate() -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
+    parser.add_argument("--baseline", default="v0.0.2")
+    parser.add_argument("--oracle-commit", default=ORACLE_COMMIT)
     arguments = parser.parse_args()
     fixture = asyncio.run(generate())
+    fixture["schema"] = f"powercontext.python-{arguments.baseline}.handoff-report-digests.v1"
+    fixture["oracle_commit"] = arguments.oracle_commit
     arguments.output.write_text(
         json.dumps(fixture, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 

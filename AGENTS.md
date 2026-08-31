@@ -186,6 +186,10 @@ source / artifact / trigger / inference
   files. Verify representative paths with `git check-attr eol` and raw
   working-tree bytes in a fresh `core.autocrlf=true` checkout so clean-filter
   normalization cannot hide CRLF.
+- When a fixture generator writes byte-frozen text artifacts, request UTF-8
+  output with an explicit LF newline and verify both raw Windows output and
+  Linux regeneration against the committed digest; checkout attributes alone
+  cannot repair a manifest that hashed pre-normalized CRLF bytes.
 - When Make recipes enable Bash nounset or pipefail globally, expand optional
   environment variables in preflight guards with explicit defaults and run
   real failed-pipeline and missing-variable probes on every supported Make

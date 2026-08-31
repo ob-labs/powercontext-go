@@ -37,7 +37,24 @@ import (
 
 const oracleCommit = "3a6cb0151670eaff7dc0293466edd673124e80da"
 
-var testPattern = regexp.MustCompile(`^(?:async\s+)?def\s+(test_[A-Za-z0-9_]+)\s*\(`)
+var (
+	testPattern   = regexp.MustCompile(`^(?:async\s+)?def\s+(test_[A-Za-z0-9_]+)\s*\(`)
+	commitPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+)
+
+var renderedPromptSpecs = []renderedPromptSpec{
+	{"powercontext.memory.extract.v1", "memory/prompts.py", "MEMORY_EXTRACTION_INSTRUCTIONS_VERSION", "MEMORY_EXTRACTION_INSTRUCTIONS"},
+	{"powercontext.memory.extract.conversation.v1", "memory/prompts.py", "CONVERSATION_MEMORY_EXTRACTION_INSTRUCTIONS_VERSION", "CONVERSATION_MEMORY_EXTRACTION_INSTRUCTIONS"},
+	{"powercontext.memory.rerank.listwise.v1", "memory/reranking.py", "MEMORY_RERANK_INSTRUCTIONS_VERSION", "MEMORY_RERANK_INSTRUCTIONS"},
+	{"powercontext.experience.incubate.v1", "experience/prompts.py", "EXPERIENCE_INCUBATION_INSTRUCTIONS_VERSION", "EXPERIENCE_INCUBATION_INSTRUCTIONS"},
+	{"powercontext.experience.generate.v1", "experience/prompts.py", "EXPERIENCE_GENERATION_INSTRUCTIONS_VERSION", "EXPERIENCE_GENERATION_INSTRUCTIONS"},
+	{"powercontext.skill.generate.v2", "skill/prompts.py", "SKILL_GENERATION_INSTRUCTIONS_VERSION", "SKILL_GENERATION_INSTRUCTIONS"},
+	{"powercontext.handoff.generate.v1", "handoff/prompts.py", "HANDOFF_GENERATION_INSTRUCTIONS_VERSION", "HANDOFF_GENERATION_INSTRUCTIONS"},
+}
+
+type fixtureConfig struct {
+	oracleCommit string
+}
 
 type manifest struct {
 	SchemaVersion        int               `json:"schema_version"`
@@ -66,21 +83,25 @@ func main() {
 		"manifest output path",
 	)
 	check := flag.Bool("check", false, "verify the committed manifest without rewriting it")
+	commit := flag.String("oracle-commit", oracleCommit, "exact Python Oracle commit")
 	flag.Parse()
 
-	if err := run(filepath.Clean(*pythonRoot), filepath.Clean(*output), *check); err != nil {
+	if err := run(filepath.Clean(*pythonRoot), filepath.Clean(*output), *check, fixtureConfig{oracleCommit: *commit}); err != nil {
 		fmt.Fprintln(os.Stderr, "fixture-generate:", err)
 		os.Exit(1)
 	}
 }
 
-func run(pythonRoot, output string, check bool) error {
+func run(pythonRoot, output string, check bool, config fixtureConfig) error {
+	if !commitPattern.MatchString(config.oracleCommit) {
+		return fmt.Errorf("Oracle commit %q is not a 40-character lowercase SHA-1", config.oracleCommit)
+	}
 	commit, err := gitOutput(pythonRoot, "rev-parse", "HEAD")
 	if err != nil {
 		return err
 	}
-	if commit != oracleCommit {
-		return fmt.Errorf("oracle commit is %s, want %s", commit, oracleCommit)
+	if commit != config.oracleCommit {
+		return fmt.Errorf("oracle commit is %s, want %s", commit, config.oracleCommit)
 	}
 
 	openapiHash, err := fileHash(filepath.Join(pythonRoot, "openapi", "powercontext.yaml"))
@@ -110,7 +131,7 @@ func run(pythonRoot, output string, check bool) error {
 
 	value := manifest{
 		SchemaVersion:        3,
-		OracleCommit:         oracleCommit,
+		OracleCommit:         config.oracleCommit,
 		OpenAPISHA256:        openapiHash,
 		SQLiteSchemaSHA256:   schemaHash,
 		FixtureSHA256:        fixtures,
@@ -232,18 +253,9 @@ type renderedPromptSpec struct {
 // narrow parser avoids importing the Python package (and therefore avoids
 // making the Oracle depend on a mutable local Python environment).
 func renderedPromptHashes(root string) (map[string]string, error) {
-	specs := []renderedPromptSpec{
-		{"powercontext.memory.extract.v1", "memory/prompts.py", "MEMORY_EXTRACTION_INSTRUCTIONS_VERSION", "MEMORY_EXTRACTION_INSTRUCTIONS"},
-		{"powercontext.memory.extract.conversation.v1", "memory/prompts.py", "CONVERSATION_MEMORY_EXTRACTION_INSTRUCTIONS_VERSION", "CONVERSATION_MEMORY_EXTRACTION_INSTRUCTIONS"},
-		{"powercontext.memory.rerank.listwise.v1", "memory/reranking.py", "MEMORY_RERANK_INSTRUCTIONS_VERSION", "MEMORY_RERANK_INSTRUCTIONS"},
-		{"powercontext.experience.incubate.v1", "experience/prompts.py", "EXPERIENCE_INCUBATION_INSTRUCTIONS_VERSION", "EXPERIENCE_INCUBATION_INSTRUCTIONS"},
-		{"powercontext.experience.generate.v1", "experience/prompts.py", "EXPERIENCE_GENERATION_INSTRUCTIONS_VERSION", "EXPERIENCE_GENERATION_INSTRUCTIONS"},
-		{"powercontext.skill.generate.v2", "skill/prompts.py", "SKILL_GENERATION_INSTRUCTIONS_VERSION", "SKILL_GENERATION_INSTRUCTIONS"},
-		{"powercontext.handoff.generate.v1", "handoff/prompts.py", "HANDOFF_GENERATION_INSTRUCTIONS_VERSION", "HANDOFF_GENERATION_INSTRUCTIONS"},
-	}
 	base := filepath.Join(root, "src", "powercontext", "builtin", "artifacts")
-	result := make(map[string]string, len(specs))
-	for _, spec := range specs {
+	result := make(map[string]string, len(renderedPromptSpecs))
+	for _, spec := range renderedPromptSpecs {
 		contents, err := os.ReadFile(filepath.Join(base, filepath.FromSlash(spec.path)))
 		if err != nil {
 			return nil, fmt.Errorf("read rendered prompt %s: %w", spec.key, err)
