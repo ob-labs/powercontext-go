@@ -109,3 +109,65 @@ func TestCommandChecksRaceDebtEntries(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandAppliesTheMonotonicBaselinePolicy(t *testing.T) {
+	const emptyLedger = `{
+  "version": 1,
+  "exclusions": []
+}`
+	const exclusionLedger = `{
+  "version": 1,
+  "exclusions": [{
+    "package": "./internal/runtime",
+    "test": "TestShutdown",
+    "issue": "https://github.com/ob-labs/powercontext-go/issues/3",
+    "owner": "@powercontext-maintainers",
+    "reason": "bounded reproduction",
+    "added": "2026-08-31",
+    "removal_condition": "replace the synchronization with a deterministic barrier",
+    "expires": "2999-12-31"
+  }]
+	}`
+	tests := []struct {
+		name       string
+		baseline   string
+		ledger     string
+		wantErr    bool
+		wantOutput string
+	}{
+		{
+			name:       "rejects a new exclusion",
+			baseline:   emptyLedger,
+			ledger:     exclusionLedger,
+			wantErr:    true,
+			wantOutput: "new temporary exclusion",
+		},
+		{
+			name:     "allows removing a baseline exclusion",
+			baseline: exclusionLedger,
+			ledger:   emptyLedger,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			baseline := filepath.Join(root, "baseline.json")
+			if err := os.WriteFile(baseline, []byte(test.baseline), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			ledger := filepath.Join(root, "race-debt.json")
+			if err := os.WriteFile(ledger, []byte(test.ledger), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			command := exec.CommandContext(t.Context(), "go", "run", ".", "-file", ledger, "-baseline", baseline)
+			output, err := command.CombinedOutput()
+			if (err != nil) != test.wantErr {
+				t.Fatalf("race-debt check error = %v, want error %t\n%s", err, test.wantErr, output)
+			}
+			if test.wantOutput != "" && !strings.Contains(string(output), test.wantOutput) {
+				t.Fatalf("race-debt check output = %q, want substring %q", output, test.wantOutput)
+			}
+		})
+	}
+}

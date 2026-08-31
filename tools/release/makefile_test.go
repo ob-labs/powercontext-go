@@ -62,6 +62,21 @@ func TestRaceDebtCheckUsesTheCheckedInLedger(t *testing.T) {
 	}
 }
 
+func TestRaceDebtCheckPassesTheOptionalBaseline(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(
+		t.Context(), "make", "--dry-run", "race-debt-check", "GO=go", "RACE_DEBT_BASELINE=test/base-race-debt.json",
+	)
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make race-debt-check dry-run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), `go run ./tools/race-debt -file .github/race-debt.json -baseline "test/base-race-debt.json"`) {
+		t.Fatalf("make race-debt-check does not pass the optional baseline:\n%s", output)
+	}
+}
+
 func TestSmokeTargetsVerifySecurityDefaultsFile(t *testing.T) {
 	tests := map[string]string{
 		"smoke":      "bin/powercontext",

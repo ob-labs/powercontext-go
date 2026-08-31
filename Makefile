@@ -31,6 +31,7 @@ COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
 COVERAGE_SUMMARY ?= $(COVERAGE_DIR)/summary.txt
 COVERAGE_MINIMUM ?= 16.0
 LICENSE_DEPENDENCY_OUTPUT ?= $(COVERAGE_DIR)/dependencies.json
+RACE_DEBT_BASELINE ?=
 
 STANDARD_TAGS := sqlite_fts5
 FULL_TAGS := sqlite_fts5,local_embeddings,ORT
@@ -224,7 +225,7 @@ test-sqlite: ## Run all standard-tag tests against SQLite.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' ./...
 
 race-debt-check: ## Validate the exact temporary race-test exclusion ledger.
-	$(GO) run ./tools/race-debt -file .github/race-debt.json
+	$(GO) run ./tools/race-debt -file .github/race-debt.json $(if $(RACE_DEBT_BASELINE),-baseline "$(RACE_DEBT_BASELINE)")
 
 test-race: ## Run all Go tests with the race detector.
 	CGO_ENABLED=1 $(GO) test -race ./...
