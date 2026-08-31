@@ -331,6 +331,8 @@ source / artifact / trigger / inference
   leaves only recoverable ownership state, a retry repairs it, and a bounded
   no-model activation lifecycle covers configured, active, inactive, exited,
   timeout, and cleanup outcomes through real child-process boundaries. In a
+  timeout regression test, wait for an explicit child-start barrier under the
+  test's individual bounded deadline before asserting cleanup. In a
   packaged release-consumer test, prove the installed bundle bytes and manifest
   originate from the release archive rather than asserting a retired installer
   command.

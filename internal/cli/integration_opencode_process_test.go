@@ -101,8 +101,11 @@ func TestRunOpenCodeProbeTimesOutAndStopsProcess(t *testing.T) {
 	requests := 0
 
 	err = runOpenCodeProbeProcessWithRequest(
-		t.Context(), openCodeProbeHelperCommand(port), environment, 200*time.Millisecond,
-		func(context.Context, string) error { requests++; return nil },
+		t.Context(), openCodeProbeHelperCommand(port), environment, 2*time.Second,
+		func(context context.Context, _ string) error {
+			requests++
+			return waitForOpenCodeProbeHelperPID(context, pidPath)
+		},
 	)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("probe error = %v", err)
@@ -161,6 +164,23 @@ func assertOpenCodeProbeHelperStopped(t *testing.T, pidPath string) {
 	}
 	if err := process.Kill(); err == nil {
 		t.Fatalf("OpenCode probe process %d was still running", pid)
+	}
+}
+
+func waitForOpenCodeProbeHelperPID(ctx context.Context, pidPath string) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(pidPath); err == nil {
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-ticker.C:
+		}
 	}
 }
 
