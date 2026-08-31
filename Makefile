@@ -11,7 +11,6 @@ GOCACHE ?=
 GOMODCACHE ?=
 PNPM ?= pnpm
 UV ?= uv
-LICENSE_EYE ?= $(GO) run github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0
 
 TOOLS_BIN := $(CURDIR)/.tools/bin
 GOLANGCI_LINT_VERSION := v2.13.1
@@ -25,6 +24,12 @@ APIDIFF_STAMP = $(TOOLS_BIN)/.apidiff-$(APIDIFF_VERSION)-$(PROJECT_GO_TOOLCHAIN)
 GOVULNCHECK_VERSION := v1.7.0
 GOVULNCHECK := $(TOOLS_BIN)/govulncheck$(shell $(GO) env GOEXE)
 GOVULNCHECK_STAMP = $(TOOLS_BIN)/.govulncheck-$(GOVULNCHECK_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+LICENSE_EYE_VERSION := v0.8.0
+LICENSE_EYE := $(TOOLS_BIN)/license-eye$(shell $(GO) env GOEXE)
+LICENSE_EYE_STAMP = $(TOOLS_BIN)/.license-eye-$(LICENSE_EYE_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+ACTIONLINT_VERSION := v1.7.12
+ACTIONLINT := $(TOOLS_BIN)/actionlint$(shell $(GO) env GOEXE)
+ACTIONLINT_STAMP = $(TOOLS_BIN)/.actionlint-$(ACTIONLINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
 
 COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
@@ -66,7 +71,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -140,6 +145,31 @@ $(GOVULNCHECK_STAMP): $(GOVULNCHECK)
 
 govulncheck-tools: $(GOVULNCHECK_STAMP) ## Install the pinned Go vulnerability scanner.
 
+$(LICENSE_EYE): Makefile go.mod go.sum
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/apache/skywalking-eyes/cmd/license-eye@$(LICENSE_EYE_VERSION)
+
+$(LICENSE_EYE_STAMP): $(LICENSE_EYE)
+	@$(GO) version -m "$(LICENSE_EYE)" | awk '$$1 == "mod" && $$2 == "github.com/apache/skywalking-eyes" && $$3 == "$(LICENSE_EYE_VERSION)" { found = 1 } END { exit !found }'
+	@touch "$@"
+
+license-eye-tools: $(LICENSE_EYE_STAMP) ## Install the pinned license checker under .tools/bin.
+
+$(ACTIONLINT): Makefile go.mod go.sum
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+
+$(ACTIONLINT_STAMP): $(ACTIONLINT)
+	@$(GO) version -m "$(ACTIONLINT)" | awk '$$1 == "mod" && $$2 == "github.com/rhysd/actionlint" && $$3 == "$(ACTIONLINT_VERSION)" { found = 1 } END { exit !found }'
+	@touch "$@"
+
+actionlint-tools: $(ACTIONLINT_STAMP) ## Install the pinned GitHub Actions workflow linter under .tools/bin.
+
+actionlint: actionlint-tools ## Lint GitHub Actions workflows with the pinned repository-local tool.
+	"$(ACTIONLINT)"
+
 dependency-security: govulncheck-tools ## Scan an unstripped standard Server build for known vulnerabilities.
 	mkdir -p bin
 	CGO_ENABLED=1 $(GO) build -tags '$(STANDARD_TAGS)' -trimpath \
@@ -186,10 +216,10 @@ contract-test: check-generated ## Test the generated OpenAPI transport contract.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' \
 		./openapi ./api/v1 ./client ./internal/httpapi ./internal/mcpapi ./server
 
-license-check: ## Verify required Apache-2.0 source headers.
+license-check: license-eye-tools ## Verify required Apache-2.0 source headers.
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 
-license-fix: ## Repair eligible source headers and recheck them.
+license-fix: license-eye-tools ## Repair eligible source headers and recheck them.
 	$(LICENSE_EYE) -c .licenserc.yaml header fix
 	$(LICENSE_EYE) -c .licenserc.yaml header check
 

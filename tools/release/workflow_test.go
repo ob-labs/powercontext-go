@@ -1017,54 +1017,42 @@ func TestWorkflowsReuseTheGoSetup(t *testing.T) {
 	}
 }
 
-func TestGoSetupRestoresRepositoryLocalToolCache(t *testing.T) {
+func TestMakefilePinsWorkflowGoToolsInTheRepositoryToolDirectory(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
-	type actionStep struct {
-		Name string            `yaml:"name"`
-		Uses string            `yaml:"uses"`
-		With map[string]string `yaml:"with"`
+	payload, err := os.ReadFile(filepath.Join(repository, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	type compositeAction struct {
-		Name string `yaml:"name"`
-		Runs struct {
-			Steps []actionStep `yaml:"steps"`
-		} `yaml:"runs"`
-	}
-
-	var setupGo compositeAction
-	readCompositeAction(t, filepath.Join(repository, ".github", "actions", "setup-go-env", "action.yml"), &setupGo)
-	if len(setupGo.Runs.Steps) != 3 || setupGo.Runs.Steps[2].Uses != "./.github/actions/setup-tools" {
-		t.Fatalf("setup-go-env steps = %#v, want setup-tools after locked module verification", setupGo.Runs.Steps)
-	}
-
-	var setupTools compositeAction
-	readCompositeAction(t, filepath.Join(repository, ".github", "actions", "setup-tools", "action.yml"), &setupTools)
-	if setupTools.Name != "Setup repository tools" || len(setupTools.Runs.Steps) != 1 {
-		t.Fatalf("setup-tools action = %#v", setupTools)
-	}
-	cache := setupTools.Runs.Steps[0]
-	if cache.Name != "Restore repository-local tool cache" ||
-		cache.Uses != "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9" {
-		t.Fatalf("setup-tools cache action = %#v", cache)
-	}
-	if cache.With["path"] != ".tools/bin" {
-		t.Fatalf("setup-tools cache path = %q", cache.With["path"])
-	}
-	for _, required := range []string{"runner.os", "Makefile", "go.mod", "go.sum", ".golangci.yml", "tools/**"} {
-		if !strings.Contains(cache.With["key"], required) {
-			t.Errorf("setup-tools cache key is missing %q: %q", required, cache.With["key"])
+	contents := string(payload)
+	for _, required := range []string{
+		"LICENSE_EYE_VERSION := v0.8.0",
+		"github.com/apache/skywalking-eyes/cmd/license-eye@$(LICENSE_EYE_VERSION)",
+		"ACTIONLINT_VERSION := v1.7.12",
+		"github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)",
+		"license-eye-tools:",
+		"actionlint-tools:",
+		"license-check: license-eye-tools",
+		"license-fix: license-eye-tools",
+		"actionlint: actionlint-tools",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("Makefile is missing pinned repository-local tool contract %q", required)
 		}
 	}
 }
 
-func readCompositeAction(t *testing.T, path string, destination any) {
-	t.Helper()
-	payload, err := os.ReadFile(path)
+func TestMigrationWorkflowRunsThePinnedActionlintTarget(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := yaml.Unmarshal(payload, destination); err != nil {
-		t.Fatal(err)
+	contents := string(payload)
+	if !strings.Contains(contents, "run: make actionlint") {
+		t.Fatal("migration-gates.yml does not run the repository-local actionlint target")
+	}
+	if strings.Contains(contents, "go run github.com/rhysd/actionlint") {
+		t.Fatal("migration-gates.yml bypasses the pinned repository-local actionlint target")
 	}
 }
 
@@ -1183,7 +1171,8 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	tests := map[string][]string{
 		"Makefile": {
-			"github.com/apache/skywalking-eyes/cmd/license-eye@v0.8.0",
+			"github.com/apache/skywalking-eyes/cmd/license-eye@$(LICENSE_EYE_VERSION)",
+			"LICENSE_EYE_VERSION := v0.8.0",
 			"license-check:",
 			"header check",
 			"license-fix:",
