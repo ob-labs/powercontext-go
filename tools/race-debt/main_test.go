@@ -171,3 +171,33 @@ func TestCommandAppliesTheMonotonicBaselinePolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandExercisesTemporaryExclusionsWithoutTheRaceDetector(t *testing.T) {
+	ledger := filepath.Join(t.TempDir(), "race-debt.json")
+	if err := os.WriteFile(ledger, []byte(`{
+  "version": 1,
+  "exclusions": [{
+    "package": "./tools/race-debt",
+    "test": "TestCommandChecksRaceDebtEntries",
+    "issue": "https://github.com/ob-labs/powercontext-go/issues/3",
+    "owner": "@powercontext-maintainers",
+    "reason": "exercise the non-race coverage path",
+    "added": "2026-08-31",
+    "removal_condition": "replace the synchronization with a deterministic barrier",
+    "expires": "2999-12-31"
+  }]
+}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "go", "run", "./tools/race-debt", "-file", ledger, "-exercise")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("race-debt non-race exercise failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "github.com/ob-labs/powercontext-go/tools/race-debt") {
+		t.Fatalf("race-debt non-race exercise output = %q", output)
+	}
+}

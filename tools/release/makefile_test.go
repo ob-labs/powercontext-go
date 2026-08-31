@@ -42,7 +42,7 @@ func TestBareMakeListsSupportedTargets(t *testing.T) {
 	if defaultOutput != helpOutput {
 		t.Errorf("default Make output differs from help output\ndefault:\n%s\nhelp:\n%s", defaultOutput, helpOutput)
 	}
-	for _, target := range []string{"lint", "check", "portable-sdk-check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "race-debt-check", "test", "build", "package-full", "governance-check"} {
+	for _, target := range []string{"lint", "check", "portable-sdk-check", "check-portable", "api-compat", "dependency-security", "generated-consumers", "module-inventory", "module-integrity", "license-dependencies", "race-debt-check", "race-debt-functional", "test", "build", "package-full", "governance-check"} {
 		if !strings.Contains(helpOutput, "  "+target+" ") {
 			t.Errorf("Make help output is missing %q\n%s", target, helpOutput)
 		}
@@ -74,6 +74,19 @@ func TestRaceDebtCheckPassesTheOptionalBaseline(t *testing.T) {
 	}
 	if !strings.Contains(string(output), `go run ./tools/race-debt -file .github/race-debt.json -baseline "test/base-race-debt.json"`) {
 		t.Fatalf("make race-debt-check does not pass the optional baseline:\n%s", output)
+	}
+}
+
+func TestRaceDebtFunctionalCoverageUsesTheCheckedInLedger(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	command := exec.CommandContext(t.Context(), "make", "--dry-run", "race-debt-functional", "GO=go")
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make race-debt-functional dry-run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "go run ./tools/race-debt -file .github/race-debt.json -exercise") {
+		t.Fatalf("make race-debt-functional does not exercise the checked-in ledger:\n%s", output)
 	}
 }
 
