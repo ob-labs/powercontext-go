@@ -21,42 +21,89 @@
 from __future__ import annotations
 
 import os
+import json
+import math
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+_CONFIG_SCHEMA = 1
+_DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
+_DEFAULT_AUTHORIZATION_ENVIRONMENT = "POWERCONTEXT_WORKBUDDY_AUTHORIZATION"
+_DEFAULT_REQUEST_TIMEOUT_SECONDS = 1.5
+_DEFAULT_REQUEST_BUDGET_SECONDS = 3.0
+_DEFAULT_PREPARE_MAX_BYTES = 8_000
+_DEFAULT_SOURCE_MAX_BYTES = 16_384
+_MAX_REQUEST_BUDGET_SECONDS = 10.0
+_MAX_PREPARE_BYTES = 32 * 1024
+_MAX_SOURCE_BYTES = 64 * 1024
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 _FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+_AUTHORIZATION_ENVIRONMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_FIELDS = frozenset(
+    {
+        "schema",
+        "server_url",
+        "scope_mode",
+        "authorization_environment",
+        "request_timeout_seconds",
+        "request_budget_seconds",
+        "prepare_max_bytes",
+        "source_max_bytes",
+    }
+)
+
+
+class WorkBuddyConfigurationError(ValueError):
+    """Raised when the persisted WorkBuddy configuration is unsafe or invalid."""
 
 
 @dataclass(frozen=True, slots=True)
 class WorkBuddyPluginSettings:
     """Configuration loaded once by a WorkBuddy hooks entry point."""
 
-    server_url: str = "http://127.0.0.1:8000"
+    server_url: str = _DEFAULT_SERVER_URL
     authorization: str | None = None
+    authorization_environment: str = _DEFAULT_AUTHORIZATION_ENVIRONMENT
     scope_id: str | None = None
+    scope_mode: str = "project"
     capture_prompts: bool = True
     flush_on_capture: bool = False
-    request_timeout_seconds: float = 1.0
-    http_budget_seconds: float = 4.0
+    request_timeout_seconds: float = _DEFAULT_REQUEST_TIMEOUT_SECONDS
+    request_budget_seconds: float = _DEFAULT_REQUEST_BUDGET_SECONDS
+    prepare_max_bytes: int = _DEFAULT_PREPARE_MAX_BYTES
+    source_max_bytes: int = _DEFAULT_SOURCE_MAX_BYTES
     flush_max_calls: int = 4
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "server_url", _http_base_url(self.server_url))
         object.__setattr__(self, "authorization", _authorization_header(self.authorization))
+        object.__setattr__(self, "authorization_environment", _authorization_environment_name(self.authorization_environment))
         object.__setattr__(self, "scope_id", _optional_text(self.scope_id))
-        if self.request_timeout_seconds <= 0 or self.http_budget_seconds <= 0:
-            raise ValueError("PowerContext HTTP timeouts must be positive")  # noqa: TRY003
-        if not 1 <= self.flush_max_calls <= 16:
-            raise ValueError("PowerContext flush_max_calls must be between 1 and 16")  # noqa: TRY003
+        _validate_scope_mode(self.scope_mode)
+        _validate_limits(
+            self.request_timeout_seconds,
+            self.request_budget_seconds,
+            self.prepare_max_bytes,
+            self.source_max_bytes,
+            self.flush_max_calls,
+        )
+
+    @property
+    def http_budget_seconds(self) -> float:
+        """Compatibility alias for the existing hook implementation."""
+
+        return self.request_budget_seconds
 
     @classmethod
     def from_environment(cls) -> WorkBuddyPluginSettings:
         """Load WorkBuddy user options and integration-specific environment values."""
 
         return cls(
-            server_url=_first_environment("POWERCONTEXT_WORKBUDDY_SERVER_URL") or "http://127.0.0.1:8000",
+            server_url=_first_environment("POWERCONTEXT_WORKBUDDY_SERVER_URL") or _DEFAULT_SERVER_URL,
             authorization=_first_environment("POWERCONTEXT_WORKBUDDY_AUTHORIZATION"),
             scope_id=_first_environment("POWERCONTEXT_WORKBUDDY_SCOPE_ID"),
             capture_prompts=_environment_bool(
@@ -69,11 +116,20 @@ class WorkBuddyPluginSettings:
             ),
             request_timeout_seconds=_environment_float(
                 "POWERCONTEXT_WORKBUDDY_REQUEST_TIMEOUT_SECONDS",
-                default=1.0,
+                default=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
             ),
-            http_budget_seconds=_environment_float(
+            request_budget_seconds=_environment_float(
                 "POWERCONTEXT_WORKBUDDY_HTTP_BUDGET_SECONDS",
-                default=4.0,
+                "POWERCONTEXT_WORKBUDDY_REQUEST_BUDGET_SECONDS",
+                default=_DEFAULT_REQUEST_BUDGET_SECONDS,
+            ),
+            prepare_max_bytes=_environment_int(
+                "POWERCONTEXT_WORKBUDDY_PREPARE_MAX_BYTES",
+                default=_DEFAULT_PREPARE_MAX_BYTES,
+            ),
+            source_max_bytes=_environment_int(
+                "POWERCONTEXT_WORKBUDDY_SOURCE_MAX_BYTES",
+                default=_DEFAULT_SOURCE_MAX_BYTES,
             ),
             flush_max_calls=_environment_int(
                 "POWERCONTEXT_WORKBUDDY_FLUSH_MAX_CALLS",
@@ -82,12 +138,63 @@ class WorkBuddyPluginSettings:
         )
 
 
+def load_settings(
+    path: str | os.PathLike[str],
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> WorkBuddyPluginSettings:
+    """Load the credential-free setup configuration and runtime credentials."""
+
+    configuration_path = Path(path)
+    try:
+        payload = json.loads(configuration_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise WorkBuddyConfigurationError("invalid WorkBuddy configuration") from error
+    if not isinstance(payload, dict) or set(payload) != _FIELDS:
+        raise WorkBuddyConfigurationError("invalid WorkBuddy configuration")
+    if payload["schema"] != _CONFIG_SCHEMA:
+        raise WorkBuddyConfigurationError("invalid WorkBuddy configuration schema")
+    authorization_environment = _text_field(payload, "authorization_environment")
+    runtime_environment = os.environ if environment is None else environment
+    return WorkBuddyPluginSettings(
+        server_url=_text_field(payload, "server_url"),
+        authorization=runtime_environment.get(authorization_environment),
+        authorization_environment=authorization_environment,
+        scope_mode=_text_field(payload, "scope_mode"),
+        request_timeout_seconds=_float_field(payload, "request_timeout_seconds"),
+        request_budget_seconds=_float_field(payload, "request_budget_seconds"),
+        prepare_max_bytes=_int_field(payload, "prepare_max_bytes"),
+        source_max_bytes=_int_field(payload, "source_max_bytes"),
+    )
+
+
 def _first_environment(*names: str) -> str | None:
     for name in names:
         value = os.environ.get(name)
         if value is not None:
             return value
     return None
+
+
+def _text_field(payload: Mapping[str, object], name: str) -> str:
+    value = payload[name]
+    if not isinstance(value, str):
+        raise WorkBuddyConfigurationError(f"invalid WorkBuddy {name.replace('_', ' ')}")
+    return value
+
+
+def _float_field(payload: Mapping[str, object], name: str) -> float:
+    value = payload[name]
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        raise WorkBuddyConfigurationError(f"invalid WorkBuddy {name.replace('_', ' ')}")
+    return float(value)
+
+
+def _int_field(payload: Mapping[str, object], name: str) -> int:
+    value = payload[name]
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise WorkBuddyConfigurationError(f"invalid WorkBuddy {name.replace('_', ' ')}")
+    return value
 
 
 def _environment_bool(*names: str, default: bool) -> bool:
@@ -99,11 +206,11 @@ def _environment_bool(*names: str, default: bool) -> bool:
         return True
     if normalized in _FALSE_VALUES:
         return False
-    raise ValueError("invalid boolean PowerContext configuration")  # noqa: TRY003
+    raise WorkBuddyConfigurationError("invalid boolean PowerContext configuration")
 
 
-def _environment_float(name: str, *, default: float) -> float:
-    value = os.environ.get(name)
+def _environment_float(*names: str, default: float) -> float:
+    value = _first_environment(*names)
     return default if value is None else float(value)
 
 
@@ -131,25 +238,67 @@ def _authorization_header(value: str | None) -> str | None:
         or not credential.isprintable()
         or any(character.isspace() for character in credential)
     ):
-        raise ValueError("WorkBuddy authorization must be a valid Bearer header")  # noqa: TRY003
+        raise WorkBuddyConfigurationError("WorkBuddy authorization must be a valid Bearer header")
     return normalized
+
+
+def _authorization_environment_name(value: str) -> str:
+    normalized = value.strip()
+    if not _AUTHORIZATION_ENVIRONMENT.fullmatch(normalized):
+        raise WorkBuddyConfigurationError("invalid WorkBuddy authorization environment name")
+    return normalized
+
+
+def _validate_scope_mode(value: str) -> None:
+    if value not in {"agent", "project"}:
+        raise WorkBuddyConfigurationError("WorkBuddy scope must be agent or project")
+
+
+def _validate_limits(
+    request_timeout_seconds: float,
+    request_budget_seconds: float,
+    prepare_max_bytes: int,
+    source_max_bytes: int,
+    flush_max_calls: int,
+) -> None:
+    if (
+        math.isnan(request_timeout_seconds)
+        or math.isinf(request_timeout_seconds)
+        or request_timeout_seconds <= 0
+    ):
+        raise WorkBuddyConfigurationError("WorkBuddy request timeout must be positive")
+    if (
+        math.isnan(request_budget_seconds)
+        or math.isinf(request_budget_seconds)
+        or request_budget_seconds <= 0
+        or request_budget_seconds > _MAX_REQUEST_BUDGET_SECONDS
+    ):
+        raise WorkBuddyConfigurationError("WorkBuddy request budget is invalid")
+    if request_timeout_seconds > request_budget_seconds:
+        raise WorkBuddyConfigurationError("WorkBuddy request timeout must not exceed the budget")
+    if prepare_max_bytes < 1 or prepare_max_bytes > _MAX_PREPARE_BYTES:
+        raise WorkBuddyConfigurationError("WorkBuddy prepare byte limit is invalid")
+    if source_max_bytes < 1 or source_max_bytes > _MAX_SOURCE_BYTES:
+        raise WorkBuddyConfigurationError("WorkBuddy source byte limit is invalid")
+    if not 1 <= flush_max_calls <= 16:
+        raise WorkBuddyConfigurationError("PowerContext flush_max_calls must be between 1 and 16")
 
 
 def _http_base_url(value: str) -> str:
     normalized = value.strip().rstrip("/")
     parsed = urlsplit(normalized)
     if parsed.username is not None or parsed.password is not None:
-        raise ValueError("PowerContext Server URL must not contain credentials")  # noqa: TRY003
+        raise WorkBuddyConfigurationError("PowerContext Server URL must not contain credentials")
     if parsed.hostname is None or parsed.scheme not in {"http", "https"}:
-        raise ValueError("PowerContext Server URL must use HTTP or HTTPS")  # noqa: TRY003
+        raise WorkBuddyConfigurationError("PowerContext Server URL must use HTTP or HTTPS")
     if parsed.query or parsed.fragment:
-        raise ValueError("PowerContext Server URL must not contain a query or fragment")  # noqa: TRY003
+        raise WorkBuddyConfigurationError("PowerContext Server URL must not contain a query or fragment")
     if parsed.scheme == "http" and parsed.hostname.lower() not in _LOOPBACK_HOSTS:
-        raise ValueError("unencrypted PowerContext URLs must be loopback addresses")  # noqa: TRY003
+        raise WorkBuddyConfigurationError("unencrypted PowerContext URLs must be loopback addresses")
     path = parsed.path.rstrip("/")
     if path.endswith("/mcp"):
         path = path.removesuffix("/mcp")
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", "")).rstrip("/")
 
 
-__all__ = ["WorkBuddyPluginSettings"]
+__all__ = ["WorkBuddyConfigurationError", "WorkBuddyPluginSettings", "load_settings"]

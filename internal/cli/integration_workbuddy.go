@@ -15,18 +15,27 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
+	"math"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ob-labs/powercontext-go/internal/transportpolicy"
 )
 
 const (
@@ -37,19 +46,33 @@ const (
 	workBuddyScopeResolver         = "powercontext_project_scope.py"
 	workBuddySkillName             = "project-context"
 	workBuddySkillOwner            = ".powercontext.json"
+	workBuddyConfigFilename        = "powercontext.json"
+	workBuddyConfigSchema          = 1
 	workBuddyPythonPlaceholder     = "${POWERCONTEXT_PYTHON}"
 	workBuddyScopePlaceholder      = "${POWERCONTEXT_PROJECT_SCOPE_SCRIPT}"
 	workBuddyServerURLTemplate     = "${POWERCONTEXT_WORKBUDDY_SERVER_URL:-http://127.0.0.1:8000}/mcp"
 	workBuddyAuthorizationTemplate = "${POWERCONTEXT_WORKBUDDY_AUTHORIZATION:-}"
 	workBuddyLegacyMCPURL          = "http://127.0.0.1:8000/mcp"
 	workBuddyMCPDescription        = "PowerContext agent memory & handoff MCP server (local service on port 8000)"
+
+	workBuddyDefaultAuthorizationEnvironment = "POWERCONTEXT_WORKBUDDY_AUTHORIZATION"
+	workBuddyDefaultRequestTimeoutSeconds    = 1.5
+	workBuddyDefaultRequestBudgetSeconds     = 3.0
+	workBuddyDefaultPrepareMaxBytes          = 8_000
+	workBuddyDefaultSourceMaxBytes           = 16_384
+	workBuddyMaximumRequestBudgetSeconds     = 10.0
+	workBuddyMaximumPrepareBytes             = 32 * 1024
+	workBuddyMaximumSourceBytes              = 64 * 1024
 )
 
-var workBuddyHookModules = [...]string{
-	workBuddyHookDriver,
-	"workbuddy_settings.py",
-	"prepared_context.py",
-}
+var (
+	workBuddyAuthorizationEnvironmentPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	workBuddyHookModules                     = [...]string{
+		workBuddyHookDriver,
+		"workbuddy_settings.py",
+		"prepared_context.py",
+	}
+)
 
 type workBuddySetupResult struct {
 	Plugin        string `json:"plugin"`
@@ -57,14 +80,31 @@ type workBuddySetupResult struct {
 	WorkBuddyHome string `json:"workbuddy_home"`
 	HooksDir      string `json:"hooks_dir"`
 	DataDir       string `json:"data_dir"`
+	ServerURL     string `json:"server_url"`
+	ScopeMode     string `json:"scope_mode"`
+}
+
+type workBuddyConfiguration struct {
+	Schema                   int     `json:"schema"`
+	ServerURL                string  `json:"server_url"`
+	ScopeMode                string  `json:"scope_mode"`
+	AuthorizationEnvironment string  `json:"authorization_environment"`
+	RequestTimeoutSeconds    float64 `json:"request_timeout_seconds"`
+	RequestBudgetSeconds     float64 `json:"request_budget_seconds"`
+	PrepareMaxBytes          int     `json:"prepare_max_bytes"`
+	SourceMaxBytes           int     `json:"source_max_bytes"`
 }
 
 func newSetupWorkBuddyCommand(state *commandState) *cobra.Command {
-	var source, ref string
+	var source, ref, serverURL, scopeMode, authorizationEnvironment string
 	command := &cobra.Command{
 		Use: "workbuddy", Short: "Install the PowerContext WorkBuddy hooks, MCP server, and Skill.", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			result, err := installWorkBuddyPlugin(command.Context(), state.system, source, ref)
+			configuration, err := newWorkBuddyConfiguration(serverURL, scopeMode, authorizationEnvironment)
+			if err != nil {
+				return err
+			}
+			result, err := installWorkBuddyPlugin(command.Context(), state.system, source, ref, configuration)
 			if err != nil {
 				return err
 			}
@@ -87,14 +127,20 @@ func newSetupWorkBuddyCommand(state *commandState) *cobra.Command {
 	}
 	command.Flags().StringVar(&source, "source", defaultMarketplaceSource, "PowerContext Git source or local checkout path.")
 	command.Flags().StringVar(&ref, "ref", defaultMarketplaceRef, "Git ref used for a remote source.")
+	command.Flags().StringVar(&serverURL, "server-url", defaultServerURL, "PowerContext Server base URL configured for WorkBuddy.")
+	command.Flags().StringVar(&scopeMode, "scope-mode", "project", "Memory scope mode: agent or project.")
+	command.Flags().StringVar(&authorizationEnvironment, "authorization-environment", workBuddyDefaultAuthorizationEnvironment, "Runtime environment variable containing an optional Bearer authorization header.")
 	return command
 }
 
 func newDoctorWorkBuddyCommand(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use: "workbuddy", Short: "Check the PowerContext WorkBuddy hooks, MCP server, and Skill.", Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(command *cobra.Command, _ []string) error {
 			checks := runWorkBuddyDiagnostics()
+			if configuration, ok := workBuddyConfiguredServerURL(); ok {
+				maps.Copy(checks, runServerDiagnostics(command.Context(), state.version.Version, configuration, state.httpClient))
+			}
 			if writeErr := writeDiagnostics(state, checks); writeErr != nil {
 				return writeErr
 			}
@@ -106,10 +152,79 @@ func newDoctorWorkBuddyCommand(state *commandState) *cobra.Command {
 	}
 }
 
+func newWorkBuddyConfiguration(serverURL, scopeMode, authorizationEnvironment string) (workBuddyConfiguration, error) {
+	normalizedURL, err := normalizeWorkBuddyServerURL(serverURL)
+	if err != nil {
+		return workBuddyConfiguration{}, err
+	}
+	configuration := workBuddyConfiguration{
+		Schema:                   workBuddyConfigSchema,
+		ServerURL:                normalizedURL,
+		ScopeMode:                scopeMode,
+		AuthorizationEnvironment: authorizationEnvironment,
+		RequestTimeoutSeconds:    workBuddyDefaultRequestTimeoutSeconds,
+		RequestBudgetSeconds:     workBuddyDefaultRequestBudgetSeconds,
+		PrepareMaxBytes:          workBuddyDefaultPrepareMaxBytes,
+		SourceMaxBytes:           workBuddyDefaultSourceMaxBytes,
+	}
+	if err := validateWorkBuddyConfiguration(configuration); err != nil {
+		return workBuddyConfiguration{}, err
+	}
+	return configuration, nil
+}
+
+func normalizeWorkBuddyServerURL(value string) (string, error) {
+	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(value), "/"))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", errors.New("WorkBuddy PowerContext Server URL must use HTTP or HTTPS")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("WorkBuddy PowerContext Server URL must not contain credentials, a query, or a fragment")
+	}
+	if transportpolicy.IsPlaintextNonLoopback(parsed) {
+		return "", errors.New("unencrypted WorkBuddy PowerContext Server URLs must be loopback addresses")
+	}
+	parsed.Path, parsed.RawPath = strings.TrimRight(parsed.Path, "/"), ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func validateWorkBuddyConfiguration(configuration workBuddyConfiguration) error {
+	if configuration.Schema != workBuddyConfigSchema {
+		return errors.New("invalid WorkBuddy configuration schema")
+	}
+	if _, err := normalizeWorkBuddyServerURL(configuration.ServerURL); err != nil {
+		return err
+	}
+	if configuration.ScopeMode != "agent" && configuration.ScopeMode != "project" {
+		return errors.New("WorkBuddy scope must be agent or project")
+	}
+	if !workBuddyAuthorizationEnvironmentPattern.MatchString(configuration.AuthorizationEnvironment) {
+		return errors.New("invalid WorkBuddy authorization environment name")
+	}
+	if math.IsNaN(configuration.RequestTimeoutSeconds) || math.IsInf(configuration.RequestTimeoutSeconds, 0) || configuration.RequestTimeoutSeconds <= 0 {
+		return errors.New("WorkBuddy request timeout must be positive")
+	}
+	if math.IsNaN(configuration.RequestBudgetSeconds) || math.IsInf(configuration.RequestBudgetSeconds, 0) || configuration.RequestBudgetSeconds <= 0 ||
+		configuration.RequestBudgetSeconds > workBuddyMaximumRequestBudgetSeconds {
+		return errors.New("WorkBuddy request budget is invalid")
+	}
+	if configuration.RequestTimeoutSeconds > configuration.RequestBudgetSeconds {
+		return errors.New("WorkBuddy request timeout must not exceed the budget")
+	}
+	if configuration.PrepareMaxBytes < 1 || configuration.PrepareMaxBytes > workBuddyMaximumPrepareBytes {
+		return errors.New("WorkBuddy prepare byte limit is invalid")
+	}
+	if configuration.SourceMaxBytes < 1 || configuration.SourceMaxBytes > workBuddyMaximumSourceBytes {
+		return errors.New("WorkBuddy source byte limit is invalid")
+	}
+	return nil
+}
+
 func installWorkBuddyPlugin(
 	ctx context.Context,
 	commands systemCommandExecutor,
 	source, ref string,
+	configuration workBuddyConfiguration,
 ) (workBuddySetupResult, error) {
 	dataDir, err := prepareDataDirectory()
 	if err != nil {
@@ -127,11 +242,15 @@ func installWorkBuddyPlugin(
 	skillDir := filepath.Join(home, "skills", workBuddySkillName)
 	settingsFile := filepath.Join(home, "settings.json")
 	mcpFile := filepath.Join(home, "mcp.json")
+	configFile := filepath.Join(home, workBuddyConfigFilename)
 	if mkdirErr := os.MkdirAll(home, 0o755); mkdirErr != nil {
 		return workBuddySetupResult{}, errors.New("cannot create WorkBuddy home")
 	}
 	if replaceableErr := requireReplaceableWorkBuddySkill(skillDir); replaceableErr != nil {
 		return workBuddySetupResult{}, replaceableErr
+	}
+	if _, _, configErr := readWorkBuddyConfiguration(configFile); configErr != nil {
+		return workBuddySetupResult{}, errors.New("existing WorkBuddy configuration is not owned by PowerContext")
 	}
 	settingsSnapshot, err := snapshotWorkBuddyFile(settingsFile)
 	if err != nil {
@@ -140,6 +259,10 @@ func installWorkBuddyPlugin(
 	mcpSnapshot, err := snapshotWorkBuddyFile(mcpFile)
 	if err != nil {
 		return workBuddySetupResult{}, errors.New("Cannot update WorkBuddy MCP configuration")
+	}
+	configSnapshot, err := snapshotWorkBuddyFile(configFile)
+	if err != nil {
+		return workBuddySetupResult{}, errors.New("cannot snapshot WorkBuddy configuration")
 	}
 	hooksBackup, err := snapshotWorkBuddyDirectory(hooksDir)
 	if err != nil {
@@ -159,6 +282,7 @@ func installWorkBuddyPlugin(
 		}
 		_ = restoreWorkBuddyFile(settingsFile, settingsSnapshot)
 		_ = restoreWorkBuddyFile(mcpFile, mcpSnapshot)
+		_ = restoreWorkBuddyFile(configFile, configSnapshot)
 		_ = restoreWorkBuddyDirectory(hooksDir, hooksBackup)
 		_ = restoreWorkBuddyDirectory(skillDir, skillBackup)
 	}()
@@ -168,8 +292,20 @@ func installWorkBuddyPlugin(
 	if settingsErr := mergeWorkBuddySettings(settingsFile, hooksDir); settingsErr != nil {
 		return workBuddySetupResult{}, settingsErr
 	}
-	if mcpErr := mergeWorkBuddyMCP(mcpFile); mcpErr != nil {
+	if mcpErr := mergeWorkBuddyMCP(mcpFile, configuration); mcpErr != nil {
 		return workBuddySetupResult{}, mcpErr
+	}
+	if configErr := writeWorkBuddyJSON(configFile, map[string]any{
+		"schema":                    configuration.Schema,
+		"server_url":                configuration.ServerURL,
+		"scope_mode":                configuration.ScopeMode,
+		"authorization_environment": configuration.AuthorizationEnvironment,
+		"request_timeout_seconds":   configuration.RequestTimeoutSeconds,
+		"request_budget_seconds":    configuration.RequestBudgetSeconds,
+		"prepare_max_bytes":         configuration.PrepareMaxBytes,
+		"source_max_bytes":          configuration.SourceMaxBytes,
+	}); configErr != nil {
+		return workBuddySetupResult{}, errors.New("cannot write WorkBuddy configuration")
 	}
 	if skillErr := installWorkBuddySkill(plugin, skillDir, hooksDir); skillErr != nil {
 		return workBuddySetupResult{}, skillErr
@@ -177,6 +313,7 @@ func installWorkBuddyPlugin(
 	succeeded = true
 	return workBuddySetupResult{
 		Plugin: workBuddyPluginName, PluginPath: plugin, WorkBuddyHome: home, HooksDir: hooksDir, DataDir: dataDir,
+		ServerURL: configuration.ServerURL, ScopeMode: configuration.ScopeMode,
 	}, nil
 }
 
@@ -335,7 +472,7 @@ func mergeWorkBuddySettings(settingsFile, hooksDir string) error {
 	return writeWorkBuddyJSON(settingsFile, settings)
 }
 
-func mergeWorkBuddyMCP(mcpFile string) error {
+func mergeWorkBuddyMCP(mcpFile string, configuration workBuddyConfiguration) error {
 	config, err := loadWorkBuddyJSON(mcpFile)
 	if err != nil {
 		return errors.New("cannot update WorkBuddy MCP configuration")
@@ -349,22 +486,14 @@ func mergeWorkBuddyMCP(mcpFile string) error {
 		config["mcpServers"] = servers
 	}
 	entry := map[string]any{
-		"type": "http", "url": workBuddyServerURLTemplate,
-		"headers":     map[string]any{"Authorization": workBuddyAuthorizationTemplate},
+		"type": "http", "url": configuration.ServerURL + "/mcp",
+		"headers":     map[string]any{"Authorization": "${" + configuration.AuthorizationEnvironment + ":-}"},
 		"description": workBuddyMCPDescription, "disabled": false,
 	}
-	if existing, ok := servers[workBuddyPluginName].(map[string]any); ok && !isLegacyWorkBuddyMCP(existing) {
-		if url, ok := existing["url"].(string); ok && strings.TrimSpace(url) != "" {
-			entry["url"] = url
-		}
-		if headers, ok := existing["headers"].(map[string]any); ok && len(headers) != 0 {
-			entry["headers"] = headers
-		}
-		for name, value := range existing {
-			if _, known := entry[name]; !known {
-				entry[name] = value
-			}
-		}
+	if existing, ok := servers[workBuddyPluginName].(map[string]any); ok &&
+		!isLegacyWorkBuddyMCP(existing) &&
+		!isOwnedWorkBuddyMCP(existing) {
+		return errors.New("existing WorkBuddy PowerContext MCP entry is not owned by PowerContext")
 	}
 	servers[workBuddyPluginName] = entry
 	return writeWorkBuddyJSON(mcpFile, config)
@@ -431,6 +560,7 @@ func runWorkBuddyDiagnostics() map[string]diagnostic {
 	home, err := workBuddyHome()
 	if err != nil {
 		return map[string]diagnostic{
+			"config":   {Status: "failed", Detail: "cannot resolve WorkBuddy home"},
 			"hooks":    {Status: "failed", Detail: "cannot resolve WorkBuddy home"},
 			"settings": {Status: "failed", Detail: "cannot resolve WorkBuddy home"},
 			"mcp":      {Status: "failed", Detail: "cannot resolve WorkBuddy home"},
@@ -438,6 +568,11 @@ func runWorkBuddyDiagnostics() map[string]diagnostic {
 		}
 	}
 	hooksDir := filepath.Join(home, "hooks")
+	configuration, present, configErr := readWorkBuddyConfiguration(filepath.Join(home, workBuddyConfigFilename))
+	config := diagnostic{OK: true, Status: "ok", Detail: "credential-free WorkBuddy configuration is valid"}
+	if configErr != nil || !present {
+		config = diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy configuration is missing or invalid"}
+	}
 	hooks := diagnostic{OK: true, Status: "ok", Detail: "hooks installed in " + hooksDir}
 	for _, name := range workBuddyHookModules {
 		if !isRegularWorkBuddyFile(filepath.Join(hooksDir, name)) {
@@ -449,9 +584,12 @@ func runWorkBuddyDiagnostics() map[string]diagnostic {
 		hooks = diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy hooks are not installed"}
 	}
 	settings := workBuddySettingsDiagnostic(filepath.Join(home, "settings.json"))
-	mcp := workBuddyMCPDiagnostic(filepath.Join(home, "mcp.json"))
+	mcp := diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
+	if config.OK {
+		mcp = workBuddyMCPDiagnostic(filepath.Join(home, "mcp.json"), configuration)
+	}
 	skill := workBuddySkillDiagnostic(filepath.Join(home, "skills", workBuddySkillName))
-	return map[string]diagnostic{"hooks": hooks, "settings": settings, "mcp": mcp, "skill": skill}
+	return map[string]diagnostic{"config": config, "hooks": hooks, "settings": settings, "mcp": mcp, "skill": skill}
 }
 
 func workBuddySettingsDiagnostic(path string) diagnostic {
@@ -462,7 +600,16 @@ func workBuddySettingsDiagnostic(path string) diagnostic {
 	return diagnostic{OK: true, Status: "ok", Detail: path}
 }
 
-func workBuddyMCPDiagnostic(path string) diagnostic {
+func workBuddyConfiguredServerURL() (string, bool) {
+	home, err := workBuddyHome()
+	if err != nil {
+		return "", false
+	}
+	configuration, present, err := readWorkBuddyConfiguration(filepath.Join(home, workBuddyConfigFilename))
+	return configuration.ServerURL, present && err == nil
+}
+
+func workBuddyMCPDiagnostic(path string, configuration workBuddyConfiguration) diagnostic {
 	config, err := loadWorkBuddyJSON(path)
 	if err != nil {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
@@ -473,6 +620,14 @@ func workBuddyMCPDiagnostic(path string) diagnostic {
 	}
 	if _, ok := servers[workBuddyPluginName].(map[string]any); !ok {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
+	}
+	entry := servers[workBuddyPluginName].(map[string]any)
+	if entry["description"] != workBuddyMCPDescription || entry["url"] != configuration.ServerURL+"/mcp" {
+		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server does not match its configuration"}
+	}
+	headers, ok := entry["headers"].(map[string]any)
+	if !ok || headers["Authorization"] != "${"+configuration.AuthorizationEnvironment+":-}" {
+		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP authorization reference does not match its configuration"}
 	}
 	return diagnostic{OK: true, Status: "ok", Detail: path}
 }
@@ -527,6 +682,69 @@ func loadWorkBuddyJSON(path string) (map[string]any, error) {
 	return value, nil
 }
 
+func readWorkBuddyConfiguration(path string) (workBuddyConfiguration, bool, error) {
+	payload, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return workBuddyConfiguration{}, false, nil
+	}
+	if err != nil {
+		return workBuddyConfiguration{}, false, err
+	}
+	configuration, err := decodeWorkBuddyConfiguration(payload)
+	return configuration, true, err
+}
+
+func decodeWorkBuddyConfiguration(payload []byte) (workBuddyConfiguration, error) {
+	if !utf8.Valid(payload) {
+		return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+	}
+	fields := make(map[string]json.RawMessage, 8)
+	for decoder.More() {
+		name, err := decoder.Token()
+		if err != nil {
+			return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+		}
+		key, ok := name.(string)
+		if !ok || fields[key] != nil {
+			return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+		}
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+		}
+		fields[key] = value
+	}
+	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
+		return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+	}
+	expected := map[string]bool{
+		"schema": true, "server_url": true, "scope_mode": true, "authorization_environment": true,
+		"request_timeout_seconds": true, "request_budget_seconds": true, "prepare_max_bytes": true, "source_max_bytes": true,
+	}
+	if len(fields) != len(expected) {
+		return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+	}
+	for name := range expected {
+		if fields[name] == nil {
+			return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+		}
+	}
+	var configuration workBuddyConfiguration
+	if err := json.Unmarshal(payload, &configuration); err != nil || validateWorkBuddyConfiguration(configuration) != nil {
+		return workBuddyConfiguration{}, errors.New("invalid WorkBuddy configuration")
+	}
+	return configuration, nil
+}
+
 func writeWorkBuddyJSON(path string, value map[string]any) error {
 	payload, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
@@ -576,6 +794,15 @@ func isLegacyWorkBuddyMCP(entry map[string]any) bool {
 	kind, _ := entry["type"].(string)
 	return kind == "http" && url == workBuddyLegacyMCPURL && headersOK && len(headers) == 0 &&
 		description == workBuddyMCPDescription && disabledOK && !disabled
+}
+
+func isOwnedWorkBuddyMCP(entry map[string]any) bool {
+	headers, headersOK := entry["headers"].(map[string]any)
+	authorization, _ := headers["Authorization"].(string)
+	description, _ := entry["description"].(string)
+	kind, _ := entry["type"].(string)
+	return kind == "http" && headersOK && authorization == workBuddyAuthorizationTemplate &&
+		description == workBuddyMCPDescription
 }
 
 func workBuddyHookCommand(hooksDir string) string {
