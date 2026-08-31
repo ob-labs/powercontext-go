@@ -293,6 +293,40 @@ jobs:
             --go-executable bin/powercontext \
             --go-cwd .
 
+      - name: Write bounded frozen Oracle diagnostics
+        if: always()
+        shell: bash
+        run: |
+          diagnostics="$RUNNER_TEMP/powercontext-oracle-diagnostics"
+          mkdir -p "$diagnostics"
+          {
+            printf 'oracle_commit='
+            git -C _oracle rev-parse HEAD 2>/dev/null || printf 'unavailable'
+            printf 'target_commit='
+            git -C _target rev-parse HEAD 2>/dev/null || printf 'unavailable'
+            for path in \
+              "$RUNNER_TEMP/powercontext-oracle-fixtures/authority-rows.json" \
+              "$RUNNER_TEMP/powercontext-oracle-fixtures/domain-contract.json" \
+              "$RUNNER_TEMP/powercontext-oracle-fixtures/handoff-report-digests.json" \
+              "$RUNNER_TEMP/powercontext-oracle-fixture-manifest/manifest.json" \
+              "$RUNNER_TEMP/powercontext-parity-inventory.json"; do
+              if test -f "$path"; then
+                sha256sum "$path"
+              fi
+            done
+            printf 'worktree_path_count='
+            git status --porcelain | wc -l | tr -d '[:space:]'
+          } > "$diagnostics/summary.txt"
+
+      - name: Upload frozen Oracle diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: frozen-oracle-diagnostics-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-oracle-diagnostics/summary.txt
+          if-no-files-found: error
+          retention-days: 14
+
   oceanbase-live:
     name: OceanBase live compatibility
     runs-on: ubuntu-24.04

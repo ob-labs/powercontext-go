@@ -740,6 +740,75 @@ func TestFrozenOracleGeneratorsUseTemporaryGoldenOutput(t *testing.T) {
 	t.Fatal("frozen-oracle job has no fixture regeneration step")
 }
 
+func TestFrozenOracleFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string            `yaml:"name"`
+				If   string            `yaml:"if"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+				Run  string            `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	oracle, ok := workflow.Jobs["frozen-oracle"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no frozen-oracle job")
+	}
+	var summary, upload *struct {
+		Name string
+		If   string
+		Uses string
+		With map[string]string
+		Run  string
+	}
+	for index := range oracle.Steps {
+		step := oracle.Steps[index]
+		if step.Name == "Write bounded frozen Oracle diagnostics" {
+			summary = &struct {
+				Name string
+				If   string
+				Uses string
+				With map[string]string
+				Run  string
+			}{step.Name, step.If, step.Uses, step.With, step.Run}
+		}
+		if step.Name == "Upload frozen Oracle diagnostics" {
+			upload = &struct {
+				Name string
+				If   string
+				Uses string
+				With map[string]string
+				Run  string
+			}{step.Name, step.If, step.Uses, step.With, step.Run}
+		}
+	}
+	if summary == nil || summary.If != "always()" || !strings.Contains(summary.Run, "powercontext-oracle-diagnostics") {
+		t.Fatalf("frozen Oracle summary step = %#v", summary)
+	}
+	for _, forbidden := range []string{"_oracle/.venv", "fixture_root/authority.db", "fixture_root/scheduler.db", "cat "} {
+		if strings.Contains(summary.Run, forbidden) {
+			t.Fatalf("frozen Oracle summary exposes %q: %s", forbidden, summary.Run)
+		}
+	}
+	if upload == nil || upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" {
+		t.Fatalf("frozen Oracle upload step = %#v", upload)
+	}
+	if upload.With["path"] != "${{ runner.temp }}/powercontext-oracle-diagnostics/summary.txt" ||
+		upload.With["if-no-files-found"] != "error" || upload.With["retention-days"] != "14" {
+		t.Fatalf("frozen Oracle upload contract = %#v", upload.With)
+	}
+}
+
 func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
