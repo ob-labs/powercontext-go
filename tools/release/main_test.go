@@ -82,15 +82,42 @@ func TestReleaseEvidenceVerifierRejectsSBOMModuleOmission(t *testing.T) {
 	}
 }
 
-func TestReleaseEvidenceVerifierRejectsLicenseRecordMissingFromNotice(t *testing.T) {
+func TestReleaseEvidenceVerifierRejectsSBOMNativeDependencyOmission(t *testing.T) {
 	root := t.TempDir()
-	writeReleaseEvidenceFixture(t, root, false, `{
+	writeReleaseEvidenceFixture(t, root, true, `{
   "spdxVersion": "SPDX-2.3",
   "packages": [{"externalRefs": [{
     "referenceCategory": "PACKAGE-MANAGER",
     "referenceType": "purl",
     "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
   }]}]
+}`)
+
+	output, commandErr := runReleaseEvidenceVerifier(t, root)
+	if commandErr == nil {
+		t.Fatalf("release evidence verifier accepted an SBOM without the native dependency:\n%s", output)
+	}
+	if !strings.Contains(string(output), "missing native dependency") {
+		t.Fatalf("release evidence verifier did not report the omitted native dependency:\n%s", output)
+	}
+}
+
+func TestReleaseEvidenceVerifierRejectsLicenseRecordMissingFromNotice(t *testing.T) {
+	root := t.TempDir()
+	writeReleaseEvidenceFixture(t, root, false, `{
+  "spdxVersion": "SPDX-2.3",
+  "packages": [
+    {"externalRefs": [{
+      "referenceCategory": "PACKAGE-MANAGER",
+      "referenceType": "purl",
+      "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
+    }]},
+    {"externalRefs": [{
+      "referenceCategory": "PACKAGE-MANAGER",
+      "referenceType": "purl",
+      "referenceLocator": "pkg:generic/example.com/native@v4.5.6"
+    }]}
+  ]
 }`)
 
 	output, commandErr := runReleaseEvidenceVerifier(t, root)
@@ -106,11 +133,18 @@ func TestReleaseEvidenceVerifierAcceptsReconciledEvidence(t *testing.T) {
 	root := t.TempDir()
 	writeReleaseEvidenceFixture(t, root, true, `{
   "spdxVersion": "SPDX-2.3",
-  "packages": [{"externalRefs": [{
-    "referenceCategory": "PACKAGE-MANAGER",
-    "referenceType": "purl",
-    "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
-  }]}]
+  "packages": [
+    {"externalRefs": [{
+      "referenceCategory": "PACKAGE-MANAGER",
+      "referenceType": "purl",
+      "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
+    }]},
+    {"externalRefs": [{
+      "referenceCategory": "PACKAGE-MANAGER",
+      "referenceType": "purl",
+      "referenceLocator": "pkg:generic/example.com/native@v4.5.6"
+    }]}
+  ]
 }`)
 
 	output, commandErr := runReleaseEvidenceVerifier(t, root)
@@ -245,6 +279,59 @@ printf '%s' '{"spdxVersion":"SPDX-2.3","name":"private-path","documentNamespace"
 		if !strings.Contains(value, required) {
 			t.Fatalf("SBOM is missing %q: %s", required, value)
 		}
+	}
+}
+
+func TestNativeDependenciesAreAddedToSBOMWithoutDroppingSyftFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "SBOM.spdx.json")
+	contents := `{
+  "spdxVersion": "SPDX-2.3",
+  "documentNamespace": "https://example.com/syft/document",
+  "packages": [{
+    "name": "existing-go-module",
+    "versionInfo": "v1.2.3",
+    "externalRefs": [{
+      "referenceCategory": "PACKAGE-MANAGER",
+      "referenceType": "purl",
+      "referenceLocator": "pkg:golang/example.com/covered@v1.2.3"
+    }]
+  }]
+}`
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	native := []dependencyRecord{{Path: "example.com/native", Version: "v4.5.6"}}
+	if err := addNativeDependenciesToSBOM(path, native); err != nil {
+		t.Fatal(err)
+	}
+
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		DocumentNamespace string `json:"documentNamespace"`
+		Packages          []struct {
+			Name               string `json:"name"`
+			Version            string `json:"versionInfo"`
+			ExternalReferences []struct {
+				Locator string `json:"referenceLocator"`
+			} `json:"externalRefs"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.DocumentNamespace != "https://example.com/syft/document" || len(document.Packages) != 2 {
+		t.Fatalf("augmented SPDX document = %#v", document)
+	}
+	if document.Packages[0].Name != "existing-go-module" ||
+		document.Packages[0].ExternalReferences[0].Locator != "pkg:golang/example.com/covered@v1.2.3" {
+		t.Fatalf("existing SPDX package changed: %#v", document.Packages[0])
+	}
+	if document.Packages[1].Name != "example.com/native" || document.Packages[1].Version != "v4.5.6" ||
+		document.Packages[1].ExternalReferences[0].Locator != "pkg:generic/example.com/native@v4.5.6" {
+		t.Fatalf("native SPDX package = %#v", document.Packages[1])
 	}
 }
 

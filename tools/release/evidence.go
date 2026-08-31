@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"flag"
@@ -27,18 +28,26 @@ import (
 )
 
 type spdxDocument struct {
-	SPDXVersion string        `json:"spdxVersion"`
-	Packages    []spdxPackage `json:"packages"`
+	SPDXVersion string                    `json:"spdxVersion"`
+	Packages    []spdxPackage             `json:"packages"`
+	Extra       map[string]jsontext.Value `json:",embed"`
 }
 
 type spdxPackage struct {
-	ExternalReferences []spdxExternalReference `json:"externalRefs"`
+	Name               string                    `json:"name,omitempty"`
+	SPDXID             string                    `json:"SPDXID,omitempty"`
+	Version            string                    `json:"versionInfo,omitempty"`
+	DownloadLocation   string                    `json:"downloadLocation,omitempty"`
+	FilesAnalyzed      *bool                     `json:"filesAnalyzed,omitempty"`
+	ExternalReferences []spdxExternalReference   `json:"externalRefs,omitempty"`
+	Extra              map[string]jsontext.Value `json:",embed"`
 }
 
 type spdxExternalReference struct {
-	Category string `json:"referenceCategory"`
-	Type     string `json:"referenceType"`
-	Locator  string `json:"referenceLocator"`
+	Category string                    `json:"referenceCategory"`
+	Type     string                    `json:"referenceType"`
+	Locator  string                    `json:"referenceLocator"`
+	Extra    map[string]jsontext.Value `json:",embed"`
 }
 
 func runVerifyEvidence(arguments []string) error {
@@ -103,12 +112,15 @@ func verifyReleaseEvidence(root string) error {
 		}
 	}
 	for _, module := range manifest.Modules {
-		if module.Path == "" || module.Version == "" {
-			return errors.New("dependency manifest contains a Go module without a path or version")
-		}
 		purl := "pkg:golang/" + module.Path + "@" + module.Version
 		if _, ok := recorded[purl]; !ok {
 			return fmt.Errorf("SPDX SBOM is missing Go module %q at version %q", module.Path, module.Version)
+		}
+	}
+	for _, native := range manifest.Native {
+		purl := "pkg:generic/" + native.Path + "@" + native.Version
+		if _, ok := recorded[purl]; !ok {
+			return fmt.Errorf("SPDX SBOM is missing native dependency %q at version %q", native.Path, native.Version)
 		}
 	}
 	return nil

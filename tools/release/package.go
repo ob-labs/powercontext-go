@@ -212,6 +212,9 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	if generateErr := generateSBOM(options.Syft, root, temporarySBOM, assets.Syft.Version, buildTime); generateErr != nil {
 		return packageResult{}, generateErr
 	}
+	if augmentErr := addNativeDependenciesToSBOM(temporarySBOM, dependencies.Native); augmentErr != nil {
+		return packageResult{}, augmentErr
+	}
 	if copyErr := copyRegularFile(temporarySBOM, filepath.Join(root, "SBOM.spdx.json"), 0o644); copyErr != nil {
 		return packageResult{}, copyErr
 	}
