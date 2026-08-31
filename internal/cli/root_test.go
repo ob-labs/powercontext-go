@@ -29,7 +29,7 @@ func TestCommandTreeContainsProductCommands(t *testing.T) {
 
 	root := newCommand(VersionInfo{Version: "test"}, &bytes.Buffer{}, &bytes.Buffer{})
 	want := []string{
-		"candidate", "capabilities", "doctor", "experience", "external-skill",
+		"candidate", "capabilities", "config", "doctor", "experience", "external-skill",
 		"live", "ready", "server", "setup", "skill", "stats",
 	}
 	got := make([]string, 0, len(root.Commands()))
