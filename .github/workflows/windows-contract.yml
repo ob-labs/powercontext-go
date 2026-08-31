@@ -48,6 +48,10 @@ jobs:
             'client/invoker_gen.go',
             'internal/mcpapi/schemas_gen.go',
             'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
+            'test/conformance/parity-contract.json',
+            'test/conformance/parity-inventory-rules.json',
+            'test/conformance/parity-inventory.json',
+            'test/conformance/target-delta.json',
             'test/conformance/testdata/python-v0.0.2/manifest.json',
             'artifact/memory/prompts/conversation.txt',
             'evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl'
@@ -86,6 +90,10 @@ jobs:
             'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
             'integrations/opencode/plugins/powercontext/src/operations.generated.ts',
             'integrations/pi/plugins/powercontext/src/operations.generated.ts',
+            'test/conformance/parity-contract.json',
+            'test/conformance/parity-inventory-rules.json',
+            'test/conformance/parity-inventory.json',
+            'test/conformance/target-delta.json',
             'test/conformance/testdata/python-v0.0.2'
           )
           & git diff --exit-code -- @contractPaths

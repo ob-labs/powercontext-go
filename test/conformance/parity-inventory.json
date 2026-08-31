@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "target_commit": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5",
+  "target_commit": "7b736206a53a6de6f43d4b517893ee1a80e7183d",
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
-  "python_test_file_count": 127,
-  "python_test_case_count": 759,
-  "mapped_case_count": 699,
-  "pending_case_count": 60,
+  "python_test_file_count": 132,
+  "python_test_case_count": 812,
+  "mapped_case_count": 686,
+  "pending_case_count": 126,
   "entries": [
     {
       "python": {
@@ -1642,8 +1642,18 @@
     {
       "python": {
         "file": "tests/builtin/inference/test_pydantic_ai.py",
-        "name": "test_instrumented_embedding_spans_nest_under_the_active_span_without_recording_text",
+        "name": "test_embedding_adapter_maps_a_rejected_request_to_a_stable_reason_without_leaking_body",
         "line": 412
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/inference/test_pydantic_ai.py",
+        "name": "test_instrumented_embedding_spans_nest_under_the_active_span_without_recording_text",
+        "line": 430
       },
       "mode": "go-port",
       "status": "mapped",
@@ -1660,7 +1670,7 @@
       "python": {
         "file": "tests/builtin/inference/test_pydantic_ai.py",
         "name": "test_embedding_adapter_maps_empty_provider_data_to_unavailable",
-        "line": 441
+        "line": 459
       },
       "mode": "go-port",
       "status": "mapped",
@@ -2405,6 +2415,46 @@
     },
     {
       "python": {
+        "file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py",
+        "name": "test_vector_index_probe_clears_a_leftover_probe_row",
+        "line": 41
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py",
+        "name": "test_vector_index_probe_reports_a_table_dimension_mismatch",
+        "line": 65
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py",
+        "name": "test_vector_index_probe_surfaces_the_underlying_cause",
+        "line": 88
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py",
+        "name": "test_vector_index_probe_reports_the_provider_limit_for_a_fresh_oversized_dimension",
+        "line": 112
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
         "file": "tests/builtin/persistence/test_sqlite_profile.py",
         "name": "test_sqlite_config_requires_the_async_dialect",
         "line": 32
@@ -2723,6 +2773,26 @@
           "test": "TestReviewApprovalRollsBackWhenCandidateStatusUpdateFails"
         }
       ]
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_composition_embedding.py",
+        "name": "test_embedding_models_send_the_configured_dimension_to_the_provider",
+        "line": 35
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_composition_embedding.py",
+        "name": "test_embedding_models_without_configuration_return_no_models",
+        "line": 55
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
     },
     {
       "python": {
@@ -3061,7 +3131,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_readiness.py",
         "name": "test_builtin_runtime_reports_runtime_and_database_readiness",
-        "line": 29
+        "line": 32
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3076,9 +3146,29 @@
     },
     {
       "python": {
+        "file": "tests/builtin/runtime/test_readiness.py",
+        "name": "test_dependency_readiness_probe_surfaces_a_stable_redacted_configuration_reason",
+        "line": 49
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_readiness.py",
+        "name": "test_dependency_readiness_probe_redacts_plain_configuration_errors",
+        "line": 61
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduler_persists_one_stable_source_window_job",
-        "line": 108
+        "line": 184
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3095,7 +3185,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduler_creates_missing_database_parent_directory",
-        "line": 127
+        "line": 203
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3112,7 +3202,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduler_interval_activates_the_source_window_policy",
-        "line": 142
+        "line": 218
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3129,7 +3219,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduler_interval_activates_experience_incubation",
-        "line": 155
+        "line": 231
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3146,7 +3236,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduler_persists_and_reconciles_independent_jobs",
-        "line": 172
+        "line": 248
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3163,7 +3253,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduled_noop_logs_a_bounded_outcome",
-        "line": 193
+        "line": 269
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3180,7 +3270,7 @@
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduled_experience_logs_candidate_count_without_scope",
-        "line": 209
+        "line": 285
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3196,8 +3286,88 @@
     {
       "python": {
         "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_processor_records_root_and_flush_spans",
+        "line": 305
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_processor_records_success_outcome",
+        "line": 332
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_processor_records_failure_and_swallows_error",
+        "line": 351
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_processor_records_cancellation",
+        "line": 368
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_experience_records_root_and_incubation_spans",
+        "line": 388
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_experience_records_noop_outcome",
+        "line": 420
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_experience_records_failure_and_swallows_error",
+        "line": 441
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
+        "name": "test_scheduled_experience_records_cancellation",
+        "line": 458
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/builtin/runtime/test_scheduler.py",
         "name": "test_scheduler_requires_file_storage_and_one_live_owner",
-        "line": 225
+        "line": 478
       },
       "mode": "go-port",
       "status": "mapped",
@@ -3767,25 +3937,8 @@
     {
       "python": {
         "file": "tests/claude_code_plugin/test_hook.py",
-        "name": "test_context_request_uses_prepare_once",
-        "line": 329
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/claude-code/tests/test_hook.py",
-          "test": "test_context_request_uses_prepare_once"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/claude_code_plugin/test_hook.py",
         "name": "test_capture_prompt_is_idempotent_and_is_not_a_task_outcome",
-        "line": 361
+        "line": 329
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -3802,7 +3955,7 @@
       "python": {
         "file": "tests/claude_code_plugin/test_hook.py",
         "name": "test_http_failures_are_non_blocking_and_content_free",
-        "line": 412
+        "line": 380
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -3818,42 +3971,18 @@
     {
       "python": {
         "file": "tests/claude_code_plugin/test_hook.py",
-        "name": "test_unknown_schema_and_oversized_content_are_not_injected",
-        "line": 440
+        "name": "test_unknown_schema_is_not_injected",
+        "line": 408
       },
       "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/claude-code/tests/test_hook.py",
-          "test": "test_unknown_schema_and_oversized_content_are_not_injected"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/claude_code_plugin/test_hook.py",
-        "name": "test_malformed_prepared_context_is_not_injected",
-        "line": 473
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/claude-code/tests/test_hook.py",
-          "test": "test_malformed_prepared_context_is_not_injected"
-        }
-      ]
+      "status": "pending",
+      "source": "rules"
     },
     {
       "python": {
         "file": "tests/claude_code_plugin/test_hook.py",
         "name": "test_hook_refuses_redirects",
-        "line": 494
+        "line": 431
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -3863,23 +3992,6 @@
           "kind": "py",
           "file": "integrations/claude-code/tests/test_hook.py",
           "test": "test_hook_refuses_redirects"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/claude_code_plugin/test_hook.py",
-        "name": "test_hook_rejects_an_oversized_response_body",
-        "line": 536
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/claude-code/tests/test_hook.py",
-          "test": "test_hook_rejects_an_oversized_response_body"
         }
       ]
     },
@@ -4311,25 +4423,8 @@
     {
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
-        "name": "test_context_request_uses_the_prepare_endpoint_once",
-        "line": 444
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/codex/tests/test_recall.py",
-          "test": "test_context_request_uses_the_prepare_endpoint_once"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/codex_plugin/test_recall.py",
         "name": "test_context_prepare_404_is_reported_as_a_version_mismatch",
-        "line": 483
+        "line": 444
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -4346,7 +4441,7 @@
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
         "name": "test_capture_prompt_is_idempotent_and_preserves_provenance",
-        "line": 507
+        "line": 468
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -4363,7 +4458,7 @@
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
         "name": "test_flush_reaches_the_captured_source_position",
-        "line": 563
+        "line": 524
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -4380,7 +4475,7 @@
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
         "name": "test_flush_is_bounded_by_settings",
-        "line": 595
+        "line": 556
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -4397,7 +4492,7 @@
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
         "name": "test_hook_refuses_redirects",
-        "line": 619
+        "line": 580
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -4414,7 +4509,7 @@
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
         "name": "test_hook_aborts_a_slow_response_at_the_request_deadline",
-        "line": 660
+        "line": 621
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -4431,7 +4526,7 @@
       "python": {
         "file": "tests/codex_plugin/test_recall.py",
         "name": "test_prompt_capture_can_be_disabled",
-        "line": 695
+        "line": 656
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5060,7 +5155,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_observability_signals_correlate_without_counting_the_mcp_bridge",
-        "line": 200
+        "line": 234
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5082,7 +5177,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_database_failure_log_does_not_include_memory_content",
-        "line": 290
+        "line": 324
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5099,7 +5194,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_inference_spans_join_the_operation_trace_only_when_instrumented",
-        "line": 333
+        "line": 367
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5121,7 +5216,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_memory_read_stage_spans_are_bounded_and_nested",
-        "line": 360
+        "line": 397
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5138,7 +5233,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_scope_lock_stage_span_reports_contention_and_closes_at_acquisition",
-        "line": 562
+        "line": 599
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5155,7 +5250,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_scope_lock_is_released_when_stage_teardown_fails",
-        "line": 620
+        "line": 657
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5171,8 +5266,28 @@
     {
       "python": {
         "file": "tests/e2e/test_observability.py",
+        "name": "test_scheduled_source_window_starts_an_independent_trace_root",
+        "line": 694
+      },
+      "mode": "cross-layer",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/e2e/test_observability.py",
+        "name": "test_scheduled_experience_starts_an_independent_trace_root",
+        "line": 725
+      },
+      "mode": "cross-layer",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/e2e/test_observability.py",
         "name": "test_vector_search_exports_embedding_under_memory_search_without_recording_text",
-        "line": 641
+        "line": 758
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5194,7 +5309,7 @@
       "python": {
         "file": "tests/e2e/test_observability.py",
         "name": "test_injected_always_on_embedding_skips_readiness_but_traces_vector_search",
-        "line": 710
+        "line": 827
       },
       "mode": "cross-layer",
       "status": "mapped",
@@ -5809,7 +5924,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_prefetch_uses_profile_and_user_scoped_context",
-        "line": 156
+        "line": 155
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5826,7 +5941,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_evaluation_trace_is_partitioned_by_session_and_records_parent",
-        "line": 169
+        "line": 168
       },
       "mode": "retained-host",
       "status": "pending",
@@ -5836,7 +5951,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_evaluation_trace_slash_command_reads_named_session",
-        "line": 207
+        "line": 206
       },
       "mode": "retained-host",
       "status": "pending",
@@ -5846,7 +5961,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_register_does_not_install_session_bound_slash_handlers",
-        "line": 231
+        "line": 230
       },
       "mode": "retained-host",
       "status": "pending",
@@ -5856,7 +5971,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_powercontext_subcommands_are_available_to_hermes_completer",
-        "line": 257
+        "line": 256
       },
       "mode": "retained-host",
       "status": "pending",
@@ -5866,7 +5981,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_standalone_command_companion_registers_before_agent_and_forwards",
-        "line": 273
+        "line": 272
       },
       "mode": "retained-host",
       "status": "pending",
@@ -5876,7 +5991,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_standalone_command_companion_keeps_interleaved_sessions_isolated",
-        "line": 321
+        "line": 320
       },
       "mode": "retained-host",
       "status": "pending",
@@ -5886,7 +6001,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_queue_prefetch_honors_max_bytes_environment_override",
-        "line": 386
+        "line": 385
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5903,7 +6018,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_queue_prefetch_does_not_wait_for_http",
-        "line": 400
+        "line": 399
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5920,7 +6035,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_json_config_is_loaded_from_hermes_home",
-        "line": 425
+        "line": 424
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5936,25 +6051,8 @@
     {
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
-        "name": "test_cli_reads_the_same_json_config_path",
-        "line": 451
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/hermes/tests/test_provider.py",
-          "test": "test_cli_reads_the_same_json_config_path"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_setup_schema_exposes_powercontext_configuration",
-        "line": 460
+        "line": 450
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5971,7 +6069,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_setup_saves_powercontext_json_and_preserves_existing_values",
-        "line": 476
+        "line": 466
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -5988,7 +6086,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_sync_turn_is_flushed_before_session_end",
-        "line": 499
+        "line": 489
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6005,7 +6103,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_sync_turn_does_not_wait_for_http",
-        "line": 511
+        "line": 501
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6022,7 +6120,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_session_end_skips_flush_when_memory_extraction_is_disabled",
-        "line": 536
+        "line": 526
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6039,7 +6137,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_pre_compress_persists_context_before_compression",
-        "line": 546
+        "line": 536
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6056,7 +6154,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_pre_compress_is_disabled_by_default",
-        "line": 565
+        "line": 555
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6073,7 +6171,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_pre_compress_filters_roles_and_redacts_secrets",
-        "line": 573
+        "line": 563
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6090,7 +6188,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_pre_compress_captures_only_new_overlapping_windows",
-        "line": 593
+        "line": 583
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6107,7 +6205,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_write_retires_mapped_entries_for_replace_and_remove",
-        "line": 628
+        "line": 618
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6124,7 +6222,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_write_matches_partial_old_text_for_replace_and_remove",
-        "line": 661
+        "line": 650
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6141,7 +6239,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_write_does_not_retire_unmapped_same_text",
-        "line": 687
+        "line": 675
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6158,7 +6256,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_map_refreshes_revision_after_multiple_writes",
-        "line": 706
+        "line": 693
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6175,7 +6273,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_write_skips_replace_and_remove_without_old_text",
-        "line": 745
+        "line": 720
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6191,25 +6289,8 @@
     {
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
-        "name": "test_memory_write_worker_is_daemon_bounded_and_reports_overflow",
-        "line": 755
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/hermes/tests/test_provider.py",
-          "test": "test_memory_write_worker_is_daemon_bounded_and_reports_overflow"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_memory_tools_map_to_powercontext_operations",
-        "line": 776
+        "line": 730
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6226,7 +6307,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_extended_tools_are_registered_and_scope_bound",
-        "line": 808
+        "line": 762
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6236,7 +6317,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_extended_slash_commands_dispatch_json_operations",
-        "line": 837
+        "line": 790
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6246,7 +6327,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_slash_commands_parse_unwrapped_citation_json_from_readme",
-        "line": 857
+        "line": 810
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6256,7 +6337,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_workstream_binding_is_shared_with_hermes_scope",
-        "line": 895
+        "line": 848
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6266,7 +6347,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_workstream_clear_restores_default_scope",
-        "line": 927
+        "line": 879
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6276,7 +6357,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_workstream_bind_isolates_queued_background_work",
-        "line": 968
+        "line": 918
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6286,7 +6367,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_backend_failure_fails_open",
-        "line": 1026
+        "line": 974
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6303,7 +6384,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_cli_registers_provider_commands",
-        "line": 1039
+        "line": 987
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6320,7 +6401,7 @@
       "python": {
         "file": "tests/integrations/test_hermes_provider.py",
         "name": "test_http_client_dispatches_operation_paths_and_get_query",
-        "line": 1054
+        "line": 1002
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6399,28 +6480,8 @@
     {
       "python": {
         "file": "tests/langchain_middleware/test_packaging.py",
-        "name": "test_license_file_is_present_in_project",
-        "line": 52
-      },
-      "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
-    },
-    {
-      "python": {
-        "file": "tests/langchain_middleware/test_packaging.py",
-        "name": "test_wheel_bundles_middleware_license_and_dependencies",
-        "line": 57
-      },
-      "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
-    },
-    {
-      "python": {
-        "file": "tests/langchain_middleware/test_scope.py",
-        "name": "test_scope_type_is_owned_by_langchain_package",
-        "line": 22
+        "name": "test_wheel_bundles_middleware_license",
+        "line": 51
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6430,7 +6491,7 @@
       "python": {
         "file": "tests/langchain_middleware/test_scope.py",
         "name": "test_missing_scope_names_langchain_configuration",
-        "line": 26
+        "line": 22
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6440,7 +6501,7 @@
       "python": {
         "file": "tests/langchain_middleware/test_scope.py",
         "name": "test_normalize_git_remote_removes_credentials",
-        "line": 41
+        "line": 37
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6450,7 +6511,7 @@
       "python": {
         "file": "tests/langchain_middleware/test_scope.py",
         "name": "test_resolve_scope_id_rejects_windows_local_remote",
-        "line": 46
+        "line": 42
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6479,25 +6540,8 @@
     {
       "python": {
         "file": "tests/langgraph_adapter/test_packaging.py",
-        "name": "test_license_file_is_present_in_project",
-        "line": 57
-      },
-      "mode": "retained-host",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "py",
-          "file": "integrations/langgraph/tests/test_packaging.py",
-          "test": "test_license_file_is_present_in_project"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/langgraph_adapter/test_packaging.py",
         "name": "test_wheel_bundles_license_and_metadata",
-        "line": 62
+        "line": 56
       },
       "mode": "retained-host",
       "status": "mapped",
@@ -6864,7 +6908,7 @@
       "python": {
         "file": "tests/pydantic_ai_adapter/test_capability.py",
         "name": "test_empty_context_is_not_injected",
-        "line": 72
+        "line": 70
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6874,7 +6918,7 @@
       "python": {
         "file": "tests/pydantic_ai_adapter/test_capability.py",
         "name": "test_unreachable_server_fails_open_for_recall",
-        "line": 96
+        "line": 93
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6884,7 +6928,7 @@
       "python": {
         "file": "tests/pydantic_ai_adapter/test_capability.py",
         "name": "test_authentication_failure_logs_one_credential_free_configuration_warning",
-        "line": 123
+        "line": 120
       },
       "mode": "retained-host",
       "status": "pending",
@@ -6963,7 +7007,7 @@
     {
       "python": {
         "file": "tests/pydantic_ai_adapter/test_capture.py",
-        "name": "test_shared_capture_caches_codex_auth_until_the_file_changes",
+        "name": "test_capture_failure_does_not_change_tool_or_model_results_or_log_arbitrary_exception_messages",
         "line": 292
       },
       "mode": "retained-host",
@@ -6973,38 +7017,8 @@
     {
       "python": {
         "file": "tests/pydantic_ai_adapter/test_capture.py",
-        "name": "test_capture_failure_does_not_change_tool_or_model_results_or_log_arbitrary_exception_messages",
-        "line": 329
-      },
-      "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
-    },
-    {
-      "python": {
-        "file": "tests/pydantic_ai_adapter/test_capture.py",
         "name": "test_flush_failure_does_not_change_model_result",
-        "line": 376
-      },
-      "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
-    },
-    {
-      "python": {
-        "file": "tests/pydantic_ai_adapter/test_packaging.py",
-        "name": "test_integration_wheels_require_the_first_core_release_with_shared_capture",
-        "line": 78
-      },
-      "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
-    },
-    {
-      "python": {
-        "file": "tests/pydantic_ai_adapter/test_packaging.py",
-        "name": "test_openai_install_command_is_consistent_across_public_guides",
-        "line": 85
+        "line": 339
       },
       "mode": "retained-host",
       "status": "pending",
@@ -7014,7 +7028,7 @@
       "python": {
         "file": "tests/pydantic_ai_adapter/test_packaging.py",
         "name": "test_documented_openai_agent_constructs_from_installed_wheels",
-        "line": 96
+        "line": 68
       },
       "mode": "retained-host",
       "status": "pending",
@@ -7094,7 +7108,7 @@
       "python": {
         "file": "tests/pydantic_ai_adapter/test_toolset.py",
         "name": "test_toolset_exposes_exact_schemas_instructions_request_mapping_and_full_responses",
-        "line": 32
+        "line": 31
       },
       "mode": "retained-host",
       "status": "pending",
@@ -7104,17 +7118,7 @@
       "python": {
         "file": "tests/pydantic_ai_adapter/test_toolset.py",
         "name": "test_toolset_converts_client_failure_to_model_retry",
-        "line": 117
-      },
-      "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
-    },
-    {
-      "python": {
-        "file": "tests/pydantic_ai_adapter/test_toolset.py",
-        "name": "test_toolset_uses_one_raw_token_client_per_run_and_closes_it",
-        "line": 139
+        "line": 116
       },
       "mode": "retained-host",
       "status": "pending",
@@ -7608,7 +7612,7 @@
       "python": {
         "file": "tests/test_ci_release_verification.py",
         "name": "test_release_smoke_resolves_console_script_from_verification_python",
-        "line": 39
+        "line": 37
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7623,82 +7627,9 @@
     },
     {
       "python": {
-        "file": "tests/test_ci_release_verification.py",
-        "name": "test_pypi_release_requires_wheel_and_sdist",
-        "line": 52
-      },
-      "mode": "go-port",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "go",
-          "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
-        },
-        {
-          "kind": "go",
-          "file": "tools/release/main_test.go",
-          "test": "TestNativeAssetManifestSupportsReleaseMatrix"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/test_ci_release_verification.py",
-        "name": "test_pypi_verification_retries_until_release_is_complete",
-        "line": 71
-      },
-      "mode": "go-port",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "go",
-          "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/test_ci_release_verification.py",
-        "name": "test_github_release_requires_published_state_and_expected_assets",
-        "line": 95
-      },
-      "mode": "go-port",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "go",
-          "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/test_ci_release_verification.py",
-        "name": "test_github_release_allows_prereleases",
-        "line": 114
-      },
-      "mode": "go-port",
-      "status": "mapped",
-      "source": "oracle-traceability",
-      "evidence": [
-        {
-          "kind": "go",
-          "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
-        }
-      ]
-    },
-    {
-      "python": {
         "file": "tests/test_cli.py",
         "name": "test_cli_help_exits_successfully",
-        "line": 128
+        "line": 129
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7715,7 +7646,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_skill_cli_exposes_the_target_based_export_command",
-        "line": 136
+        "line": 137
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7732,7 +7663,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_cli_version_reports_the_installed_distribution",
-        "line": 151
+        "line": 152
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7749,7 +7680,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_cli_exposes_installed_role_commands",
-        "line": 158
+        "line": 159
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7766,7 +7697,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_settings_load_environment",
-        "line": 167
+        "line": 168
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7788,7 +7719,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_settings_reject_invalid_values",
-        "line": 178
+        "line": 179
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7805,7 +7736,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_server_command_layers_partial_cli_overrides_over_environment_settings",
-        "line": 203
+        "line": 204
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7821,8 +7752,38 @@
     {
       "python": {
         "file": "tests/test_cli.py",
+        "name": "test_server_command_uses_env_file_instead_of_stale_shell_environment",
+        "line": 232
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_cli.py",
+        "name": "test_server_command_clears_stale_server_values_missing_from_env_file",
+        "line": 269
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_cli.py",
+        "name": "test_server_command_reports_a_missing_env_file_without_starting",
+        "line": 293
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_cli.py",
         "name": "test_server_command_rejects_an_unauthenticated_non_loopback_host_override",
-        "line": 246
+        "line": 325
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7839,7 +7800,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_server_command_reports_a_friendly_error_when_auth_lacks_a_token",
-        "line": 269
+        "line": 348
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7861,7 +7822,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_server_command_lets_a_loopback_override_repair_an_unsafe_environment_host",
-        "line": 291
+        "line": 370
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7878,7 +7839,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_server_command_does_not_load_client_settings",
-        "line": 313
+        "line": 392
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7895,7 +7856,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_cli_reports_server_errors_with_request_context_without_a_traceback",
-        "line": 329
+        "line": 408
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7912,7 +7873,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_command_prints_human_readable_output_by_default",
-        "line": 355
+        "line": 434
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7929,7 +7890,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_stats_command_builds_request_and_prints_summary",
-        "line": 379
+        "line": 458
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7946,7 +7907,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_generation_commands_build_requests_from_explicit_options",
-        "line": 413
+        "line": 492
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7963,7 +7924,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_candidate_revision_commands_build_typed_proposals",
-        "line": 491
+        "line": 570
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7980,7 +7941,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_generation_commands_reject_invalid_reference_options",
-        "line": 599
+        "line": 678
       },
       "mode": "go-port",
       "status": "mapped",
@@ -7997,7 +7958,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_external_skill_import_preserves_exact_identity_and_intent",
-        "line": 609
+        "line": 688
       },
       "mode": "go-port",
       "status": "mapped",
@@ -8014,7 +7975,7 @@
       "python": {
         "file": "tests/test_cli.py",
         "name": "test_client_skill_export_uses_configured_authentication",
-        "line": 648
+        "line": 727
       },
       "mode": "go-port",
       "status": "mapped",
@@ -8459,6 +8420,216 @@
     },
     {
       "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_asks_for_protocol_endpoint_key_and_plain_model_name",
+        "line": 26
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_arbitrary_model_providers_and_environment_variables_are_not_rejected",
+        "line": 57
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_provider_base_url_rejects_embedded_credentials",
+        "line": 81
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_validate_and_show_round_trip_managed_environment",
+        "line": 93
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_rejects_configuration_that_server_settings_reject",
+        "line": 123
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_rejects_provider_models_that_cannot_be_constructed",
+        "line": 138
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_configuration_rejects_relative_persistent_storage",
+        "line": 162
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_standard_provider_requires_a_credential",
+        "line": 177
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_custom_connection_is_not_reclassified_from_its_model_prefix",
+        "line": 192
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_refuses_to_replace_an_existing_environment_without_force",
+        "line": 217
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_environment_parser_rejects_duplicate_assignments",
+        "line": 232
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_validate_reports_invalid_numeric_values_without_a_traceback",
+        "line": 237
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_show_redacts_standard_credential_container_variables",
+        "line": 252
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_records_generated_credential_names_for_show_redaction",
+        "line": 267
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_managed_marker_text_inside_a_credential_is_not_treated_as_structure",
+        "line": 302
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_show_reports_malformed_managed_markers_without_a_traceback",
+        "line": 320
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_custom_connection_marks_prompted_credential_for_show_redaction",
+        "line": 332
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_init_hides_and_redacts_marked_additional_credentials",
+        "line": 373
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_collect_provider_variable_hides_input_for_credential_names",
+        "line": 396
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_collect_additional_provider_variables_hides_and_records_marked_credentials",
+        "line": 411
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_config_cli.py",
+        "name": "test_collect_additional_provider_variables_keeps_unmarked_values_visible",
+        "line": 432
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
         "file": "tests/test_dashboard.py",
         "name": "test_dashboard_is_enabled_by_default_without_authentication_or_scopes",
         "line": 38
@@ -8560,8 +8731,28 @@
     {
       "python": {
         "file": "tests/test_dashboard.py",
+        "name": "test_publish_reports_success_when_post_publish_scan_fails",
+        "line": 412
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_dashboard.py",
+        "name": "test_publish_reports_stale_discovery_when_registry_database_is_unavailable",
+        "line": 517
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_dashboard.py",
         "name": "test_handoff_report_page_is_available_without_the_statistics_dashboard",
-        "line": 391
+        "line": 598
       },
       "mode": "go-port",
       "status": "mapped",
@@ -8583,7 +8774,7 @@
       "python": {
         "file": "tests/test_dashboard.py",
         "name": "test_handoff_report_page_contains_a_data_free_preview_template",
-        "line": 488
+        "line": 695
       },
       "mode": "go-port",
       "status": "mapped",
@@ -8952,6 +9143,206 @@
           "test": "TestDoctorDSHReportsInstalledPlugin"
         }
       ]
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_hash_inside_a_value_is_preserved",
+        "line": 29
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_comment_after_an_assignment_is_removed",
+        "line": 33
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_quoted_values_keep_hashes_and_spaces",
+        "line": 37
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_url_fragment_assignment_survives",
+        "line": 42
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_export_prefix_keeps_hash_values",
+        "line": 46
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_full_line_comments_are_ignored",
+        "line": 50
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_value_may_start_with_hash_like_shell",
+        "line": 55
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_backslash_escaped_space_preserves_hash_value",
+        "line": 59
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_even_backslash_before_space_starts_a_comment_like_shell",
+        "line": 63
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_backslash_escaped_quote_outside_quotes_is_literal",
+        "line": 67
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_backslash_escaped_tab_preserves_hash_value",
+        "line": 71
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_unescaped_tab_starts_a_comment_boundary",
+        "line": 75
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_trailing_escaped_whitespace_is_preserved",
+        "line": 80
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_export_accepts_shell_whitespace",
+        "line": 84
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_shell_expansion_is_rejected_instead_of_loaded_literally",
+        "line": 89
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_quoted_and_escaped_expansion_characters_are_literal",
+        "line": 94
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_invalid_utf8_is_reported_as_an_environment_file_error",
+        "line": 102
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_environment_context_can_clear_stale_values",
+        "line": 110
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_env_file.py",
+        "name": "test_unterminated_quote_is_rejected",
+        "line": 126
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_full_capability_docs.py",
+        "name": "test_full_capability_guide_binds_memory_evidence_to_the_captured_source",
+        "line": 27
+      },
+      "mode": "cross-layer",
+      "status": "pending",
+      "source": "rules"
     },
     {
       "python": {
@@ -10137,8 +10528,18 @@
     {
       "python": {
         "file": "tests/test_mcp.py",
-        "name": "test_mcp_exact_entry_tools_use_nested_citations",
+        "name": "test_mcp_describes_review_write_side_effects_for_host_approval",
         "line": 348
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_mcp.py",
+        "name": "test_mcp_exact_entry_tools_use_nested_citations",
+        "line": 370
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10155,7 +10556,7 @@
       "python": {
         "file": "tests/test_mcp.py",
         "name": "test_mcp_bridge_reuses_logical_request_id_and_is_marked_internal",
-        "line": 367
+        "line": 389
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10177,7 +10578,7 @@
       "python": {
         "file": "tests/test_mcp.py",
         "name": "test_mcp_access_log_counts_the_logical_tool_call_without_the_bridge",
-        "line": 424
+        "line": 446
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10555,8 +10956,18 @@
     {
       "python": {
         "file": "tests/test_opencode_cli.py",
-        "name": "test_setup_opencode_refuses_unowned_skill",
+        "name": "test_interrupted_plugin_install_recovers_on_retry",
         "line": 224
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_opencode_cli.py",
+        "name": "test_setup_opencode_refuses_unowned_skill",
+        "line": 260
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10573,7 +10984,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_activation_probe_uses_headless_server_without_model",
-        "line": 246
+        "line": 282
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10590,7 +11001,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_run_opencode_probe_executes_request_waits_for_nonce_and_stops_process",
-        "line": 274
+        "line": 310
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10607,7 +11018,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_run_opencode_probe_handles_process_exit_and_stops_process",
-        "line": 285
+        "line": 321
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10624,7 +11035,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_run_opencode_probe_times_out_and_stops_process",
-        "line": 296
+        "line": 332
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10641,7 +11052,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_setup_opencode_requires_built_bundle",
-        "line": 308
+        "line": 344
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10658,7 +11069,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_setup_opencode_rejects_unsupported_version",
-        "line": 323
+        "line": 359
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10675,7 +11086,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_doctor_opencode_reports_plugin_and_skill",
-        "line": 338
+        "line": 374
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10692,7 +11103,7 @@
       "python": {
         "file": "tests/test_opencode_cli.py",
         "name": "test_doctor_opencode_rejects_configured_but_inactive_plugin",
-        "line": 364
+        "line": 400
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10828,7 +11239,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_settings_load_server_environment",
-        "line": 88
+        "line": 90
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10845,7 +11256,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_env_example_loads_server_settings",
-        "line": 146
+        "line": 148
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10862,7 +11273,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_settings_select_oceanbase",
-        "line": 164
+        "line": 171
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10879,7 +11290,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_settings_select_embedded_seekdb",
-        "line": 175
+        "line": 182
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10896,7 +11307,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_settings_default_blank_embedded_seekdb_path",
-        "line": 189
+        "line": 196
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10913,7 +11324,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_settings_override_embedded_seekdb_path",
-        "line": 201
+        "line": 208
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10930,7 +11341,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_settings_reject_custom_embedded_seekdb_database",
-        "line": 213
+        "line": 220
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10947,7 +11358,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_scheduler_uses_the_powercontext_data_directory",
-        "line": 222
+        "line": 229
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10964,7 +11375,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_settings_load_bearer_authentication_without_exposing_token",
-        "line": 237
+        "line": 244
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10981,7 +11392,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_enabled_bearer_authentication_requires_a_token",
-        "line": 249
+        "line": 256
       },
       "mode": "go-port",
       "status": "mapped",
@@ -10998,7 +11409,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_liveness_adds_a_server_owned_request_id",
-        "line": 254
+        "line": 261
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11015,7 +11426,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_factory_optionally_requires_bearer_authentication",
-        "line": 272
+        "line": 279
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11037,7 +11448,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_readiness_reports_unavailable_bindings",
-        "line": 305
+        "line": 312
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11054,7 +11465,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_readiness_keeps_degraded_bindings_in_traffic",
-        "line": 322
+        "line": 329
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11071,7 +11482,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_factory_reports_database_failure_as_not_ready",
-        "line": 338
+        "line": 345
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11088,7 +11499,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_factory_reports_database_and_configured_generation_readiness",
-        "line": 366
+        "line": 373
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11110,7 +11521,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_factory_reports_generation_failure_as_degraded",
-        "line": 389
+        "line": 396
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11132,7 +11543,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_factory_caches_and_redacts_degraded_embedding_readiness",
-        "line": 417
+        "line": 424
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11148,8 +11559,18 @@
     {
       "python": {
         "file": "tests/test_server.py",
-        "name": "test_server_factory_reports_transient_embedding_failures_as_degraded",
+        "name": "test_server_factory_reports_a_rejected_embedding_request_with_a_redacted_reason",
         "line": 457
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_server.py",
+        "name": "test_server_factory_reports_transient_embedding_failures_as_degraded",
+        "line": 488
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11171,7 +11592,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_provider_cache_shares_refreshes_and_retries_transient_failures_sooner",
-        "line": 485
+        "line": 516
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11188,7 +11609,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_server_factory_reports_missing_embedding_api_prefix_as_degraded",
-        "line": 530
+        "line": 561
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11205,7 +11626,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_unhandled_errors_return_the_server_request_id",
-        "line": 594
+        "line": 625
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11222,7 +11643,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_prepare_context_rejects_memory_specific_tuning_fields",
-        "line": 606
+        "line": 637
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11239,7 +11660,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_prepare_context_rejects_unicode_surrogates_without_crashing",
-        "line": 628
+        "line": 659
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11261,7 +11682,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_prepare_context_rejects_invalid_request_without_input_field",
-        "line": 653
+        "line": 684
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11283,7 +11704,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_stats_returns_inclusive_utc_periods_for_empty_scope",
-        "line": 677
+        "line": 708
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11305,7 +11726,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_application_failure_log_uses_operation_context",
-        "line": 732
+        "line": 763
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11322,7 +11743,7 @@
       "python": {
         "file": "tests/test_server.py",
         "name": "test_logging_failure_does_not_change_the_response",
-        "line": 750
+        "line": 781
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11599,7 +12020,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_http_and_application_spans_preserve_incoming_context",
-        "line": 52
+        "line": 53
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11616,7 +12037,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_client_span_injects_w3c_trace_context",
-        "line": 84
+        "line": 85
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11633,7 +12054,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_tracing_context_is_not_recorded_by_default",
-        "line": 125
+        "line": 126
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11650,7 +12071,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_inference_instrumentation_follows_the_tracing_setting",
-        "line": 136
+        "line": 137
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11667,7 +12088,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_inference_instrumentation_records_no_content",
-        "line": 146
+        "line": 147
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11689,7 +12110,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_runtime_stage_records_attributes_and_inherits_current_span",
-        "line": 156
+        "line": 157
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11711,7 +12132,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_runtime_stage_records_failure_and_reraises_same_error",
-        "line": 185
+        "line": 186
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11728,7 +12149,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_runtime_stage_records_cancellation_and_reraises_same_error",
-        "line": 202
+        "line": 203
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11745,7 +12166,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_runtime_stage_isolates_tracer_failure",
-        "line": 218
+        "line": 219
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11761,8 +12182,38 @@
     {
       "python": {
         "file": "tests/test_server_tracing.py",
+        "name": "test_runtime_stage_records_explicit_noop_and_failure_outcomes",
+        "line": 234
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_server_tracing.py",
+        "name": "test_background_stage_starts_a_fresh_trace_outside_an_ambient_span",
+        "line": 254
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_server_tracing.py",
+        "name": "test_background_isolates_child_spans_when_root_start_fails",
+        "line": 280
+      },
+      "mode": "go-port",
+      "status": "pending",
+      "source": "rules"
+    },
+    {
+      "python": {
+        "file": "tests/test_server_tracing.py",
         "name": "test_readiness_ignores_tracing_setup_failure",
-        "line": 233
+        "line": 311
       },
       "mode": "go-port",
       "status": "mapped",
@@ -11784,7 +12235,7 @@
       "python": {
         "file": "tests/test_server_tracing.py",
         "name": "test_tracing_export_requires_the_otlp_extra",
-        "line": 258
+        "line": 336
       },
       "mode": "go-port",
       "status": "mapped",
@@ -12979,45 +13430,8 @@
     {
       "python": {
         "file": "tests/test_transport.py",
-        "name": "test_vendored_plugin_shares_the_loopback_host_set",
-        "line": 209
-      },
-      "mode": "cross-layer",
-      "status": "mapped",
-      "source": "rules",
-      "evidence": [
-        {
-          "kind": "go",
-          "file": "test/transport/policy_test.go",
-          "test": "TestSharedLoopbackHostVectors"
-        },
-        {
-          "kind": "py",
-          "file": "integrations/codex/tests/test_contract.py",
-          "test": "test_codex_settings_accept_shared_loopback_hosts"
-        },
-        {
-          "kind": "py",
-          "file": "integrations/codex/tests/test_contract.py",
-          "test": "test_codex_settings_reject_shared_non_loopback_plaintext_hosts"
-        },
-        {
-          "kind": "py",
-          "file": "integrations/claude-code/tests/test_contract.py",
-          "test": "test_settings_accept_shared_loopback_hosts"
-        },
-        {
-          "kind": "py",
-          "file": "integrations/claude-code/tests/test_contract.py",
-          "test": "test_settings_reject_shared_non_loopback_plaintext_hosts"
-        }
-      ]
-    },
-    {
-      "python": {
-        "file": "tests/test_transport.py",
         "name": "test_vendored_plugin_matches_the_shared_plaintext_policy",
-        "line": 215
+        "line": 210
       },
       "mode": "cross-layer",
       "status": "mapped",

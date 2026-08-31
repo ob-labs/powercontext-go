@@ -15,8 +15,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,4 +85,211 @@ func TestResolveOutputPathKeepsAbsoluteAndRootsRelative(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateTargetDeltaAcceptsExactReviewedLedger(t *testing.T) {
+	root := t.TempDir()
+	writeDeltaEvidence(t, root)
+	previous := []pythonTest{
+		{File: "tests/test_api.py", Name: "test_kept"},
+		{File: "tests/test_api.py", Name: "test_removed"},
+		{File: "tests/test_api.py", Name: "test_renamed_old"},
+	}
+	release := []pythonTest{
+		{File: "tests/test_api.py", Name: "test_kept"},
+		{File: "tests/test_api.py", Name: "test_added"},
+		{File: "tests/test_api.py", Name: "test_renamed_new"},
+	}
+	ledger := targetDeltaLedger{
+		SchemaVersion: 1,
+		FromCommit:    "previous",
+		ToCommit:      "release",
+		Added: []caseIdentity{
+			{File: "tests/test_api.py", Name: "test_added"},
+			{File: "tests/test_api.py", Name: "test_renamed_new"},
+		},
+		Removed: []removedCaseDisposition{
+			{
+				Case:        caseIdentity{File: "tests/test_api.py", Name: "test_removed"},
+				Disposition: "removed",
+				Reason:      "The release removed an implementation-detail assertion.",
+				Evidence:    []string{"go:evidence_test.go#TestSurvivingBehavior"},
+			},
+			{
+				Case:         caseIdentity{File: "tests/test_api.py", Name: "test_renamed_old"},
+				Disposition:  "renamed",
+				Reason:       "The release renamed the observable behavior test.",
+				Replacements: []caseIdentity{{File: "tests/test_api.py", Name: "test_renamed_new"}},
+			},
+		},
+	}
+
+	if err := validateTargetDelta(ledger, previous, release, "previous", "release", root); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateTargetDeltaRejectsCaseSetDrift(t *testing.T) {
+	ledger := targetDeltaLedger{
+		SchemaVersion: 1,
+		FromCommit:    "previous",
+		ToCommit:      "release",
+		Added:         []caseIdentity{{File: "tests/test_api.py", Name: "test_wrong"}},
+		Removed: []removedCaseDisposition{{
+			Case:         caseIdentity{File: "tests/test_api.py", Name: "test_removed"},
+			Disposition:  "superseded",
+			Reason:       "A release test replaces the old case.",
+			Replacements: []caseIdentity{{File: "tests/test_api.py", Name: "test_added"}},
+		}},
+	}
+	previous := []pythonTest{{File: "tests/test_api.py", Name: "test_removed"}}
+	release := []pythonTest{{File: "tests/test_api.py", Name: "test_added"}}
+
+	err := validateTargetDelta(ledger, previous, release, "previous", "release", t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "added case set") {
+		t.Fatalf("validateTargetDelta error = %v", err)
+	}
+}
+
+func TestValidateTargetDeltaRejectsMissingReplacement(t *testing.T) {
+	ledger := targetDeltaLedger{
+		SchemaVersion: 1,
+		FromCommit:    "previous",
+		ToCommit:      "release",
+		Added:         []caseIdentity{{File: "tests/test_api.py", Name: "test_added"}},
+		Removed: []removedCaseDisposition{{
+			Case:         caseIdentity{File: "tests/test_api.py", Name: "test_removed"},
+			Disposition:  "renamed",
+			Reason:       "The release renamed the case.",
+			Replacements: []caseIdentity{{File: "tests/test_api.py", Name: "test_missing"}},
+		}},
+	}
+	previous := []pythonTest{{File: "tests/test_api.py", Name: "test_removed"}}
+	release := []pythonTest{{File: "tests/test_api.py", Name: "test_added"}}
+
+	err := validateTargetDelta(ledger, previous, release, "previous", "release", t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "replacement") {
+		t.Fatalf("validateTargetDelta error = %v", err)
+	}
+}
+
+func TestValidateTargetDeltaRejectsUnresolvedEvidence(t *testing.T) {
+	ledger := targetDeltaLedger{
+		SchemaVersion: 1,
+		FromCommit:    "previous",
+		ToCommit:      "release",
+		Removed: []removedCaseDisposition{{
+			Case:        caseIdentity{File: "tests/test_api.py", Name: "test_removed"},
+			Disposition: "removed",
+			Reason:      "The release removed an implementation-detail assertion.",
+			Evidence:    []string{"go:missing_test.go#TestMissing"},
+		}},
+	}
+	previous := []pythonTest{{File: "tests/test_api.py", Name: "test_removed"}}
+
+	err := validateTargetDelta(ledger, previous, nil, "previous", "release", t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "evidence") {
+		t.Fatalf("validateTargetDelta error = %v", err)
+	}
+}
+
+func writeDeltaEvidence(t *testing.T, root string) {
+	t.Helper()
+	contents := []byte("package evidence\n\nfunc TestSurvivingBehavior(t *testing.T) {}\n")
+	if err := os.WriteFile(filepath.Join(root, "evidence_test.go"), contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckTargetDeltaRejectsCheckoutIdentityDrift(t *testing.T) {
+	root := t.TempDir()
+	writeDeltaEvidence(t, root)
+	previous := writeDeltaCheckout(t, map[string]string{
+		"tests/test_api.py": "def test_kept(): pass\ndef test_removed(): pass\n",
+	})
+	release := writeDeltaCheckout(t, map[string]string{
+		"tests/test_api.py": "def test_kept(): pass\ndef test_added(): pass\n",
+	})
+	previousCommit := gitOutputForTest(t, previous, "rev-parse", "HEAD")
+	releaseCommit := gitOutputForTest(t, release, "rev-parse", "HEAD")
+	contractPath := filepath.Join(root, "parity-contract.json")
+	contract := fmt.Sprintf(`{"schema_version":2,"release_target":{"commit":%q}}`, releaseCommit)
+	if err := os.WriteFile(contractPath, []byte(contract), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(root, "target-delta.json")
+	ledger := fmt.Sprintf(`{
+  "schema_version": 1,
+  "from_commit": %q,
+  "to_commit": %q,
+  "added": [{"file":"tests/test_api.py","name":"test_added"}],
+  "removed": [{
+    "case":{"file":"tests/test_api.py","name":"test_removed"},
+    "disposition":"removed",
+    "reason":"The release removed an implementation-detail assertion.",
+    "evidence":["go:evidence_test.go#TestSurvivingBehavior"]
+  }]
+}
+`, previousCommit, releaseCommit)
+	if err := os.WriteFile(ledgerPath, []byte(ledger), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTargetDelta(root, contractPath, ledgerPath, previous, release); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(release, "tests", "new_test.py"), []byte("def test_new(): pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGitForTest(t, release, "add", ".")
+	runGitForTest(t, release, "commit", "-m", "drift")
+
+	err := checkTargetDelta(root, contractPath, ledgerPath, previous, release)
+	if err == nil || !strings.Contains(err.Error(), "release checkout HEAD") {
+		t.Fatalf("checkTargetDelta error = %v", err)
+	}
+}
+
+func writeDeltaCheckout(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	runGitForTest(t, root, "init")
+	for _, directory := range []string{"tests", "integrations", "e2e"} {
+		if err := os.MkdirAll(filepath.Join(root, directory), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, directory, ".gitkeep"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, contents := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runGitForTest(t, root, "add", ".")
+	runGitForTest(t, root, "commit", "-m", "fixture")
+	return root
+}
+
+func runGitForTest(t *testing.T, root string, arguments ...string) {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-c", "user.name=PowerContext", "-c", "user.email=powercontext@example.invalid", "-C", root}, arguments...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(arguments, " "), err, output)
+	}
+}
+
+func gitOutputForTest(t *testing.T, root string, arguments ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(output))
 }

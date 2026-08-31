@@ -25,7 +25,7 @@
       "sha256": "18d47a335340b0870216e2cc0fb1fd8e4d865880155daeea3b01187c950fd746"
     }
   },
-  "exact_target_sha": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5",
-  "target_test_case_count": 759,
-  "active_parity_target": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5"
+  "exact_target_sha": "7b736206a53a6de6f43d4b517893ee1a80e7183d",
+  "target_test_case_count": 812,
+  "active_parity_target": "7b736206a53a6de6f43d4b517893ee1a80e7183d"
 }

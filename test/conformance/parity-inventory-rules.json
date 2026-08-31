@@ -1,7 +1,63 @@
 {
   "schema_version": 1,
-  "comment": "Mode assignments for the delta between the frozen v0.0.2 Oracle (622 cases) and the active parity target (759 cases). Cases listed under \"cases\" carry resolvable evidence and become status=mapped; every other delta case becomes status=pending with the file mode and is expected to gain evidence as the relevant port lands (for example WP2 for the transport surface). Frozen Oracle cases inherit their mappings from traceability.json and never appear here.",
+  "comment": "Mode assignments for the delta between the frozen v0.0.2 Oracle (622 cases) and the signed v0.1.0 active parity target (812 cases). Cases listed under \"cases\" carry resolvable evidence and become status=mapped; every other delta case becomes status=pending with the file mode and is expected to gain evidence as the relevant port lands. Frozen Oracle cases inherit their mappings from traceability.json and never appear here.",
   "files": {
+    "tests/builtin/inference/test_pydantic_ai.py": {
+      "mode": "go-port",
+      "reason": "Builtin Pydantic AI embedding-provider error classification maps to the Go model-provider boundary."
+    },
+    "tests/builtin/persistence/test_sqlite_memory_vector_index.py": {
+      "mode": "go-port",
+      "reason": "SQLite vector-index dimension and probe behavior maps to the Go SQLite persistence implementation."
+    },
+    "tests/builtin/runtime/test_composition_embedding.py": {
+      "mode": "go-port",
+      "reason": "Embedding model composition and configured dimension propagation map to Go runtime/provider construction."
+    },
+    "tests/builtin/runtime/test_readiness.py": {
+      "mode": "go-port",
+      "reason": "Dependency readiness and redacted provider configuration reasons map to the Go Server readiness boundary."
+    },
+    "tests/builtin/runtime/test_scheduler.py": {
+      "mode": "go-port",
+      "reason": "Scheduled Source-window and Experience-incubation trace outcomes map to Go runtime scheduler orchestration."
+    },
+    "tests/claude_code_plugin/test_hook.py": {
+      "mode": "retained-host",
+      "reason": "Claude Code prompt hook behavior is owned by the retained Claude Code adapter."
+    },
+    "tests/e2e/test_observability.py": {
+      "mode": "cross-layer",
+      "reason": "Independent scheduled trace roots cross runtime scheduling, tracing, and exported observability evidence."
+    },
+    "tests/test_config_cli.py": {
+      "mode": "go-port",
+      "reason": "Managed environment initialization, validation, credential input, and redacted display map to the Go CLI."
+    },
+    "tests/test_dashboard.py": {
+      "mode": "go-port",
+      "reason": "Skill publication and stale registry discovery behavior map to the Go endpoint and dashboard-facing API."
+    },
+    "tests/test_env_file.py": {
+      "mode": "go-port",
+      "reason": "Shell-compatible managed environment parsing and stale-value clearing map to the Go CLI configuration parser."
+    },
+    "tests/test_full_capability_docs.py": {
+      "mode": "cross-layer",
+      "reason": "Executable full-capability documentation binds CLI capture, Memory evidence, and cursor behavior across layers."
+    },
+    "tests/test_mcp.py": {
+      "mode": "go-port",
+      "reason": "MCP ToolAnnotations and Review write side-effect metadata map to the Go MCP server."
+    },
+    "tests/test_server.py": {
+      "mode": "go-port",
+      "reason": "Server factory provider rejection and redacted readiness behavior map to Go Server construction."
+    },
+    "tests/test_server_tracing.py": {
+      "mode": "go-port",
+      "reason": "Background and runtime trace-root outcomes map to Go Server tracing orchestration."
+    },
     "e2e/bub/tests/test_bub_transport_trust.py": {
       "mode": "retained-host",
       "reason": "Bub plugin transport trust behavior owned by the retained Bub adapter.",
@@ -494,17 +550,6 @@
         "test_server_allows_a_non_loopback_bind_with_an_explicit_opt_in": {
           "evidence": [
             "go:server/config_test.go#TestLoadConfigAllowsExplicitUnauthenticatedNonLoopbackBind"
-          ]
-        },
-        "test_vendored_plugin_shares_the_loopback_host_set": {
-          "mode": "cross-layer",
-          "reason": "Asserts retained plugins share the core loopback host set; crosses the Go core and retained adapters.",
-          "evidence": [
-            "go:test/transport/policy_test.go#TestSharedLoopbackHostVectors",
-            "py:integrations/codex/tests/test_contract.py#test_codex_settings_accept_shared_loopback_hosts",
-            "py:integrations/codex/tests/test_contract.py#test_codex_settings_reject_shared_non_loopback_plaintext_hosts",
-            "py:integrations/claude-code/tests/test_contract.py#test_settings_accept_shared_loopback_hosts",
-            "py:integrations/claude-code/tests/test_contract.py#test_settings_reject_shared_non_loopback_plaintext_hosts"
           ]
         },
         "test_vendored_plugin_matches_the_shared_plaintext_policy": {

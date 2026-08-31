@@ -185,6 +185,12 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 	if active == oracle {
 		t.Errorf("active parity target collapses into the frozen release Oracle %s; parity work must measure a newer upstream state", oracle)
 	}
+	if active != target || active != contract.ReleaseTarget.Commit {
+		t.Errorf("active parity target = %s, exact target = %s, release target = %s", active, target, contract.ReleaseTarget.Commit)
+	}
+	if contract.TargetTestCaseCount != contract.ReleaseTarget.TestCaseCount {
+		t.Errorf("active target cases = %d, release target cases = %d", contract.TargetTestCaseCount, contract.ReleaseTarget.TestCaseCount)
+	}
 }
 
 func TestParityContractRecordsSignedV010ReleaseIdentity(t *testing.T) {
@@ -239,8 +245,13 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	if !ok {
 		t.Fatal("migration-gates.yml has no frozen-oracle job")
 	}
+	var delta struct {
+		FromCommit string `json:"from_commit"`
+	}
+	decodeJSONFile(t, filepath.Join(root, "test", "conformance", "target-delta.json"), &delta)
 	checkout, verify := "", ""
-	targetCheckout, targetVerify := "", ""
+	previousCheckout, previousVerify := "", ""
+	targetCheckout, targetVerify, deltaVerify := "", "", ""
 	for _, step := range job.Steps {
 		switch step.Name {
 		case "Check out frozen Python Oracle":
@@ -256,6 +267,16 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			if !validCheckoutIdentityCommand(step.Run, "_oracle", contract.FrozenReleaseOracle.Commit) {
 				t.Errorf("Verify Oracle identity step does not pin the contract frozen Oracle %q", contract.FrozenReleaseOracle.Commit)
 			}
+		case "Check out the previous parity target":
+			previousCheckout = step.Name
+			if step.With.Repository != contract.Upstream.Repository || step.With.Ref != delta.FromCommit {
+				t.Errorf("previous target checkout = %q@%q, want %q@%q", step.With.Repository, step.With.Ref, contract.Upstream.Repository, delta.FromCommit)
+			}
+		case "Verify previous parity target identity":
+			previousVerify = step.Name
+			if !validCheckoutIdentityCommand(step.Run, "_previous_target", delta.FromCommit) {
+				t.Errorf("previous target identity step does not pin ledger from_commit %q", delta.FromCommit)
+			}
 		case "Check out the active parity target":
 			targetCheckout = step.Name
 			if step.With.Repository != contract.Upstream.Repository {
@@ -269,6 +290,11 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			if !validCheckoutIdentityCommand(step.Run, "_target", contract.ExactTargetSHA) {
 				t.Errorf("Verify parity target identity step does not pin the contract exact target SHA %q", contract.ExactTargetSHA)
 			}
+		case "Regenerate and compare frozen fixtures":
+			if strings.Contains(step.Run, "-check-delta") && strings.Contains(step.Run, "-previous-upstream _previous_target") &&
+				strings.Contains(step.Run, "-release-upstream _target") {
+				deltaVerify = step.Name
+			}
 		}
 	}
 	if checkout == "" {
@@ -277,11 +303,20 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	if verify == "" {
 		t.Error("frozen-oracle job has no 'Verify Oracle identity' step")
 	}
+	if previousCheckout == "" {
+		t.Error("frozen-oracle job has no 'Check out the previous parity target' step")
+	}
+	if previousVerify == "" {
+		t.Error("frozen-oracle job has no 'Verify previous parity target identity' step")
+	}
 	if targetCheckout == "" {
 		t.Error("frozen-oracle job has no 'Check out the active parity target' step")
 	}
 	if targetVerify == "" {
 		t.Error("frozen-oracle job has no 'Verify parity target identity' step")
+	}
+	if deltaVerify == "" {
+		t.Error("frozen-oracle job does not verify the reviewed target delta")
 	}
 }
 
