@@ -208,7 +208,7 @@ func TestSetupWorkBuddyRejectsRemotePlaintextBeforePythonLookup(t *testing.T) {
 	}
 }
 
-func TestSetupWorkBuddyRefusesCredentialBearingMCPEntryBeforeMutation(t *testing.T) {
+func TestSetupWorkBuddyPreservesRemoteAuthenticatedMCPConfiguration(t *testing.T) {
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -222,12 +222,18 @@ func TestSetupWorkBuddyRefusesCredentialBearingMCPEntryBeforeMutation(t *testing
 	}
 	writeWorkBuddyTestJSON(t, filepath.Join(home, "mcp.json"), original)
 
-	_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
-	if err == nil || !strings.Contains(err.Error(), "not owned by PowerContext") {
-		t.Fatalf("setup error = %v", err)
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
 	}
-	if got := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json")); fmt.Sprint(got) != fmt.Sprint(original) {
-		t.Fatalf("MCP after refusal = %#v", got)
+	entry := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))["mcpServers"].(map[string]any)[workBuddyPluginName].(map[string]any)
+	if entry["url"] != "https://memory.example.test/mcp" ||
+		entry["headers"].(map[string]any)["Authorization"] != "Bearer existing-token" ||
+		entry["disabled"] != false {
+		t.Fatalf("MCP after setup = %#v", entry)
+	}
+	configuration, readErr := os.ReadFile(filepath.Join(home, workBuddyConfigFilename))
+	if readErr != nil || strings.Contains(string(configuration), "existing-token") {
+		t.Fatalf("credential-free configuration = %q, error = %v", configuration, readErr)
 	}
 }
 
