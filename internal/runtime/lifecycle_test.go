@@ -17,55 +17,63 @@ package runtime
 import (
 	"context"
 	"errors"
-	goruntime "runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 )
 
 func TestScopedWriteSerializesExactScopeAndRetainsBoundedGate(t *testing.T) {
-	t.Parallel()
-	runtime := New()
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	firstDone := make(chan error, 1)
-	go func() {
-		firstDone <- runtime.ScopedWrite(context.Background(), "scope-a", func(context.Context, string) error {
-			close(entered)
-			<-release
-			return nil
-		})
-	}()
-	<-entered
+	synctest.Test(t, func(t *testing.T) {
+		runtime := New()
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		firstDone := make(chan error, 1)
+		go func() {
+			firstDone <- runtime.ScopedWrite(t.Context(), "scope-a", func(context.Context, string) error {
+				close(entered)
+				<-release
+				return nil
+			})
+		}()
+		<-entered
 
-	var secondEntered atomic.Bool
-	secondDone := make(chan error, 1)
-	go func() {
-		secondDone <- runtime.ScopedWrite(context.Background(), "scope-a", func(context.Context, string) error {
-			secondEntered.Store(true)
-			return nil
-		})
-	}()
-	for index := 0; index < 1000; index++ {
-		goruntime.Gosched()
-	}
-	if secondEntered.Load() {
-		t.Fatal("same-Scope writer overlapped")
-	}
-	close(release)
-	if err := <-firstDone; err != nil {
-		t.Fatal(err)
-	}
-	if err := <-secondDone; err != nil {
-		t.Fatal(err)
-	}
+		var secondEntered atomic.Bool
+		secondDone := make(chan error, 1)
+		go func() {
+			secondDone <- runtime.ScopedWrite(t.Context(), "scope-a", func(context.Context, string) error {
+				secondEntered.Store(true)
+				return nil
+			})
+		}()
+		// The second writer must be blocked on the exact scope gate before the
+		// first writer is released; this is not a scheduler-yield guess.
+		synctest.Wait()
+		if secondEntered.Load() {
+			close(release)
+			if err := <-firstDone; err != nil {
+				t.Fatal(err)
+			}
+			if err := <-secondDone; err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("same-Scope writer overlapped")
+		}
+		close(release)
+		if err := <-firstDone; err != nil {
+			t.Fatal(err)
+		}
+		if err := <-secondDone; err != nil {
+			t.Fatal(err)
+		}
 
-	runtime.scopes.mu.Lock()
-	remaining := len(runtime.scopes.entries)
-	runtime.scopes.mu.Unlock()
-	if remaining != 1 {
-		t.Fatalf("cached Scope gates = %d, want 1", remaining)
-	}
+		runtime.scopes.mu.Lock()
+		remaining := len(runtime.scopes.entries)
+		runtime.scopes.mu.Unlock()
+		if remaining != 1 {
+			t.Fatalf("cached Scope gates = %d, want 1", remaining)
+		}
+	})
 }
 
 func TestScopedWritesForDifferentScopesCanOverlap(t *testing.T) {
@@ -123,39 +131,40 @@ func TestScopedReadsForSameScopeCanOverlap(t *testing.T) {
 }
 
 func TestCloseRejectsNewWorkAndWaitsForAdmittedOperation(t *testing.T) {
-	t.Parallel()
-	runtime := New()
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		done <- runtime.Operation(context.Background(), func(context.Context) error {
-			close(entered)
-			<-release
-			return nil
-		})
-	}()
-	<-entered
-	closed := make(chan error, 1)
-	go func() { closed <- runtime.Close(context.Background()) }()
-	waitForClosing(t, runtime)
-	err := runtime.Operation(context.Background(), func(context.Context) error { return nil })
-	var state *StateError
-	if !errors.As(err, &state) {
-		t.Fatalf("expected closed StateError, got %v", err)
-	}
-	select {
-	case err := <-closed:
-		t.Fatalf("Close returned before drain: %v", err)
-	default:
-	}
-	close(release)
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	if err := <-closed; err != nil {
-		t.Fatal(err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		runtime := New()
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		done := make(chan error, 1)
+		go func() {
+			done <- runtime.Operation(t.Context(), func(context.Context) error {
+				close(entered)
+				<-release
+				return nil
+			})
+		}()
+		<-entered
+		closed := make(chan error, 1)
+		go func() { closed <- runtime.Close(t.Context()) }()
+		synctest.Wait()
+		err := runtime.Operation(t.Context(), func(context.Context) error { return nil })
+		var state *StateError
+		if !errors.As(err, &state) {
+			t.Fatalf("expected closed StateError, got %v", err)
+		}
+		select {
+		case err := <-closed:
+			t.Fatalf("Close returned before drain: %v", err)
+		default:
+		}
+		close(release)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		if err := <-closed; err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestCanceledCloseRestoresAdmissionAndCanceledWaiterIsReclaimed(t *testing.T) {
@@ -210,79 +219,74 @@ func TestCanceledCloseRestoresAdmissionAndCanceledWaiterIsReclaimed(t *testing.T
 }
 
 func TestScopeCacheNeverEvictsLockWithHolderOrWaiter(t *testing.T) {
-	t.Parallel()
-	var mu sync.Mutex
-	var evicted []string
-	runtime, err := NewConfigured(RuntimeOptions{
-		ScopeCacheSize: 1,
-		ScopeEvictor: func(scope string) {
-			mu.Lock()
-			evicted = append(evicted, scope)
-			mu.Unlock()
-		},
-	}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	firstEntered := make(chan struct{})
-	releaseFirst := make(chan struct{})
-	firstDone := make(chan error, 1)
-	go func() {
-		firstDone <- runtime.ScopedWrite(t.Context(), "same", func(context.Context, string) error {
-			close(firstEntered)
-			<-releaseFirst
-			return nil
-		})
-	}()
-	<-firstEntered
+	synctest.Test(t, func(t *testing.T) {
+		var mu sync.Mutex
+		var evicted []string
+		runtime, err := NewConfigured(RuntimeOptions{
+			ScopeCacheSize: 1,
+			ScopeEvictor: func(scope string) {
+				mu.Lock()
+				evicted = append(evicted, scope)
+				mu.Unlock()
+			},
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		firstEntered := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		firstDone := make(chan error, 1)
+		go func() {
+			firstDone <- runtime.ScopedWrite(t.Context(), "same", func(context.Context, string) error {
+				close(firstEntered)
+				<-releaseFirst
+				return nil
+			})
+		}()
+		<-firstEntered
 
-	secondStarted := make(chan struct{})
-	secondDone := make(chan error, 1)
-	go func() {
-		close(secondStarted)
-		secondDone <- runtime.ScopedWrite(t.Context(), "same", func(context.Context, string) error { return nil })
-	}()
-	<-secondStarted
-	waiterLeased := false
-	for index := 0; index < 100_000; index++ {
+		secondStarted := make(chan struct{})
+		secondDone := make(chan error, 1)
+		go func() {
+			close(secondStarted)
+			secondDone <- runtime.ScopedWrite(t.Context(), "same", func(context.Context, string) error { return nil })
+		}()
+		<-secondStarted
+		synctest.Wait()
 		runtime.scopes.mu.Lock()
 		entry := runtime.scopes.entries["same"]
-		waiterLeased = entry != nil && entry.leases == 2
+		waiterLeased := entry != nil && entry.leases == 2
 		runtime.scopes.mu.Unlock()
-		if waiterLeased {
-			break
+		if !waiterLeased {
+			t.Fatal("same-Scope waiter did not acquire a cache lease")
 		}
-		goruntime.Gosched()
-	}
-	if !waiterLeased {
-		t.Fatal("same-Scope waiter did not acquire a cache lease")
-	}
-	if err := runtime.ScopedWrite(t.Context(), "other", func(context.Context, string) error { return nil }); err != nil {
-		t.Fatal(err)
-	}
-	mu.Lock()
-	gotEvicted := append([]string(nil), evicted...)
-	mu.Unlock()
-	if len(gotEvicted) != 1 || gotEvicted[0] != "other" {
-		t.Fatalf("evicted while same Scope active = %v, want [other]", gotEvicted)
-	}
+		if err := runtime.ScopedWrite(t.Context(), "other", func(context.Context, string) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		gotEvicted := append([]string(nil), evicted...)
+		mu.Unlock()
+		if len(gotEvicted) != 1 || gotEvicted[0] != "other" {
+			t.Fatalf("evicted while same Scope active = %v, want [other]", gotEvicted)
+		}
 
-	close(releaseFirst)
-	if err := <-firstDone; err != nil {
-		t.Fatal(err)
-	}
-	if err := <-secondDone; err != nil {
-		t.Fatal(err)
-	}
-	if err := runtime.ScopedRead(t.Context(), "replacement", func(context.Context, string) error { return nil }); err != nil {
-		t.Fatal(err)
-	}
-	mu.Lock()
-	gotEvicted = append([]string(nil), evicted...)
-	mu.Unlock()
-	if len(gotEvicted) != 2 || gotEvicted[1] != "same" {
-		t.Fatalf("final evictions = %v, want [other same]", gotEvicted)
-	}
+		close(releaseFirst)
+		if err := <-firstDone; err != nil {
+			t.Fatal(err)
+		}
+		if err := <-secondDone; err != nil {
+			t.Fatal(err)
+		}
+		if err := runtime.ScopedRead(t.Context(), "replacement", func(context.Context, string) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		gotEvicted = append([]string(nil), evicted...)
+		mu.Unlock()
+		if len(gotEvicted) != 2 || gotEvicted[1] != "same" {
+			t.Fatalf("final evictions = %v, want [other same]", gotEvicted)
+		}
+	})
 }
 
 func TestScopeCacheObserverReportsDistinctActiveAndCachedScopes(t *testing.T) {
@@ -382,17 +386,3 @@ type schedulerRecorder struct {
 
 func (r *schedulerRecorder) Pause()                          { r.pause() }
 func (r *schedulerRecorder) Close(ctx context.Context) error { return r.close(ctx) }
-
-func waitForClosing(t *testing.T, runtime *Runtime) {
-	t.Helper()
-	for index := 0; index < 100_000; index++ {
-		runtime.stateMu.Lock()
-		closing := runtime.closing
-		runtime.stateMu.Unlock()
-		if closing {
-			return
-		}
-		goruntime.Gosched()
-	}
-	t.Fatal("Runtime did not enter closing state")
-}
