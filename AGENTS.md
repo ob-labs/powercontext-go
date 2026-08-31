@@ -319,3 +319,9 @@ source / artifact / trigger / inference
   against the same resolved path rather than the raw input path. Verify a
   symlinked temporary-root path and an ordinary path so platform aliases such
   as macOS `/var` cannot cause a false setup failure.
+- When a CLI reads a shell-style environment file, parse assignments without
+  evaluating shell expansion, recognize managed markers only as complete
+  lines, and redact credential-bearing URLs, headers, and cookies. Verify
+  quoted and escaped literals, rejected expansion and control input, invalid
+  UTF-8, marker text inside values, repeated markers, and both human and JSON
+  output.
