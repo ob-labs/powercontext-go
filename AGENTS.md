@@ -180,6 +180,9 @@ source / artifact / trigger / inference
   raw database bytes that contain the producing SQLite version and physical
   page-layout metadata. Keep committed fixture hashes pinned separately, and
   verify both semantic regeneration and cross-runtime read/write compatibility.
+- When a newly exposed MCP tool mutates review state, declare its complete
+  `ToolAnnotations` tuple and verify it through `tools/list`; annotations must
+  remain host hints and never replace authorization or state-transition checks.
 - When defining or changing LF checkout rules, enumerate every tracked
   byte-sensitive executable, module manifest or checksum, prompt, schema,
   dataset, fixture, and generated-contract format, including extensionless

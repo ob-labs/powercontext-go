@@ -514,6 +514,12 @@ func annotations(name string) *mcp.ToolAnnotations {
 		value.DestructiveHint = &nondestructive
 		value.IdempotentHint = true
 		return value
+	case "approve_artifact_candidate", "reject_artifact_candidate", "revise_artifact_candidate":
+		value := &mcp.ToolAnnotations{OpenWorldHint: &closedWorld}
+		destructive := true
+		value.DestructiveHint = &destructive
+		value.IdempotentHint = true
+		return value
 	default:
 		return nil
 	}

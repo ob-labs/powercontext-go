@@ -100,6 +100,35 @@ func TestHandoffToolAnnotationsMatchFrozenHostApprovalSemantics(t *testing.T) {
 	}
 }
 
+func TestReviewWriteToolAnnotationsMatchFrozenHostApprovalSemantics(t *testing.T) {
+	t.Parallel()
+	server, err := NewServer(endpoint.NewHandler(endpoint.HandlerOptions{}), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := connectInMemory(t, server).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := make(map[string]*mcp.Tool, len(result.Tools))
+	for _, tool := range result.Tools {
+		tools[tool.Name] = tool
+	}
+
+	for _, name := range []string{
+		"approve_artifact_candidate",
+		"reject_artifact_candidate",
+		"revise_artifact_candidate",
+	} {
+		annotation := tools[name].Annotations
+		if annotation == nil || annotation.ReadOnlyHint || annotation.DestructiveHint == nil ||
+			!*annotation.DestructiveHint || !annotation.IdempotentHint || annotation.OpenWorldHint == nil ||
+			*annotation.OpenWorldHint {
+			t.Fatalf("%s annotations = %#v", name, annotation)
+		}
+	}
+}
+
 func TestServerExposesFrozenToolSet(t *testing.T) {
 	t.Parallel()
 
