@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Command parity-inventory-generate builds the 759-case Python test
+// Command parity-inventory-generate builds the 812-case Python test
 // inventory at the active parity target recorded in
 // test/conformance/parity-contract.json. It walks an upstream checkout that
 // must sit exactly at the target commit, merges the frozen Oracle mappings
@@ -152,12 +152,33 @@ func main() {
 	rulesPath := flag.String("rules", "test/conformance/parity-inventory-rules.json", "parity inventory rules")
 	outputPath := flag.String("output", "test/conformance/parity-inventory.json", "generated parity inventory")
 	upstream := flag.String("upstream", "", "upstream Python checkout pinned at the contract target SHA (required)")
+	previousUpstream := flag.String("previous-upstream", "", "previous Python target checkout used to verify the reviewed target delta")
+	releaseUpstream := flag.String("release-upstream", "", "release Python target checkout used to verify the reviewed target delta")
+	deltaLedgerPath := flag.String("delta-ledger", "test/conformance/target-delta.json", "reviewed target delta ledger")
+	checkDelta := flag.Bool("check-delta", false, "verify the reviewed previous-to-release target delta")
 	root := flag.String("root", ".", "Go repository root")
 	check := flag.Bool("check", false, "verify generated output without rewriting")
 	flag.Parse()
-	if err := run(*root, *contractPath, *traceabilityPath, *rulesPath, *outputPath, *upstream, *check); err != nil {
+	cleanRoot := filepath.Clean(*root)
+	if err := run(cleanRoot, *contractPath, *traceabilityPath, *rulesPath, *outputPath, *upstream, *check); err != nil {
 		fmt.Fprintln(os.Stderr, "parity-inventory-generate:", err)
 		os.Exit(1)
+	}
+	if *checkDelta {
+		if *previousUpstream == "" || *releaseUpstream == "" {
+			fmt.Fprintln(os.Stderr, "parity-inventory-generate: -check-delta requires -previous-upstream and -release-upstream")
+			os.Exit(1)
+		}
+		if err := checkTargetDelta(
+			cleanRoot,
+			resolveOutputPath(cleanRoot, *contractPath),
+			resolveOutputPath(cleanRoot, *deltaLedgerPath),
+			filepath.Clean(*previousUpstream),
+			filepath.Clean(*releaseUpstream),
+		); err != nil {
+			fmt.Fprintln(os.Stderr, "parity-inventory-generate:", err)
+			os.Exit(1)
+		}
 	}
 }
 

@@ -38,7 +38,7 @@ type parityInventory struct {
 	Entries             []parityInventoryEntry `json:"entries"`
 }
 
-// TestParityInventoryMatchesContract guards the 759-case active parity target
+// TestParityInventoryMatchesContract guards the 812-case active parity target
 // inventory: it must agree with parity-contract.json on identity, keep every
 // frozen Oracle mapping verbatim, assign a mode to every delta case, resolve
 // every mapped evidence reference, and pin the mapped/pending split so silent
@@ -59,6 +59,12 @@ func TestParityInventoryMatchesContract(t *testing.T) {
 	decodeJSONFile(t, "parity-inventory.json", &inventory)
 	var trace traceTable
 	decodeJSONFile(t, "traceability.json", &trace)
+	var delta struct {
+		Removed []struct {
+			Case tracedPythonTest `json:"case"`
+		} `json:"removed"`
+	}
+	decodeJSONFile(t, "target-delta.json", &delta)
 
 	if inventory.SchemaVersion != 1 {
 		t.Fatalf("unsupported parity inventory schema %d", inventory.SchemaVersion)
@@ -82,6 +88,13 @@ func TestParityInventoryMatchesContract(t *testing.T) {
 	frozen := make(map[string]traceEntry, len(trace.Entries))
 	for _, entry := range trace.Entries {
 		frozen[entry.Python.File+"#"+entry.Python.Name] = entry
+	}
+	removedFrozen := make(map[string]struct{})
+	for _, disposition := range delta.Removed {
+		key := disposition.Case.File + "#" + disposition.Case.Name
+		if _, ok := frozen[key]; ok {
+			removedFrozen[key] = struct{}{}
+		}
 	}
 
 	root := filepath.Join("..", "..")
@@ -137,8 +150,13 @@ func TestParityInventoryMatchesContract(t *testing.T) {
 			assertEvidenceResolves(t, root, key, evidence)
 		}
 	}
-	if inherited != len(trace.Entries) {
-		t.Fatalf("inventory inherited %d frozen Oracle cases, traceability declares %d", inherited, len(trace.Entries))
+	for key := range removedFrozen {
+		if _, present := seen[key]; present {
+			t.Fatalf("ledger-removed frozen Oracle case %s remains in the release inventory", key)
+		}
+	}
+	if want := len(trace.Entries) - len(removedFrozen); inherited != want {
+		t.Fatalf("inventory inherited %d frozen Oracle cases, want %d after %d reviewed removals", inherited, want, len(removedFrozen))
 	}
 	if mapped != inventory.MappedCaseCount || pending != inventory.PendingCaseCount {
 		t.Fatalf("counted mapped %d/pending %d, summary says %d/%d",

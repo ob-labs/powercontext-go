@@ -4,9 +4,9 @@ This directory makes the Python `v0.0.2` implementation at commit
 `3a6cb0151670eaff7dc0293466edd673124e80da` an executable Oracle rather than
 an informal reference.
 
-- `parity-contract.json` records the upstream parity identity as four
-  separate concepts: the upstream repository, the exact target SHA, the
-  frozen release Oracle, and the active parity target. `parity_contract_test.go`
+- `parity-contract.json` records the upstream parity identity as separate
+  concepts: the upstream repository, the exact target SHA, the signed release
+  target and assets, the frozen release Oracle, and the active parity target. `parity_contract_test.go`
   proves the frozen Oracle commit is identical across the contract, the Go
   test constant, `manifest.json`, and the `frozen-oracle` CI checkout, and
   rejects any conflation between the frozen Oracle and the parity targets.
@@ -20,7 +20,7 @@ an informal reference.
   functions and records whether its evidence is case-specific or supporting.
   It is generated from `traceability-rules.json`; do not edit the generated
   table by hand.
-- `parity-inventory.json` inventories all 759 Python test cases at the
+- `parity-inventory.json` inventories all 812 Python test cases at the
   active parity target recorded in `parity-contract.json`. Every case
   carries a mode (`go-port`, `cross-layer`, or `retained-host`) and a
   status: `mapped` cases have case-specific evidence that resolves against
@@ -31,6 +31,12 @@ an informal reference.
   pinned at the contract target SHA; do not edit the generated inventory
   by hand, and update the pinned mapped/pending counts only together with
   the rule changes that move cases between the two states.
+- `target-delta.json` records the exact 73 added and 20 removed cases between
+  the former `f2ec1f75` target and the signed v0.1.0 release. Every removed
+  case has a reviewed `removed`, `renamed`, or `superseded` disposition plus
+  replacement case or still-resolvable Go/retained-host evidence. The parity
+  generator recomputes both case sets from exact Git checkouts and rejects
+  ledger, replacement, or evidence drift.
 - `authority_test.go` proves Python SQLite → Go read/write → Python back-read.
 - `review_database_test.go` proves Python Candidate → Go revise/approve →
   Python Artifact back-read and continued Candidate writes against the same
@@ -49,22 +55,27 @@ go run ./tools/traceability-generate
 go run ./tools/traceability-generate -check
 ```
 
-Regenerate or check the active parity target inventory against an upstream
-checkout pinned at the contract target SHA (the generator verifies
-`git rev-parse HEAD` before extracting):
+Regenerate or check the active parity target inventory and reviewed target
+delta against upstream checkouts pinned to the previous and release commits
+(the generator verifies both `git rev-parse HEAD` values before extracting):
 
 ```sh
-git -C ../powercontext checkout f2ec1f75e5e1b46ad0626ab8390801b88966b6f5
-go run ./tools/parity-inventory-generate -upstream ../powercontext
-go run ./tools/parity-inventory-generate -upstream ../powercontext -check
+go run ./tools/parity-inventory-generate \
+  -upstream ../powercontext-v0.1.0
+go run ./tools/parity-inventory-generate \
+  -upstream ../powercontext-v0.1.0 \
+  -check \
+  -check-delta \
+  -previous-upstream ../powercontext-f2ec1f75 \
+  -release-upstream ../powercontext-v0.1.0
 ```
 
-The frozen-Oracle CI job checks out both the exact Oracle commit and the
-active parity target, runs the Oracle suite, regenerates the deterministic
-fixtures, verifies both generated inventories byte-for-byte, and enables
-both Python back-read tests. A changed Oracle commit requires deliberate
-fixture regeneration and review; changing only a hash to silence drift is
-not valid.
+The frozen-Oracle CI job checks out the exact Oracle, previous target, and
+active release target commits; runs the Oracle suite; regenerates the
+deterministic fixtures; verifies both generated inventories and the reviewed
+target delta; and enables both Python back-read tests. A changed Oracle commit
+requires deliberate fixture regeneration and review; changing only a hash to
+silence drift is not valid.
 
 The rules carry a monotonically increasing checkpoint for case-specific
 evidence. A changed Oracle case must add or update its exact `cases` mapping;

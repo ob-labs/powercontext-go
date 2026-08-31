@@ -929,6 +929,7 @@ func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
 		"artifact/memory/prompts/extraction.schema.json",
 		"evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl",
 		"api/v1/oas_client_gen.go",
+		"test/conformance/target-delta.json",
 	}
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {

@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "from_commit": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5",
+  "to_commit": "7b736206a53a6de6f43d4b517893ee1a80e7183d",
+  "added": [
+    {"file": "tests/builtin/inference/test_pydantic_ai.py", "name": "test_embedding_adapter_maps_a_rejected_request_to_a_stable_reason_without_leaking_body"},
+    {"file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py", "name": "test_vector_index_probe_clears_a_leftover_probe_row"},
+    {"file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py", "name": "test_vector_index_probe_reports_a_table_dimension_mismatch"},
+    {"file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py", "name": "test_vector_index_probe_reports_the_provider_limit_for_a_fresh_oversized_dimension"},
+    {"file": "tests/builtin/persistence/test_sqlite_memory_vector_index.py", "name": "test_vector_index_probe_surfaces_the_underlying_cause"},
+    {"file": "tests/builtin/runtime/test_composition_embedding.py", "name": "test_embedding_models_send_the_configured_dimension_to_the_provider"},
+    {"file": "tests/builtin/runtime/test_composition_embedding.py", "name": "test_embedding_models_without_configuration_return_no_models"},
+    {"file": "tests/builtin/runtime/test_readiness.py", "name": "test_dependency_readiness_probe_redacts_plain_configuration_errors"},
+    {"file": "tests/builtin/runtime/test_readiness.py", "name": "test_dependency_readiness_probe_surfaces_a_stable_redacted_configuration_reason"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_experience_records_cancellation"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_experience_records_failure_and_swallows_error"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_experience_records_noop_outcome"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_experience_records_root_and_incubation_spans"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_processor_records_cancellation"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_processor_records_failure_and_swallows_error"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_processor_records_root_and_flush_spans"},
+    {"file": "tests/builtin/runtime/test_scheduler.py", "name": "test_scheduled_processor_records_success_outcome"},
+    {"file": "tests/claude_code_plugin/test_hook.py", "name": "test_unknown_schema_is_not_injected"},
+    {"file": "tests/e2e/test_observability.py", "name": "test_scheduled_experience_starts_an_independent_trace_root"},
+    {"file": "tests/e2e/test_observability.py", "name": "test_scheduled_source_window_starts_an_independent_trace_root"},
+    {"file": "tests/langchain_middleware/test_packaging.py", "name": "test_wheel_bundles_middleware_license"},
+    {"file": "tests/test_cli.py", "name": "test_server_command_clears_stale_server_values_missing_from_env_file"},
+    {"file": "tests/test_cli.py", "name": "test_server_command_reports_a_missing_env_file_without_starting"},
+    {"file": "tests/test_cli.py", "name": "test_server_command_uses_env_file_instead_of_stale_shell_environment"},
+    {"file": "tests/test_config_cli.py", "name": "test_arbitrary_model_providers_and_environment_variables_are_not_rejected"},
+    {"file": "tests/test_config_cli.py", "name": "test_collect_additional_provider_variables_hides_and_records_marked_credentials"},
+    {"file": "tests/test_config_cli.py", "name": "test_collect_additional_provider_variables_keeps_unmarked_values_visible"},
+    {"file": "tests/test_config_cli.py", "name": "test_collect_provider_variable_hides_input_for_credential_names"},
+    {"file": "tests/test_config_cli.py", "name": "test_configuration_rejects_relative_persistent_storage"},
+    {"file": "tests/test_config_cli.py", "name": "test_custom_connection_is_not_reclassified_from_its_model_prefix"},
+    {"file": "tests/test_config_cli.py", "name": "test_custom_connection_marks_prompted_credential_for_show_redaction"},
+    {"file": "tests/test_config_cli.py", "name": "test_environment_parser_rejects_duplicate_assignments"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_asks_for_protocol_endpoint_key_and_plain_model_name"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_hides_and_redacts_marked_additional_credentials"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_records_generated_credential_names_for_show_redaction"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_refuses_to_replace_an_existing_environment_without_force"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_rejects_configuration_that_server_settings_reject"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_rejects_provider_models_that_cannot_be_constructed"},
+    {"file": "tests/test_config_cli.py", "name": "test_init_validate_and_show_round_trip_managed_environment"},
+    {"file": "tests/test_config_cli.py", "name": "test_managed_marker_text_inside_a_credential_is_not_treated_as_structure"},
+    {"file": "tests/test_config_cli.py", "name": "test_provider_base_url_rejects_embedded_credentials"},
+    {"file": "tests/test_config_cli.py", "name": "test_show_redacts_standard_credential_container_variables"},
+    {"file": "tests/test_config_cli.py", "name": "test_show_reports_malformed_managed_markers_without_a_traceback"},
+    {"file": "tests/test_config_cli.py", "name": "test_standard_provider_requires_a_credential"},
+    {"file": "tests/test_config_cli.py", "name": "test_validate_reports_invalid_numeric_values_without_a_traceback"},
+    {"file": "tests/test_dashboard.py", "name": "test_publish_reports_stale_discovery_when_registry_database_is_unavailable"},
+    {"file": "tests/test_dashboard.py", "name": "test_publish_reports_success_when_post_publish_scan_fails"},
+    {"file": "tests/test_env_file.py", "name": "test_backslash_escaped_quote_outside_quotes_is_literal"},
+    {"file": "tests/test_env_file.py", "name": "test_backslash_escaped_space_preserves_hash_value"},
+    {"file": "tests/test_env_file.py", "name": "test_backslash_escaped_tab_preserves_hash_value"},
+    {"file": "tests/test_env_file.py", "name": "test_comment_after_an_assignment_is_removed"},
+    {"file": "tests/test_env_file.py", "name": "test_environment_context_can_clear_stale_values"},
+    {"file": "tests/test_env_file.py", "name": "test_even_backslash_before_space_starts_a_comment_like_shell"},
+    {"file": "tests/test_env_file.py", "name": "test_export_accepts_shell_whitespace"},
+    {"file": "tests/test_env_file.py", "name": "test_export_prefix_keeps_hash_values"},
+    {"file": "tests/test_env_file.py", "name": "test_full_line_comments_are_ignored"},
+    {"file": "tests/test_env_file.py", "name": "test_hash_inside_a_value_is_preserved"},
+    {"file": "tests/test_env_file.py", "name": "test_invalid_utf8_is_reported_as_an_environment_file_error"},
+    {"file": "tests/test_env_file.py", "name": "test_quoted_and_escaped_expansion_characters_are_literal"},
+    {"file": "tests/test_env_file.py", "name": "test_quoted_values_keep_hashes_and_spaces"},
+    {"file": "tests/test_env_file.py", "name": "test_shell_expansion_is_rejected_instead_of_loaded_literally"},
+    {"file": "tests/test_env_file.py", "name": "test_trailing_escaped_whitespace_is_preserved"},
+    {"file": "tests/test_env_file.py", "name": "test_unescaped_tab_starts_a_comment_boundary"},
+    {"file": "tests/test_env_file.py", "name": "test_unterminated_quote_is_rejected"},
+    {"file": "tests/test_env_file.py", "name": "test_url_fragment_assignment_survives"},
+    {"file": "tests/test_env_file.py", "name": "test_value_may_start_with_hash_like_shell"},
+    {"file": "tests/test_full_capability_docs.py", "name": "test_full_capability_guide_binds_memory_evidence_to_the_captured_source"},
+    {"file": "tests/test_mcp.py", "name": "test_mcp_describes_review_write_side_effects_for_host_approval"},
+    {"file": "tests/test_opencode_cli.py", "name": "test_interrupted_plugin_install_recovers_on_retry"},
+    {"file": "tests/test_server.py", "name": "test_server_factory_reports_a_rejected_embedding_request_with_a_redacted_reason"},
+    {"file": "tests/test_server_tracing.py", "name": "test_background_isolates_child_spans_when_root_start_fails"},
+    {"file": "tests/test_server_tracing.py", "name": "test_background_stage_starts_a_fresh_trace_outside_an_ambient_span"},
+    {"file": "tests/test_server_tracing.py", "name": "test_runtime_stage_records_explicit_noop_and_failure_outcomes"}
+  ],
+  "removed": [
+    {
+      "case": {"file": "tests/claude_code_plugin/test_hook.py", "name": "test_context_request_uses_prepare_once"},
+      "disposition": "removed",
+      "reason": "The release removed an internal call-count assertion while retaining the prepare-context behavior.",
+      "evidence": ["py:integrations/claude-code/tests/test_hook.py#test_context_request_uses_prepare_once"]
+    },
+    {
+      "case": {"file": "tests/claude_code_plugin/test_hook.py", "name": "test_hook_rejects_an_oversized_response_body"},
+      "disposition": "removed",
+      "reason": "The release removed the low-level response-reader test; the retained adapter still proves the bounded response contract.",
+      "evidence": ["py:integrations/claude-code/tests/test_hook.py#test_hook_rejects_an_oversized_response_body"]
+    },
+    {
+      "case": {"file": "tests/claude_code_plugin/test_hook.py", "name": "test_malformed_prepared_context_is_not_injected"},
+      "disposition": "removed",
+      "reason": "The release removed the parameterized internal parser test; retained host evidence preserves malformed-response fail-open behavior.",
+      "evidence": ["py:integrations/claude-code/tests/test_hook.py#test_malformed_prepared_context_is_not_injected"]
+    },
+    {
+      "case": {"file": "tests/claude_code_plugin/test_hook.py", "name": "test_unknown_schema_and_oversized_content_are_not_injected"},
+      "disposition": "superseded",
+      "reason": "The release split out a focused unknown-schema behavior while retained host evidence keeps the oversized boundary.",
+      "replacements": [{"file": "tests/claude_code_plugin/test_hook.py", "name": "test_unknown_schema_is_not_injected"}],
+      "evidence": ["py:integrations/claude-code/tests/test_hook.py#test_unknown_schema_and_oversized_content_are_not_injected"]
+    },
+    {
+      "case": {"file": "tests/codex_plugin/test_recall.py", "name": "test_context_request_uses_the_prepare_endpoint_once"},
+      "disposition": "removed",
+      "reason": "The release removed an internal call-count assertion while retaining Codex prepare-context behavior.",
+      "evidence": ["py:integrations/codex/tests/test_recall.py#test_context_request_uses_the_prepare_endpoint_once"]
+    },
+    {
+      "case": {"file": "tests/integrations/test_hermes_provider.py", "name": "test_cli_reads_the_same_json_config_path"},
+      "disposition": "removed",
+      "reason": "The release removed a private path-sharing assertion; the retained Hermes adapter still verifies the public configuration behavior.",
+      "evidence": ["py:integrations/hermes/tests/test_provider.py#test_cli_reads_the_same_json_config_path"]
+    },
+    {
+      "case": {"file": "tests/integrations/test_hermes_provider.py", "name": "test_memory_write_worker_is_daemon_bounded_and_reports_overflow"},
+      "disposition": "removed",
+      "reason": "The release removed worker implementation-detail assertions; retained Hermes evidence preserves bounded overflow behavior.",
+      "evidence": ["py:integrations/hermes/tests/test_provider.py#test_memory_write_worker_is_daemon_bounded_and_reports_overflow"]
+    },
+    {
+      "case": {"file": "tests/langchain_middleware/test_packaging.py", "name": "test_license_file_is_present_in_project"},
+      "disposition": "superseded",
+      "reason": "The release replaces source-tree license presence with the distributed wheel license contract.",
+      "replacements": [{"file": "tests/langchain_middleware/test_packaging.py", "name": "test_wheel_bundles_middleware_license"}]
+    },
+    {
+      "case": {"file": "tests/langchain_middleware/test_packaging.py", "name": "test_wheel_bundles_middleware_license_and_dependencies"},
+      "disposition": "superseded",
+      "reason": "The release narrows the packaging contract to the redistributed license artifact and removes obsolete dependency pins.",
+      "replacements": [{"file": "tests/langchain_middleware/test_packaging.py", "name": "test_wheel_bundles_middleware_license"}]
+    },
+    {
+      "case": {"file": "tests/langchain_middleware/test_scope.py", "name": "test_scope_type_is_owned_by_langchain_package"},
+      "disposition": "superseded",
+      "reason": "The release removes a private type-ownership assertion and retains the public scope configuration contract.",
+      "replacements": [{"file": "tests/langchain_middleware/test_scope.py", "name": "test_missing_scope_names_langchain_configuration"}]
+    },
+    {
+      "case": {"file": "tests/langgraph_adapter/test_packaging.py", "name": "test_license_file_is_present_in_project"},
+      "disposition": "superseded",
+      "reason": "The release replaces source-tree license presence with wheel license and metadata verification.",
+      "replacements": [{"file": "tests/langgraph_adapter/test_packaging.py", "name": "test_wheel_bundles_license_and_metadata"}],
+      "evidence": ["py:integrations/langgraph/tests/test_packaging.py#test_license_file_is_present_in_project"]
+    },
+    {
+      "case": {"file": "tests/pydantic_ai_adapter/test_capture.py", "name": "test_shared_capture_caches_codex_auth_until_the_file_changes"},
+      "disposition": "superseded",
+      "reason": "The release removes cache implementation assertions while retaining credential redaction as the observable contract.",
+      "replacements": [{"file": "tests/pydantic_ai_adapter/test_capture.py", "name": "test_shared_capture_redacts_codex_auth_values_outside_sensitive_keys"}]
+    },
+    {
+      "case": {"file": "tests/pydantic_ai_adapter/test_packaging.py", "name": "test_integration_wheels_require_the_first_core_release_with_shared_capture"},
+      "disposition": "superseded",
+      "reason": "The formal v0.1.0 release identity replaces the pre-release dependency-floor assertion; installed-wheel behavior remains covered.",
+      "replacements": [{"file": "tests/pydantic_ai_adapter/test_packaging.py", "name": "test_documented_openai_agent_constructs_from_installed_wheels"}],
+      "evidence": ["go:test/conformance/parity_contract_test.go#TestParityContractRecordsSignedV010ReleaseIdentity"]
+    },
+    {
+      "case": {"file": "tests/pydantic_ai_adapter/test_packaging.py", "name": "test_openai_install_command_is_consistent_across_public_guides"},
+      "disposition": "superseded",
+      "reason": "The release replaces source-text command equality with an installed-wheel documentation smoke test.",
+      "replacements": [{"file": "tests/pydantic_ai_adapter/test_packaging.py", "name": "test_documented_openai_agent_constructs_from_installed_wheels"}]
+    },
+    {
+      "case": {"file": "tests/pydantic_ai_adapter/test_toolset.py", "name": "test_toolset_uses_one_raw_token_client_per_run_and_closes_it"},
+      "disposition": "superseded",
+      "reason": "The release removes raw-client lifecycle implementation assertions and retains the public toolset request/response contract.",
+      "replacements": [{"file": "tests/pydantic_ai_adapter/test_toolset.py", "name": "test_toolset_exposes_exact_schemas_instructions_request_mapping_and_full_responses"}]
+    },
+    {
+      "case": {"file": "tests/test_ci_release_verification.py", "name": "test_github_release_allows_prereleases"},
+      "disposition": "superseded",
+      "reason": "Go release workflow tests own prerelease and published-asset verification for the shipped implementation.",
+      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"]
+    },
+    {
+      "case": {"file": "tests/test_ci_release_verification.py", "name": "test_github_release_requires_published_state_and_expected_assets"},
+      "disposition": "superseded",
+      "reason": "Go release workflow tests own published-state and complete-asset verification for the shipped implementation.",
+      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"]
+    },
+    {
+      "case": {"file": "tests/test_ci_release_verification.py", "name": "test_pypi_release_requires_wheel_and_sdist"},
+      "disposition": "superseded",
+      "reason": "The Go release contract records and verifies the complete distribution asset set.",
+      "evidence": [
+        "go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases",
+        "go:tools/release/main_test.go#TestNativeAssetManifestSupportsReleaseMatrix"
+      ]
+    },
+    {
+      "case": {"file": "tests/test_ci_release_verification.py", "name": "test_pypi_verification_retries_until_release_is_complete"},
+      "disposition": "superseded",
+      "reason": "The Go release workflow owns bounded publication verification for the shipped release process.",
+      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"]
+    },
+    {
+      "case": {"file": "tests/test_transport.py", "name": "test_vendored_plugin_shares_the_loopback_host_set"},
+      "disposition": "superseded",
+      "reason": "The release replaces private host-set equality with observable plaintext-policy agreement over shared vectors.",
+      "replacements": [{"file": "tests/test_transport.py", "name": "test_vendored_plugin_matches_the_shared_plaintext_policy"}],
+      "evidence": [
+        "go:test/transport/policy_test.go#TestSharedLoopbackHostVectors",
+        "py:integrations/codex/tests/test_contract.py#test_codex_settings_accept_shared_loopback_hosts",
+        "py:integrations/codex/tests/test_contract.py#test_codex_settings_reject_shared_non_loopback_plaintext_hosts",
+        "py:integrations/claude-code/tests/test_contract.py#test_settings_accept_shared_loopback_hosts",
+        "py:integrations/claude-code/tests/test_contract.py#test_settings_reject_shared_non_loopback_plaintext_hosts"
+      ]
+    }
+  ]
+}
