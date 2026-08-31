@@ -305,7 +305,10 @@ func runPhase(
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer stopCancel()
 	stopErr := process.stop(stopCtx)
-	return errors.Join(exerciseErr, stopErr)
+	if stopErr != nil {
+		return errors.Join(exerciseErr, stopErr)
+	}
+	return errors.Join(exerciseErr, process.stop(stopCtx))
 }
 
 func availablePort() (int, error) {

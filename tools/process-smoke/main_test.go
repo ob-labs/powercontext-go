@@ -160,3 +160,21 @@ func TestFrozenBaseToolNamesAreUnique(t *testing.T) {
 		t.Fatalf("base MCP tools = %d, want 20", len(seen))
 	}
 }
+
+func TestStoppedServerProcessCanBeStoppedAgain(t *testing.T) {
+	log, err := os.CreateTemp(t.TempDir(), "server.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	process := &serverProcess{log: log, done: make(chan struct{})}
+	close(process.done)
+
+	for range 2 {
+		if err := process.stop(t.Context()); err != nil {
+			t.Fatalf("stop completed Server: %v", err)
+		}
+	}
+	if _, err := log.Write([]byte("closed")); err == nil {
+		t.Fatal("stop did not close the completed Server log")
+	}
+}
