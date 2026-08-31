@@ -15,7 +15,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -58,4 +61,43 @@ func generateSBOM(syft, root, output, syftVersion string, created time.Time) err
 		"Tool: syft-" + syftVersion,
 	}
 	return writeJSON(output, document)
+}
+
+func addNativeDependenciesToSBOM(path string, dependencies []dependencyRecord) error {
+	contents, err := readBoundedFile(path, maxMetadataBytes)
+	if err != nil {
+		return err
+	}
+	var document spdxDocument
+	if decodeErr := jsonv2.Unmarshal(contents, &document); decodeErr != nil || !strings.HasPrefix(document.SPDXVersion, "SPDX-") {
+		return errors.New("Syft did not produce a valid SPDX JSON document")
+	}
+	recorded := make(map[string]struct{})
+	for _, packageRecord := range document.Packages {
+		for _, reference := range packageRecord.ExternalReferences {
+			if reference.Category == "PACKAGE-MANAGER" && reference.Type == "purl" {
+				recorded[reference.Locator] = struct{}{}
+			}
+		}
+	}
+	for _, dependency := range dependencies {
+		purl := "pkg:generic/" + dependency.Path + "@" + dependency.Version
+		if _, exists := recorded[purl]; exists {
+			continue
+		}
+		digest := sha256.Sum256([]byte(dependency.Path + "\x00" + dependency.Version))
+		document.Packages = append(document.Packages, spdxPackage{
+			Name: dependency.Path, SPDXID: fmt.Sprintf("SPDXRef-Native-%x", digest[:8]),
+			Version: dependency.Version, DownloadLocation: "NOASSERTION", FilesAnalyzed: new(false),
+			ExternalReferences: []spdxExternalReference{{
+				Category: "PACKAGE-MANAGER", Type: "purl", Locator: purl,
+			}},
+		})
+		recorded[purl] = struct{}{}
+	}
+	encoded, err := jsonv2.Marshal(&document, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(encoded, '\n'), 0o644)
 }
