@@ -662,6 +662,40 @@ func TestMigrationGeneratedConsumersRunsFreshConsumerVerification(t *testing.T) 
 	}
 }
 
+func TestMainTestsJobChecksRepositoryCleanlinessAfterTestExecution(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []migrationWorkflowStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["tests"]
+	if !ok {
+		t.Fatal("master.yml has no tests job")
+	}
+	if len(job.Steps) == 0 {
+		t.Fatal("master.yml tests job has no steps")
+	}
+	want := migrationWorkflowStep{
+		Name:  "Verify repository cleanliness after test execution",
+		If:    "always()",
+		Shell: "bash",
+		Run:   boundedGitStatusCleanlinessScript(),
+	}
+	got := job.Steps[len(job.Steps)-1]
+	got.Run = strings.TrimSpace(got.Run)
+	if got != want {
+		t.Fatalf("master.yml final tests step = %#v, want %#v", got, want)
+	}
+}
+
 func TestFrozenOracleGeneratorsUseTemporaryGoldenOutput(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
