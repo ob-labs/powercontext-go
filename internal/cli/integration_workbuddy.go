@@ -490,10 +490,15 @@ func mergeWorkBuddyMCP(mcpFile string, configuration workBuddyConfiguration) err
 		"headers":     map[string]any{"Authorization": "${" + configuration.AuthorizationEnvironment + ":-}"},
 		"description": workBuddyMCPDescription, "disabled": false,
 	}
-	if existing, ok := servers[workBuddyPluginName].(map[string]any); ok &&
-		!isLegacyWorkBuddyMCP(existing) &&
-		!isOwnedWorkBuddyMCP(existing) {
-		return errors.New("existing WorkBuddy PowerContext MCP entry is not owned by PowerContext")
+	if existing, ok := servers[workBuddyPluginName].(map[string]any); ok {
+		if isRemoteAuthenticatedWorkBuddyMCP(existing) {
+			existing["disabled"] = false
+			servers[workBuddyPluginName] = existing
+			return writeWorkBuddyJSON(mcpFile, config)
+		}
+		if !isLegacyWorkBuddyMCP(existing) && !isOwnedWorkBuddyMCP(existing) {
+			return errors.New("existing WorkBuddy PowerContext MCP entry is not owned by PowerContext")
+		}
 	}
 	servers[workBuddyPluginName] = entry
 	return writeWorkBuddyJSON(mcpFile, config)
@@ -621,6 +626,9 @@ func workBuddyMCPDiagnostic(path string, configuration workBuddyConfiguration) d
 	entry, entryOK := servers[workBuddyPluginName].(map[string]any)
 	if !entryOK {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
+	}
+	if isRemoteAuthenticatedWorkBuddyMCP(entry) {
+		return diagnostic{OK: true, Status: "ok", Detail: "existing remote PowerContext WorkBuddy MCP server is registered"}
 	}
 	if entry["description"] != workBuddyMCPDescription || entry["url"] != configuration.ServerURL+"/mcp" {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server does not match its configuration"}
@@ -803,6 +811,18 @@ func isOwnedWorkBuddyMCP(entry map[string]any) bool {
 	kind, _ := entry["type"].(string)
 	return kind == "http" && headersOK && isWorkBuddyAuthorizationTemplate(authorization) &&
 		description == workBuddyMCPDescription
+}
+
+func isRemoteAuthenticatedWorkBuddyMCP(entry map[string]any) bool {
+	serverURL, urlOK := entry["url"].(string)
+	parsed, parseErr := url.Parse(serverURL)
+	headers, headersOK := entry["headers"].(map[string]any)
+	authorization, authorizationOK := headers["Authorization"].(string)
+	disabled, disabledOK := entry["disabled"].(bool)
+	kind, kindOK := entry["type"].(string)
+	return kindOK && kind == "http" && urlOK && parseErr == nil && parsed.Scheme == "https" && parsed.Host != "" &&
+		parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" && headersOK && authorizationOK &&
+		strings.TrimSpace(authorization) != "" && disabledOK && disabled
 }
 
 func isWorkBuddyAuthorizationTemplate(value string) bool {

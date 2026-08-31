@@ -8074,7 +8074,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_workbuddy_test.go",
-          "test": "TestSetupWorkBuddyRefusesCredentialBearingMCPEntryBeforeMutation"
+          "test": "TestSetupWorkBuddyPreservesRemoteAuthenticatedMCPConfiguration"
         }
       ]
     },
