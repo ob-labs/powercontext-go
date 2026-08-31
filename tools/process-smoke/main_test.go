@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,6 +33,36 @@ POWERCONTEXT_CLIENT_SERVER_URL=http://127.0.0.1:8000
 func TestReleaseSecurityDefaultsAcceptRepositoryExample(t *testing.T) {
 	if err := verifySecurityDefaults(filepath.Join("..", "..", ".env.example")); err != nil {
 		t.Fatalf("verify repository security defaults: %v", err)
+	}
+}
+
+func TestWriteFailureDiagnosticsRedactsPrivateValuesAndBoundsOutput(t *testing.T) {
+	report := filepath.Join(t.TempDir(), "diagnostics.txt")
+	root := filepath.Join(t.TempDir(), "private-root")
+	cause := errors.New(strings.Join([]string{
+		"startup failed at " + root,
+		smokeScope,
+		smokeText,
+		smokeToken,
+		strings.Repeat("x", maximumFailureDiagnosticBytes+1024),
+	}, "\n"))
+	if err := writeFailureDiagnostics(report, root, cause); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) > maximumFailureDiagnosticBytes {
+		t.Fatalf("diagnostics length = %d, want at most %d", len(payload), maximumFailureDiagnosticBytes)
+	}
+	for _, private := range []string{root, smokeScope, smokeText, smokeToken} {
+		if strings.Contains(string(payload), private) {
+			t.Fatalf("diagnostics leaked %q: %s", private, payload)
+		}
+	}
+	if !strings.Contains(string(payload), "[redacted]") || !strings.Contains(string(payload), "[truncated]") {
+		t.Fatalf("diagnostics = %q, want redaction and truncation markers", payload)
 	}
 }
 

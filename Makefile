@@ -249,7 +249,8 @@ unit-test: ## Run standard-tag unit tests.
 
 e2e-test: ## Run standard-tag process-level end-to-end tests.
 	CGO_ENABLED=1 $(GO) test -count=1 -tags '$(STANDARD_TAGS)' ./test/e2e
-	$(MAKE) smoke VERSION=ci COMMIT=$$(git rev-parse HEAD) BUILD_DATE=1970-01-01T00:00:00Z
+	$(MAKE) smoke VERSION=ci COMMIT=$$(git rev-parse HEAD) BUILD_DATE=1970-01-01T00:00:00Z \
+		PROCESS_SMOKE_FAILURE_DIAGNOSTICS="$(PROCESS_SMOKE_FAILURE_DIAGNOSTICS)"
 
 test-sqlite: ## Run all standard-tag tests against SQLite.
 	CGO_ENABLED=1 $(GO) test -tags '$(STANDARD_TAGS)' ./...
@@ -351,7 +352,8 @@ build-full: ## Build the Full native-asset server binary.
 		-o bin/powercontext-full ./cmd/powercontext
 
 smoke: build ## Build and smoke-test the standard server binary.
-	$(GO) run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version "$(VERSION)"
+	$(GO) run ./tools/process-smoke -binary bin/powercontext -env-file .env.example -version "$(VERSION)" \
+		$(if $(PROCESS_SMOKE_FAILURE_DIAGNOSTICS),-failure-diagnostics "$(PROCESS_SMOKE_FAILURE_DIAGNOSTICS)")
 
 smoke-full: build-full ## Build and smoke-test the Full server binary.
 	$(GO) run ./tools/process-smoke -binary bin/powercontext-full -env-file .env.example -version "$(VERSION)"

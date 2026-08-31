@@ -215,7 +215,39 @@ jobs:
         run: make unit-test
 
       - name: Run end-to-end tests
+        id: end_to_end_tests
+        env:
+          PROCESS_SMOKE_FAILURE_DIAGNOSTICS: ${{ runner.temp }}/powercontext-process-diagnostics/report.txt
         run: make e2e-test
+
+      - name: Write bounded process diagnostics
+        if: always()
+        shell: bash
+        env:
+          E2E_TESTS_OUTCOME: ${{ steps.end_to_end_tests.outcome }}
+        run: |
+          diagnostics="$RUNNER_TEMP/powercontext-process-diagnostics"
+          mkdir -p "$diagnostics"
+          {
+            printf 'commit=%s\n' "$GITHUB_SHA"
+            printf 'e2e_tests_outcome=%s\n' "$E2E_TESTS_OUTCOME"
+            if test -f "$diagnostics/report.txt"; then
+              sha256sum "$diagnostics/report.txt"
+            else
+              printf 'process_smoke_report=not-created\n'
+            fi
+          } > "$diagnostics/summary.txt"
+
+      - name: Upload process diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: process-diagnostics-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/powercontext-process-diagnostics/summary.txt
+            ${{ runner.temp }}/powercontext-process-diagnostics/report.txt
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Verify repository cleanliness after test execution
         if: always()
