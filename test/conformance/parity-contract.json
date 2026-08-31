@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "upstream": {
     "repository": "oceanbase/powercontext",
     "url": "https://github.com/oceanbase/powercontext",
@@ -9,6 +9,21 @@
     "commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
     "baseline": "python-v0.0.2",
     "evidence_directory": "test/conformance/testdata/python-v0.0.2"
+  },
+  "release_target": {
+    "tag": "powercontext-v0.1.0",
+    "version": "0.1.0",
+    "commit": "7b736206a53a6de6f43d4b517893ee1a80e7183d",
+    "test_case_count": 812,
+    "test_file_count": 132,
+    "wheel": {
+      "filename": "powercontext-0.1.0-py3-none-any.whl",
+      "sha256": "94f8fef36d4afcee09dd5231fbe5edfe47e42e41994596b775e2f203ef6fac72"
+    },
+    "sdist": {
+      "filename": "powercontext-0.1.0.tar.gz",
+      "sha256": "18d47a335340b0870216e2cc0fb1fd8e4d865880155daeea3b01187c950fd746"
+    }
   },
   "exact_target_sha": "f2ec1f75e5e1b46ad0626ab8390801b88966b6f5",
   "target_test_case_count": 759,

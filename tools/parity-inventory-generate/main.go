@@ -51,6 +51,21 @@ type parityContract struct {
 		Baseline          string `json:"baseline"`
 		EvidenceDirectory string `json:"evidence_directory"`
 	} `json:"frozen_release_oracle"`
+	ReleaseTarget struct {
+		Tag           string `json:"tag"`
+		Version       string `json:"version"`
+		Commit        string `json:"commit"`
+		TestCaseCount int    `json:"test_case_count"`
+		TestFileCount int    `json:"test_file_count"`
+		Wheel         struct {
+			Filename string `json:"filename"`
+			SHA256   string `json:"sha256"`
+		} `json:"wheel"`
+		Sdist struct {
+			Filename string `json:"filename"`
+			SHA256   string `json:"sha256"`
+		} `json:"sdist"`
+	} `json:"release_target"`
 	ExactTargetSHA      string `json:"exact_target_sha"`
 	TargetTestCaseCount int    `json:"target_test_case_count"`
 	ActiveParityTarget  string `json:"active_parity_target"`
@@ -151,7 +166,7 @@ func run(root, contractPath, traceabilityPath, rulesPath, outputPath, upstream s
 	if err := readJSON(filepath.Join(root, contractPath), &contract); err != nil {
 		return fmt.Errorf("read parity contract: %w", err)
 	}
-	if contract.SchemaVersion != 1 || contract.ExactTargetSHA == "" || contract.FrozenOracle.Commit == "" {
+	if contract.SchemaVersion != 2 || contract.ExactTargetSHA == "" || contract.FrozenOracle.Commit == "" {
 		return fmt.Errorf("parity contract is missing the target SHA or frozen Oracle commit")
 	}
 	if upstream == "" {
