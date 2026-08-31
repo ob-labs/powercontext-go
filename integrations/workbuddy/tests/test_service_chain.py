@@ -120,6 +120,62 @@ def test_hook_uses_the_live_service_chain_with_bounded_requests(monkeypatch, tmp
     ).hexdigest()
 
 
+def test_hook_keeps_context_empty_and_captures_the_prompt_when_prepare_is_empty(monkeypatch, tmp_path: Path) -> None:
+    received: list[tuple[str, dict[str, object]]] = []
+
+    class EmptyContextService(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
+            content_length = int(self.headers["Content-Length"])
+            received.append((self.path, json.loads(self.rfile.read(content_length))))
+            if self.path == "/v1/context/prepare":
+                self._respond(200, {"schema": "powercontext.prepared-context.v1", "status": "empty", "content": None, "content_bytes": 0})
+                return
+            if self.path == "/v1/sources/content":
+                self._respond(201, {"position": 3})
+                return
+            self._respond(404, {})
+
+        def log_message(self, _format: str, *_arguments: object) -> None:
+            return
+
+        def _respond(self, status: int, payload: dict[str, object]) -> None:
+            encoded = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+    hook = load_hook_module()
+    prompt = "What context is available?"
+    with serve(EmptyContextService) as server_url:
+        settings = hook.WorkBuddyPluginSettings(
+            server_url=server_url,
+            scope_mode="project",
+            authorization_environment="WORKBUDDY_TOKEN",
+            authorization="Bearer test-token",
+            request_timeout_seconds=1.0,
+            request_budget_seconds=2.0,
+            prepare_max_bytes=64,
+            source_max_bytes=128,
+        )
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "cwd": str(tmp_path), "prompt": prompt})),
+        )
+        stdout = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", stdout)
+
+        assert hook.main(settings) == 0
+
+    assert json.loads(stdout.getvalue()) == {
+        "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ""}
+    }
+    assert [path for path, _ in received] == ["/v1/context/prepare", "/v1/sources/content"]
+    assert received[1][1]["content"] == prompt
+
+
 def test_hook_preserves_the_host_prompt_when_the_live_service_is_unavailable(monkeypatch, tmp_path: Path) -> None:
     class UnavailableService(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
