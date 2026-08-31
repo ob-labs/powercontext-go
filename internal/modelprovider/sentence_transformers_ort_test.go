@@ -21,10 +21,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 
 	"github.com/ob-labs/powercontext-go/inference"
 )
@@ -73,64 +73,79 @@ func TestSentenceTransformersFactoryIsLazy(t *testing.T) {
 }
 
 func TestLocalEmbeddingTransportCancellationAndCloseDrainNativeCall(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	var destroyed atomic.Int32
-	transport := newLocalEmbeddingTransport(func([]string) ([][]float32, error) {
-		close(started)
-		<-release
-		return [][]float32{{1}}, nil
-	}, func() error {
-		destroyed.Add(1)
-		return nil
-	})
+	synctest.Test(t, func(t *testing.T) {
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var destroyed atomic.Int32
+		transport := newLocalEmbeddingTransport(func([]string) ([][]float32, error) {
+			close(started)
+			<-release
+			return [][]float32{{1}}, nil
+		}, func() error {
+			destroyed.Add(1)
+			return nil
+		})
 
-	callContext, cancelCall := context.WithCancel(context.Background())
-	callDone := make(chan error, 1)
-	go func() {
-		_, err := transport.Embed(callContext, []string{"alpha"}, inference.EmbeddingDocument)
-		callDone <- err
-	}()
-	<-started
-	cancelCall()
-	if err := <-callDone; !errors.Is(err, context.Canceled) {
-		t.Fatalf("embed error = %v", err)
-	}
-
-	closeDone := make(chan error, 1)
-	go func() { closeDone <- transport.Close(context.Background()) }()
-	for {
-		transport.stateMu.Lock()
-		closing := transport.closing
-		transport.stateMu.Unlock()
-		if closing {
-			break
+		callContext, cancelCall := context.WithCancel(t.Context())
+		callDone := make(chan error, 1)
+		go func() {
+			_, err := transport.Embed(callContext, []string{"alpha"}, inference.EmbeddingDocument)
+			callDone <- err
+		}()
+		<-started
+		cancelCall()
+		if err := <-callDone; !errors.Is(err, context.Canceled) {
+			t.Fatalf("embed error = %v", err)
 		}
-		runtime.Gosched()
-	}
-	_, err := transport.Embed(t.Context(), []string{"late"}, inference.EmbeddingDocument)
-	var unavailable *inference.UnavailableError
-	if !errors.As(err, &unavailable) {
-		t.Fatalf("late embed error = %v", err)
-	}
-	select {
-	case err := <-closeDone:
-		t.Fatalf("close returned before native call drained: %v", err)
-	default:
-	}
-	close(release)
-	if err := <-closeDone; err != nil {
-		t.Fatal(err)
-	}
-	if destroyed.Load() != 1 {
-		t.Fatalf("destroy calls = %d", destroyed.Load())
-	}
-	if err := transport.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if destroyed.Load() != 1 {
-		t.Fatalf("idempotent destroy calls = %d", destroyed.Load())
-	}
+
+		closeDone := make(chan error, 1)
+		go func() { closeDone <- transport.Close(t.Context()) }()
+		synctest.Wait()
+
+		lateContext, cancelLate := context.WithCancel(t.Context())
+		defer cancelLate()
+		lateDone := make(chan error, 1)
+		go func() {
+			_, err := transport.Embed(lateContext, []string{"late"}, inference.EmbeddingDocument)
+			lateDone <- err
+		}()
+		synctest.Wait()
+		select {
+		case err := <-lateDone:
+			var unavailable *inference.UnavailableError
+			if !errors.As(err, &unavailable) {
+				t.Fatalf("late embed error = %v", err)
+			}
+		default:
+			cancelLate()
+			close(release)
+			if err := <-lateDone; !errors.Is(err, context.Canceled) {
+				t.Fatalf("late admitted embed error = %v", err)
+			}
+			if err := <-closeDone; err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("late embed was admitted while Close was draining")
+		}
+		select {
+		case err := <-closeDone:
+			t.Fatalf("close returned before native call drained: %v", err)
+		default:
+		}
+		close(release)
+		if err := <-closeDone; err != nil {
+			t.Fatal(err)
+		}
+		if destroyed.Load() != 1 {
+			t.Fatalf("destroy calls = %d", destroyed.Load())
+		}
+		if err := transport.Close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if destroyed.Load() != 1 {
+			t.Fatalf("idempotent destroy calls = %d", destroyed.Load())
+		}
+	})
 }
 
 func TestLocalEmbeddingTransportSerializesPipeline(t *testing.T) {
