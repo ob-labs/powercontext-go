@@ -22,7 +22,7 @@ jobs:
         uses: ./.github/actions/setup-go-env
 
       - name: Lint GitHub Actions workflows
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+        run: make actionlint
 
       - name: Verify generated contracts
         run: make check-generated
