@@ -373,6 +373,230 @@ func TestStageIntegrationsIncludesEveryRuntimeAdapterAndExcludesWorkspaceState(t
 	}
 }
 
+func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("release adapter consumption is verified against the Linux release artifact")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	archive := buildAdapterConsumerArchive(t, repository)
+	releaseRoot := unpackReleaseArchive(t, archive)
+
+	for _, required := range []string{
+		".claude-plugin/marketplace.json",
+		"integrations/bub/pyproject.toml",
+		"integrations/claude-code/plugins/powercontext/.claude-plugin/plugin.json",
+		"integrations/codex/plugins/powercontext/.codex-plugin/plugin.json",
+		"integrations/dsh/plugins/powercontext/lib/index.js",
+		"integrations/hermes/plugins/powercontext/plugin.yaml",
+		"integrations/langgraph/pyproject.toml",
+		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
+		"integrations/opencode/plugins/powercontext/lib/index.js",
+		"integrations/pi/plugins/powercontext/extensions/powercontext.ts",
+	} {
+		info, err := os.Stat(filepath.Join(releaseRoot, filepath.FromSlash(required)))
+		if err != nil || !info.Mode().IsRegular() {
+			t.Errorf("release artifact adapter entrypoint %q is unavailable: %v", required, err)
+		}
+	}
+
+	binDirectory, commandLog := writeAdapterConsumerHosts(t)
+	t.Setenv("PATH", binDirectory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FAKE_HOST_LOG", commandLog)
+	t.Setenv("FAKE_PI_PACKAGE", filepath.Join(releaseRoot, "integrations", "pi", "plugins", "powercontext"))
+	t.Setenv("FAKE_OPENCODE_CONFIG", filepath.Join(t.TempDir(), "opencode"))
+
+	for _, host := range []string{"codex", "claude-code", "dsh", "hermes", "opencode", "openclaw", "pi"} {
+		t.Run(host, func(t *testing.T) {
+			t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "powercontext-home"))
+			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
+			t.Setenv("HERMES_HOME", filepath.Join(t.TempDir(), "hermes"))
+			command := exec.CommandContext(
+				t.Context(), filepath.Join(releaseRoot, "bin", "powercontext"), "setup", host, "--source", releaseRoot,
+			)
+			output, commandErr := command.CombinedOutput()
+			if commandErr != nil {
+				t.Fatalf("packaged %s setup failed: %v\n%s", host, commandErr, output)
+			}
+			if !strings.Contains(string(output), "setup complete") {
+				t.Fatalf("packaged %s setup output = %q", host, output)
+			}
+		})
+	}
+
+	commands, err := os.ReadFile(commandLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"codex|plugin marketplace add " + releaseRoot,
+		"claude|plugin marketplace add " + releaseRoot,
+		"dsh|plugin --profile web add " + filepath.Join(releaseRoot, "integrations", "dsh", "plugins", "powercontext"),
+		"opencode|plugin " + filepath.Join(releaseRoot, "integrations", "opencode", "plugins", "powercontext"),
+		"openclaw|plugins install --link --force " + filepath.Join(releaseRoot, "integrations", "openclaw", "plugins", "memory-powercontext"),
+		"pi|install " + filepath.Join(releaseRoot, "integrations", "pi", "plugins", "powercontext"),
+	} {
+		if !strings.Contains(string(commands), expected) {
+			t.Errorf("packaged setup did not consume expected release adapter path %q:\n%s", expected, commands)
+		}
+	}
+}
+
+func buildAdapterConsumerArchive(t *testing.T, repository string) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "powercontext")
+	build := exec.CommandContext(t.Context(), "go", "build", "-tags", "sqlite_fts5", "-o", binary, "./cmd/powercontext")
+	build.Dir = repository
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build release CLI: %v\n%s", err, output)
+	}
+	root := filepath.Join(t.TempDir(), "powercontext-0.0.0-linux-amd64")
+	if err := stageRelease(repository, root, packageOptions{Binary: binary}, binaryFacts{}); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(t.TempDir(), "powercontext.tar.gz")
+	if err := archiveTree(root, archive, time.Unix(0, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	return archive
+}
+
+func unpackReleaseArchive(t *testing.T, archive string) string {
+	t.Helper()
+	file, err := os.Open(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			t.Errorf("close release artifact: %v", closeErr)
+		}
+	}()
+	compressed, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := compressed.Close(); closeErr != nil {
+			t.Errorf("close compressed release artifact: %v", closeErr)
+		}
+	}()
+	root := t.TempDir()
+	reader := tar.NewReader(compressed)
+	for {
+		header, nextErr := reader.Next()
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+		if nextErr != nil {
+			t.Fatal(nextErr)
+		}
+		path := filepath.Join(root, filepath.FromSlash(header.Name))
+		if parentErr := os.MkdirAll(filepath.Dir(path), 0o755); parentErr != nil {
+			t.Fatal(parentErr)
+		}
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if directoryErr := os.MkdirAll(path, header.FileInfo().Mode()); directoryErr != nil {
+				t.Fatal(directoryErr)
+			}
+		case tar.TypeReg:
+			output, createErr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, header.FileInfo().Mode())
+			if createErr != nil {
+				t.Fatal(createErr)
+			}
+			if _, copyErr := io.Copy(output, reader); copyErr != nil {
+				_ = output.Close()
+				t.Fatal(copyErr)
+			}
+			if closeErr := output.Close(); closeErr != nil {
+				t.Fatal(closeErr)
+			}
+		case tar.TypeSymlink:
+			if symlinkErr := os.Symlink(header.Linkname, path); symlinkErr != nil {
+				t.Fatal(symlinkErr)
+			}
+		default:
+			t.Fatalf("unexpected release archive entry %q with type %d", header.Name, header.Typeflag)
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || !entries[0].IsDir() {
+		t.Fatalf("release archive roots = %#v, want one directory", entries)
+	}
+	return filepath.Join(root, entries[0].Name())
+}
+
+func writeAdapterConsumerHosts(t *testing.T) (string, string) {
+	t.Helper()
+	directory := t.TempDir()
+	commandLog := filepath.Join(t.TempDir(), "host-commands.log")
+	script := `#!/usr/bin/env sh
+set -eu
+name="$(basename "$0")"
+printf '%s|%s\n' "$name" "$*" >> "$FAKE_HOST_LOG"
+first="${1-}"
+second="${2-}"
+third="${3-}"
+case "$name" in
+  claude)
+    if [ "$first $second $third" = "plugin marketplace list" ]; then
+      printf '[]\n'
+    elif [ "$first $second" = "plugin list" ]; then
+      printf '[{"id":"powercontext@powercontext","enabled":true,"version":"0.0.0"}]\n'
+    fi
+    ;;
+  codex)
+    if [ "$first $second $third" = "plugin marketplace add" ]; then
+      printf '{"marketplaceName":"powercontext"}\n'
+    elif [ "$first $second" = "plugin add" ]; then
+      printf '{"name":"powercontext","version":"0.0.0"}\n'
+    elif [ "$first $second" = "plugin list" ]; then
+      printf '{"installed":[{"name":"powercontext","installed":true,"enabled":true,"pluginId":"powercontext@powercontext"}]}\n'
+    fi
+    ;;
+  dsh)
+    if [ "$first $second $third" = "--profile web --dump-config" ]; then
+      printf 'id: powercontext-dsh\n'
+    fi
+    ;;
+  hermes)
+    if [ "$first" = "--version" ]; then
+      printf 'Hermes Agent v0.20.4\n'
+    fi
+    ;;
+  opencode)
+    if [ "$first" = "--version" ]; then
+      printf '1.18.21\n'
+    elif [ "$first $second" = "debug paths" ]; then
+      printf 'config %s\n' "$FAKE_OPENCODE_CONFIG"
+    fi
+    ;;
+  openclaw)
+    if [ "$first" = "--version" ]; then
+      printf '2026.8.1-beta.2\n'
+    elif [ "$first $second $third" = "config get gateway.mode" ] || [ "$first $second $third" = "config get tools.alsoAllow" ]; then
+      exit 1
+    fi
+    ;;
+  pi)
+    if [ "$first" = "list" ]; then
+      printf 'User packages:\n  %s\n    %s\n' "$FAKE_PI_PACKAGE" "$FAKE_PI_PACKAGE"
+    fi
+    ;;
+esac
+`
+	for _, name := range []string{"claude", "codex", "dsh", "hermes", "opencode", "openclaw", "pi", "pnpm"} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return directory, commandLog
+}
+
 func TestCopyONNXRuntimeOnlyCopiesRuntimeLibraries(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "lib")
 	destination := filepath.Join(t.TempDir(), "runtime")
