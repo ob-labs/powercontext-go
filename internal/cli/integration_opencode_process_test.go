@@ -43,10 +43,15 @@ func TestRunOpenCodeProbeExecutesRequestWaitsForNonceAndStopsProcess(t *testing.
 	t.Cleanup(func() { stopOpenCodeProbeHelper(t, pidPath) })
 	requests := 0
 	requester := func(_ context.Context, endpoint string) error {
-		requests++
 		if endpoint != "http://127.0.0.1:"+strconv.Itoa(port)+"/session" {
 			t.Fatalf("probe endpoint = %q", endpoint)
 		}
+		if _, err := os.Stat(pidPath); errors.Is(err, os.ErrNotExist) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		requests++
 		value := "wrong-nonce"
 		if requests > 1 {
 			value = "expected-nonce"
