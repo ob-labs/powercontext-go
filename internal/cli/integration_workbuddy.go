@@ -798,7 +798,7 @@ func isLegacyWorkBuddyMCP(entry map[string]any) bool {
 	url, _ := entry["url"].(string)
 	headers, headersOK := entry["headers"].(map[string]any)
 	description, _ := entry["description"].(string)
-	_, disabledOK := entry["disabled"].(bool)
+	disabled, disabledOK := entry["disabled"].(bool)
 	kind, _ := entry["type"].(string)
 	return kind == "http" && url == workBuddyLegacyMCPURL && headersOK && len(headers) == 0 &&
 		description == workBuddyMCPDescription && disabledOK && !disabled
@@ -818,7 +818,7 @@ func isRemoteAuthenticatedWorkBuddyMCP(entry map[string]any) bool {
 	parsed, parseErr := url.Parse(serverURL)
 	headers, headersOK := entry["headers"].(map[string]any)
 	authorization, authorizationOK := headers["Authorization"].(string)
-	disabled, disabledOK := entry["disabled"].(bool)
+	_, disabledOK := entry["disabled"].(bool)
 	kind, kindOK := entry["type"].(string)
 	return kindOK && kind == "http" && urlOK && parseErr == nil && parsed.Scheme == "https" && parsed.Host != "" &&
 		parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" && headersOK && authorizationOK &&
