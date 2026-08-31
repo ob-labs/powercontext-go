@@ -1,0 +1,11 @@
+name: Setup repository tools
+description: Restore repository-local Go development tools from an input-sensitive cache
+
+runs:
+  using: composite
+  steps:
+    - name: Restore repository-local tool cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .tools/bin
+        key: powercontext-tools-${{ runner.os }}-${{ hashFiles('Makefile', 'go.mod', 'go.sum', '.golangci.yml', 'tools/**') }}
