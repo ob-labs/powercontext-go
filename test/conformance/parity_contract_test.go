@@ -41,6 +41,21 @@ type parityContract struct {
 		Baseline          string `json:"baseline"`
 		EvidenceDirectory string `json:"evidence_directory"`
 	} `json:"frozen_release_oracle"`
+	ReleaseTarget struct {
+		Tag           string `json:"tag"`
+		Version       string `json:"version"`
+		Commit        string `json:"commit"`
+		TestCaseCount int    `json:"test_case_count"`
+		TestFileCount int    `json:"test_file_count"`
+		Wheel         struct {
+			Filename string `json:"filename"`
+			SHA256   string `json:"sha256"`
+		} `json:"wheel"`
+		Sdist struct {
+			Filename string `json:"filename"`
+			SHA256   string `json:"sha256"`
+		} `json:"sdist"`
+	} `json:"release_target"`
 	ExactTargetSHA      string `json:"exact_target_sha"`
 	TargetTestCaseCount int    `json:"target_test_case_count"`
 	ActiveParityTarget  string `json:"active_parity_target"`
@@ -67,11 +82,11 @@ func TestParityContractRejectsAmbiguousJSON(t *testing.T) {
 	}{
 		{
 			name:   "duplicate member",
-			mutant: strings.Replace(string(contents), `"schema_version": 1,`, `"schema_version": 999, "schema_version": 1,`, 1),
+			mutant: strings.Replace(string(contents), `"schema_version": 2,`, `"schema_version": 999, "schema_version": 2,`, 1),
 		},
 		{
 			name:   "unknown member",
-			mutant: strings.Replace(string(contents), `"schema_version": 1,`, `"schema_version": 1, "future_semantics": true,`, 1),
+			mutant: strings.Replace(string(contents), `"schema_version": 2,`, `"schema_version": 2, "future_semantics": true,`, 1),
 		},
 	}
 	for _, test := range tests {
@@ -108,8 +123,8 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 	contract := readParityContract(t)
 	root := repositoryRoot(t)
 
-	if contract.SchemaVersion != 1 {
-		t.Fatalf("parity contract schema version = %d, want 1", contract.SchemaVersion)
+	if contract.SchemaVersion != 2 {
+		t.Fatalf("parity contract schema version = %d, want 2", contract.SchemaVersion)
 	}
 
 	// Concept 1: the upstream repository identity.
@@ -169,6 +184,31 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 	}
 	if active == oracle {
 		t.Errorf("active parity target collapses into the frozen release Oracle %s; parity work must measure a newer upstream state", oracle)
+	}
+}
+
+func TestParityContractRecordsSignedV010ReleaseIdentity(t *testing.T) {
+	contract := readParityContract(t)
+	release := contract.ReleaseTarget
+	if release.Tag != "powercontext-v0.1.0" {
+		t.Errorf("release tag = %q, want powercontext-v0.1.0", release.Tag)
+	}
+	if release.Version != "0.1.0" {
+		t.Errorf("release version = %q, want 0.1.0", release.Version)
+	}
+	if release.Commit != "7b736206a53a6de6f43d4b517893ee1a80e7183d" {
+		t.Errorf("release commit = %q, want exact v0.1.0 release commit", release.Commit)
+	}
+	if release.TestCaseCount != 812 || release.TestFileCount != 132 {
+		t.Errorf("release inventory = %d cases in %d files, want 812 cases in 132 files", release.TestCaseCount, release.TestFileCount)
+	}
+	if release.Wheel.Filename != "powercontext-0.1.0-py3-none-any.whl" ||
+		release.Wheel.SHA256 != "94f8fef36d4afcee09dd5231fbe5edfe47e42e41994596b775e2f203ef6fac72" {
+		t.Errorf("wheel identity = %#v", release.Wheel)
+	}
+	if release.Sdist.Filename != "powercontext-0.1.0.tar.gz" ||
+		release.Sdist.SHA256 != "18d47a335340b0870216e2cc0fb1fd8e4d865880155daeea3b01187c950fd746" {
+		t.Errorf("sdist identity = %#v", release.Sdist)
 	}
 }
 
