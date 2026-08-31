@@ -55,16 +55,16 @@ func newSetupOpenClawCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{
 		Use: "openclaw", Short: "Build, install, and configure the PowerContext OpenClaw memory plugin.", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			normalizedURL, err := normalizeOpenClawServerURL(serverURL)
+			if err != nil {
+				return err
+			}
 			executable, err := openClawExecutable(state.system, runtime.GOOS)
 			if err != nil {
 				return errors.New("OpenClaw CLI is not installed or is not on PATH")
 			}
 			if _, versionErr := supportedOpenClawVersion(command.Context(), state.system, executable); versionErr != nil {
 				return versionErr
-			}
-			normalizedURL, err := normalizeOpenClawServerURL(serverURL)
-			if err != nil {
-				return err
 			}
 			if scopeMode != "agent" && scopeMode != "project" {
 				return errors.New("OpenClaw scope must be agent or project")

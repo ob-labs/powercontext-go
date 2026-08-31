@@ -274,12 +274,13 @@ source / artifact / trigger / inference
   caller supplies the client and explicitly vouches for transport security.
   Return a typed refusal that preserves configuration-error matching, names the
   non-loopback policy, and never includes the rejected URL in its representations.
-- When a cross-field security policy depends on environment values plus CLI
-  overrides, preserve whether each override was explicitly present, reject
-  explicit blank values as operator input, and merge valid overrides before the
-  final validation. Verify both directions: a safe override repairs an unsafe
-  environment value, and an unsafe override cannot replace a safe environment
-  value without failing.
+- When a cross-field security policy or parent command depends on optional CLI
+  overrides, preserve explicit presence separately from the value, reject an
+  explicit blank instead of treating it as omission, and merge or forward valid
+  overrides before final validation. For environment merges, verify both safe
+  and unsafe override directions; for parent forwarding, verify omission keeps
+  the child default while an explicit blank reaches child validation before any
+  write.
 - When a CLI converts a typed configuration failure into a usage error, keep
   the underlying error matchable and name concrete operator remediation without
   exposing configured values. Verify exit code 2 and that execution never
@@ -301,3 +302,7 @@ source / artifact / trigger / inference
   boundary, anchor the mutation to the target job's actual adjacent boundary
   after structural changes. Verify the mutant changes that target job and is
   rejected by the contract validator.
+- When CLI behavior depends on whether stdin is interactive, use an actual
+  terminal query instead of treating every character device as a TTY. Verify
+  null devices and pipes remain non-interactive while a controlled terminal
+  input still enables the prompt path.

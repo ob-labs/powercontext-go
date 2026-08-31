@@ -31,8 +31,17 @@ const (
 )
 
 func newSetupCommand(state *commandState) *cobra.Command {
-	command := &cobra.Command{Use: "setup", Short: "Install and configure PowerContext integrations."}
+	command := &cobra.Command{
+		Use: "setup", Short: "Install and configure PowerContext integrations.", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			if err := command.Help(); err != nil {
+				return err
+			}
+			return usageError(errors.New("setup requires a subcommand"))
+		},
+	}
 	command.AddCommand(
+		newSetupSelectCommand(state),
 		newSetupCodexCommand(state),
 		newSetupClaudeCodeCommand(state),
 		newSetupDSHCommand(state),

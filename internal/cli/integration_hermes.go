@@ -69,7 +69,7 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
 					return writeErr
 				}
-				return alreadyReported(errors.New("Hermes diagnostics did not pass"))
+				return alreadyReported(setupVerificationError(checks))
 			}
 			result := map[string]string{
 				"plugin": hermesPluginName, "plugin_path": target, "hermes_home": home, "data_dir": dataDirectory,

@@ -211,7 +211,112 @@
     },
     "tests/test_setup_select.py": {
       "mode": "go-port",
-      "reason": "Interactive/non-interactive host selection CLI; the CLI is Go (internal/cli)."
+      "reason": "Interactive/non-interactive host selection CLI; the CLI is Go (internal/cli).",
+      "cases": {
+        "test_setup_without_subcommand_prints_help_and_installs_nothing": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupWithoutSubcommandPrintsHelpAndInstallsNothing"
+          ]
+        },
+        "test_setup_select_json_without_host_does_not_install": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectJSONRequiresHostBeforeInstalling"
+          ]
+        },
+        "test_setup_select_without_host_requires_host_on_a_non_tty": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectNonTTYRequiresHostBeforeInstalling"
+          ]
+        },
+        "test_setup_select_rejects_an_unknown_host_before_installing": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnknownHostBeforeInstalling"
+          ]
+        },
+        "test_setup_select_installs_only_the_requested_hosts": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags"
+          ]
+        },
+        "test_setup_select_continues_after_a_selected_host_fails": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectContinuesAfterSelectedHostFails"
+          ]
+        },
+        "test_setup_select_reports_an_unavailable_selected_host_and_continues": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectHumanReportIncludesFailureAndContinues"
+          ]
+        },
+        "test_setup_select_reports_a_successful_rerun_as_installed": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectReportsSuccessfulRerunAsInstalled"
+          ]
+        },
+        "test_setup_select_reads_a_tty_selection_by_number": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectReadsTTYSelectionByNumber"
+          ]
+        },
+        "test_setup_select_cancels_an_empty_tty_selection": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectCancelsEmptyTTYSelection"
+          ]
+        },
+        "test_setup_select_rejects_an_invalid_tty_token_without_installing": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsInvalidTTYTokenBeforeInstalling"
+          ]
+        },
+        "test_setup_select_deduplicates_repeated_host_flags": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags"
+          ]
+        },
+        "test_setup_select_json_writes_the_matrix_without_a_prompt": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags"
+          ]
+        },
+        "test_setup_select_passes_source_ref_and_host_specific_defaults": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectPassesSourceRefAndClaudeOptions",
+            "go:internal/cli/integration_hosts_test.go#TestOpenClawSetupFlagsPreservePythonDefaults"
+          ]
+        },
+        "test_setup_select_passes_server_and_scope_overrides_to_openclaw": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectPassesServerAndScopeOverridesToOpenClaw"
+          ]
+        },
+        "test_setup_select_fails_a_row_when_post_install_verification_fails": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectContinuesAfterPostInstallVerificationFails",
+            "go:internal/cli/setup_select_test.go#TestSetupSelectFailsRowsWhenPostInstallVerificationFails",
+            "go:internal/cli/setup_select_test.go#TestSetupSelectFailsOpenCodeRowWhenActivationVerificationFails"
+          ]
+        },
+        "test_setup_select_continues_after_post_install_verification_fails": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectContinuesAfterPostInstallVerificationFails"
+          ]
+        },
+        "test_setup_select_prints_hermes_specific_next_step_only_when_installed": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestSetupSelectPrintsHermesNextStepOnlyWhenInstalled"
+          ]
+        },
+        "test_setup_dsh_still_fails_closed_when_the_cli_is_missing": {
+          "evidence": [
+            "go:internal/cli/system_contract_test.go#TestSetupDSHReportsMissingCLI"
+          ]
+        },
+        "test_parse_host_selection_accepts_names_and_reorders_to_the_catalog": {
+          "evidence": [
+            "go:internal/cli/setup_select_test.go#TestParseSetupHostSelectionAcceptsNamesAndCatalogNumbers"
+          ]
+        }
+      }
     },
     "tests/test_transport.py": {
       "mode": "go-port",

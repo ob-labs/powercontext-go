@@ -72,7 +72,7 @@ func newSetupCodexCommand(state *commandState) *cobra.Command {
 				if writeErr := writeDiagnostics(state, checks); writeErr != nil {
 					return writeErr
 				}
-				return alreadyReported(errors.New("Codex diagnostics did not pass"))
+				return alreadyReported(setupVerificationError(checks))
 			}
 			result := map[string]string{
 				"marketplace": marketplaceName, "plugin": name, "plugin_version": version, "data_dir": dataDirectory,
