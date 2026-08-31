@@ -230,15 +230,14 @@ func TestSetupSelectFailsOpenCodeRowWhenActivationVerificationFails(t *testing.T
 		results: []systemCommandResult{
 			{output: "1.18.21\n"},
 			{output: "config " + config + "\n"},
-			{},
 			{output: "1.18.21\n"},
 			{output: "config " + config + "\n"},
 			{output: fmt.Sprintf(`{"plugin":[%q]}`, plugin)},
 		},
 	}
 	commands := &environmentAwareCommands{scriptedSystemCommands: base}
-	commands.runEnv = func(ctx context.Context, _ map[string]string, executable string, arguments ...string) ([]byte, error) {
-		return base.Run(ctx, executable, arguments...)
+	commands.runEnv = func(context.Context, map[string]string, string, ...string) ([]byte, error) {
+		return nil, nil
 	}
 	stdout, _, err := executeSystemCLIWithInput(
 		t, commands, strings.NewReader(""),

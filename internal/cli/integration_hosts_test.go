@@ -22,8 +22,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSetupAndDoctorExposeCurrentHostMatrix(t *testing.T) {
@@ -400,14 +402,13 @@ func TestOpenCodeDiagnosticsRequireActivationAndOwnedSkill(t *testing.T) {
 				},
 			}
 			commands := &environmentAwareCommands{scriptedSystemCommands: base}
-			commands.runEnv = func(ctx context.Context, environment map[string]string, executable string, arguments ...string) ([]byte, error) {
-				output, err := base.Run(ctx, executable, arguments...)
-				if err == nil && test.activate {
+			commands.runEnv = func(_ context.Context, environment map[string]string, _ string, _ ...string) ([]byte, error) {
+				if test.activate {
 					if writeErr := os.WriteFile(environment[openCodeProbePath], []byte(environment[openCodeProbeNonce]), 0o600); writeErr != nil {
 						t.Fatal(writeErr)
 					}
 				}
-				return output, err
+				return nil, nil
 			}
 			checks := runOpenCodeDiagnostics(t.Context(), commands)
 			if checks["plugin"].Status != test.wantStatus || checks["skill"].Status != "ok" {
@@ -417,6 +418,69 @@ func TestOpenCodeDiagnosticsRequireActivationAndOwnedSkill(t *testing.T) {
 				t.Fatalf("inactive detail = %q", checks["plugin"].Detail)
 			}
 		})
+	}
+}
+
+func TestOpenCodeDiagnosticsAcceptsAnOwnedAutoloadBundle(t *testing.T) {
+	plugin := writeOpenCodePlugin(t, filepath.Join(t.TempDir(), "checkout"))
+	config := filepath.Join(t.TempDir(), "config")
+	bundle := filepath.Join(config, "plugins", openCodePluginName+".js")
+	if err := installOpenCodePlugin(filepath.Join(plugin, "lib", "index.js"), bundle); err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(config, "skills", "project-context")
+	if err := installOpenCodeSkill(filepath.Join(plugin, "skills", "project-context"), skill); err != nil {
+		t.Fatal(err)
+	}
+	base := &scriptedSystemCommands{
+		t: t, paths: map[string]string{"opencode": "/resolved/bin/opencode"},
+		results: []systemCommandResult{
+			{output: "1.18.21\n"},
+			{output: "config     " + config + "\n"},
+			{output: `{}`},
+		},
+	}
+	commands := &environmentAwareCommands{scriptedSystemCommands: base}
+	commands.runEnv = func(_ context.Context, environment map[string]string, _ string, _ ...string) ([]byte, error) {
+		return nil, os.WriteFile(environment[openCodeProbePath], []byte(environment[openCodeProbeNonce]), 0o600)
+	}
+
+	checks := runOpenCodeDiagnostics(t.Context(), commands)
+	if checks["plugin"].Status != "ok" || checks["skill"].Status != "ok" {
+		t.Fatalf("diagnostics = %#v", checks)
+	}
+}
+
+func TestOpenCodeActivationProbeUsesHeadlessServerWithoutModel(t *testing.T) {
+	plugin := writeOpenCodePlugin(t, filepath.Join(t.TempDir(), "checkout"))
+	commands := &scriptedSystemCommands{
+		t:       t,
+		results: []systemCommandResult{{output: fmt.Sprintf(`{"plugin":[%q]}`, plugin)}},
+	}
+	var observed []string
+	runner := func(_ context.Context, command []string, environment map[string]string, timeout time.Duration) error {
+		observed = slices.Clone(command)
+		if timeout <= 0 {
+			t.Fatalf("probe timeout = %s", timeout)
+		}
+		return os.WriteFile(environment[openCodeProbePath], []byte(environment[openCodeProbeNonce]), 0o600)
+	}
+
+	configured, activated, err := probeOpenCodeActivationWithRunner(
+		t.Context(), commands, "/usr/bin/opencode", runner,
+	)
+	if err != nil || !configured || !activated {
+		t.Fatalf("configured = %v, activated = %v, error = %v", configured, activated, err)
+	}
+	if len(observed) != 6 || observed[0] != "/usr/bin/opencode" || observed[1] != "serve" ||
+		observed[2] != "--hostname" || observed[3] != "127.0.0.1" || observed[4] != "--port" {
+		t.Fatalf("probe command = %v", observed)
+	}
+	if _, portErr := strconv.Atoi(observed[5]); portErr != nil {
+		t.Fatalf("probe port = %q", observed[5])
+	}
+	if slices.Contains(observed, "--model") {
+		t.Fatalf("probe command invokes a model: %v", observed)
 	}
 }
 
@@ -622,28 +686,36 @@ func TestPiDiagnosticsReportInstalledPackageAsJSON(t *testing.T) {
 	}
 }
 
-func TestSetupOpenCodeProtectsAndPublishesOwnedSkill(t *testing.T) {
+func TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill(t *testing.T) {
 	checkout := filepath.Join(t.TempDir(), "checkout")
 	plugin := writeOpenCodePlugin(t, checkout)
 	config := filepath.Join(t.TempDir(), "config")
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
-		results: []systemCommandResult{{output: "1.18.21\n"}, {output: "config     " + config + "\n"}, {}},
+		results: []systemCommandResult{{output: "1.18.21\n"}, {output: "config     " + config + "\n"}},
 	}
 	if _, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout); err != nil {
 		t.Fatal(err)
+	}
+	bundle := filepath.Join(config, "plugins", openCodePluginName+".js")
+	content, err := os.ReadFile(bundle)
+	if err != nil || string(content) != "export default {}\n" {
+		t.Fatalf("plugin content = %q, error = %v", content, err)
+	}
+	if !ownedOpenCodePlugin(bundle) {
+		t.Fatalf("plugin %q is not marked as PowerContext-owned", bundle)
 	}
 	skill := filepath.Join(config, "skills", "project-context")
 	if !ownedOpenCodeSkill(skill) {
 		t.Fatalf("skill %q is not marked as PowerContext-owned", skill)
 	}
-	content, err := os.ReadFile(filepath.Join(skill, "SKILL.md"))
+	content, err = os.ReadFile(filepath.Join(skill, "SKILL.md"))
 	if err != nil || string(content) != "project context\n" {
 		t.Fatalf("skill content = %q, error = %v", content, err)
 	}
-	if got := commands.calls[2].String(); got != "/usr/bin/opencode plugin "+plugin+" --global --force" {
-		t.Fatalf("install command = %q", got)
+	if len(commands.calls) != 2 {
+		t.Fatalf("unexpected OpenCode commands = %v; source plugin = %s", commands.calls, plugin)
 	}
 }
 
@@ -666,6 +738,73 @@ func TestSetupOpenCodeRefusesUnownedSkillBeforePluginMutation(t *testing.T) {
 	_, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout)
 	if err == nil || !strings.Contains(err.Error(), "not owned by PowerContext") || len(commands.calls) != 2 {
 		t.Fatalf("error = %v, commands = %v", err, commands.calls)
+	}
+}
+
+func TestSetupOpenCodeRefusesUnownedPluginBeforeSkillMutation(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "checkout")
+	writeOpenCodePlugin(t, checkout)
+	config := filepath.Join(t.TempDir(), "config")
+	bundle := filepath.Join(config, "plugins", openCodePluginName+".js")
+	writeTestFile(t, bundle, "user owned\n")
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	commands := &scriptedSystemCommands{
+		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
+		results: []systemCommandResult{{output: "1.18.21\n"}, {output: "config " + config + "\n"}},
+	}
+	_, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout)
+	if err == nil || !strings.Contains(err.Error(), "not owned by PowerContext") || len(commands.calls) != 2 {
+		t.Fatalf("error = %v, commands = %v", err, commands.calls)
+	}
+	content, readErr := os.ReadFile(bundle)
+	if readErr != nil || string(content) != "user owned\n" {
+		t.Fatalf("plugin content = %q, error = %v", content, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(config, "skills", "project-context")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Skill was mutated before plugin conflict was reported: %v", statErr)
+	}
+}
+
+func TestInterruptedOpenCodePluginInstallRecoversOnRetry(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "index.js")
+	writeTestFile(t, source, "export default {}\n")
+	target := filepath.Join(t.TempDir(), "config", "plugins", openCodePluginName+".js")
+	replacements := 0
+	interruptedRename := func(oldPath, newPath string) error {
+		replacements++
+		if replacements == 2 {
+			return errors.New("interrupted")
+		}
+		return os.Rename(oldPath, newPath)
+	}
+
+	err := installOpenCodePluginWithRename(source, target, interruptedRename)
+	if err == nil {
+		t.Fatal("interrupted install succeeded")
+	}
+	manifest := filepath.Join(filepath.Dir(target), openCodePluginOwner)
+	if !ownedOpenCodePlugin(target) {
+		t.Fatalf("ownership manifest %q was not published before the interrupted bundle replacement", manifest)
+	}
+	if _, statErr := os.Stat(target); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("plugin target survived interrupted first install: %v", statErr)
+	}
+	entries, readErr := os.ReadDir(filepath.Dir(target))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".tmp") {
+			t.Fatalf("temporary plugin path survived interruption: %s", entry.Name())
+		}
+	}
+
+	if retryErr := installOpenCodePlugin(source, target); retryErr != nil {
+		t.Fatal(retryErr)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil || string(content) != "export default {}\n" || !ownedOpenCodePlugin(target) {
+		t.Fatalf("repaired plugin content = %q, owned = %v, error = %v", content, ownedOpenCodePlugin(target), readErr)
 	}
 }
 
@@ -1028,4 +1167,14 @@ func (e *environmentAwareCommands) RunEnv(
 	arguments ...string,
 ) ([]byte, error) {
 	return e.runEnv(ctx, environment, executable, arguments...)
+}
+
+func (e *environmentAwareCommands) runOpenCodeProbe(
+	ctx context.Context,
+	command []string,
+	environment map[string]string,
+	_ time.Duration,
+) error {
+	_, err := e.runEnv(ctx, environment, command[0], command[1:]...)
+	return err
 }

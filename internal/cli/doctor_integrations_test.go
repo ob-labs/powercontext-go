@@ -150,18 +150,15 @@ func TestDoctorIntegrationsFailsWhenPresentOpenCodeSkillIsBroken(t *testing.T) {
 	}
 	commands := &environmentAwareCommands{scriptedSystemCommands: base}
 	commands.runEnv = func(
-		ctx context.Context,
+		_ context.Context,
 		environment map[string]string,
-		executable string,
-		arguments ...string,
+		_ string,
+		_ ...string,
 	) ([]byte, error) {
-		output, err := base.Run(ctx, executable, arguments...)
-		if err == nil {
-			if writeErr := os.WriteFile(environment[openCodeProbePath], []byte(environment[openCodeProbeNonce]), 0o600); writeErr != nil {
-				t.Fatal(writeErr)
-			}
+		if writeErr := os.WriteFile(environment[openCodeProbePath], []byte(environment[openCodeProbeNonce]), 0o600); writeErr != nil {
+			t.Fatal(writeErr)
 		}
-		return output, err
+		return nil, nil
 	}
 	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "integrations", "--json")
 	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {

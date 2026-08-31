@@ -284,7 +284,29 @@
     },
     "tests/test_opencode_cli.py": {
       "mode": "go-port",
-      "reason": "OpenCode activation probe CLI commands; the CLI is Go (internal/cli)."
+      "reason": "OpenCode activation probe CLI commands; the CLI is Go (internal/cli).",
+      "cases": {
+        "test_activation_probe_uses_headless_server_without_model": {
+          "evidence": [
+            "go:internal/cli/integration_hosts_test.go#TestOpenCodeActivationProbeUsesHeadlessServerWithoutModel"
+          ]
+        },
+        "test_run_opencode_probe_executes_request_waits_for_nonce_and_stops_process": {
+          "evidence": [
+            "go:internal/cli/integration_opencode_process_test.go#TestRunOpenCodeProbeExecutesRequestWaitsForNonceAndStopsProcess"
+          ]
+        },
+        "test_run_opencode_probe_handles_process_exit_and_stops_process": {
+          "evidence": [
+            "go:internal/cli/integration_opencode_process_test.go#TestRunOpenCodeProbeHandlesProcessExitAndStopsProcess"
+          ]
+        },
+        "test_run_opencode_probe_times_out_and_stops_process": {
+          "evidence": [
+            "go:internal/cli/integration_opencode_process_test.go#TestRunOpenCodeProbeTimesOutAndStopsProcess"
+          ]
+        }
+      }
     },
     "tests/test_setup_select.py": {
       "mode": "go-port",
