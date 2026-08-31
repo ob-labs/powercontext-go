@@ -2557,12 +2557,12 @@
     "tests/test_opencode_cli.py": {
       "mode": "go-port",
       "supporting_evidence": [
-        "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeProtectsAndPublishesOwnedSkill",
+        "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill",
         "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeRefusesUnownedSkillBeforePluginMutation"
       ],
       "cases": {
         "test_setup_opencode_installs_plugin_and_owned_skill": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeProtectsAndPublishesOwnedSkill"
+          "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill"
         ],
         "test_remote_checkout_cache_is_scoped_by_source_and_resolved_commit": [
           "go:internal/cli/integration_hosts_test.go#TestOpenCodeRemoteCheckoutCacheIsSourceAndResolvedCommitScoped"

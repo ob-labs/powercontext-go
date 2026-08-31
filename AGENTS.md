@@ -325,3 +325,9 @@ source / artifact / trigger / inference
   quoted and escaped literals, rejected expansion and control input, invalid
   UTF-8, marker text inside values, repeated markers, and both human and JSON
   output.
+- When a host autoloads a plugin from a global directory, publish its constant
+  ownership manifest before atomically replacing the bundle and treat an
+  existing unowned bundle as a conflict. Verify an interrupted first install
+  leaves only recoverable ownership state, a retry repairs it, and a bounded
+  no-model activation lifecycle covers configured, active, inactive, exited,
+  timeout, and cleanup outcomes through real child-process boundaries.

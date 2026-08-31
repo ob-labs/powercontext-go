@@ -22,24 +22,42 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
 const (
-	openCodePluginName = "powercontext-opencode"
-	openCodeRelative   = "integrations/opencode/plugins/powercontext"
-	openCodeSkillOwner = ".powercontext.json"
-	openCodeProbePath  = "POWERCONTEXT_OPENCODE_ACTIVATION_PROBE_PATH"
-	openCodeProbeNonce = "POWERCONTEXT_OPENCODE_ACTIVATION_PROBE_NONCE"
+	openCodePluginName      = "powercontext-opencode"
+	openCodeRelative        = "integrations/opencode/plugins/powercontext"
+	openCodePluginBundle    = "lib/index.js"
+	openCodePluginOwner     = ".powercontext-opencode.json"
+	openCodeSkillOwner      = ".powercontext.json"
+	openCodeProbePath       = "POWERCONTEXT_OPENCODE_ACTIVATION_PROBE_PATH"
+	openCodeProbeNonce      = "POWERCONTEXT_OPENCODE_ACTIVATION_PROBE_NONCE"
+	openCodePluginOwnership = "{\n  \"schema\": 1,\n  \"owner\": \"powercontext\",\n  \"integration\": \"opencode-plugin\"\n}\n"
+	openCodeProbeTimeout    = 15 * time.Second
 )
+
+type (
+	openCodeProbeRunner    func(context.Context, []string, map[string]string, time.Duration) error
+	openCodeProbeRequester func(context.Context, string) error
+)
+
+type openCodeProbeRunnerProvider interface {
+	runOpenCodeProbe(context.Context, []string, map[string]string, time.Duration) error
+}
 
 var (
 	openCodeVersionPattern = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)`)
@@ -73,11 +91,15 @@ func newSetupOpenCodeCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			pluginTarget := filepath.Join(configDirectory, "plugins", openCodePluginName+".js")
 			skillPath := filepath.Join(configDirectory, "skills", "project-context")
+			if pluginErr := requireReplaceableOpenCodePlugin(pluginTarget); pluginErr != nil {
+				return pluginErr
+			}
 			if skillErr := requireReplaceableOpenCodeSkill(skillPath); skillErr != nil {
 				return skillErr
 			}
-			if _, installErr := state.system.Run(command.Context(), executable, "plugin", pluginPath, "--global", "--force"); installErr != nil {
+			if installErr := installOpenCodePlugin(filepath.Join(pluginPath, filepath.FromSlash(openCodePluginBundle)), pluginTarget); installErr != nil {
 				return installErr
 			}
 			if installErr := installOpenCodeSkill(filepath.Join(pluginPath, "skills", "project-context"), skillPath); installErr != nil {
@@ -290,6 +312,117 @@ func requireReplaceableOpenCodeSkill(target string) error {
 	return nil
 }
 
+func requireReplaceableOpenCodePlugin(target string) error {
+	if _, err := os.Stat(target); err == nil && !ownedOpenCodePlugin(target) {
+		return fmt.Errorf("OpenCode plugin path %s already exists and is not owned by PowerContext", displayPath(target))
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.New("cannot inspect OpenCode plugin path")
+	}
+	return nil
+}
+
+func installOpenCodePlugin(source, target string) error {
+	return installOpenCodePluginWithRename(source, target, os.Rename)
+}
+
+func installOpenCodePluginWithRename(source, target string, rename func(string, string) error) error {
+	if err := requireReplaceableOpenCodePlugin(target); err != nil {
+		return err
+	}
+	info, err := os.Stat(source)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maximumCommandOutput {
+		return errors.New("cannot read the OpenCode plugin bundle")
+	}
+	bundle, err := os.ReadFile(source)
+	if err != nil {
+		return errors.New("cannot read the OpenCode plugin bundle")
+	}
+	parent := filepath.Dir(target)
+	if mkdirErr := os.MkdirAll(parent, 0o755); mkdirErr != nil {
+		return errors.New("cannot create the OpenCode plugin directory")
+	}
+	staging, err := stageOpenCodeFile(parent, filepath.Base(target), bundle, info.Mode().Perm()&0o755)
+	if err != nil {
+		return errors.New("cannot stage the OpenCode plugin bundle")
+	}
+	defer func() { _ = os.Remove(staging) }()
+
+	manifest := filepath.Join(parent, openCodePluginOwner)
+	if !ownedOpenCodePlugin(target) {
+		manifestStaging, stageErr := stageOpenCodeFile(parent, openCodePluginOwner, []byte(openCodePluginOwnership), 0o644)
+		if stageErr != nil {
+			return errors.New("cannot stage the OpenCode plugin ownership manifest")
+		}
+		defer func() { _ = os.Remove(manifestStaging) }()
+		if removeErr := os.Remove(manifest); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return errors.New("cannot replace the OpenCode plugin ownership manifest")
+		}
+		if renameErr := rename(manifestStaging, manifest); renameErr != nil {
+			return errors.New("cannot publish the OpenCode plugin ownership manifest")
+		}
+	}
+
+	backup := ""
+	if _, err := os.Stat(target); err == nil {
+		backupFile, createErr := os.CreateTemp(parent, "."+filepath.Base(target)+"-*.bak")
+		if createErr != nil {
+			return errors.New("cannot stage the existing OpenCode plugin bundle")
+		}
+		backup = backupFile.Name()
+		if closeErr := backupFile.Close(); closeErr != nil {
+			_ = os.Remove(backup)
+			return errors.New("cannot stage the existing OpenCode plugin bundle")
+		}
+		if removeErr := os.Remove(backup); removeErr != nil {
+			return errors.New("cannot stage the existing OpenCode plugin bundle")
+		}
+		if renameErr := rename(target, backup); renameErr != nil {
+			return errors.New("cannot preserve the existing OpenCode plugin bundle")
+		}
+	}
+	if renameErr := rename(staging, target); renameErr != nil {
+		if backup != "" {
+			_ = rename(backup, target)
+		}
+		return errors.New("cannot activate the OpenCode plugin bundle")
+	}
+	if backup != "" {
+		_ = os.Remove(backup)
+	}
+	return nil
+}
+
+func stageOpenCodeFile(directory, base string, content []byte, mode os.FileMode) (string, error) {
+	file, err := os.CreateTemp(directory, "."+base+"-*.tmp")
+	if err != nil {
+		return "", err
+	}
+	path := file.Name()
+	if mode == 0 {
+		mode = 0o644
+	}
+	if err := file.Chmod(mode); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	if _, err := file.Write(content); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
 func installOpenCodeSkill(source, target string) error {
 	if err := requireReplaceableOpenCodeSkill(target); err != nil {
 		return err
@@ -381,6 +514,20 @@ func ownedOpenCodeSkill(path string) bool {
 		manifest.Owner == "powercontext" && manifest.Integration == "opencode"
 }
 
+func ownedOpenCodePlugin(path string) bool {
+	payload, err := os.ReadFile(filepath.Join(filepath.Dir(path), openCodePluginOwner))
+	if err != nil || len(payload) > 4096 {
+		return false
+	}
+	var manifest struct {
+		Schema      int    `json:"schema"`
+		Owner       string `json:"owner"`
+		Integration string `json:"integration"`
+	}
+	return json.Unmarshal(payload, &manifest) == nil && manifest.Schema == 1 &&
+		manifest.Owner == "powercontext" && manifest.Integration == "opencode-plugin"
+}
+
 func runOpenCodeDiagnostics(ctx context.Context, commands systemCommandExecutor) map[string]diagnostic {
 	executable, err := commands.LookPath("opencode")
 	if err != nil {
@@ -399,6 +546,8 @@ func runOpenCodeDiagnostics(ctx context.Context, commands systemCommandExecutor)
 		}
 	}
 	configured, activated, err := probeOpenCodeActivation(ctx, commands, executable)
+	pluginPath := filepath.Join(configDirectory, "plugins", openCodePluginName+".js")
+	configured = configured || ownedOpenCodePlugin(pluginPath)
 	pluginCheck := diagnostic{Status: "failed", Detail: "PowerContext OpenCode plugin is not configured"}
 	if err != nil {
 		pluginCheck.Detail = err.Error()
@@ -434,6 +583,19 @@ func probeOpenCodeActivation(
 	commands systemCommandExecutor,
 	executable string,
 ) (bool, bool, error) {
+	runner := openCodeProbeRunner(runOpenCodeProbeProcess)
+	if provider, ok := commands.(openCodeProbeRunnerProvider); ok {
+		runner = provider.runOpenCodeProbe
+	}
+	return probeOpenCodeActivationWithRunner(ctx, commands, executable, runner)
+}
+
+func probeOpenCodeActivationWithRunner(
+	ctx context.Context,
+	commands systemCommandExecutor,
+	executable string,
+	runner openCodeProbeRunner,
+) (bool, bool, error) {
 	directory, err := os.MkdirTemp("", "powercontext-opencode-probe-")
 	if err != nil {
 		return false, false, errors.New("cannot create OpenCode activation probe")
@@ -444,13 +606,147 @@ func probeOpenCodeActivation(
 		return false, false, errors.New("cannot create OpenCode activation nonce")
 	}
 	probePath := filepath.Join(directory, "active")
-	output, err := commands.RunEnv(ctx, map[string]string{openCodeProbePath: probePath, openCodeProbeNonce: nonce}, executable, "debug", "config")
+	output, err := commands.Run(ctx, executable, "debug", "config")
 	if err != nil {
+		return false, false, err
+	}
+	port, err := availableOpenCodeProbePort()
+	if err != nil {
+		return false, false, errors.New("cannot allocate an OpenCode activation probe port")
+	}
+	command := []string{executable, "serve", "--hostname", "127.0.0.1", "--port", strconv.Itoa(port)}
+	if err := runner(
+		ctx,
+		command,
+		map[string]string{openCodeProbePath: probePath, openCodeProbeNonce: nonce},
+		openCodeProbeTimeout,
+	); err != nil {
 		return false, false, err
 	}
 	configured := configuredOpenCodePlugin(output)
 	content, readErr := os.ReadFile(probePath)
 	return configured, readErr == nil && string(content) == nonce, nil
+}
+
+func availableOpenCodeProbePort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	address, ok := listener.Addr().(*net.TCPAddr)
+	closeErr := listener.Close()
+	if !ok {
+		return 0, errors.New("OpenCode activation probe did not receive a TCP address")
+	}
+	if closeErr != nil {
+		return 0, closeErr
+	}
+	return address.Port, nil
+}
+
+func runOpenCodeProbeProcess(
+	ctx context.Context,
+	command []string,
+	environment map[string]string,
+	timeout time.Duration,
+) error {
+	return runOpenCodeProbeProcessWithRequest(ctx, command, environment, timeout, requestOpenCodeActivation)
+}
+
+func runOpenCodeProbeProcessWithRequest(
+	ctx context.Context,
+	command []string,
+	environment map[string]string,
+	timeout time.Duration,
+	requester openCodeProbeRequester,
+) error {
+	if len(command) == 0 || timeout <= 0 {
+		return errors.New("invalid OpenCode activation probe command")
+	}
+	deadlineCause := errors.New("OpenCode activation probe timed out")
+	probeContext, cancel := context.WithTimeoutCause(ctx, timeout, deadlineCause)
+	defer cancel()
+	process := exec.CommandContext(probeContext, command[0], command[1:]...)
+	process.Env = os.Environ()
+	for name, value := range environment {
+		if name == "" || strings.ContainsAny(name, "=\x00") || strings.ContainsRune(value, '\x00') {
+			return errors.New("invalid OpenCode activation probe environment")
+		}
+		process.Env = append(process.Env, name+"="+value)
+	}
+	process.Stdout = io.Discard
+	process.Stderr = io.Discard
+	if err := process.Start(); err != nil {
+		return errors.New("cannot start the OpenCode activation probe")
+	}
+	completed := make(chan error, 1)
+	go func() { completed <- process.Wait() }()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	probePath := environment[openCodeProbePath]
+	nonce := environment[openCodeProbeNonce]
+	port, err := openCodeProbeCommandPort(command)
+	if err != nil {
+		_ = stopOpenCodeProbeProcess(process.Process, completed)
+		return err
+	}
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/session", port)
+	for {
+		if content, readErr := os.ReadFile(probePath); readErr == nil && string(content) == nonce {
+			return stopOpenCodeProbeProcess(process.Process, completed)
+		}
+		select {
+		case <-completed:
+			if cause := context.Cause(probeContext); cause != nil {
+				return cause
+			}
+			return nil
+		case <-probeContext.Done():
+			_ = stopOpenCodeProbeProcess(process.Process, completed)
+			return context.Cause(probeContext)
+		case <-ticker.C:
+			_ = requester(probeContext, endpoint)
+		}
+	}
+}
+
+func requestOpenCodeActivation(ctx context.Context, endpoint string) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return errors.New("cannot create the OpenCode activation request")
+	}
+	client := &http.Client{Timeout: time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	_, _ = io.CopyN(io.Discard, response.Body, 1)
+	return response.Body.Close()
+}
+
+func openCodeProbeCommandPort(command []string) (int, error) {
+	for index, argument := range command {
+		if argument == "--port" && index+1 < len(command) {
+			port, err := strconv.Atoi(command[index+1])
+			if err == nil && port > 0 && port <= 65535 {
+				return port, nil
+			}
+			break
+		}
+	}
+	return 0, errors.New("OpenCode activation probe command has an invalid port")
+}
+
+func stopOpenCodeProbeProcess(process *os.Process, completed <-chan error) error {
+	if err := process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return errors.New("cannot stop the OpenCode activation probe")
+	}
+	select {
+	case <-completed:
+		return nil
+	case <-time.After(5 * time.Second):
+		return errors.New("OpenCode activation probe did not stop")
+	}
 }
 
 func configuredOpenCodePlugin(output []byte) bool {
