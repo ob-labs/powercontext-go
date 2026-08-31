@@ -373,16 +373,30 @@ func expectedModuleIntegrityCalls(t *testing.T, repository string) []string {
 	}
 	type moduleEntry struct {
 		Path string `json:"path"`
+		Kind string `json:"kind"`
 	}
 	var inventory struct {
-		SchemaVersion int           `json:"schema_version"`
-		Modules       []moduleEntry `json:"modules"`
+		SchemaVersion      int           `json:"schema_version"`
+		Modules            []moduleEntry `json:"modules"`
+		GeneratedConsumers struct {
+			Mode    string `json:"mode"`
+			Package string `json:"package"`
+		} `json:"generated_consumers"`
 	}
 	if decodeErr := json.Unmarshal(payload, &inventory, json.RejectUnknownMembers(true)); decodeErr != nil {
 		t.Fatal(decodeErr)
 	}
-	if inventory.SchemaVersion != 1 {
-		t.Fatalf("module inventory schema_version = %d, want 1", inventory.SchemaVersion)
+	if inventory.SchemaVersion != 2 {
+		t.Fatalf("module inventory schema_version = %d, want 2", inventory.SchemaVersion)
+	}
+	if inventory.GeneratedConsumers.Mode != "temporary" || inventory.GeneratedConsumers.Package != "tools/generated-consumers" {
+		t.Fatalf("generated consumer inventory = %#v", inventory.GeneratedConsumers)
+	}
+	for _, module := range inventory.Modules {
+		if module.Path == "." && module.Kind != "production" ||
+			module.Path == "test/downstream" && module.Kind != "external-consumer" {
+			t.Fatalf("module inventory entry = %#v", module)
+		}
 	}
 	slices.SortFunc(inventory.Modules, func(left, right moduleEntry) int {
 		return cmp.Compare(left.Path, right.Path)
