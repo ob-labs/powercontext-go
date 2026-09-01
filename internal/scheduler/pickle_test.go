@@ -136,3 +136,23 @@ func TestReaderRejectsColumnMismatchAndOversizedBlob(t *testing.T) {
 		t.Fatalf("expected size rejection, got %v", err)
 	}
 }
+
+func TestRestrictedReaderRejectsStaleMarksBeforeSlicingStack(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []struct {
+		name string
+		run  func(*pickleParser) error
+	}{
+		{name: "tuple", run: (*pickleParser).markTuple},
+		{name: "set items", run: (*pickleParser).setItems},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			parser := &pickleParser{stack: make([]any, 9), marks: []int{10}}
+			err := operation.run(parser)
+			var invalid *InvalidJobStateError
+			if !errors.As(err, &invalid) {
+				t.Fatalf("stale mark error = %T %v", err, err)
+			}
+		})
+	}
+}

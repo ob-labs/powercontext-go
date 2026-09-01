@@ -289,6 +289,10 @@ source / artifact / trigger / inference
   the underlying error matchable and name concrete operator remediation without
   exposing configured values. Verify exit code 2 and that execution never
   reaches the operation runner.
+- When a bytecode parser retains stack markers across later stack mutations,
+  validate every stored marker against the current stack length before slicing
+  or indexing. Verify stale-marker tuple and map operations return the typed
+  parse error, then run the bounded decoder fuzz target without a panic.
 - When a CLI option consumes the following token as a value, reject a missing
   value or another option before any read or write. Verify the real CLI exits
   nonzero with an actionable diagnostic even when an option-named file would
