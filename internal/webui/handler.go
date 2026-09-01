@@ -22,6 +22,7 @@ import (
 	"errors"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -50,6 +51,7 @@ type Options struct {
 	AuthenticationRequired bool
 	AgentSkillTargets      []skill.AgentSkillTarget
 	SkillProjections       SkillProjectionOperations
+	Logger                 *slog.Logger
 }
 
 type SkillProjectionOperations interface {
@@ -69,6 +71,7 @@ type pages struct {
 	static            http.Handler
 	projectionTargets []skill.AgentSkillTarget
 	projections       SkillProjectionOperations
+	logger            *slog.Logger
 }
 
 type pageData struct {
@@ -131,6 +134,7 @@ func Mount(mux *http.ServeMux, options Options) error {
 		scopes:    append([]Scope{}, options.Scopes...),
 		options:   options,
 		static:    http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))),
+		logger:    options.Logger,
 	}
 	owner.projections = options.SkillProjections
 	for _, target := range options.AgentSkillTargets {

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"unicode/utf8"
@@ -26,6 +27,7 @@ import (
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
+	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 	"github.com/ob-labs/powercontext-go/internal/review"
 )
 
@@ -157,8 +159,15 @@ func (p *pages) skillProjectionPublish(writer http.ResponseWriter, request *http
 		return
 	}
 	if _, err := p.projections.ScanExternalSkills(request.Context(), selection.ScopeID); err != nil {
-		p.writeOperationError(writer, err)
-		return
+		serverlogging.LogSafely(
+			request.Context(), p.logger, slog.LevelWarn,
+			"PowerContext external Skill scan failed after publication",
+			slog.String("event", "skill_projection.registry_scan.degraded"),
+			slog.String("operation", "scan_external_skills"),
+			slog.String("outcome", "degraded"),
+			slog.String("unit", "application"),
+			slog.String("error_code", "external_skill_scan_failed"),
+		)
 	}
 	response, err := p.projectionResponse(request, selection.ScopeID, value)
 	if err != nil {
@@ -220,7 +229,16 @@ func (p *pages) projectionResponse(
 		}
 		registrations, err = p.projections.ListExternalSkills(request.Context(), scopeID, true)
 		if err != nil {
-			return projectionResponse{}, err
+			serverlogging.LogSafely(
+				request.Context(), p.logger, slog.LevelWarn,
+				"PowerContext external Skill registry discovery failed",
+				slog.String("event", "skill_projection.registry_discovery.degraded"),
+				slog.String("operation", "list_external_skills"),
+				slog.String("outcome", "degraded"),
+				slog.String("unit", "application"),
+				slog.String("error_code", "external_skill_discovery_failed"),
+			)
+			registrations = nil
 		}
 	}
 	result := projectionResponse{

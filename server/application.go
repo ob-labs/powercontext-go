@@ -129,6 +129,7 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 			AuthenticationRequired: a.config.Auth.Enabled,
 			AgentSkillTargets:      append([]skill.AgentSkillTarget(nil), a.agentSkillTargets...),
 			SkillProjections:       webSkillProjectionOperations{review: a.review, external: a.externalSkills},
+			Logger:                 namedLogger(a.logger, "powercontext.server.webui"),
 		}
 	}
 	return NewHTTPHandler(a.endpoint, HTTPOptions{

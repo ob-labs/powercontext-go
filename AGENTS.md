@@ -136,6 +136,10 @@ source / artifact / trigger / inference
 - Merge with an existing rule when the lesson is already covered. Keep the
   stronger wording and remove duplication so this file remains a practical
   engineering contract rather than an append-only incident log.
+- When authoritative state changes successfully before best-effort discovery or
+  bookkeeping runs, preserve the successful response if that follow-up fails.
+  Emit one bounded warning per degraded call, and verify the public response
+  reflects authoritative state without logging raw errors, identifiers, or paths.
 - When a generator rewrites generated code to call project-specific support,
   emit that support as a declared generated artifact and verify a fresh
   temporary module can tidy, verify, and test the complete output.

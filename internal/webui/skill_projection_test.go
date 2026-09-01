@@ -18,6 +18,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,6 +29,7 @@ import (
 
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 	"github.com/ob-labs/powercontext-go/internal/review"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -86,6 +90,103 @@ func TestDashboardSkillProjectionStatusAndPublish(t *testing.T) {
 	conflict := requestJSON(t, mux, "/dashboard/skill-projections/publish", selection)
 	if conflict.Code != http.StatusConflict || !bytes.Contains(conflict.Body.Bytes(), []byte(`"code":"skill_projection_conflict"`)) {
 		t.Fatalf("drift publish = %d %s", conflict.Code, conflict.Body.String())
+	}
+}
+
+func TestDashboardSkillProjectionPublishToleratesUnavailableRegistry(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), ".agents", "skills")
+	target, err := skill.NewAgentSkillTarget("codex-project", skill.CodexAgent, skill.ProjectScope, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := skill.NewAgentSkillProvider("workstation-1", []skill.AgentSkillTarget{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := projectionOperationsFixture(t, provider)
+	operations.scanErr = errors.New("scan failed for project:example at /private/registry")
+	operations.listErr = errors.New("list failed for project:example at /private/registry")
+	var logs bytes.Buffer
+	logger, err := serverlogging.New(serverlogging.Config{
+		Level: slog.LevelDebug, Format: serverlogging.JSON, Writer: &logs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	if err := Mount(mux, Options{
+		DashboardEnabled:  true,
+		Scopes:            []Scope{{ScopeID: "project:example", DisplayName: "Example"}},
+		AgentSkillTargets: []skill.AgentSkillTarget{target},
+		SkillProjections:  operations,
+		Logger:            logger,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	selection := map[string]any{
+		"scope_id": "project:example", "candidate_id": operations.candidate.ID(), "target_id": "codex-project",
+		"artifact": map[string]any{
+			"family": operations.managed.Ref().Family(), "artifact_id": operations.managed.Ref().ID(),
+			"revision": operations.managed.Ref().Revision(),
+		},
+	}
+
+	response := requestJSON(t, mux, "/dashboard/skill-projections/publish", selection)
+	if response.Code != http.StatusOK {
+		t.Fatalf("publish = %d %s", response.Code, response.Body.String())
+	}
+	assertProjectionResponse(t, response, "current", "unavailable")
+	if _, err := os.Stat(filepath.Join(root, operations.managed.Content().Name(), "powercontext.json")); err != nil {
+		t.Fatalf("published projection is absent: %v", err)
+	}
+	if operations.scanCalls != 1 || operations.listCalls != 1 {
+		t.Fatalf("registry calls = scan %d, list %d; want 1 each", operations.scanCalls, operations.listCalls)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(logs.Bytes()))
+	var records []map[string]any
+	for {
+		var record map[string]any
+		if err := decoder.Decode(&record); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatalf("decode logs: %v", err)
+		}
+		records = append(records, record)
+	}
+	wantLogs := map[string]map[string]string{
+		"PowerContext external Skill scan failed after publication": {
+			"event": "skill_projection.registry_scan.degraded", "operation": "scan_external_skills",
+			"error_code": "external_skill_scan_failed",
+		},
+		"PowerContext external Skill registry discovery failed": {
+			"event": "skill_projection.registry_discovery.degraded", "operation": "list_external_skills",
+			"error_code": "external_skill_discovery_failed",
+		},
+	}
+	if len(records) != len(wantLogs) {
+		t.Fatalf("WARNING records = %d, want %d; logs = %s", len(records), len(wantLogs), logs.String())
+	}
+	for _, record := range records {
+		message, ok := record["message"].(string)
+		want, expected := wantLogs[message]
+		if !ok || !expected || record["level"] != "WARN" || record["outcome"] != "degraded" || record["unit"] != "application" {
+			t.Fatalf("unexpected degraded log = %#v", record)
+		}
+		for key, value := range want {
+			if record[key] != value {
+				t.Fatalf("log %q field %q = %#v, want %q", message, key, record[key], value)
+			}
+		}
+		delete(wantLogs, message)
+	}
+	if len(wantLogs) != 0 {
+		t.Fatalf("missing degraded logs = %#v", wantLogs)
+	}
+	for _, secret := range [][]byte{[]byte("project:example"), []byte("/private/registry")} {
+		if bytes.Contains(logs.Bytes(), secret) {
+			t.Fatalf("logs contain sensitive diagnostic %q: %s", secret, logs.String())
+		}
 	}
 }
 
@@ -158,6 +259,9 @@ type projectionOperations struct {
 	provider  *skill.AgentSkillProvider
 	listed    []skill.Resolution
 	scanCalls int
+	listCalls int
+	scanErr   error
+	listErr   error
 }
 
 func projectionOperationsFixture(t *testing.T, provider *skill.AgentSkillProvider) *projectionOperations {
@@ -201,11 +305,18 @@ func (o *projectionOperations) GetSkill(context.Context, string, artifact.Ref) (
 }
 
 func (o *projectionOperations) ListExternalSkills(context.Context, string, bool) ([]skill.Resolution, error) {
+	o.listCalls++
+	if o.listErr != nil {
+		return nil, o.listErr
+	}
 	return append([]skill.Resolution(nil), o.listed...), nil
 }
 
 func (o *projectionOperations) ScanExternalSkills(ctx context.Context, _ string) (skill.ProviderScan, error) {
 	o.scanCalls++
+	if o.scanErr != nil {
+		return skill.ProviderScan{}, o.scanErr
+	}
 	scan, err := o.provider.Scan(ctx)
 	if err != nil {
 		return skill.ProviderScan{}, err
