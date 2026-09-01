@@ -28,12 +28,17 @@ from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
-from urllib.request import Request, proxy_bypass
+from urllib.request import Request
+
+import pytest
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = Path(__file__).resolve().parents[1] / "plugins" / "powercontext"
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
 _DEAD_PROXY = "http://127.0.0.1:9"
-_REMOTE_SERVER_URL = "https://powercontext.example.invalid"
 _PROXY_ENVIRONMENT_NAMES = frozenset({"http_proxy", "https_proxy", "ftp_proxy", "all_proxy", "no_proxy"})
 
 # ``_URL_OPENER`` is built once at import time and ``ProxyHandler`` reads the
@@ -322,10 +327,11 @@ def test_hook_rejects_invalid_persisted_configuration_instead_of_falling_back_to
 
 
 def _run_proxy_child(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
-    """Run a child interpreter with a proxy environment that must not intercept loopback traffic."""
+    """Run a child interpreter under an isolated dead-proxy environment."""
     environment = dict(os.environ)
-    for name in _PROXY_ENVIRONMENT_NAMES:
-        environment.pop(name, None)
+    for name in tuple(environment):
+        if name.lower() in _PROXY_ENVIRONMENT_NAMES:
+            environment.pop(name)
     environment["http_proxy"] = _DEAD_PROXY
     environment["https_proxy"] = _DEAD_PROXY
     return subprocess.run(
@@ -379,8 +385,11 @@ def test_proxy_environment_does_not_redirect_loopback_hook_traffic(tmp_path: Pat
     assert received[1][0] == "/v1/sources/content"
 
 
-def test_control_probe_proves_proxy_environment_intercepts_loopback_traffic() -> None:
+def test_control_probe_intercepts_loopback_when_parent_bypasses_all_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The default urllib opener must fail through the dead proxy, proving the proxy really took effect."""
+    monkeypatch.setenv("NO_PROXY", "*")
 
     class NoopService(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API.
@@ -398,25 +407,38 @@ def test_control_probe_proves_proxy_environment_intercepts_loopback_traffic() ->
     assert "CONTROL-RESULT URLError" in result.stdout, result.stdout
 
 
-def test_loopback_aware_proxy_handler_preserves_remote_proxy_behaviour(monkeypatch) -> None:
-    """Loopback destinations bypass the proxy; remote destinations keep proxy behaviour."""
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_loopback_aware_proxy_handler_bypasses_shared_loopback_hosts(
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+) -> None:
+    """Every shared loopback authority must connect directly without request rewriting."""
     monkeypatch.setattr("urllib.request.proxy_bypass", lambda host: False)
     hook = load_hook_module()
     handler = hook._LoopbackAwareProxyHandler()
 
-    # Remote HTTPS keeps proxy behaviour: proxy_open rewrites the request into a
-    # CONNECT tunnel through the proxy instead of forcing a direct connection.
-    remote = Request(_REMOTE_SERVER_URL + "/v1/context/prepare", data=b"{}", method="POST")
-    handler.proxy_open(remote, _DEAD_PROXY, "https")
-    assert remote.host == "127.0.0.1:9", "remote HTTPS request must be routed through the proxy"
-    assert remote._tunnel_host == "powercontext.example.invalid", "original host must enter the tunnel"
-
-    # Remote HTTP keeps proxy behaviour as well.
-    http_remote = Request("http://example.invalid/v1/context/prepare", data=b"{}", method="POST")
-    handler.proxy_open(http_remote, _DEAD_PROXY, "http")
-    assert http_remote.host == "127.0.0.1:9", "remote HTTP request must be routed through the proxy"
-
-    # Loopback destinations bypass the proxy entirely: no rewrite happens.
-    loopback = Request("http://127.0.0.1:8000/v1/context/prepare", data=b"{}", method="POST")
+    loopback = Request(f"http://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    direct_host = loopback.host
     assert handler.proxy_open(loopback, _DEAD_PROXY, "http") is None
-    assert loopback.host == "127.0.0.1:8000", "loopback request must keep its direct destination"
+    assert loopback.host == direct_host, "loopback request must keep its direct destination"
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+@pytest.mark.parametrize("scheme", ("http", "https"))
+def test_loopback_aware_proxy_handler_preserves_remote_proxy_behaviour(
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    scheme: str,
+) -> None:
+    """Every shared non-loopback authority must retain configured proxy routing."""
+    monkeypatch.setattr("urllib.request.proxy_bypass", lambda host: False)
+    hook = load_hook_module()
+    handler = hook._LoopbackAwareProxyHandler()
+
+    remote = Request(f"{scheme}://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    original_host = remote.host
+    handler.proxy_open(remote, _DEAD_PROXY, scheme)
+
+    assert remote.host == "127.0.0.1:9", "remote request must be routed through the proxy"
+    if scheme == "https":
+        assert remote._tunnel_host == original_host, "remote HTTPS request must tunnel to its original destination"
