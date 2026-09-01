@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 723,
-  "pending_case_count": 89,
+  "mapped_case_count": 725,
+  "pending_case_count": 87,
   "entries": [
     {
       "python": {
@@ -8933,8 +8933,15 @@
         "line": 412
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/webui/skill_projection_test.go",
+          "test": "TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenScanFails"
+        }
+      ]
     },
     {
       "python": {
@@ -8943,8 +8950,15 @@
         "line": 517
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/webui/skill_projection_test.go",
+          "test": "TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenDiscoveryListFails"
+        }
+      ]
     },
     {
       "python": {
