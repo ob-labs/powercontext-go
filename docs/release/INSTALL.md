@@ -109,7 +109,7 @@ the separately secured transport with `TrustTransportSecurity`.
 
 Before WP6, Codex and WorkBuddy are the supported host-operation scope. Both
 integrations call a running Server; neither embeds SQLite or starts the Server.
-Use the [Codex integration guide](../../integrations/codex/plugins/powercontext/README.md)
+Use the [Codex integration guide](https://github.com/ob-labs/powercontext-go/blob/main/integrations/codex/plugins/powercontext/README.md)
 for MCP, hook, scope, and credential-backed header configuration. Install
 WorkBuddy with `./bin/powercontext setup workbuddy`, then run
 `./bin/powercontext doctor workbuddy` to check its Hook, MCP registration,
