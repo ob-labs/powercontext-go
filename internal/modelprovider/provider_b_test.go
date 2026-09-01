@@ -549,6 +549,40 @@ func TestBedrockEmbeddingDimensionPayloads(t *testing.T) {
 	}
 }
 
+func TestBedrockEmbeddingRejectsNearMissModelIDsBeforeInvoke(t *testing.T) {
+	models := []string{
+		"amazon.titan-embed-text-v20:0",
+		"us.cohere.embed-v40:0",
+		"global.amazon.nova-2-lite-v1:0",
+	}
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			route, err := Resolve("bedrock:"+model, Embedding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			invoked := false
+			transport := &BedrockEmbeddingTransport{route: route, client: bedrockClientFake{
+				invoke: func(*bedrockruntime.InvokeModelInput) (*bedrockruntime.InvokeModelOutput, error) {
+					invoked = true
+					return nil, errors.New("unexpected Bedrock invocation")
+				},
+			}}
+			_, err = transport.Embed(
+				t.Context(),
+				embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384),
+			)
+			configurationError, found := errors.AsType[*inference.ConfigurationError](err)
+			if !found || configurationError.Code() != "embedding-model" {
+				t.Fatalf("error = %v", err)
+			}
+			if invoked {
+				t.Fatal("Bedrock InvokeModel was called for an unsupported embedding model")
+			}
+		})
+	}
+}
+
 func TestMilestoneBFactoryConstructsEveryRemoteProvider(t *testing.T) {
 	environment := milestoneBTestEnvironment()
 	factory, err := NewFactory(MilestoneB, environment.lookup, (&openAIFake{}).Client())

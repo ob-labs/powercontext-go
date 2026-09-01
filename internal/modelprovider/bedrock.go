@@ -190,23 +190,29 @@ func bedrockMessages(messages []inference.Message) []bedrocktypes.Message {
 	return result
 }
 
-type bedrockEmbeddingProvider uint8
+type bedrockEmbeddingShape uint8
 
 const (
-	bedrockTitan bedrockEmbeddingProvider = iota + 1
-	bedrockCohere
-	bedrockNova
+	bedrockTitanV1 bedrockEmbeddingShape = iota + 1
+	bedrockTitanV2
+	bedrockCohereV3
+	bedrockCohereV4
+	bedrockNovaEmbeddings
 )
 
-func bedrockEmbeddingKind(model string) (bedrockEmbeddingProvider, error) {
+func bedrockEmbeddingKind(model string) (bedrockEmbeddingShape, error) {
 	normalized := removeBedrockGeoPrefix(model)
-	switch {
-	case strings.HasPrefix(normalized, "amazon.titan-embed"):
-		return bedrockTitan, nil
-	case strings.HasPrefix(normalized, "cohere.embed"):
-		return bedrockCohere, nil
-	case strings.HasPrefix(normalized, "amazon.nova"):
-		return bedrockNova, nil
+	switch normalized {
+	case "amazon.titan-embed-text-v1":
+		return bedrockTitanV1, nil
+	case "amazon.titan-embed-text-v2:0":
+		return bedrockTitanV2, nil
+	case "cohere.embed-english-v3", "cohere.embed-multilingual-v3":
+		return bedrockCohereV3, nil
+	case "cohere.embed-v4:0":
+		return bedrockCohereV4, nil
+	case "amazon.nova-2-multimodal-embeddings-v1:0":
+		return bedrockNovaEmbeddings, nil
 	default:
 		return 0, inference.NewConfigurationError("embedding-model", "unsupported Bedrock embedding model")
 	}
@@ -222,8 +228,8 @@ func (t *BedrockEmbeddingTransport) Embed(
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, err
 	}
-	if kind == bedrockCohere {
-		vectors, tokens, invokeErr := t.invokeCohere(ctx, inputs, inputType, request.DimensionCount())
+	if kind == bedrockCohereV3 || kind == bedrockCohereV4 {
+		vectors, tokens, invokeErr := t.invokeCohere(ctx, inputs, inputType, request.DimensionCount(), kind)
 		if invokeErr != nil {
 			return inference.ProviderEmbeddingResult{}, invokeErr
 		}
@@ -243,7 +249,7 @@ func (t *BedrockEmbeddingTransport) embedIndividually(
 	inputs []string,
 	inputType inference.EmbeddingInputType,
 	dimension int,
-	kind bedrockEmbeddingProvider,
+	kind bedrockEmbeddingShape,
 ) (inference.ProviderEmbeddingResult, error) {
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -264,10 +270,10 @@ func (t *BedrockEmbeddingTransport) embedIndividually(
 			var vector []float64
 			var tokens int64
 			var err error
-			if kind == bedrockTitan {
-				vector, tokens, err = t.invokeTitan(callCtx, input, dimension)
-			} else {
+			if kind == bedrockNovaEmbeddings {
 				vector, tokens, err = t.invokeNova(callCtx, input, inputType, dimension)
+			} else {
+				vector, tokens, err = t.invokeTitan(callCtx, input, dimension, kind)
 			}
 			results[index] = bedrockEmbeddingItem{vector: vector, tokens: tokens, err: err}
 			if err != nil {
@@ -291,13 +297,15 @@ func (t *BedrockEmbeddingTransport) embedIndividually(
 	return inference.NewProviderEmbeddingResult(inputs, inputType, vectors, inference.Usage{InputTokens: &tokens})
 }
 
-func (t *BedrockEmbeddingTransport) invokeTitan(ctx context.Context, input string, dimension int) ([]float64, int64, error) {
+func (t *BedrockEmbeddingTransport) invokeTitan(
+	ctx context.Context,
+	input string,
+	dimension int,
+	kind bedrockEmbeddingShape,
+) ([]float64, int64, error) {
 	payload := map[string]any{"inputText": input}
-	model := removeBedrockGeoPrefix(t.route.model)
-	if !strings.Contains(model, "-v1") {
+	if kind == bedrockTitanV2 {
 		payload["normalize"] = true
-	}
-	if strings.Contains(model, "amazon.titan-embed-text-v2") {
 		payload["dimensions"] = dimension
 	}
 	var response struct {
@@ -312,13 +320,14 @@ func (t *BedrockEmbeddingTransport) invokeCohere(
 	inputs []string,
 	inputType inference.EmbeddingInputType,
 	dimension int,
+	kind bedrockEmbeddingShape,
 ) ([][]float64, int64, error) {
 	wireType := "search_document"
 	if inputType == inference.EmbeddingQuery {
 		wireType = "search_query"
 	}
 	payload := map[string]any{"texts": inputs, "input_type": wireType, "truncate": "NONE"}
-	if strings.Contains(removeBedrockGeoPrefix(t.route.model), "cohere.embed-v4") {
+	if kind == bedrockCohereV4 {
 		payload["output_dimension"] = dimension
 	}
 	var response struct {

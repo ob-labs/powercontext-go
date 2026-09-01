@@ -11,6 +11,10 @@ on:
         description: "Optional Pydantic AI-style embedding model ID"
         required: false
         type: string
+      embedding_dimension:
+        description: "Positive output dimension supported by the selected embedding model"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -39,6 +43,7 @@ jobs:
         env:
           POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL: ${{ inputs.generation_model }}
           POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL: ${{ inputs.embedding_model }}
+          POWERCONTEXT_REAL_SMOKE_EMBEDDING_DIMENSION: ${{ inputs.embedding_dimension }}
           ALIBABA_API_KEY: ${{ secrets.ALIBABA_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

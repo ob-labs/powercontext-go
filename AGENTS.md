@@ -268,6 +268,15 @@ source / artifact / trigger / inference
   return vectors with at least that dimension instead of relying on later
   padding or validation gaps. Verify the fixture under every supported
   full-build-tag platform matrix.
+- When an opt-in real-provider smoke accepts an arbitrary embedding model,
+  require one explicit positive model-supported dimension from the same smoke
+  configuration and require the returned vector length to match it exactly.
+  Verify the configuration path with a non-default positive dimension and
+  missing, non-numeric, and non-positive mutants without calling a provider.
+- When provider request shape depends on a model ID, use one exact normalized
+  classifier for both accepting the model and selecting every shape-specific
+  field. Verify near-miss versions and same-provider non-target models are
+  rejected before the provider client runs.
 - When a stacked pull request's prerequisite lands or its base branch is
   rewritten, rebuild the branch on the current intended base with only the
   pull request's own semantic changes. Verify the base is an ancestor of the
