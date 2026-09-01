@@ -339,8 +339,8 @@ func TestGoogleOfficialSDKMappingAndEmbeddingTaskDefaults(t *testing.T) {
 		},
 	}}
 	_, err = overflowTransport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret overflow input"}, inference.EmbeddingDocument, int(math.MaxInt32)+1))
-	var configurationError *inference.ConfigurationError
-	if !errors.As(err, &configurationError) || configurationError.Code() != "request-rejected" || configurationError.Detail() != "Google embedding dimension exceeds int32" || strings.Contains(err.Error(), "secret overflow input") {
+	configurationError, found := errors.AsType[*inference.ConfigurationError](err)
+	if !found || configurationError.Code() != "request-rejected" || configurationError.Detail() != "Google embedding dimension exceeds int32" || strings.Contains(err.Error(), "secret overflow input") {
 		t.Fatalf("overflow error = %v", err)
 	}
 	if called {
