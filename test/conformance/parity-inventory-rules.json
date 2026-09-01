@@ -191,7 +191,14 @@
     },
     "tests/test_mcp.py": {
       "mode": "go-port",
-      "reason": "MCP ToolAnnotations and Review write side-effect metadata map to the Go MCP server."
+      "reason": "MCP ToolAnnotations and Review write side-effect metadata map to the Go MCP server.",
+      "cases": {
+        "test_mcp_describes_review_write_side_effects_for_host_approval": {
+          "evidence": [
+            "go:internal/mcpapi/server_test.go#TestReviewWriteToolAnnotationsMatchUpstreamHostApprovalSemantics"
+          ]
+        }
+      }
     },
     "tests/test_server.py": {
       "mode": "go-port",
