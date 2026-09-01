@@ -16,11 +16,13 @@ package generatedconsumers
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -199,6 +201,56 @@ func validateTraceabilityEntry(entry traceabilityEntry) error {
 	return nil
 }
 `
+
+type generatorInventory struct {
+	SchemaVersion int              `json:"schema_version"`
+	Generators    []generatorEntry `json:"generators"`
+}
+
+type generatorEntry struct {
+	Name     string   `json:"name"`
+	Command  string   `json:"command"`
+	Inputs   []string `json:"inputs"`
+	Outputs  []string `json:"outputs"`
+	Evidence []string `json:"evidence"`
+}
+
+func TestGeneratorInventoryListsCheckedContracts(t *testing.T) {
+	repository := repositoryRoot(t)
+	payload, err := os.ReadFile(filepath.Join(repository, "test", "generator-inventory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inventory generatorInventory
+	if err := json.Unmarshal(payload, &inventory, json.RejectUnknownMembers(true)); err != nil {
+		t.Fatal(err)
+	}
+	if inventory.SchemaVersion != 1 || len(inventory.Generators) == 0 {
+		t.Fatalf("generator inventory = %#v", inventory)
+	}
+	seen := map[string]bool{}
+	for _, generator := range inventory.Generators {
+		if generator.Name == "" || generator.Command == "" || seen[generator.Name] || len(generator.Inputs) == 0 || len(generator.Outputs) == 0 || len(generator.Evidence) == 0 {
+			t.Fatalf("generator entry = %#v", generator)
+		}
+		seen[generator.Name] = true
+		for _, path := range append(slices.Clone(generator.Inputs), generator.Outputs...) {
+			if _, err := os.Stat(filepath.Join(repository, filepath.FromSlash(path))); err != nil {
+				t.Fatalf("%s declared path %q: %v", generator.Name, path, err)
+			}
+		}
+		for _, evidence := range generator.Evidence {
+			path, needle, ok := strings.Cut(evidence, "#")
+			if !ok || path == "" || needle == "" {
+				t.Fatalf("%s evidence %q is invalid", generator.Name, evidence)
+			}
+			contents, err := os.ReadFile(filepath.Join(repository, filepath.FromSlash(path)))
+			if err != nil || !bytes.Contains(contents, []byte(needle)) {
+				t.Fatalf("%s evidence %q is not a real test: %v", generator.Name, evidence, err)
+			}
+		}
+	}
+}
 
 func TestOpenAPIGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 	repository := repositoryRoot(t)
