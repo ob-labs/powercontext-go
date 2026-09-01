@@ -191,7 +191,7 @@ func TestLocalEmbeddingTransportSerializesPipeline(t *testing.T) {
 		started <- struct{}{}
 		<-release
 		active.Add(-1)
-		return [][]float32{{1}}, nil
+		return [][]float32{{1, 2, 3}}, nil
 	}, func() error { return nil })
 
 	done := make(chan error, 2)
