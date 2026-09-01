@@ -73,7 +73,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated release-contract-check module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -202,6 +202,9 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 	$(GO) run ./tools/mcp-schema-generate
 	$(GO) run ./tools/traceability-generate -check
 	git diff --exit-code -- openapi api/v1 client/invoker_gen.go internal/mcpapi/schemas_gen.go integrations/dsh/plugins/powercontext/src/operations.generated.ts
+
+release-contract-check: ## Verify the recorded upstream tag, release assets, and PyPI provenance.
+	$(GO) run ./tools/release-contract-verify
 
 generated-consumers: lint-tools ## Generate, test, and lint fresh consumers from public generator CLIs.
 	POWERCONTEXT_GOLANGCI_LINT="$(GOLANGCI_LINT)" GOWORK=off $(GO) test -count=1 ./tools/generated-consumers

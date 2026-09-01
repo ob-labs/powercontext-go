@@ -213,7 +213,7 @@ func TestCheckTargetDeltaRejectsCheckoutIdentityDrift(t *testing.T) {
 	previousCommit := gitOutputForTest(t, previous, "rev-parse", "HEAD")
 	releaseCommit := gitOutputForTest(t, release, "rev-parse", "HEAD")
 	contractPath := filepath.Join(root, "parity-contract.json")
-	contract := fmt.Sprintf(`{"schema_version":2,"release_target":{"commit":%q}}`, releaseCommit)
+	contract := fmt.Sprintf(`{"schema_version":3,"release_target":{"commit":%q}}`, releaseCommit)
 	if err := os.WriteFile(contractPath, []byte(contract), 0o600); err != nil {
 		t.Fatal(err)
 	}

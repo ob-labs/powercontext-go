@@ -229,6 +229,11 @@ jobs:
       - name: Set up the Go environment
         uses: ./.github/actions/setup-go-env
 
+      - name: Verify release tag, assets, and provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make release-contract-check
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
