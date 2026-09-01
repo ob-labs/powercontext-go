@@ -459,6 +459,96 @@ func TestBedrockConverseAndEmbeddingFormats(t *testing.T) {
 	}
 }
 
+func TestBedrockEmbeddingDimensionPayloads(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		assertion func(*testing.T, map[string]any)
+		response  string
+	}{
+		{
+			name:  "titan v1 omits dimensions",
+			model: "amazon.titan-embed-text-v1",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if _, found := body["dimensions"]; found {
+					t.Fatalf("body unexpectedly contains dimensions: %#v", body)
+				}
+			},
+			response: `{"embedding":[1,2]}`,
+		},
+		{
+			name:  "titan v2 sends dimensions",
+			model: "amazon.titan-embed-text-v2:0",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if body["dimensions"] != float64(384) {
+					t.Fatalf("body dimensions = %#v", body["dimensions"])
+				}
+			},
+			response: `{"embedding":[1,2]}`,
+		},
+		{
+			name:  "cohere v3 omits output dimension",
+			model: "cohere.embed-english-v3",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if _, found := body["output_dimension"]; found {
+					t.Fatalf("body unexpectedly contains output_dimension: %#v", body)
+				}
+			},
+			response: `{"embeddings":[[1,2]]}`,
+		},
+		{
+			name:  "cohere v4 sends output dimension",
+			model: "cohere.embed-v4:0",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if body["output_dimension"] != float64(384) {
+					t.Fatalf("body output_dimension = %#v", body["output_dimension"])
+				}
+			},
+			response: `{"embeddings":[[1,2]]}`,
+		},
+		{
+			name:  "nova sends nested embedding dimension",
+			model: "amazon.nova-2-multimodal-embeddings-v1:0",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if _, found := body["embeddingDimension"]; found {
+					t.Fatalf("body has top-level embeddingDimension: %#v", body)
+				}
+				params, found := body["singleEmbeddingParams"].(map[string]any)
+				if !found || params["embeddingDimension"] != float64(384) {
+					t.Fatalf("singleEmbeddingParams = %#v", body["singleEmbeddingParams"])
+				}
+			},
+			response: `{"embeddings":[{"embedding":[1,2]}]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			route, err := Resolve("bedrock:"+test.model, Embedding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			transport := &BedrockEmbeddingTransport{route: route, client: bedrockClientFake{
+				invoke: func(input *bedrockruntime.InvokeModelInput) (*bedrockruntime.InvokeModelOutput, error) {
+					var body map[string]any
+					if err := json.Unmarshal(input.Body, &body); err != nil {
+						t.Fatal(err)
+					}
+					test.assertion(t, body)
+					return &bedrockruntime.InvokeModelOutput{Body: []byte(test.response)}, nil
+				},
+			}}
+			if _, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestMilestoneBFactoryConstructsEveryRemoteProvider(t *testing.T) {
 	environment := milestoneBTestEnvironment()
 	factory, err := NewFactory(MilestoneB, environment.lookup, (&openAIFake{}).Client())

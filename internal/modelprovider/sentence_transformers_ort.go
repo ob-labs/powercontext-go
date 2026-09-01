@@ -180,11 +180,18 @@ func (t *sentenceTransformersTransport) Embed(
 		if result.err != nil {
 			return inference.ProviderEmbeddingResult{}, result.err
 		}
+		dimension := request.DimensionCount()
 		vectors := make([][]float64, len(result.vectors))
 		for index, vector := range result.vectors {
-			vectors[index] = make([]float64, len(vector))
-			for dimension, value := range vector {
-				vectors[index][dimension] = float64(value)
+			if len(vector) < dimension {
+				return inference.ProviderEmbeddingResult{}, inference.NewConfigurationError(
+					"request-rejected", "configured dimension exceeds local model output",
+				)
+			}
+			vector = vector[:dimension]
+			vectors[index] = make([]float64, dimension)
+			for valueIndex, value := range vector {
+				vectors[index][valueIndex] = float64(value)
 			}
 		}
 		return inference.NewProviderEmbeddingResult(resultInputs, inputType, vectors, inference.Usage{})

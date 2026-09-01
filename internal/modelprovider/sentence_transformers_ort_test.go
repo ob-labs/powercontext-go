@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -51,6 +52,32 @@ func TestLocalEmbeddingTransportPreservesInputsAndVectors(t *testing.T) {
 	}
 	if result.Usage().Requests != 0 || result.Usage().InputTokens != nil || result.Usage().OutputTokens != nil {
 		t.Fatalf("usage = %#v", result.Usage())
+	}
+}
+
+func TestLocalEmbeddingTransportTruncatesToRequestedDimension(t *testing.T) {
+	transport := newLocalEmbeddingTransport(
+		func([]string) ([][]float32, error) { return [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}, nil },
+		func() error { return nil },
+	)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingDocument, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(result.Embeddings()[0], []float64{1, 2}) || !slices.Equal(result.Embeddings()[1], []float64{5, 6}) {
+		t.Fatalf("embeddings = %#v", result.Embeddings())
+	}
+}
+
+func TestLocalEmbeddingTransportRejectsDimensionLargerThanNativeOutput(t *testing.T) {
+	transport := newLocalEmbeddingTransport(
+		func([]string) ([][]float32, error) { return [][]float32{{1, 2}}, nil },
+		func() error { return nil },
+	)
+	_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret input"}, inference.EmbeddingDocument, 3))
+	configuration, found := errors.AsType[*inference.ConfigurationError](err)
+	if !found || configuration.Code() != "request-rejected" || configuration.Detail() != "configured dimension exceeds local model output" || strings.Contains(err.Error(), "secret input") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
