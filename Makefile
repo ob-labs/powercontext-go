@@ -29,6 +29,9 @@ LICENSE_EYE_STAMP = $(TOOLS_BIN)/.license-eye-$(LICENSE_EYE_VERSION)-$(PROJECT_G
 ACTIONLINT_VERSION := v1.7.12
 ACTIONLINT := $(TOOLS_BIN)/actionlint$(shell $(GO) env GOEXE)
 ACTIONLINT_STAMP = $(TOOLS_BIN)/.actionlint-$(ACTIONLINT_VERSION)-$(PROJECT_GO_TOOLCHAIN)
+MODERN_GO_VERSION := v0.1.1
+MODERN_GO := $(TOOLS_BIN)/go-modern-guidelines$(shell $(GO) env GOEXE)
+MODERN_GO_STAMP = $(TOOLS_BIN)/.go-modern-guidelines-$(MODERN_GO_VERSION)-$(PROJECT_GO_TOOLCHAIN)
 
 COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
@@ -70,7 +73,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -168,6 +171,21 @@ actionlint-tools: $(ACTIONLINT_STAMP) ## Install the pinned GitHub Actions workf
 
 actionlint: actionlint-tools ## Lint GitHub Actions workflows with the pinned repository-local tool.
 	"$(ACTIONLINT)"
+
+$(MODERN_GO): Makefile go.mod go.sum
+	@mkdir -p "$(TOOLS_BIN)"
+	GOTOOLCHAIN="$(PROJECT_GO_TOOLCHAIN)+auto" GOBIN="$(TOOLS_BIN)" \
+		$(GO) install github.com/JetBrains/go-modern-guidelines@$(MODERN_GO_VERSION)
+
+$(MODERN_GO_STAMP): $(MODERN_GO)
+	@"$(MODERN_GO)" --version | grep -qx "$(MODERN_GO_VERSION)"
+	@$(RM) $(TOOLS_BIN)/.go-modern-guidelines-*
+	@touch "$@"
+
+modern-go-tools: $(MODERN_GO_STAMP) ## Install the pinned Modern Go Guidelines CLI under .tools/bin.
+
+modern-go: modern-go-tools ## List Modern Go guidelines for the project Go version.
+	"$(MODERN_GO)" list --go-version "$$( $(GO) env GOVERSION | sed 's/^go//' )"
 
 dependency-security: govulncheck-tools ## Scan an unstripped standard Server build for known vulnerabilities.
 	mkdir -p bin
