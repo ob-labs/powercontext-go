@@ -228,6 +228,40 @@ func (r *Runtime) Background(ctx context.Context, fn func(context.Context) error
 	})
 }
 
+// BackgroundOperation serializes one named background operation and lets the
+// owning transport trace it as a root. The callback returns its observable
+// outcome separately because scheduled scope failures may be isolated rather
+// than returned as the dispatch error.
+func (r *Runtime) BackgroundOperation(
+	ctx context.Context,
+	name string,
+	fn func(context.Context) (string, error),
+) (err error) {
+	if name == "" {
+		return errors.New("runtime: background operation name must not be empty")
+	}
+	if fn == nil {
+		return errors.New("runtime: background operation callback must not be nil")
+	}
+	backgroundCtx, span := safelyStartBackground(ctx, r.tracing, name, nil)
+	outcome := "failure"
+	defer func() { safelyFinishStage(span, outcome, err) }()
+	err = r.Background(backgroundCtx, func(operationCtx context.Context) error {
+		outcome, err = fn(operationCtx)
+		return err
+	})
+	if outcome == "" {
+		outcome = "failure"
+		if err == nil {
+			outcome = "success"
+		}
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || context.Cause(backgroundCtx) != nil {
+		outcome = "cancelled"
+	}
+	return err
+}
+
 // Close atomically rejects new operations and waits for every admitted read,
 // writer, lock waiter, and background processor. If ctx is canceled before the
 // drain completes, admission is restored so the owner can retry shutdown.

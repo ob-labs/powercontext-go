@@ -35,6 +35,13 @@ type StageTracing interface {
 	StartStage(context.Context, string, map[string]TraceAttribute) (context.Context, StageSpan)
 }
 
+// BackgroundTracing is an optional consumer-owned boundary for work that has
+// no request parent. Runtime remains transport-agnostic while a consumer such
+// as the server can export an independent operation root.
+type BackgroundTracing interface {
+	StartBackground(context.Context, string, map[string]TraceAttribute) (context.Context, StageSpan)
+}
+
 type StageTracingFunc func(context.Context, string, map[string]TraceAttribute) (context.Context, StageSpan)
 
 func (f StageTracingFunc) StartStage(
@@ -98,6 +105,29 @@ func safelyStartStage(
 		stageContext = started
 	}
 	return stageContext, span
+}
+
+func safelyStartBackground(
+	ctx context.Context,
+	tracing StageTracing,
+	name string,
+	attributes map[string]TraceAttribute,
+) (backgroundContext context.Context, span StageSpan) {
+	backgroundContext = ctx
+	background, ok := tracing.(BackgroundTracing)
+	if !ok || background == nil {
+		return backgroundContext, nil
+	}
+	defer func() {
+		if recover() != nil {
+			backgroundContext, span = ctx, nil
+		}
+	}()
+	started, span := background.StartBackground(ctx, name, cloneTraceAttributes(attributes))
+	if started != nil {
+		backgroundContext = started
+	}
+	return backgroundContext, span
 }
 
 func setStageAttributes(span StageSpan, attributes map[string]TraceAttribute) {

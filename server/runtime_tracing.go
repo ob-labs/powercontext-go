@@ -41,4 +41,17 @@ func (t runtimeStageTracing) StartStage(
 	return spanContext, operation
 }
 
-var _ pcruntime.StageTracing = runtimeStageTracing{}
+func (t runtimeStageTracing) StartBackground(
+	ctx context.Context,
+	name string,
+	attributes map[string]pcruntime.TraceAttribute,
+) (context.Context, pcruntime.StageSpan) {
+	spanContext, operation := requesttrace.StartBackgroundOperation(ctx, t.provider, name, name)
+	operation.SetAttributes(attributes)
+	return spanContext, operation
+}
+
+var (
+	_ pcruntime.StageTracing      = runtimeStageTracing{}
+	_ pcruntime.BackgroundTracing = runtimeStageTracing{}
+)

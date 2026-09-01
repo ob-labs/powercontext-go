@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 702,
-  "pending_case_count": 110,
+  "mapped_case_count": 712,
+  "pending_case_count": 100,
   "entries": [
     {
       "python": {
@@ -3290,8 +3290,20 @@
         "line": 305
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        },
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledSourceWindowNoopRecordsFlushStage"
+        }
+      ]
     },
     {
       "python": {
@@ -3300,8 +3312,20 @@
         "line": 332
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        },
+        {
+          "kind": "go",
+          "file": "server/runtime_tracing_test.go",
+          "test": "TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+        }
+      ]
     },
     {
       "python": {
@@ -3310,8 +3334,15 @@
         "line": 351
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        }
+      ]
     },
     {
       "python": {
@@ -3320,8 +3351,15 @@
         "line": 368
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        }
+      ]
     },
     {
       "python": {
@@ -3330,8 +3368,20 @@
         "line": 388
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/experience_incubation_test.go",
+          "test": "TestScheduledExperienceIncubationUsesFixedSourceWindowBudget"
+        },
+        {
+          "kind": "go",
+          "file": "server/runtime_tracing_test.go",
+          "test": "TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+        }
+      ]
     },
     {
       "python": {
@@ -3340,8 +3390,15 @@
         "line": 420
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        }
+      ]
     },
     {
       "python": {
@@ -3350,8 +3407,15 @@
         "line": 441
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        }
+      ]
     },
     {
       "python": {
@@ -3360,8 +3424,15 @@
         "line": 458
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        }
+      ]
     },
     {
       "python": {
@@ -5270,8 +5341,20 @@
         "line": 694
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        },
+        {
+          "kind": "go",
+          "file": "server/runtime_tracing_test.go",
+          "test": "TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+        }
+      ]
     },
     {
       "python": {
@@ -5280,8 +5363,20 @@
         "line": 725
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/experience_incubation_test.go",
+          "test": "TestScheduledExperienceIncubationUsesFixedSourceWindowBudget"
+        },
+        {
+          "kind": "go",
+          "file": "server/runtime_tracing_test.go",
+          "test": "TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+        }
+      ]
     },
     {
       "python": {

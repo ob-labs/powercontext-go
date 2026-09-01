@@ -131,6 +131,31 @@ func StartOperation(
 	return spanCtx, &Operation{span: span}
 }
 
+// StartBackgroundOperation creates an internal operation root without
+// inheriting an ambient request trace. Background workers must not masquerade
+// as transport children, and they never receive a request ID attribute.
+func StartBackgroundOperation(
+	ctx context.Context,
+	provider trace.TracerProvider,
+	name string,
+	operation string,
+) (context.Context, *Operation) {
+	if provider == nil {
+		provider = otel.GetTracerProvider()
+	}
+	spanCtx, span := provider.Tracer(instrumentationName).Start(
+		ctx,
+		name,
+		trace.WithNewRoot(),
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("powercontext.operation.name", operation),
+			attribute.String("powercontext.operation.unit", "background"),
+		),
+	)
+	return spanCtx, &Operation{span: span}
+}
+
 func (o *Operation) Finish(outcome string, err error) {
 	if o == nil || o.span == nil || !o.done.CompareAndSwap(false, true) {
 		return

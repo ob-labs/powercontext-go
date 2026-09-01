@@ -20,7 +20,52 @@
     },
     "tests/builtin/runtime/test_scheduler.py": {
       "mode": "go-port",
-      "reason": "Scheduled Source-window and Experience-incubation trace outcomes map to Go runtime scheduler orchestration."
+      "reason": "Scheduled Source-window and Experience-incubation trace outcomes map to Go runtime scheduler orchestration.",
+      "cases": {
+        "test_scheduled_processor_records_root_and_flush_spans": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes",
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledSourceWindowNoopRecordsFlushStage"
+          ]
+        },
+        "test_scheduled_processor_records_success_outcome": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes",
+            "go:server/runtime_tracing_test.go#TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+          ]
+        },
+        "test_scheduled_processor_records_failure_and_swallows_error": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+          ]
+        },
+        "test_scheduled_processor_records_cancellation": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+          ]
+        },
+        "test_scheduled_experience_records_root_and_incubation_spans": {
+          "evidence": [
+            "go:internal/runtime/experience_incubation_test.go#TestScheduledExperienceIncubationUsesFixedSourceWindowBudget",
+            "go:server/runtime_tracing_test.go#TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+          ]
+        },
+        "test_scheduled_experience_records_noop_outcome": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+          ]
+        },
+        "test_scheduled_experience_records_failure_and_swallows_error": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+          ]
+        },
+        "test_scheduled_experience_records_cancellation": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+          ]
+        }
+      }
     },
     "tests/claude_code_plugin/test_hook.py": {
       "mode": "retained-host",
@@ -28,7 +73,21 @@
     },
     "tests/e2e/test_observability.py": {
       "mode": "cross-layer",
-      "reason": "Independent scheduled trace roots cross runtime scheduling, tracing, and exported observability evidence."
+      "reason": "Independent scheduled trace roots cross runtime scheduling, tracing, and exported observability evidence.",
+      "cases": {
+        "test_scheduled_source_window_starts_an_independent_trace_root": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes",
+            "go:server/runtime_tracing_test.go#TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+          ]
+        },
+        "test_scheduled_experience_starts_an_independent_trace_root": {
+          "evidence": [
+            "go:internal/runtime/experience_incubation_test.go#TestScheduledExperienceIncubationUsesFixedSourceWindowBudget",
+            "go:server/runtime_tracing_test.go#TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+          ]
+        }
+      }
     },
     "tests/test_config_cli.py": {
       "mode": "go-port",

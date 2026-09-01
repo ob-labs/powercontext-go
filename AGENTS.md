@@ -157,6 +157,11 @@ source / artifact / trigger / inference
   readiness against child completion, retain the most recent bounded log tail,
   include the exit code or signal, and prove the failure path with a real
   short-lived child whose diagnostic follows over-limit output.
+- When a scheduled operation is traced outside a request, create one explicit
+  transport-owned root and finish it from the scheduler's aggregate outcome.
+  Keep every runtime stage beneath that root, make cancellation dominate
+  failure/success/noop, and verify both trace-parent isolation and that scope
+  IDs or protected inputs never become exported attributes.
 - When a test invokes a freshly built external binary, disable result caching
   or key it to the binary content. Verify the gate reruns after the binary
   changes without changing the test package.

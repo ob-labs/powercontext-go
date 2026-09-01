@@ -39,7 +39,19 @@ func (a *MemoryApplication) Flush(ctx context.Context, scopeID string) (MemoryFl
 // flush performs an already-admitted, already-serialized Source window. It is
 // shared with the scheduled processor so shutdown never requires recursive
 // lifecycle admission.
-func (a *MemoryApplication) flush(ctx context.Context, scope string) (MemoryFlushResult, error) {
+func (a *MemoryApplication) flush(ctx context.Context, scope string) (result MemoryFlushResult, err error) {
+	err = a.runtime.runStage(ctx, "memory.flush", nil, func(stageCtx context.Context, span StageSpan) error {
+		var operationErr error
+		result, operationErr = a.flushWindow(stageCtx, scope)
+		setStageAttributes(span, map[string]TraceAttribute{
+			"powercontext.memory.flush.source_count": result.ProcessedSourceCount,
+		})
+		return operationErr
+	})
+	return result, err
+}
+
+func (a *MemoryApplication) flushWindow(ctx context.Context, scope string) (MemoryFlushResult, error) {
 	ctx = a.runtime.withModelUsage(ctx, scope, stats.MemoryExtraction, stats.MemoryIndexing)
 	if a.flushes == nil {
 		return MemoryFlushResult{}, &StateError{Code: "memory-flush"}

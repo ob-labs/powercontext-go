@@ -104,6 +104,23 @@ func (a *ExperienceIncubationApplication) incubate(
 	ctx context.Context,
 	scope string,
 	limit int64,
+) (result ExperienceIncubationResult, err error) {
+	err = a.runtime.runStage(ctx, "experience.incubation", nil, func(stageCtx context.Context, span StageSpan) error {
+		var operationErr error
+		result, operationErr = a.incubateWindow(stageCtx, scope, limit)
+		setStageAttributes(span, map[string]TraceAttribute{
+			"powercontext.experience.incubation.source_count":    result.ProcessedSourceCount,
+			"powercontext.experience.incubation.candidate_count": result.CandidateCount,
+		})
+		return operationErr
+	})
+	return result, err
+}
+
+func (a *ExperienceIncubationApplication) incubateWindow(
+	ctx context.Context,
+	scope string,
+	limit int64,
 ) (ExperienceIncubationResult, error) {
 	ctx = a.runtime.withModelUsage(ctx, scope, stats.ExperienceGeneration, "")
 	backend, err := a.backends(scope)
