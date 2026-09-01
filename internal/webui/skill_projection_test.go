@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -86,6 +87,42 @@ func TestDashboardSkillProjectionStatusAndPublish(t *testing.T) {
 	conflict := requestJSON(t, mux, "/dashboard/skill-projections/publish", selection)
 	if conflict.Code != http.StatusConflict || !bytes.Contains(conflict.Body.Bytes(), []byte(`"code":"skill_projection_conflict"`)) {
 		t.Fatalf("drift publish = %d %s", conflict.Code, conflict.Body.String())
+	}
+}
+
+func TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenScanFails(t *testing.T) {
+	mux, operations, selection := projectionPublishFixture(t)
+	operations.scanErr = errors.New("scan failure /private/registry API_KEY=secret")
+
+	published := requestJSON(t, mux, "/dashboard/skill-projections/publish", selection)
+	assertPublishedProjectionRemainsCurrent(t, published, operations)
+}
+
+func TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenDiscoveryListFails(t *testing.T) {
+	mux, operations, selection := projectionPublishFixture(t)
+	operations.listErr = errors.New("discovery failure /private/registry API_KEY=secret")
+
+	published := requestJSON(t, mux, "/dashboard/skill-projections/publish", selection)
+	assertPublishedProjectionRemainsCurrent(t, published, operations)
+}
+
+func assertPublishedProjectionRemainsCurrent(
+	t *testing.T,
+	published *httptest.ResponseRecorder,
+	operations *projectionOperations,
+) {
+	t.Helper()
+	if published.Code != http.StatusOK {
+		t.Fatalf("publish = %d %s", published.Code, published.Body.String())
+	}
+	assertProjectionResponse(t, published, "current", "unavailable")
+	if _, err := os.Stat(filepath.Join(operations.root, operations.managed.Content().Name(), "SKILL.md")); err != nil {
+		t.Fatalf("published projection is absent: %v", err)
+	}
+	for _, secret := range []string{"/private/registry", "API_KEY=secret"} {
+		if bytes.Contains(published.Body.Bytes(), []byte(secret)) {
+			t.Fatalf("publish response leaked %q: %s", secret, published.Body.String())
+		}
 	}
 }
 
@@ -158,6 +195,9 @@ type projectionOperations struct {
 	provider  *skill.AgentSkillProvider
 	listed    []skill.Resolution
 	scanCalls int
+	root      string
+	scanErr   error
+	listErr   error
 }
 
 func projectionOperationsFixture(t *testing.T, provider *skill.AgentSkillProvider) *projectionOperations {
@@ -201,11 +241,17 @@ func (o *projectionOperations) GetSkill(context.Context, string, artifact.Ref) (
 }
 
 func (o *projectionOperations) ListExternalSkills(context.Context, string, bool) ([]skill.Resolution, error) {
+	if o.listErr != nil {
+		return nil, o.listErr
+	}
 	return append([]skill.Resolution(nil), o.listed...), nil
 }
 
 func (o *projectionOperations) ScanExternalSkills(ctx context.Context, _ string) (skill.ProviderScan, error) {
 	o.scanCalls++
+	if o.scanErr != nil {
+		return skill.ProviderScan{}, o.scanErr
+	}
 	scan, err := o.provider.Scan(ctx)
 	if err != nil {
 		return skill.ProviderScan{}, err
@@ -219,6 +265,37 @@ func (o *projectionOperations) ScanExternalSkills(ctx context.Context, _ string)
 		o.listed = append(o.listed, resolved)
 	}
 	return scan, nil
+}
+
+func projectionPublishFixture(t *testing.T) (*http.ServeMux, *projectionOperations, map[string]any) {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), ".agents", "skills")
+	target, err := skill.NewAgentSkillTarget("codex-project", skill.CodexAgent, skill.ProjectScope, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := skill.NewAgentSkillProvider("workstation-1", []skill.AgentSkillTarget{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := projectionOperationsFixture(t, provider)
+	operations.root = root
+	mux := http.NewServeMux()
+	if err := Mount(mux, Options{
+		DashboardEnabled:  true,
+		Scopes:            []Scope{{ScopeID: "project:example", DisplayName: "Example"}},
+		AgentSkillTargets: []skill.AgentSkillTarget{target},
+		SkillProjections:  operations,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return mux, operations, map[string]any{
+		"scope_id": "project:example", "candidate_id": operations.candidate.ID(), "target_id": target.ID(),
+		"artifact": map[string]any{
+			"family": operations.managed.Ref().Family(), "artifact_id": operations.managed.Ref().ID(),
+			"revision": operations.managed.Ref().Revision(),
+		},
+	}
 }
 
 func requestJSON(t *testing.T, handler http.Handler, target string, value any) *httptest.ResponseRecorder {

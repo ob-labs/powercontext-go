@@ -176,7 +176,19 @@
     },
     "tests/test_dashboard.py": {
       "mode": "go-port",
-      "reason": "Skill publication and stale registry discovery behavior map to the Go endpoint and dashboard-facing API."
+      "reason": "Skill publication and stale registry discovery behavior map to the Go endpoint and dashboard-facing API.",
+      "cases": {
+        "test_publish_reports_success_when_post_publish_scan_fails": {
+          "evidence": [
+            "go:internal/webui/skill_projection_test.go#TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenScanFails"
+          ]
+        },
+        "test_publish_reports_stale_discovery_when_registry_database_is_unavailable": {
+          "evidence": [
+            "go:internal/webui/skill_projection_test.go#TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenDiscoveryListFails"
+          ]
+        }
+      }
     },
     "tests/test_env_file.py": {
       "mode": "go-port",

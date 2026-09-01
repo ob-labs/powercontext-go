@@ -372,3 +372,7 @@ source / artifact / trigger / inference
   creating any projection DDL. Verify a fresh over-limit profile returns a
   typed, redacted error that states both limits, creates no projection, and
   leaves the extension's raw diagnostic unexposed.
+- When a durable publication succeeds but its post-publication discovery refresh
+  fails, preserve the successful publication result and report only a bounded
+  stale-discovery state. Verify scan and registry-read failures leave the
+  published package intact, return success, and never expose discovery errors.

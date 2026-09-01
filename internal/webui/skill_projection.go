@@ -156,11 +156,7 @@ func (p *pages) skillProjectionPublish(writer http.ResponseWriter, request *http
 		writeWebError(writer, http.StatusServiceUnavailable, "runtime_not_ready", "The Runtime is not ready.", nil)
 		return
 	}
-	if _, err := p.projections.ScanExternalSkills(request.Context(), selection.ScopeID); err != nil {
-		p.writeOperationError(writer, err)
-		return
-	}
-	response, err := p.projectionResponse(request, selection.ScopeID, value)
+	response, err := p.publishedProjectionResponse(request, selection.ScopeID, value)
 	if err != nil {
 		p.writeOperationError(writer, err)
 		return
@@ -212,17 +208,41 @@ func (p *pages) projectionResponse(
 	scopeID string,
 	value skill.Skill,
 ) (projectionResponse, error) {
-	var registrations []skill.Resolution
-	var err error
 	if len(p.projectionTargets) > 0 {
 		if p.projections == nil {
 			return projectionResponse{}, &endpoint.RuntimeNotReadyError{}
 		}
-		registrations, err = p.projections.ListExternalSkills(request.Context(), scopeID, true)
+		registrations, err := p.projections.ListExternalSkills(request.Context(), scopeID, true)
 		if err != nil {
 			return projectionResponse{}, err
 		}
+		return p.projectionResponseWithRegistrations(value, registrations), nil
 	}
+	return p.projectionResponseWithRegistrations(value, nil), nil
+}
+
+func (p *pages) publishedProjectionResponse(
+	request *http.Request,
+	scopeID string,
+	value skill.Skill,
+) (projectionResponse, error) {
+	if p.projections == nil {
+		return projectionResponse{}, &endpoint.RuntimeNotReadyError{}
+	}
+	if _, err := p.projections.ScanExternalSkills(request.Context(), scopeID); err != nil {
+		return p.projectionResponseWithRegistrations(value, nil), nil
+	}
+	registrations, err := p.projections.ListExternalSkills(request.Context(), scopeID, true)
+	if err != nil {
+		return p.projectionResponseWithRegistrations(value, nil), nil
+	}
+	return p.projectionResponseWithRegistrations(value, registrations), nil
+}
+
+func (p *pages) projectionResponseWithRegistrations(
+	value skill.Skill,
+	registrations []skill.Resolution,
+) projectionResponse {
 	result := projectionResponse{
 		Artifact: wireProjectionArtifact(value.Ref()), Name: value.Content().Name(),
 		Targets: make([]projectionTargetResponse, 0, len(p.projectionTargets)),
@@ -268,7 +288,7 @@ func (p *pages) projectionResponse(
 			Discovery: discovery, ExternalSkillID: externalSkillID,
 		})
 	}
-	return result, nil
+	return result
 }
 
 func (p *pages) hasScope(scopeID string) bool {
