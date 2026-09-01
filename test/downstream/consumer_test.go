@@ -31,6 +31,7 @@ import (
 
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/client"
+	"github.com/ob-labs/powercontext-go/inference"
 )
 
 const (
@@ -114,6 +115,45 @@ func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
 		t.Fatalf("current-work Handoff request violates the public contract: %v", err)
 	}
 }
+
+func TestExternalEmbeddingTransportConsumesRequestValue(t *testing.T) {
+	model, err := inference.NewBatchedEmbeddingModel(
+		downstreamEmbeddingTransport{}, downstreamEmbeddingProfile{}, 1, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := model.Embed(t.Context(), []string{"downstream embedding input"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Vectors) != 1 || len(result.Vectors[0]) != 3 || result.Vectors[0][0] != 1 {
+		t.Fatalf("embedding result = %#v", result)
+	}
+}
+
+type downstreamEmbeddingTransport struct{}
+
+func (downstreamEmbeddingTransport) Embed(
+	_ context.Context,
+	request inference.EmbeddingRequest,
+) (inference.ProviderEmbeddingResult, error) {
+	vectors := make([][]float64, len(request.Inputs()))
+	for index := range vectors {
+		vectors[index] = make([]float64, request.DimensionCount())
+		vectors[index][0] = 1
+	}
+	return inference.NewProviderEmbeddingResult(
+		request.Inputs(), request.InputType(), vectors, inference.Usage{},
+	)
+}
+
+type downstreamEmbeddingProfile struct{}
+
+func (downstreamEmbeddingProfile) ID() string                { return "downstream-v1" }
+func (downstreamEmbeddingProfile) ModelName() string         { return "downstream:embedding" }
+func (downstreamEmbeddingProfile) DimensionCount() int       { return 3 }
+func (downstreamEmbeddingProfile) NormalizationMode() string { return "none" }
 
 func TestPublicClientMemoryPersistsAcrossGracefulServerRestart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)

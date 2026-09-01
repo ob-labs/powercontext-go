@@ -21,6 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -502,7 +503,9 @@ func TestOpenApplicationReportsAndCachesConfiguredEmbeddingReadiness(t *testing.
 	var calls atomic.Int64
 	embedding := failingReadinessEmbedding{
 		calls: &calls,
-		err:   inference.NewConfigurationError("embedding-model", "secret provider response"),
+		err: inference.WrapConfigurationError(
+			"provider-rejected", "HTTP 400", errors.New("secret provider response"),
+		),
 	}
 	application, err := OpenApplication(t.Context(), config, Dependencies{
 		EmbeddingModel: embedding,
@@ -529,7 +532,8 @@ func TestOpenApplicationReportsAndCachesConfiguredEmbeddingReadiness(t *testing.
 			t.Fatal(err)
 		}
 		if body.Status != "degraded" || body.Checks["runtime"] != "ready" ||
-			body.Checks["database"] != "ready" || body.Checks["inference.embedding"] != "misconfigured" ||
+			body.Checks["database"] != "ready" ||
+			body.Checks["inference.embedding"] != "misconfigured: provider-rejected (HTTP 400)" ||
 			len(body.Checks) != 3 {
 			t.Fatalf("readiness body = %#v", body)
 		}

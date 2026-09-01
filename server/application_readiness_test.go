@@ -148,6 +148,54 @@ func TestGenerationReadinessUsesRawMinimalProviderRequest(t *testing.T) {
 	}
 }
 
+func TestConfiguredEmbeddingReadinessUsesConfiguredDimension(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Inference.EmbeddingModel = "openai:text-embedding-test"
+	config.Inference.EmbeddingProfileID = "test-v1"
+	config.Inference.EmbeddingDimension = 3
+	config.Inference.EmbeddingNormalization = "none"
+
+	var dimensions []float64
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return nil, err
+		}
+		dimension, ok := payload["dimensions"].(float64)
+		if !ok {
+			return nil, errors.New("embedding request did not include a dimension")
+		}
+		dimensions = append(dimensions, dimension)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(
+				`{"object":"list","data":[{"object":"embedding","index":0,"embedding":[1,0,0]}],"model":"text-embedding-test","usage":{"prompt_tokens":1,"total_tokens":1}}`,
+			)),
+			Request: request,
+		}, nil
+	})}
+	assembled, err := assembleDependencies(config, Dependencies{HTTPClient: client}, noop.NewTracerProvider())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := assembled.embeddingReadiness(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(dimensions) != 1 || dimensions[0] != 3 {
+		t.Fatalf("readiness dimensions = %v, want [3]", dimensions)
+	}
+}
+
 func TestConfiguredEmbeddingReadinessIsUntracedButRuntimeEmbeddingIsTraced(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")
@@ -208,6 +256,20 @@ func TestConfiguredEmbeddingReadinessIsUntracedButRuntimeEmbeddingIsTraced(t *te
 	if operationSpan == nil || embeddingSpan == nil ||
 		embeddingSpan.Parent().SpanID() != operationSpan.SpanContext().SpanID() {
 		t.Fatalf("runtime embedding span was not nested under the application operation: %#v", spans)
+	}
+}
+
+func TestAssembleDependenciesWithoutEmbeddingConfiguration(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembled, err := assembleDependencies(config, Dependencies{}, noop.NewTracerProvider())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assembled.embeddingModel != nil || assembled.embeddingReadiness != nil {
+		t.Fatalf("unconfigured embedding dependencies = %#v", assembled)
 	}
 }
 
@@ -295,6 +357,54 @@ func TestApplicationReadinessClassifiesConfiguredInferenceWithoutLeakingFailures
 				t.Fatalf("metrics = %d: %s", metrics.Code, metrics.Body.String())
 			}
 		})
+	}
+}
+
+func TestProviderRejectedReadinessReportsRedactedReason(t *testing.T) {
+	providerFailure := inference.WrapConfigurationError(
+		"provider-rejected", "HTTP 400", errors.New("API_KEY=secret https://credential@example.invalid private Memory"),
+	)
+	_, handler := readinessTestApplication(
+		t,
+		func(context.Context) error { return nil },
+		assembledDependencies{embeddingReadiness: func(context.Context) error { return providerFailure }},
+		time.Now,
+	)
+	response := perform(handler, http.MethodGet, "/health/ready", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("readiness = %d: %s", response.Code, response.Body.String())
+	}
+	assertReadinessBody(t, response, "degraded", map[string]string{
+		"runtime": "ready", "database": "ready",
+		"inference.embedding": "misconfigured: provider-rejected (HTTP 400)",
+	})
+	for _, sentinel := range []string{"API_KEY=secret", "credential@example.invalid", "private Memory"} {
+		if strings.Contains(response.Body.String(), sentinel) {
+			t.Fatalf("readiness leaked provider failure sentinel %q", sentinel)
+		}
+	}
+}
+
+func TestApplicationReadinessRedactsPlainConfigurationErrors(t *testing.T) {
+	_, handler := readinessTestApplication(
+		t,
+		func(context.Context) error { return nil },
+		assembledDependencies{embeddingReadiness: func(context.Context) error {
+			return inference.NewConfigurationError("embedding-model", "API_KEY=secret private Memory")
+		}},
+		time.Now,
+	)
+	response := perform(handler, http.MethodGet, "/health/ready", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("readiness = %d: %s", response.Code, response.Body.String())
+	}
+	assertReadinessBody(t, response, "degraded", map[string]string{
+		"runtime": "ready", "database": "ready", "inference.embedding": "misconfigured",
+	})
+	for _, sentinel := range []string{"API_KEY=secret", "private Memory"} {
+		if strings.Contains(response.Body.String(), sentinel) {
+			t.Fatalf("readiness leaked configuration sentinel %q", sentinel)
+		}
 	}
 }
 

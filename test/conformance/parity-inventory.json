@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 713,
-  "pending_case_count": 99,
+  "mapped_case_count": 719,
+  "pending_case_count": 93,
   "entries": [
     {
       "python": {
@@ -1646,8 +1646,15 @@
         "line": 412
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/application_readiness_test.go",
+          "test": "TestProviderRejectedReadinessReportsRedactedReason"
+        }
+      ]
     },
     {
       "python": {
@@ -2781,8 +2788,15 @@
         "line": 35
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/application_readiness_test.go",
+          "test": "TestConfiguredEmbeddingReadinessUsesConfiguredDimension"
+        }
+      ]
     },
     {
       "python": {
@@ -2791,8 +2805,15 @@
         "line": 55
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/application_readiness_test.go",
+          "test": "TestAssembleDependenciesWithoutEmbeddingConfiguration"
+        }
+      ]
     },
     {
       "python": {
@@ -3151,8 +3172,15 @@
         "line": 49
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/application_readiness_test.go",
+          "test": "TestProviderRejectedReadinessReportsRedactedReason"
+        }
+      ]
     },
     {
       "python": {
@@ -3161,8 +3189,15 @@
         "line": 61
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/application_readiness_test.go",
+          "test": "TestApplicationReadinessRedactsPlainConfigurationErrors"
+        }
+      ]
     },
     {
       "python": {
@@ -11777,8 +11812,15 @@
         "line": 457
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/application_readiness_test.go",
+          "test": "TestProviderRejectedReadinessReportsRedactedReason"
+        }
+      ]
     },
     {
       "python": {
