@@ -37,6 +37,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -715,7 +716,11 @@ func writeFailureDiagnostics(path, root string, cause error) error {
 	}
 	const truncation = "\n[truncated]\n"
 	if len(diagnostic) > maximumFailureDiagnosticBytes {
-		diagnostic = diagnostic[:maximumFailureDiagnosticBytes-len(truncation)] + truncation
+		diagnostic = diagnostic[:maximumFailureDiagnosticBytes-len(truncation)]
+		for !utf8.ValidString(diagnostic) {
+			diagnostic = diagnostic[:len(diagnostic)-1]
+		}
+		diagnostic += truncation
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create diagnostics directory: %w", err)

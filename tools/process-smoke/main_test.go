@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const validSecurityDefaults = `
@@ -44,7 +45,7 @@ func TestWriteFailureDiagnosticsRedactsPrivateValuesAndBoundsOutput(t *testing.T
 		smokeScope,
 		smokeText,
 		smokeToken,
-		strings.Repeat("x", maximumFailureDiagnosticBytes+1024),
+		strings.Repeat("界", maximumFailureDiagnosticBytes),
 	}, "\n"))
 	if err := writeFailureDiagnostics(report, root, cause); err != nil {
 		t.Fatal(err)
@@ -56,6 +57,9 @@ func TestWriteFailureDiagnosticsRedactsPrivateValuesAndBoundsOutput(t *testing.T
 	if len(payload) > maximumFailureDiagnosticBytes {
 		t.Fatalf("diagnostics length = %d, want at most %d", len(payload), maximumFailureDiagnosticBytes)
 	}
+	if !utf8.Valid(payload) {
+		t.Fatalf("diagnostics are not valid UTF-8: %q", payload)
+	}
 	for _, private := range []string{root, smokeScope, smokeText, smokeToken} {
 		if strings.Contains(string(payload), private) {
 			t.Fatalf("diagnostics leaked %q: %s", private, payload)
@@ -63,6 +67,24 @@ func TestWriteFailureDiagnosticsRedactsPrivateValuesAndBoundsOutput(t *testing.T
 	}
 	if !strings.Contains(string(payload), "[redacted]") || !strings.Contains(string(payload), "[truncated]") {
 		t.Fatalf("diagnostics = %q, want redaction and truncation markers", payload)
+	}
+}
+
+func TestWriteFailureDiagnosticsPreservesUTF8AtTheTruncationBoundary(t *testing.T) {
+	report := filepath.Join(t.TempDir(), "diagnostics.txt")
+	const truncation = "\n[truncated]\n"
+	limit := maximumFailureDiagnosticBytes - len(truncation)
+	prefix := "status=failed\n"
+	cause := errors.New(strings.Repeat("x", limit-len(prefix)-1) + "界" + strings.Repeat("x", len(truncation)+1))
+	if err := writeFailureDiagnostics(report, "", cause); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.Valid(payload) {
+		t.Fatalf("diagnostics are not valid UTF-8: %q", payload)
 	}
 }
 
