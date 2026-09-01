@@ -294,7 +294,7 @@ def _http_base_url(value: str) -> str:
         raise WorkBuddyConfigurationError("PowerContext Server URL must use HTTP or HTTPS")
     if parsed.query or parsed.fragment:
         raise WorkBuddyConfigurationError("PowerContext Server URL must not contain a query or fragment")
-    if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
+    if parsed.scheme == "http" and not is_loopback_host(parsed.hostname):
         raise WorkBuddyConfigurationError("unencrypted PowerContext URLs must be loopback addresses")
     path = parsed.path.rstrip("/")
     if path.endswith("/mcp"):
@@ -302,7 +302,7 @@ def _http_base_url(value: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", "")).rstrip("/")
 
 
-def _is_loopback_host(value: str) -> bool:
+def is_loopback_host(value: str) -> bool:
     host = value.lower()
     if host in _LOOPBACK_HOSTS:
         return True
@@ -312,4 +312,4 @@ def _is_loopback_host(value: str) -> bool:
         return False
 
 
-__all__ = ["WorkBuddyConfigurationError", "WorkBuddyPluginSettings", "load_settings"]
+__all__ = ["WorkBuddyConfigurationError", "WorkBuddyPluginSettings", "is_loopback_host", "load_settings"]

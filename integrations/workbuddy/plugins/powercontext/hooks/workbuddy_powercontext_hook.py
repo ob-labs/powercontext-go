@@ -29,7 +29,8 @@ from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 if TYPE_CHECKING:
     from typing_extensions import override
@@ -46,7 +47,12 @@ sys.path.insert(0, str(_PLUGIN_ROOT))
 sys.path.insert(0, str(_HOOKS_ROOT))
 
 import prepared_context as _prepared_context  # noqa: E402
-from workbuddy_settings import WorkBuddyConfigurationError, WorkBuddyPluginSettings, load_settings  # noqa: E402
+from workbuddy_settings import (  # noqa: E402
+    WorkBuddyConfigurationError,
+    WorkBuddyPluginSettings,
+    is_loopback_host,
+    load_settings,
+)
 
 if (_HOOKS_ROOT / "powercontext_project_scope.py").is_file():
     from powercontext_project_scope import resolve_scope_id
@@ -91,7 +97,24 @@ class _RejectRedirects(HTTPRedirectHandler):
         return None
 
 
-_URL_OPENER = build_opener(_RejectRedirects)
+class _LoopbackAwareProxyHandler(ProxyHandler):
+    """Bypass any configured proxy for loopback destinations.
+
+    urllib installs a ProxyHandler in every opener, so a loopback request is
+    routed through an environment or registry proxy whenever no_proxy omits
+    the host. Local PowerContext traffic must never leave the host, and each
+    request carries a bearer credential, so loopback targets are always
+    connected to directly. Remote HTTPS endpoints keep proxy behaviour.
+    """
+
+    @override
+    def proxy_open(self, req: Request, proxy: str, type: str) -> object | None:  # noqa: A002 - urllib API name.
+        if is_loopback_host(urlsplit(req.full_url).hostname or ""):
+            return None
+        return super().proxy_open(req, proxy, type)
+
+
+_URL_OPENER = build_opener(_RejectRedirects, _LoopbackAwareProxyHandler())
 
 
 class _HttpStatusError(RuntimeError):
