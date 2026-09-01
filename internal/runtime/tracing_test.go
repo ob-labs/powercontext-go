@@ -35,10 +35,11 @@ type recordedRuntimeStage struct {
 }
 
 type recordingStageTracing struct {
-	mu      sync.Mutex
-	stages  []*recordedRuntimeStage
-	panic   bool
-	started chan string
+	mu          sync.Mutex
+	stages      []*recordedRuntimeStage
+	backgrounds []*recordedRuntimeStage
+	panic       bool
+	started     chan string
 }
 
 func (t *recordingStageTracing) StartStage(
@@ -60,6 +61,21 @@ func (t *recordingStageTracing) StartStage(
 		}
 	}
 	return ctx, stage
+}
+
+func (t *recordingStageTracing) StartBackground(
+	ctx context.Context,
+	name string,
+	attributes map[string]TraceAttribute,
+) (context.Context, StageSpan) {
+	if t.panic {
+		panic("tracer unavailable")
+	}
+	background := &recordedRuntimeStage{owner: t, name: name, attributes: cloneTraceAttributes(attributes)}
+	t.mu.Lock()
+	t.backgrounds = append(t.backgrounds, background)
+	t.mu.Unlock()
+	return ctx, background
 }
 
 func (s *recordedRuntimeStage) SetAttributes(attributes map[string]TraceAttribute) {
@@ -238,6 +254,44 @@ func TestRuntimeStageTracerFailureDoesNotChangeOperation(t *testing.T) {
 		return nil
 	}); err != nil || !called {
 		t.Fatalf("operation changed by tracer failure: called=%t err=%v", called, err)
+	}
+}
+
+func TestRuntimeBackgroundTracerFailureDoesNotChangeOperation(t *testing.T) {
+	t.Parallel()
+	runtime, err := NewConfigured(RuntimeOptions{Tracing: &recordingStageTracing{panic: true}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err = runtime.BackgroundOperation(t.Context(), ProcessSourceWindowOperation, func(context.Context) (string, error) {
+		called = true
+		return ScheduledProcessingSuccess, nil
+	})
+	if err != nil || !called {
+		t.Fatalf("background operation changed by tracer failure: called=%t err=%v", called, err)
+	}
+}
+
+func TestRuntimeBackgroundOperationDefaultsToFailureWhenCallbackReturnsAnError(t *testing.T) {
+	t.Parallel()
+	tracing := &recordingStageTracing{}
+	runtime, err := NewConfigured(RuntimeOptions{Tracing: tracing}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("background failure")
+	err = runtime.BackgroundOperation(t.Context(), ProcessSourceWindowOperation, func(context.Context) (string, error) {
+		return "", failure
+	})
+	if !errors.Is(err, failure) {
+		t.Fatalf("background operation error = %v", err)
+	}
+	tracing.mu.Lock()
+	defer tracing.mu.Unlock()
+	if len(tracing.backgrounds) != 1 || tracing.backgrounds[0].outcome != "failure" ||
+		!errors.Is(tracing.backgrounds[0].err, failure) {
+		t.Fatalf("background roots = %#v", tracing.backgrounds)
 	}
 }
 

@@ -118,10 +118,11 @@ func (p *ScheduledProcessor) process(
 	operation string,
 	processScope func(context.Context, string) ScheduledObservation,
 ) error {
-	return p.runtime.Background(ctx, func(ctx context.Context) error {
+	return p.runtime.BackgroundOperation(ctx, operation, func(ctx context.Context) (string, error) {
+		outcome := ScheduledProcessingNoop
 		scopes, err := p.scopes.ScopeIDs(ctx)
 		if err != nil {
-			return err
+			return ScheduledProcessingFailure, err
 		}
 		for _, rawScope := range scopes {
 			if p.runtime.isClosing() {
@@ -129,13 +130,17 @@ func (p *ScheduledProcessor) process(
 			}
 			scope, err := ValidateScopeID(rawScope)
 			if err != nil {
-				p.notify(ctx, ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: err})
+				observation := ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: err}
+				p.notify(ctx, observation)
+				outcome = scheduledAggregateOutcome(outcome, observation.Outcome)
 				continue
 			}
 			lease, releaseLease := p.runtime.scopes.lease(scope)
 			if resolveErr := p.runtime.resolveScope(ctx); resolveErr != nil {
 				releaseLease()
-				p.notify(ctx, ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: resolveErr})
+				observation := ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: resolveErr}
+				p.notify(ctx, observation)
+				outcome = scheduledAggregateOutcome(outcome, observation.Outcome)
 				continue
 			}
 			var release func()
@@ -148,19 +153,29 @@ func (p *ScheduledProcessor) process(
 			})
 			if err != nil {
 				releaseLease()
-				outcome := ScheduledProcessingFailure
+				lockOutcome := ScheduledProcessingFailure
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					outcome = ScheduledProcessingCancelled
+					lockOutcome = ScheduledProcessingCancelled
 				}
-				p.notify(ctx, ScheduledObservation{Operation: operation, Outcome: outcome, Err: err})
-				return err
+				observation := ScheduledObservation{Operation: operation, Outcome: lockOutcome, Err: err}
+				p.notify(ctx, observation)
+				return observation.Outcome, err
 			}
 			observation := processScope(ctx, scope)
 			release()
 			releaseLease()
+			if observation.Outcome == ScheduledProcessingCancelled {
+				if observation.Err == nil {
+					observation.Err = context.Canceled
+				}
+				p.notify(ctx, observation)
+				outcome = scheduledAggregateOutcome(outcome, observation.Outcome)
+				return outcome, observation.Err
+			}
 			p.notify(ctx, observation)
+			outcome = scheduledAggregateOutcome(outcome, observation.Outcome)
 		}
-		return nil
+		return outcome, nil
 	})
 }
 
@@ -187,6 +202,27 @@ func scheduledOutcome(processed bool, err error) string {
 		return ScheduledProcessingSuccess
 	}
 	return ScheduledProcessingNoop
+}
+
+func scheduledAggregateOutcome(current, next string) string {
+	if scheduledOutcomePriority(next) > scheduledOutcomePriority(current) {
+		return next
+	}
+	return current
+}
+
+func scheduledOutcomePriority(outcome string) int {
+	switch outcome {
+	case ScheduledProcessingCancelled:
+		return 4
+	case ScheduledProcessingSuccess:
+		return 2
+	case ScheduledProcessingNoop:
+		return 1
+	default:
+		// Failure is the conservative default for an unknown observation.
+		return 3
+	}
 }
 
 func elapsed(now, started time.Time) time.Duration {

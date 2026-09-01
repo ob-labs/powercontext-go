@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact/experience"
@@ -131,7 +132,11 @@ func TestScheduledExperienceIncubationUsesFixedSourceWindowBudget(t *testing.T) 
 		previous: source.NewCursor(0), next: source.NewCursor(1), high: 1,
 		values: []source.Value{incubationSource(t, "task-1")}, available: []source.Ref{ref},
 	}
-	lifecycle := New()
+	tracing := &recordingStageTracing{}
+	lifecycle, err := NewConfigured(RuntimeOptions{Tracing: tracing}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	application, err := NewExperienceIncubationApplication(
 		lifecycle, func(string) (ExperienceIncubationBackend, error) { return backend, nil },
 		incubationPipelineFunc(func(context.Context, []source.Value) ([]experience.CandidateInput, error) {
@@ -151,6 +156,19 @@ func TestScheduledExperienceIncubationUsesFixedSourceWindowBudget(t *testing.T) 
 	}
 	if len(backend.observedLimits) != 1 || backend.observedLimits[0] != experience.IncubationWindowLimit {
 		t.Fatalf("observed limits = %v", backend.observedLimits)
+	}
+	tracing.mu.Lock()
+	defer tracing.mu.Unlock()
+	if len(tracing.backgrounds) != 1 || tracing.backgrounds[0].outcome != ScheduledProcessingSuccess {
+		t.Fatalf("backgrounds = %#v", tracing.backgrounds)
+	}
+	if len(tracing.stages) != 3 || tracing.stages[2].name != "experience.incubation" ||
+		tracing.stages[2].outcome != "success" ||
+		!reflect.DeepEqual(tracing.stages[2].attributes, map[string]TraceAttribute{
+			"powercontext.experience.incubation.source_count":    1,
+			"powercontext.experience.incubation.candidate_count": 0,
+		}) {
+		t.Fatalf("stages = %#v", tracing.stages)
 	}
 }
 
