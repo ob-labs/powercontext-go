@@ -615,3 +615,43 @@ def test_cli_registers_provider_commands(hermes_modules):
     assert args.query == "deployment"
     assert args.limit == 3
     assert callable(args.func)
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_proxy_handler_bypasses_shared_loopback_hosts(hermes_modules, host: str) -> None:
+    del hermes_modules
+    client_module = importlib.import_module("plugins.powercontext.client")
+    from urllib.request import Request
+
+    handler = client_module._LoopbackAwareProxyHandler()
+    dead_proxy = "http://127.0.0.1:9"
+
+    loopback = Request(f"http://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    direct_host = loopback.host
+    assert handler.proxy_open(loopback, dead_proxy, "http") is None
+    assert loopback.host == direct_host
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+@pytest.mark.parametrize("scheme", ("http", "https"))
+def test_proxy_handler_preserves_remote_proxy_for_shared_non_loopback_hosts(
+    hermes_modules,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    scheme: str,
+) -> None:
+    del hermes_modules
+    client_module = importlib.import_module("plugins.powercontext.client")
+    from urllib.request import Request
+
+    monkeypatch.setattr("urllib.request.proxy_bypass", lambda _host: False)
+    handler = client_module._LoopbackAwareProxyHandler()
+    dead_proxy = "http://127.0.0.1:9"
+
+    remote = Request(f"{scheme}://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    original_host = remote.host
+    handler.proxy_open(remote, dead_proxy, scheme)
+
+    assert remote.host == "127.0.0.1:9"
+    if scheme == "https":
+        assert remote._tunnel_host == original_host

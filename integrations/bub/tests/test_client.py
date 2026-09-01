@@ -198,5 +198,36 @@ class ValidationTests(unittest.TestCase):
         self.assertFalse(math.isfinite(float("nan")))
 
 
+class ProxyHandlerTests(unittest.TestCase):
+    """The loopback-aware proxy handler must never route local traffic through a proxy."""
+
+    def setUp(self) -> None:
+        self.handler = client._LoopbackAwareProxyHandler()
+
+    def test_shared_loopback_destinations_connect_directly(self) -> None:
+        for host in _TRANSPORT_VECTORS["loopback"]:
+            with self.subTest(host=host):
+                request = client.Request(f"http://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+                direct_host = request.host
+                self.assertIsNone(self.handler.proxy_open(request, "http://127.0.0.1:9", "http"))
+                self.assertEqual(request.host, direct_host)
+
+    def test_shared_non_loopback_destinations_keep_proxy_behaviour(self) -> None:
+        with mock.patch("urllib.request.proxy_bypass", return_value=False):
+            for scheme in ("http", "https"):
+                for host in _TRANSPORT_VECTORS["non_loopback"]:
+                    with self.subTest(scheme=scheme, host=host):
+                        request = client.Request(
+                            f"{scheme}://{host}:8000/v1/context/prepare",
+                            data=b"{}",
+                            method="POST",
+                        )
+                        original_host = request.host
+                        self.handler.proxy_open(request, "http://127.0.0.1:9", scheme)
+                        self.assertEqual(request.host, "127.0.0.1:9")
+                        if scheme == "https":
+                            self.assertEqual(request._tunnel_host, original_host)
+
+
 if __name__ == "__main__":
     unittest.main()
