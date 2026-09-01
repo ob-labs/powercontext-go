@@ -29,6 +29,44 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+func TestGoPrimaryMonorepoLinguistPolicy(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".gitattributes"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDetectable := map[string]bool{
+		"evaluation/**":          false,
+		"integrations/**":        false,
+		"test/conformance/*.py":  false,
+		"test/differential/*.py": false,
+	}
+	for _, line := range strings.Split(string(payload), "\n") {
+		fields := strings.Fields(strings.SplitN(line, "#", 2)[0])
+		if len(fields) < 2 {
+			continue
+		}
+		path := fields[0]
+		for _, attribute := range fields[1:] {
+			switch attribute {
+			case "-linguist-detectable":
+				if _, ok := wantDetectable[path]; !ok {
+					t.Errorf(".gitattributes has broad or unowned linguist classification %q", line)
+					continue
+				}
+				wantDetectable[path] = true
+			case "linguist-vendored", "linguist-generated":
+				t.Errorf(".gitattributes must not classify maintained sources as %q", attribute)
+			}
+		}
+	}
+	for path, found := range wantDetectable {
+		if !found {
+			t.Errorf(".gitattributes is missing %q", path+" -linguist-detectable")
+		}
+	}
+}
+
 func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	workflows := filepath.Join(repository, ".github", "workflows")
@@ -80,7 +118,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"FuzzRestrictedPickleJobDecoder", "Frozen Python Oracle and differential fixtures",
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
 			"OceanBase live compatibility", "Standard (", "Full build tags (",
-			"Host adapters", "Evaluation control plane and console",
+			"Pre-WP6 host adapters", "Post-WP6 retained host adapters", "Codex/SQLite evaluation control plane",
 		},
 		"codeql.yml": {
 			"name: CodeQL", "pull_request:", "push:", "branches: [main]", "schedule:", "workflow_dispatch:",
@@ -922,7 +960,7 @@ func TestFrozenOracleFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
 	}
 }
 
-func TestHostAdapterFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
+func TestPreWP6HostAdapterWorkflowContract(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
 	if err != nil {
@@ -930,6 +968,7 @@ func TestHostAdapterFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
 	}
 	var workflow struct {
 		Jobs map[string]struct {
+			Name  string `yaml:"name"`
 			Steps []struct {
 				ID   string            `yaml:"id"`
 				Name string            `yaml:"name"`
@@ -944,70 +983,171 @@ func TestHostAdapterFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
 	if err := yaml.Unmarshal(payload, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	hostAdapters, ok := workflow.Jobs["host-adapters"]
+	job, ok := workflow.Jobs["host-adapters"]
 	if !ok {
 		t.Fatal("migration-gates.yml has no host-adapters job")
 	}
-	adapterStepIDs := map[string]bool{}
-	var summary, upload *struct {
-		ID   string
+	if job.Name != "Pre-WP6 host adapters" {
+		t.Fatalf("host-adapters name = %q, want Pre-WP6 host adapters", job.Name)
+	}
+	steps := map[string]struct {
 		Name string
 		If   string
 		Uses string
 		With map[string]string
 		Env  map[string]string
 		Run  string
-	}
-	for index := range hostAdapters.Steps {
-		step := hostAdapters.Steps[index]
+	}{}
+	for _, step := range job.Steps {
 		if step.ID != "" {
-			adapterStepIDs[step.ID] = true
-		}
-		if step.Name == "Write bounded host adapter diagnostics" {
-			summary = &struct {
-				ID   string
+			steps[step.ID] = struct {
 				Name string
 				If   string
 				Uses string
 				With map[string]string
 				Env  map[string]string
 				Run  string
-			}{step.ID, step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
+			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
 		}
-		if step.Name == "Upload host adapter diagnostics" {
-			upload = &struct {
-				ID   string
+	}
+	codex, ok := steps["codex_adapter"]
+	if !ok {
+		t.Fatal("host-adapters has no codex_adapter step")
+	}
+	if !strings.Contains(codex.Run, "integrations/codex/tests") || strings.Contains(codex.Run, "integrations/workbuddy") {
+		t.Errorf("Codex adapter command = %q", codex.Run)
+	}
+	workBuddy, ok := steps["workbuddy_adapter"]
+	if !ok {
+		t.Fatal("host-adapters has no workbuddy_adapter step")
+	}
+	if workBuddy.If != "success() || failure()" || !strings.Contains(workBuddy.Run, "integrations/workbuddy/tests") ||
+		strings.Contains(workBuddy.Run, "integrations/codex") {
+		t.Errorf("WorkBuddy adapter contract = %#v", workBuddy)
+	}
+	for _, deferred := range []string{"integrations/bub", "integrations/claude-code", "integrations/hermes", "integrations/langgraph"} {
+		if strings.Contains(codex.Run, deferred) || strings.Contains(workBuddy.Run, deferred) {
+			t.Errorf("pre-WP6 adapter commands must not include %q", deferred)
+		}
+	}
+	for _, deferredID := range []string{"dsh_server", "dsh_adapter", "pi_adapter", "opencode_adapter", "openclaw_adapter"} {
+		if _, found := steps[deferredID]; found {
+			t.Errorf("pre-WP6 host-adapters must not include deferred step %q", deferredID)
+		}
+	}
+	summary, ok := steps["pre_wp6_adapter_diagnostics"]
+	if !ok {
+		t.Fatal("host-adapters has no pre_wp6_adapter_diagnostics step")
+	}
+	if summary.If != "always()" ||
+		summary.Env["CODEX_ADAPTER_OUTCOME"] != "${{ steps.codex_adapter.outcome }}" ||
+		summary.Env["WORKBUDDY_ADAPTER_OUTCOME"] != "${{ steps.workbuddy_adapter.outcome }}" {
+		t.Errorf("pre-WP6 diagnostics contract = %#v", summary)
+	}
+	for _, required := range []string{
+		"powercontext-pre-wp6-host-adapter-diagnostics",
+		"integrations/codex/plugins/powercontext/uv.lock",
+		"integrations/workbuddy/plugins/powercontext/powercontext.json.example",
+		"integrations/workbuddy/plugins/powercontext/hooks/workbuddy_powercontext_hook.py",
+	} {
+		if !strings.Contains(summary.Run, required) {
+			t.Errorf("pre-WP6 diagnostics are missing %q: %s", required, summary.Run)
+		}
+	}
+	upload, ok := steps["pre_wp6_adapter_upload"]
+	if !ok {
+		t.Fatal("host-adapters has no pre_wp6_adapter_upload step")
+	}
+	if upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" ||
+		upload.With["path"] != "${{ runner.temp }}/powercontext-pre-wp6-host-adapter-diagnostics/summary.txt" {
+		t.Errorf("pre-WP6 upload contract = %#v", upload)
+	}
+}
+
+func TestRetainedHostAdapterWorkflowContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Name  string `yaml:"name"`
+			Steps []struct {
+				ID   string            `yaml:"id"`
+				Name string            `yaml:"name"`
+				If   string            `yaml:"if"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+				Env  map[string]string `yaml:"env"`
+				Run  string            `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["retained-host-adapters"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no retained-host-adapters job")
+	}
+	if job.Name != "Post-WP6 retained host adapters" {
+		t.Fatalf("retained-host-adapters name = %q, want Post-WP6 retained host adapters", job.Name)
+	}
+	steps := map[string]struct {
+		Name string
+		If   string
+		Uses string
+		With map[string]string
+		Env  map[string]string
+		Run  string
+	}{}
+	for _, step := range job.Steps {
+		if step.ID != "" {
+			steps[step.ID] = struct {
 				Name string
 				If   string
 				Uses string
 				With map[string]string
 				Env  map[string]string
 				Run  string
-			}{step.ID, step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
+			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
 		}
 	}
-	for _, id := range []string{"python_adapters", "dsh_server", "dsh_adapter", "pi_adapter", "opencode_adapter", "openclaw_adapter"} {
-		if !adapterStepIDs[id] {
-			t.Fatalf("host adapter step id %q is missing", id)
+	python, ok := steps["python_adapters"]
+	if !ok {
+		t.Fatal("retained-host-adapters has no python_adapters step")
+	}
+	for _, required := range []string{"integrations/bub", "integrations/claude-code", "integrations/hermes", "integrations/langgraph"} {
+		if !strings.Contains(python.Run, required) {
+			t.Errorf("retained adapter command is missing %q: %s", required, python.Run)
 		}
 	}
-	if summary == nil || summary.If != "always()" || !strings.Contains(summary.Run, "powercontext-host-adapter-diagnostics") ||
-		summary.Env["PYTHON_ADAPTERS_OUTCOME"] != "${{ steps.python_adapters.outcome }}" ||
+	for _, requiredID := range []string{"dsh_server", "dsh_adapter", "pi_adapter", "opencode_adapter", "openclaw_adapter"} {
+		if _, found := steps[requiredID]; !found {
+			t.Errorf("retained-host-adapters is missing step %q", requiredID)
+		}
+	}
+	summary, ok := steps["retained_adapter_diagnostics"]
+	if !ok {
+		t.Fatal("retained-host-adapters has no retained_adapter_diagnostics step")
+	}
+	if summary.If != "always()" || summary.Env["PYTHON_ADAPTERS_OUTCOME"] != "${{ steps.python_adapters.outcome }}" ||
 		summary.Env["DSH_SERVER_OUTCOME"] != "${{ steps.dsh_server.outcome }}" ||
 		summary.Env["DSH_ADAPTER_OUTCOME"] != "${{ steps.dsh_adapter.outcome }}" ||
 		summary.Env["PI_ADAPTER_OUTCOME"] != "${{ steps.pi_adapter.outcome }}" ||
 		summary.Env["OPENCODE_ADAPTER_OUTCOME"] != "${{ steps.opencode_adapter.outcome }}" ||
-		summary.Env["OPENCLAW_ADAPTER_OUTCOME"] != "${{ steps.openclaw_adapter.outcome }}" {
-		t.Fatalf("host adapter summary step = %#v", summary)
+		summary.Env["OPENCLAW_ADAPTER_OUTCOME"] != "${{ steps.openclaw_adapter.outcome }}" ||
+		!strings.Contains(summary.Run, "powercontext-retained-host-adapter-diagnostics") {
+		t.Errorf("retained diagnostics contract = %#v", summary)
 	}
 	for _, forbidden := range []string{"cat ", "find ", "GITHUB_TOKEN", "POWERCONTEXT_GO_BINARY", "git diff"} {
 		if strings.Contains(summary.Run, forbidden) {
-			t.Fatalf("host adapter summary exposes %q: %s", forbidden, summary.Run)
+			t.Errorf("retained diagnostics expose %q: %s", forbidden, summary.Run)
 		}
 	}
 	for _, lockfile := range []string{
 		"integrations/bub/uv.lock",
-		"integrations/codex/plugins/powercontext/uv.lock",
 		"integrations/langgraph/uv.lock",
 		"integrations/dsh/plugins/powercontext/pnpm-lock.yaml",
 		"integrations/pi/plugins/powercontext/pnpm-lock.yaml",
@@ -1015,15 +1155,17 @@ func TestHostAdapterFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
 		"integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml",
 	} {
 		if !strings.Contains(summary.Run, lockfile) {
-			t.Fatalf("host adapter summary omits lockfile %q: %s", lockfile, summary.Run)
+			t.Errorf("retained diagnostics omit lockfile %q: %s", lockfile, summary.Run)
 		}
 	}
-	if upload == nil || upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" {
-		t.Fatalf("host adapter upload step = %#v", upload)
+	upload, ok := steps["retained_adapter_upload"]
+	if !ok {
+		t.Fatal("retained-host-adapters has no retained_adapter_upload step")
 	}
-	if upload.With["path"] != "${{ runner.temp }}/powercontext-host-adapter-diagnostics/summary.txt" ||
+	if upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" ||
+		upload.With["path"] != "${{ runner.temp }}/powercontext-retained-host-adapter-diagnostics/summary.txt" ||
 		upload.With["if-no-files-found"] != "error" || upload.With["retention-days"] != "14" {
-		t.Fatalf("host adapter upload contract = %#v", upload.With)
+		t.Errorf("retained upload contract = %#v", upload)
 	}
 }
 
