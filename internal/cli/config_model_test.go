@@ -172,3 +172,25 @@ func TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials(t *tes
 		t.Fatalf("managed block = %q", block)
 	}
 }
+
+func TestCollectProviderAwareConfigDeduplicatesSharedCustomCredential(t *testing.T) {
+	input := strings.NewReader(strings.Join([]string{
+		"", "", "custom",
+		"openai-chat:gpt-4.1-mini",
+		"OPENAI_API_KEY", "true", "shared-secret", "",
+		"openai:text-embedding-3-small",
+		"OPENAI_API_KEY", "true", "shared-secret", "",
+		"1536",
+	}, "\n") + "\n")
+
+	config, err := collectProviderAwareConfig(input, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credentials := strings.Join(config.credentials, ","); credentials != "OPENAI_API_KEY" {
+		t.Fatalf("credentials = %q", credentials)
+	}
+	if err := validateProviderAwareConfig(config, true); err != nil {
+		t.Fatal(err)
+	}
+}

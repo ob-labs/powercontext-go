@@ -74,7 +74,7 @@ func collectProviderAwareConfig(input io.Reader, output io.Writer) (providerAwar
 			return providerAwareConfig{}, collectErr
 		}
 		config.generation, config.embedding = generation, embedding
-		config.credentials = append(generationCredentials, embeddingCredentials...)
+		config.credentials = uniqueConfigCredentialNames(append(generationCredentials, embeddingCredentials...))
 	default:
 		return providerAwareConfig{}, errors.New("Generation API protocol is not supported")
 	}
@@ -88,6 +88,19 @@ func collectProviderAwareConfig(input io.Reader, output io.Writer) (providerAwar
 	}
 	config.embeddingProfileID = configProfileID(config.embedding.model, config.embeddingDimension)
 	return config, nil
+}
+
+func uniqueConfigCredentialNames(names []string) []string {
+	seen := make(map[string]struct{}, len(names))
+	unique := make([]string, 0, len(names))
+	for _, name := range names {
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		unique = append(unique, name)
+	}
+	return unique
 }
 
 func collectCustomConfigConnection(

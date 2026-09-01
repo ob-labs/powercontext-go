@@ -380,4 +380,7 @@ source / artifact / trigger / inference
   display redaction from the explicit managed credential metadata rather than
   inferring names from a model prefix. Verify marked custom values never appear
   in `show`, unmarked operational values remain visible, and validation refuses
-  a required recorded credential before writing a runnable configuration.
+  a required recorded credential before writing a runnable configuration. When
+  generation and embedding share a marked variable, deduplicate the metadata
+  in first-presented order before strict validation and verify the generated
+  configuration remains runnable.
