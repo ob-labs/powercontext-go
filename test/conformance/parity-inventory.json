@@ -1651,8 +1651,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "server/application_readiness_test.go",
-          "test": "TestProviderRejectedReadinessReportsRedactedReason"
+          "file": "internal/modelprovider/openai_test.go",
+          "test": "TestOpenAIEmbeddingTransportMapsRejectedRequestToRedactedReason"
         }
       ]
     },
@@ -2794,7 +2794,7 @@
         {
           "kind": "go",
           "file": "server/application_readiness_test.go",
-          "test": "TestConfiguredEmbeddingReadinessUsesConfiguredDimension"
+          "test": "TestConfiguredEmbeddingReadinessPassesProfileDimensionToTransport"
         }
       ]
     },
@@ -3177,8 +3177,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "server/application_readiness_test.go",
-          "test": "TestProviderRejectedReadinessReportsRedactedReason"
+          "file": "internal/runtime/readiness_test.go",
+          "test": "TestDependencyProbePublishesOnlyAllowlistedProviderRejectionReason"
         }
       ]
     },
@@ -11817,8 +11817,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "server/application_readiness_test.go",
-          "test": "TestProviderRejectedReadinessReportsRedactedReason"
+          "file": "server/application_test.go",
+          "test": "TestOpenApplicationReportsProviderRejectedEmbeddingReadinessWithoutLeakingProviderBody"
         }
       ]
     },

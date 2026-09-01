@@ -67,10 +67,29 @@ type assembledDependencies struct {
 	resources            []pcruntime.Resource
 }
 
+type assembledProviderFactory interface {
+	TextModel(string) (inference.TextModel, error)
+	EmbeddingTransport(string) (inference.EmbeddingTransport, error)
+}
+
+type providerFactoryBuilder func(*http.Client) (assembledProviderFactory, error)
+
 func assembleDependencies(
 	config ProcessConfig,
 	supplied Dependencies,
 	tracerProvider trace.TracerProvider,
+) (assembledDependencies, error) {
+	return assembleDependenciesWithProviderFactory(
+		config, supplied, tracerProvider,
+		func(client *http.Client) (assembledProviderFactory, error) { return providerFactory(client) },
+	)
+}
+
+func assembleDependenciesWithProviderFactory(
+	config ProcessConfig,
+	supplied Dependencies,
+	tracerProvider trace.TracerProvider,
+	newProviderFactory providerFactoryBuilder,
 ) (assembledDependencies, error) {
 	result := assembledDependencies{
 		memoryCandidates: supplied.MemoryCandidates, experienceCandidates: supplied.ExperienceCandidates,
@@ -88,7 +107,7 @@ func assembleDependencies(
 		result.skillGenerator == nil || result.handoffGenerator == nil ||
 		(config.Runtime.MemoryRerankEnabled && result.memoryReranker == nil)
 	if config.Inference.GenerationModel != "" && needsGenerated {
-		factory, err := providerFactory(supplied.HTTPClient)
+		factory, err := newProviderFactory(supplied.HTTPClient)
 		if err != nil {
 			return result, err
 		}
@@ -172,7 +191,7 @@ func assembleDependencies(
 	}
 
 	if result.embeddingModel == nil && config.Inference.EmbeddingModel != "" {
-		factory, err := providerFactory(supplied.HTTPClient)
+		factory, err := newProviderFactory(supplied.HTTPClient)
 		if err != nil {
 			return result, err
 		}

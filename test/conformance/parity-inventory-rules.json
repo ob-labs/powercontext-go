@@ -8,7 +8,7 @@
       "cases": {
         "test_embedding_adapter_maps_a_rejected_request_to_a_stable_reason_without_leaking_body": {
           "evidence": [
-            "go:server/application_readiness_test.go#TestProviderRejectedReadinessReportsRedactedReason"
+            "go:internal/modelprovider/openai_test.go#TestOpenAIEmbeddingTransportMapsRejectedRequestToRedactedReason"
           ]
         }
       }
@@ -23,7 +23,7 @@
       "cases": {
         "test_embedding_models_send_the_configured_dimension_to_the_provider": {
           "evidence": [
-            "go:server/application_readiness_test.go#TestConfiguredEmbeddingReadinessUsesConfiguredDimension"
+            "go:server/application_readiness_test.go#TestConfiguredEmbeddingReadinessPassesProfileDimensionToTransport"
           ]
         },
         "test_embedding_models_without_configuration_return_no_models": {
@@ -39,7 +39,7 @@
       "cases": {
         "test_dependency_readiness_probe_surfaces_a_stable_redacted_configuration_reason": {
           "evidence": [
-            "go:server/application_readiness_test.go#TestProviderRejectedReadinessReportsRedactedReason"
+            "go:internal/runtime/readiness_test.go#TestDependencyProbePublishesOnlyAllowlistedProviderRejectionReason"
           ]
         },
         "test_dependency_readiness_probe_redacts_plain_configuration_errors": {
@@ -237,7 +237,7 @@
       "cases": {
         "test_server_factory_reports_a_rejected_embedding_request_with_a_redacted_reason": {
           "evidence": [
-            "go:server/application_readiness_test.go#TestProviderRejectedReadinessReportsRedactedReason"
+            "go:server/application_test.go#TestOpenApplicationReportsProviderRejectedEmbeddingReadinessWithoutLeakingProviderBody"
           ]
         }
       }

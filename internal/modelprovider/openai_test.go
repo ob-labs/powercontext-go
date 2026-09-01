@@ -276,6 +276,36 @@ func TestOpenAIEmbeddingTransportUsesOrderedBatchAndUsage(t *testing.T) {
 	}
 }
 
+func TestOpenAIEmbeddingTransportMapsRejectedRequestToRedactedReason(t *testing.T) {
+	fake := &openAIFake{t: t, statuses: []int{http.StatusBadRequest}, responses: []any{
+		map[string]any{"error": map[string]any{
+			"message": "API_KEY=secret https://credential@example.invalid private Memory", "type": "test",
+		}},
+	}}
+	route, _ := Resolve("openai:text-embedding-test", Embedding)
+	transport, err := NewOpenAIEmbeddingTransport(route, OpenAIConfig{
+		APIKey: "test-key", BaseURL: "https://provider.test/v1", HTTPClient: fake.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = transport.Embed(
+		t.Context(), embeddingRequestForProviderTest(t, []string{"embedding input"}, inference.EmbeddingDocument, 3),
+	)
+	configuration, ok := errors.AsType[*inference.ConfigurationError](err)
+	if !ok || configuration.Code() != "provider-rejected" || configuration.Detail() != "HTTP 400" {
+		t.Fatalf("configuration = %#v", configuration)
+	}
+	for _, sentinel := range []string{"API_KEY=secret", "credential@example.invalid", "private Memory"} {
+		if strings.Contains(err.Error(), sentinel) {
+			t.Fatalf("embedding provider error leaked %q", sentinel)
+		}
+	}
+	if errors.Unwrap(err) == nil {
+		t.Fatalf("embedding provider error %T did not retain the SDK cause", err)
+	}
+}
+
 func openAITestCodec(t *testing.T) *inference.JSONCodec[openAITestInput, openAITestOutput] {
 	t.Helper()
 	codec, err := inference.NewJSONCodec[openAITestInput, openAITestOutput](

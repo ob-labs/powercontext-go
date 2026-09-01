@@ -148,9 +148,7 @@ func TestGenerationReadinessUsesRawMinimalProviderRequest(t *testing.T) {
 	}
 }
 
-func TestConfiguredEmbeddingReadinessUsesConfiguredDimension(t *testing.T) {
-	t.Setenv("OPENAI_API_KEY", "test-key")
-	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")
+func TestConfiguredEmbeddingReadinessPassesProfileDimensionToTransport(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -160,39 +158,23 @@ func TestConfiguredEmbeddingReadinessUsesConfiguredDimension(t *testing.T) {
 	config.Inference.EmbeddingDimension = 3
 	config.Inference.EmbeddingNormalization = "none"
 
-	var dimensions []float64
-	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
-		body, err := io.ReadAll(request.Body)
-		if err != nil {
-			return nil, err
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return nil, err
-		}
-		dimension, ok := payload["dimensions"].(float64)
-		if !ok {
-			return nil, errors.New("embedding request did not include a dimension")
-		}
-		dimensions = append(dimensions, dimension)
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body: io.NopCloser(strings.NewReader(
-				`{"object":"list","data":[{"object":"embedding","index":0,"embedding":[1,0,0]}],"model":"text-embedding-test","usage":{"prompt_tokens":1,"total_tokens":1}}`,
-			)),
-			Request: request,
-		}, nil
-	})}
-	assembled, err := assembleDependencies(config, Dependencies{HTTPClient: client}, noop.NewTracerProvider())
+	transport := &recordingEmbeddingTransport{}
+	assembled, err := assembleDependenciesWithProviderFactory(
+		config,
+		Dependencies{},
+		noop.NewTracerProvider(),
+		func(*http.Client) (assembledProviderFactory, error) {
+			return recordingEmbeddingProviderFactory{transport: transport}, nil
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := assembled.embeddingReadiness(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if len(dimensions) != 1 || dimensions[0] != 3 {
-		t.Fatalf("readiness dimensions = %v, want [3]", dimensions)
+	if transport.calls != 1 || transport.request.DimensionCount() != 3 {
+		t.Fatalf("transport calls = %d, request dimension = %d; want 1 and 3", transport.calls, transport.request.DimensionCount())
 	}
 }
 
@@ -406,6 +388,39 @@ func TestApplicationReadinessRedactsPlainConfigurationErrors(t *testing.T) {
 			t.Fatalf("readiness leaked configuration sentinel %q", sentinel)
 		}
 	}
+}
+
+type recordingEmbeddingProviderFactory struct {
+	transport inference.EmbeddingTransport
+}
+
+func (f recordingEmbeddingProviderFactory) TextModel(string) (inference.TextModel, error) {
+	return nil, errors.New("generation model was not expected")
+}
+
+func (f recordingEmbeddingProviderFactory) EmbeddingTransport(string) (inference.EmbeddingTransport, error) {
+	return f.transport, nil
+}
+
+type recordingEmbeddingTransport struct {
+	calls   int
+	request inference.EmbeddingRequest
+}
+
+func (t *recordingEmbeddingTransport) Embed(
+	_ context.Context,
+	request inference.EmbeddingRequest,
+) (inference.ProviderEmbeddingResult, error) {
+	t.calls++
+	t.request = request
+	vectors := make([][]float64, len(request.Inputs()))
+	for index := range vectors {
+		vectors[index] = make([]float64, request.DimensionCount())
+		vectors[index][0] = 1
+	}
+	return inference.NewProviderEmbeddingResult(
+		request.Inputs(), request.InputType(), vectors, inference.Usage{},
+	)
 }
 
 func readinessTestApplication(

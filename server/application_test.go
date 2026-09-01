@@ -630,6 +630,53 @@ func TestOpenApplicationReportsMissingOpenAIEmbeddingAPIPrefixAsDegraded(t *test
 	}
 }
 
+func TestOpenApplicationReportsProviderRejectedEmbeddingReadinessWithoutLeakingProviderBody(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")
+	config := applicationTestConfig(t)
+	config.Inference.EmbeddingModel = "openai:text-embedding-3-small"
+	config.Inference.EmbeddingProfileID = "readiness-test"
+	config.Inference.EmbeddingDimension = 3
+	httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(
+				`{"error":{"message":"API_KEY=secret https://credential@example.invalid private Memory","type":"invalid_request_error"}}`,
+			)),
+			Request: request,
+		}, nil
+	})}
+	application, err := OpenApplication(t.Context(), config, Dependencies{HTTPClient: httpClient})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = application.Close(context.Background()) })
+	handler, err := application.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := perform(handler, http.MethodGet, "/health/ready", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("readiness = %d: %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Status string            `json:"status"`
+		Checks map[string]string `json:"checks"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Status != "degraded" || body.Checks["inference.embedding"] != "misconfigured: provider-rejected (HTTP 400)" {
+		t.Fatalf("readiness body = %#v", body)
+	}
+	for _, sentinel := range []string{"API_KEY=secret", "credential@example.invalid", "private Memory"} {
+		if strings.Contains(response.Body.String(), sentinel) {
+			t.Fatalf("readiness leaked provider body sentinel %q", sentinel)
+		}
+	}
+}
+
 func TestOpenApplicationPersistsBusinessInferenceAndRecallAcrossRestartWithoutMeteringReadiness(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")
