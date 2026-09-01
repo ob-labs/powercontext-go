@@ -19,7 +19,7 @@ Four Go-specific workflows extend, rather than replace, that Python topology:
 
 | Go workflow | Purpose |
 | --- | --- |
-| `migration-gates.yml` | Reusable PR assurance called by `master.yml`: explicit owned-module integrity, fresh generated-consumer builds, public API compatibility, frozen Python Oracle and exact v0.1.0 release-fixture regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, live OceanBase, host adapters, evaluation, four-platform standard/Full builds, CGO-disabled portable SDK cross-builds, and the isolated downstream public-consumer workflow. |
+| `migration-gates.yml` | Reusable PR assurance called by `master.yml`: explicit owned-module integrity, fresh generated-consumer builds, public API compatibility, online verification of the recorded upstream tag, release bytes, and PyPI provenance, frozen Python Oracle and exact v0.1.0 release-fixture regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, live OceanBase, host adapters, evaluation, four-platform standard/Full builds, CGO-disabled portable SDK cross-builds, and the isolated downstream public-consumer workflow. |
 | `codeql.yml` | Go CodeQL analysis on pull requests, pushes to `main`, a weekly schedule, and manual dispatch. Pull request runs check out the exact submitted head commit before the explicit Go build. |
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
 | `windows-contract.yml` | Windows checkout-only contract guard: verifies LF attributes, both versioned fixture SHA-256 inventories, and generated-contract cleanliness without claiming Windows binary support. |

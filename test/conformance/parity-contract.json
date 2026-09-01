@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "upstream": {
     "repository": "oceanbase/powercontext",
     "url": "https://github.com/oceanbase/powercontext",
@@ -23,6 +23,14 @@
     "sdist": {
       "filename": "powercontext-0.1.0.tar.gz",
       "sha256": "18d47a335340b0870216e2cc0fb1fd8e4d865880155daeea3b01187c950fd746"
+    },
+    "provenance": {
+      "pypi_project": "powercontext",
+      "publisher": {
+        "kind": "GitHub",
+        "repository": "oceanbase/powercontext",
+        "workflow": "release.yml"
+      }
     }
   },
   "exact_target_sha": "7b736206a53a6de6f43d4b517893ee1a80e7183d",

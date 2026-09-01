@@ -55,6 +55,14 @@ type parityContract struct {
 			Filename string `json:"filename"`
 			SHA256   string `json:"sha256"`
 		} `json:"sdist"`
+		Provenance struct {
+			PyPIProject string `json:"pypi_project"`
+			Publisher   struct {
+				Kind       string `json:"kind"`
+				Repository string `json:"repository"`
+				Workflow   string `json:"workflow"`
+			} `json:"publisher"`
+		} `json:"provenance"`
 	} `json:"release_target"`
 	ExactTargetSHA      string `json:"exact_target_sha"`
 	TargetTestCaseCount int    `json:"target_test_case_count"`
@@ -82,11 +90,11 @@ func TestParityContractRejectsAmbiguousJSON(t *testing.T) {
 	}{
 		{
 			name:   "duplicate member",
-			mutant: strings.Replace(string(contents), `"schema_version": 2,`, `"schema_version": 999, "schema_version": 2,`, 1),
+			mutant: strings.Replace(string(contents), `"schema_version": 3,`, `"schema_version": 999, "schema_version": 3,`, 1),
 		},
 		{
 			name:   "unknown member",
-			mutant: strings.Replace(string(contents), `"schema_version": 2,`, `"schema_version": 2, "future_semantics": true,`, 1),
+			mutant: strings.Replace(string(contents), `"schema_version": 3,`, `"schema_version": 3, "future_semantics": true,`, 1),
 		},
 	}
 	for _, test := range tests {
@@ -123,8 +131,8 @@ func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 	contract := readParityContract(t)
 	root := repositoryRoot(t)
 
-	if contract.SchemaVersion != 2 {
-		t.Fatalf("parity contract schema version = %d, want 2", contract.SchemaVersion)
+	if contract.SchemaVersion != 3 {
+		t.Fatalf("parity contract schema version = %d, want 3", contract.SchemaVersion)
 	}
 
 	// Concept 1: the upstream repository identity.
@@ -216,6 +224,11 @@ func TestParityContractRecordsSignedV010ReleaseIdentity(t *testing.T) {
 		release.Sdist.SHA256 != "18d47a335340b0870216e2cc0fb1fd8e4d865880155daeea3b01187c950fd746" {
 		t.Errorf("sdist identity = %#v", release.Sdist)
 	}
+	if release.Provenance.PyPIProject != "powercontext" || release.Provenance.Publisher.Kind != "GitHub" ||
+		release.Provenance.Publisher.Repository != contract.Upstream.Repository ||
+		release.Provenance.Publisher.Workflow != "release.yml" {
+		t.Errorf("release provenance identity = %#v", release.Provenance)
+	}
 }
 
 func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
@@ -229,7 +242,8 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	var workflow struct {
 		Jobs map[string]struct {
 			Steps []struct {
-				Name string `yaml:"name"`
+				Name string            `yaml:"name"`
+				Env  map[string]string `yaml:"env"`
 				With struct {
 					Repository string `yaml:"repository"`
 					Ref        string `yaml:"ref"`
@@ -251,7 +265,7 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	decodeJSONFile(t, filepath.Join(root, "test", "conformance", "target-delta.json"), &delta)
 	checkout, verify := "", ""
 	previousCheckout, previousVerify := "", ""
-	targetCheckout, targetVerify, deltaVerify, releaseFixtureVerify := "", "", "", ""
+	targetCheckout, targetVerify, releaseVerify, deltaVerify, releaseFixtureVerify := "", "", "", "", ""
 	for _, step := range job.Steps {
 		switch step.Name {
 		case "Check out frozen Python Oracle":
@@ -290,6 +304,14 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 			if !validCheckoutIdentityCommand(step.Run, "_target", contract.ExactTargetSHA) {
 				t.Errorf("Verify parity target identity step does not pin the contract exact target SHA %q", contract.ExactTargetSHA)
 			}
+		case "Verify release tag, assets, and provenance":
+			releaseVerify = step.Name
+			if strings.TrimSpace(step.Run) != "make release-contract-check" {
+				t.Errorf("release verification command = %q, want make release-contract-check", step.Run)
+			}
+			if step.Env["GITHUB_TOKEN"] != "${{ github.token }}" {
+				t.Errorf("release verification GITHUB_TOKEN = %q, want github.token", step.Env["GITHUB_TOKEN"])
+			}
 		case "Regenerate and compare frozen fixtures":
 			if strings.Contains(step.Run, "-check-delta") && strings.Contains(step.Run, "-previous-upstream _previous_target") &&
 				strings.Contains(step.Run, "-release-upstream _target") {
@@ -320,6 +342,9 @@ func TestParityContractMatchesFrozenOracleWorkflow(t *testing.T) {
 	}
 	if targetVerify == "" {
 		t.Error("frozen-oracle job has no 'Verify parity target identity' step")
+	}
+	if releaseVerify == "" {
+		t.Error("frozen-oracle job does not verify the release tag, assets, and provenance")
 	}
 	if deltaVerify == "" {
 		t.Error("frozen-oracle job does not verify the reviewed target delta")

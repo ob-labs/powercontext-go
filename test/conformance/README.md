@@ -6,7 +6,8 @@ an informal reference.
 
 - `parity-contract.json` records the upstream parity identity as separate
   concepts: the upstream repository, the exact target SHA, the signed release
-  target and assets, the frozen release Oracle, and the active parity target. `parity_contract_test.go`
+  target, assets, and PyPI publisher identity, the frozen release Oracle, and
+  the active parity target. `parity_contract_test.go`
   proves the frozen Oracle commit is identical across the contract, the Go
   test constant, `manifest.json`, and the `frozen-oracle` CI checkout, and
   rejects any conflation between the frozen Oracle and the parity targets.
@@ -14,6 +15,11 @@ an informal reference.
   run at the new commit is green, record the new exact target SHA and its
   test inventory together in one reviewed change, and keep the frozen
   Oracle untouched until a new versioned Oracle directory is accepted.
+  `make release-contract-check` resolves the recorded release tag, verifies GitHub
+  Release metadata and downloaded bytes, and checks PyPI metadata plus the
+  Integrity provenance subject against this contract. The command reads
+  `GITHUB_TOKEN` for authenticated GitHub API access; CI supplies the
+  repository token, while local anonymous runs may exhaust shared API limits.
 - `testdata/python-v0.0.2/manifest.json` freezes OpenAPI, SQLite schema,
   Prompt, fixture, and Python-test inventories.
 - `traceability.json` inventories every one of the 622 frozen Python test
