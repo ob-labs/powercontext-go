@@ -179,6 +179,18 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-go-env
 
+      - name: Validate pull request title
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          title_pattern='^(build|ci|docs|feat|fix|perf|refactor|revert|security|style|test)(\([a-z0-9][a-z0-9._/-]*\))?:[[:space:]]+.+$'
+          if ! [[ "$PR_TITLE" =~ $title_pattern ]]; then
+            echo "pull request title must use type(scope optional): summary" >&2
+            exit 1
+          fi
+
       - name: Check contribution and review contracts
         run: make governance-check
 

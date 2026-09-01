@@ -696,6 +696,78 @@ func TestMainTestsJobChecksRepositoryCleanlinessAfterTestExecution(t *testing.T)
 	}
 }
 
+func TestGovernanceJobValidatesPullRequestTitleContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string            `yaml:"name"`
+				If   string            `yaml:"if"`
+				Env  map[string]string `yaml:"env"`
+				Run  string            `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	governance, ok := workflow.Jobs["governance-contract"]
+	if !ok {
+		t.Fatal("master.yml has no governance-contract job")
+	}
+	for _, step := range governance.Steps {
+		if step.Name != "Validate pull request title" {
+			continue
+		}
+		if step.If != "github.event_name == 'pull_request'" ||
+			step.Env["PR_TITLE"] != "${{ github.event.pull_request.title }}" ||
+			!strings.Contains(step.Run, "PR_TITLE") ||
+			!strings.Contains(step.Run, "build|ci|docs|feat|fix|perf|refactor|revert|security|style|test") ||
+			!strings.Contains(step.Run, "title_pattern=") ||
+			!strings.Contains(step.Run, "(\\([a-z0-9][a-z0-9._/-]*\\))?:[[:space:]]+.+$") ||
+			!strings.Contains(step.Run, "=~ $title_pattern") {
+			t.Fatalf("pull request title validation step = %#v", step)
+		}
+		if runtime.GOOS == "windows" {
+			return
+		}
+		if _, err := exec.LookPath("bash"); err != nil {
+			t.Skip("Bash is required to exercise the pull request title contract")
+		}
+		for _, title := range []string{
+			"build: pin local formatting commands",
+			"build(deps): bump actions",
+			"feat(runtime): trace background operations",
+			"fix(scheduler): reject stale marker",
+			"test: guard operation mirrors",
+		} {
+			if err := runPullRequestTitleContract(t, step.Run, title); err != nil {
+				t.Fatalf("valid title %q rejected: %v", title, err)
+			}
+		}
+		if err := runPullRequestTitleContract(t, step.Run, "missing conventional prefix"); err == nil {
+			t.Fatal("invalid title was accepted")
+		}
+		return
+	}
+	t.Fatal("governance-contract has no pull request title validation step")
+}
+
+func runPullRequestTitleContract(t *testing.T, script, title string) error {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), "bash", "-c", script)
+	command.Env = append(os.Environ(), "PR_TITLE="+title)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, output)
+	}
+	return nil
+}
+
 func TestFrozenOracleGeneratorsUseTemporaryGoldenOutput(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
