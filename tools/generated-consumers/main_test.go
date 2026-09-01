@@ -17,6 +17,7 @@ package generatedconsumers
 import (
 	"bytes"
 	"encoding/json/v2"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -250,6 +251,51 @@ func TestGeneratorInventoryListsCheckedContracts(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRetainedAdapterOperationMirrorsMatchDSHGeneratorOutput(t *testing.T) {
+	repository := repositoryRoot(t)
+	paths := []string{
+		"integrations/dsh/plugins/powercontext/src/operations.generated.ts",
+		"integrations/pi/plugins/powercontext/src/operations.generated.ts",
+		"integrations/opencode/plugins/powercontext/src/operations.generated.ts",
+	}
+	if err := validateOperationMirrors(repository, paths); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOperationMirrorValidationRejectsDrift(t *testing.T) {
+	directory := t.TempDir()
+	paths := []string{"dsh.ts", "pi.ts", "opencode.ts"}
+	for _, path := range paths {
+		writeFile(t, filepath.Join(directory, path), "export const OPERATIONS = {}\n")
+	}
+	writeFile(t, filepath.Join(directory, "opencode.ts"), "export const OPERATIONS = { drift: true }\n")
+	if err := validateOperationMirrors(directory, paths); err == nil {
+		t.Fatal("operation mirror drift was accepted")
+	}
+}
+
+func validateOperationMirrors(root string, paths []string) error {
+	if len(paths) < 2 {
+		return fmt.Errorf("operation mirror count = %d, want at least 2", len(paths))
+	}
+	reference, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(paths[0])))
+	if err != nil {
+		return err
+	}
+	reference = bytes.ReplaceAll(reference, []byte("\r\n"), []byte("\n"))
+	for _, path := range paths[1:] {
+		payload, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(reference, bytes.ReplaceAll(payload, []byte("\r\n"), []byte("\n"))) {
+			return fmt.Errorf("operation mirror %q differs from %q", path, paths[0])
+		}
+	}
+	return nil
 }
 
 func TestOpenAPIGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
