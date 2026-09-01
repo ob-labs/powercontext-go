@@ -376,3 +376,8 @@ source / artifact / trigger / inference
   fails, preserve the successful publication result and report only a bounded
   stale-discovery state. Verify scan and registry-read failures leave the
   published package intact, return success, and never expose discovery errors.
+- When a configuration generator records provider credentials, derive every
+  display redaction from the explicit managed credential metadata rather than
+  inferring names from a model prefix. Verify marked custom values never appear
+  in `show`, unmarked operational values remain visible, and validation refuses
+  a required recorded credential before writing a runnable configuration.
