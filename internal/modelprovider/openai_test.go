@@ -212,12 +212,12 @@ func TestOpenAISDKRetriesAreDisabledAndErrorsAreSanitized(t *testing.T) {
 		check  func(error) bool
 	}{
 		{status: http.StatusBadRequest, check: func(err error) bool {
-			var target *inference.ConfigurationError
-			return errors.As(err, &target)
+			target, ok := errors.AsType[*inference.ConfigurationError](err)
+			return ok && target.Code() == "provider-rejected" && target.Detail() == "HTTP 400"
 		}},
 		{status: http.StatusTooManyRequests, check: func(err error) bool {
-			var target *inference.UnavailableError
-			return errors.As(err, &target)
+			_, ok := errors.AsType[*inference.UnavailableError](err)
+			return ok
 		}},
 	}
 	for _, test := range tests {

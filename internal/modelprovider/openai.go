@@ -355,14 +355,7 @@ func mapOpenAIError(err error, operation string) error {
 	}
 	var apiError *openai.Error
 	if errors.As(err, &apiError) {
-		status := apiError.StatusCode
-		if status == http.StatusRequestTimeout || status == http.StatusGatewayTimeout {
-			return context.DeadlineExceeded
-		}
-		if status == http.StatusConflict || status == http.StatusTooEarly || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError {
-			return inference.WrapUnavailableError(operation, err)
-		}
-		return inference.WrapConfigurationError("provider-rejected", "", err)
+		return mapProviderHTTPStatus(apiError.StatusCode, operation, err)
 	}
 	return inference.WrapUnavailableError(operation, err)
 }
