@@ -147,14 +147,95 @@
       "mode": "go-port",
       "reason": "Managed environment initialization, validation, credential input, and redacted display map to the Go CLI.",
       "cases": {
+        "test_init_asks_for_protocol_endpoint_key_and_plain_model_name": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigInitCollectsOpenAIProtocolAndRedactsCredential"
+          ]
+        },
+        "test_arbitrary_model_providers_and_environment_variables_are_not_rejected": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestProviderAwareConfigAllowsSupportedModelsAndExplicitEnvironment"
+          ]
+        },
+        "test_provider_base_url_rejects_embedded_credentials": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestProviderAwareConfigRejectsCredentialBearingBaseURL"
+          ]
+        },
         "test_init_validate_and_show_round_trip_managed_environment": {
           "evidence": [
-            "go:internal/cli/config_command_test.go#TestConfigInitShowAndValidateManageOneCredentialFreeEnvironmentFile"
+            "go:internal/cli/config_command_test.go#TestConfigInitShowAndValidateManageOneProviderEnvironmentFile"
+          ]
+        },
+        "test_init_rejects_configuration_that_server_settings_reject": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigInitRejectsServerInvalidConfigurationBeforeWriting"
+          ]
+        },
+        "test_init_rejects_provider_models_that_cannot_be_constructed": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestProviderAwareConfigRejectsUnknownProviderBeforeWriting"
           ]
         },
         "test_configuration_rejects_relative_persistent_storage": {
           "evidence": [
             "go:internal/cli/config_command_test.go#TestConfigValidateRejectsRelativeSQLitePersistencePath"
+          ]
+        },
+        "test_standard_provider_requires_a_credential": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestProviderAwareConfigTemplateAllowsBlankCredentialButStrictValidationRejectsIt"
+          ]
+        },
+        "test_custom_connection_is_not_reclassified_from_its_model_prefix": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestProviderAwareConfigDoesNotInferCredentialsFromModelPrefix"
+          ]
+        },
+        "test_init_refuses_to_replace_an_existing_environment_without_force": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigInitRefusesToReplaceExistingEnvironmentWithoutForce"
+          ]
+        },
+        "test_environment_parser_rejects_duplicate_assignments": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentRejectsDuplicateAssignments"
+          ]
+        },
+        "test_validate_reports_invalid_numeric_values_without_a_traceback": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigValidateReportsInvalidProviderAwareNumericValueWithoutTraceback"
+          ]
+        },
+        "test_init_records_generated_credential_names_for_show_redaction": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestProviderAwareConfigDoesNotInferCredentialsFromModelPrefix"
+          ]
+        },
+        "test_custom_connection_marks_prompted_credential_for_show_redaction": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+          ]
+        },
+        "test_init_hides_and_redacts_marked_additional_credentials": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials",
+            "go:internal/cli/config_command_test.go#TestConfigShowRedactsRecordedCustomCredentialAndKeepsUnmarkedValue"
+          ]
+        },
+        "test_collect_provider_variable_hides_input_for_credential_names": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+          ]
+        },
+        "test_collect_additional_provider_variables_hides_and_records_marked_credentials": {
+          "evidence": [
+            "go:internal/cli/config_model_test.go#TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+          ]
+        },
+        "test_collect_additional_provider_variables_keeps_unmarked_values_visible": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestConfigShowRedactsRecordedCustomCredentialAndKeepsUnmarkedValue"
           ]
         },
         "test_show_redacts_standard_credential_container_variables": {

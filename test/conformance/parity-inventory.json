@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 725,
-  "pending_case_count": 87,
+  "mapped_case_count": 741,
+  "pending_case_count": 71,
   "entries": [
     {
       "python": {
@@ -8588,8 +8588,15 @@
         "line": 26
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitCollectsOpenAIProtocolAndRedactsCredential"
+        }
+      ]
     },
     {
       "python": {
@@ -8598,8 +8605,15 @@
         "line": 57
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigAllowsSupportedModelsAndExplicitEnvironment"
+        }
+      ]
     },
     {
       "python": {
@@ -8608,8 +8622,15 @@
         "line": 81
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigRejectsCredentialBearingBaseURL"
+        }
+      ]
     },
     {
       "python": {
@@ -8624,7 +8645,7 @@
         {
           "kind": "go",
           "file": "internal/cli/config_command_test.go",
-          "test": "TestConfigInitShowAndValidateManageOneCredentialFreeEnvironmentFile"
+          "test": "TestConfigInitShowAndValidateManageOneProviderEnvironmentFile"
         }
       ]
     },
@@ -8635,8 +8656,15 @@
         "line": 123
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitRejectsServerInvalidConfigurationBeforeWriting"
+        }
+      ]
     },
     {
       "python": {
@@ -8645,8 +8673,15 @@
         "line": 138
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigRejectsUnknownProviderBeforeWriting"
+        }
+      ]
     },
     {
       "python": {
@@ -8672,8 +8707,15 @@
         "line": 177
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigTemplateAllowsBlankCredentialButStrictValidationRejectsIt"
+        }
+      ]
     },
     {
       "python": {
@@ -8682,8 +8724,15 @@
         "line": 192
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigDoesNotInferCredentialsFromModelPrefix"
+        }
+      ]
     },
     {
       "python": {
@@ -8692,8 +8741,15 @@
         "line": 217
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitRefusesToReplaceExistingEnvironmentWithoutForce"
+        }
+      ]
     },
     {
       "python": {
@@ -8702,8 +8758,15 @@
         "line": 232
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentRejectsDuplicateAssignments"
+        }
+      ]
     },
     {
       "python": {
@@ -8712,8 +8775,15 @@
         "line": 237
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigValidateReportsInvalidProviderAwareNumericValueWithoutTraceback"
+        }
+      ]
     },
     {
       "python": {
@@ -8739,8 +8809,15 @@
         "line": 267
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigDoesNotInferCredentialsFromModelPrefix"
+        }
+      ]
     },
     {
       "python": {
@@ -8783,8 +8860,15 @@
         "line": 332
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        }
+      ]
     },
     {
       "python": {
@@ -8793,8 +8877,20 @@
         "line": 373
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        },
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRedactsRecordedCustomCredentialAndKeepsUnmarkedValue"
+        }
+      ]
     },
     {
       "python": {
@@ -8803,8 +8899,15 @@
         "line": 396
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        }
+      ]
     },
     {
       "python": {
@@ -8813,8 +8916,15 @@
         "line": 411
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        }
+      ]
     },
     {
       "python": {
@@ -8823,8 +8933,15 @@
         "line": 432
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRedactsRecordedCustomCredentialAndKeepsUnmarkedValue"
+        }
+      ]
     },
     {
       "python": {
