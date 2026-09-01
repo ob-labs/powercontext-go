@@ -17,7 +17,27 @@ The HTTP source of truth is [`openapi/powercontext.yaml`](openapi/powercontext.y
 Generated code under `api/v1` and generated operation tables are never edited
 by hand. Compatibility evidence lives under `test/conformance`: the v0.1.0
 release inventory contains 812 Python test cases in 132 files, alongside the
-immutable historical v0.0.2 fixture.
+immutable historical v0.0.2 fixture. At this commit, the generated inventory
+maps 741 release-target cases to case-specific evidence and records 71 as
+pending; the pending set is not a compatibility claim.
+
+## Alignment and support matrix
+
+This table describes the currently implemented and evidenced boundary. The
+upstream Python release is the alignment target; it is not a PowerContext Go
+binary release.
+
+| Surface | Current evidence | Pre-WP6 acceptance boundary |
+| --- | --- | --- |
+| Upstream release identity | `powercontext-v0.1.0` at `7b736206a53a6de6f43d4b517893ee1a80e7183d`; the generated inventory covers 812 cases in 132 files, with 741 mapped and 71 pending. | The exact target, distribution digests, fixtures, and traceability rules are checked by the release-contract workflow. |
+| Go Server, SDK, CLI, and OpenAPI | Go-native implementation with `openapi/powercontext.yaml` as the authoritative HTTP contract. | SQLite is the only database accepted before WP6. |
+| Codex and WorkBuddy | Installed integrations call the running Go Server through HTTP or MCP; their service-chain evidence is a required `Pre-WP6 host adapters` check. | These are the only host integrations counted toward WP6 acceptance. |
+| Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is WP5 evidence, not evidence for every retained host adapter. |
+| Retained adapters | Other maintained adapters retain their own executable `Post-WP6 retained host adapters` CI evidence. | Bub, Claude Code, DSH, Hermes, LangGraph, OpenClaw, OpenCode, and Pi are P3 work and are not WP6 acceptance evidence. |
+| seekDB and OceanBase | Existing code and jobs remain useful backend-plan evidence. | Feature parity, migrations, packaging, license/SBOM work, and release reconciliation are final P4 work. |
+
+See [`docs/release/INSTALL.md`](docs/release/INSTALL.md) for the exact release
+identity, configuration, upgrade, transport, and host-operation contract.
 
 ## Repository shape
 
