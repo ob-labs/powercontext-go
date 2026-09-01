@@ -31,6 +31,14 @@ import (
 
 const requiredSQLiteVecVersion = "v0.1.9"
 
+const (
+	sqliteVecProjectionName         = "pc_memory_entry_vec"
+	sqliteVecProjectionSchemaLookup = "SELECT type, sql FROM sqlite_master WHERE name = ?"
+	sqliteVecProbeInsert            = "INSERT INTO pc_memory_entry_vec (rowid, embedding) VALUES (?, ?)"
+	sqliteVecProbeQuery             = "SELECT rowid FROM pc_memory_entry_vec WHERE embedding MATCH ? AND k = 1"
+	sqliteVecProbeDelete            = "DELETE FROM pc_memory_entry_vec WHERE rowid = ?"
+)
+
 var sqliteVecProjectionSchema = regexp.MustCompile(
 	`^CREATE VIRTUAL TABLE pc_memory_entry_vec USING vec0\(embedding float\[([1-9][0-9]*)\]\)$`,
 )
@@ -60,13 +68,12 @@ func (i *SQLiteMemoryVectorIndex) Capabilities() memory.Capabilities {
 func (i *SQLiteMemoryVectorIndex) Initialize(ctx context.Context, db DBTX) error {
 	var version any
 	if err := db.QueryRowContext(ctx, "SELECT vec_version()").Scan(&version); err != nil {
-		return sqliteVecCapabilityError("sqlite-vec probe failed")
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
 	}
 	if err := validateSQLiteVecVersion(version); err != nil {
 		return err
 	}
-	for _, statement := range []string{
-		`CREATE TABLE IF NOT EXISTS pc_memory_vector_entries (
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS pc_memory_vector_entries (
             vector_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             scope_id VARCHAR(256) NOT NULL,
             memory_artifact_id VARCHAR(128) NOT NULL,
@@ -84,36 +91,90 @@ func (i *SQLiteMemoryVectorIndex) Initialize(ctx context.Context, db DBTX) error
                 scope_id, memory_artifact_id, entry_id
             ) ON DELETE CASCADE,
             CONSTRAINT ck_pc_memory_vector_entries_revision_positive CHECK (head_revision > 0)
-        )`,
-		fmt.Sprintf(`CREATE VIRTUAL TABLE IF NOT EXISTS pc_memory_entry_vec USING vec0(embedding float[%d])`, i.profile.Dimension),
-	} {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			return sqliteVecCapabilityError("sqlite-vec probe failed")
-		}
+		)`); err != nil {
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
+	}
+	if err := i.ensureSQLiteVecProjection(ctx, db); err != nil {
+		return err
 	}
 
 	probe := make([]float64, i.profile.Dimension)
 	packed, err := packSQLiteVector(probe)
 	if err != nil {
-		return sqliteVecCapabilityError("sqlite-vec probe failed")
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
+	}
+	if _, err := db.ExecContext(ctx, sqliteVecProbeDelete, -1); err != nil {
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
 	}
 	if _, err := db.ExecContext(ctx,
-		"INSERT INTO pc_memory_entry_vec (rowid, embedding) VALUES (?, ?)", -1, packed,
+		sqliteVecProbeInsert, -1, packed,
 	); err != nil {
-		return sqliteVecCapabilityError("sqlite-vec probe failed")
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
 	}
-	var rowID int64
-	queryErr := db.QueryRowContext(ctx,
-		"SELECT rowid FROM pc_memory_entry_vec WHERE embedding MATCH ? AND k = 1", packed,
-	).Scan(&rowID)
-	_, deleteErr := db.ExecContext(ctx, "DELETE FROM pc_memory_entry_vec WHERE rowid = ?", -1)
-	if queryErr != nil || deleteErr != nil {
-		return sqliteVecCapabilityError("sqlite-vec probe failed")
+	rowID, queryErr, closeErr := sqliteVecProbeRowID(ctx, db, packed)
+	_, deleteErr := db.ExecContext(ctx, sqliteVecProbeDelete, -1)
+	if queryErr != nil || closeErr != nil || deleteErr != nil {
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", queryErr, closeErr, deleteErr)
 	}
 	if rowID != -1 {
 		return sqliteVecCapabilityError("sqlite-vec probe returned an invalid row")
 	}
 	return nil
+}
+
+func (i *SQLiteMemoryVectorIndex) ensureSQLiteVecProjection(ctx context.Context, db DBTX) error {
+	tableType, schema, err := sqliteVecProjectionDefinition(ctx, db)
+	if errors.Is(err, sql.ErrNoRows) {
+		statement := fmt.Sprintf(
+			"CREATE VIRTUAL TABLE %s USING vec0(embedding float[%d])",
+			sqliteVecProjectionName, i.profile.Dimension,
+		)
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
+		}
+		tableType, schema, err = sqliteVecProjectionDefinition(ctx, db)
+	}
+	if err != nil {
+		return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
+	}
+	if tableType != "table" {
+		return sqliteVecIncompatibleSchemaError()
+	}
+	dimension, ok := parseSQLiteVecProjectionDimension(schema)
+	if !ok {
+		return sqliteVecIncompatibleSchemaError()
+	}
+	if dimension != i.profile.Dimension {
+		return sqliteVecDimensionMismatchError(dimension, i.profile.Dimension)
+	}
+	return nil
+}
+
+func sqliteVecProjectionDefinition(ctx context.Context, db DBTX) (string, string, error) {
+	var tableType, schema string
+	err := db.QueryRowContext(ctx, sqliteVecProjectionSchemaLookup, sqliteVecProjectionName).Scan(&tableType, &schema)
+	return tableType, schema, err
+}
+
+func sqliteVecProbeRowID(ctx context.Context, db DBTX, packed []byte) (int64, error, error) {
+	rows, err := db.QueryContext(ctx, sqliteVecProbeQuery, packed)
+	if err != nil {
+		return 0, err, nil
+	}
+	var rowID int64
+	var queryErr error
+	if rows.Next() {
+		queryErr = rows.Scan(&rowID)
+	} else {
+		queryErr = rows.Err()
+		if queryErr == nil {
+			queryErr = sql.ErrNoRows
+		}
+	}
+	if queryErr == nil {
+		queryErr = rows.Err()
+	}
+	return rowID, queryErr, rows.Close()
 }
 
 func (i *SQLiteMemoryVectorIndex) Replace(
