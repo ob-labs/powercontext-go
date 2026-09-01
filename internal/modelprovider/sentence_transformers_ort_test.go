@@ -40,7 +40,7 @@ func TestLocalEmbeddingTransportPreservesInputsAndVectors(t *testing.T) {
 	}, func() error { return nil })
 
 	inputs := []string{"alpha", "beta"}
-	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, inputs, inference.EmbeddingDocument, 3))
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, inputs, inference.EmbeddingDocument, 2))
 	if err != nil {
 		t.Fatal(err)
 	}
