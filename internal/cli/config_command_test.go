@@ -345,6 +345,43 @@ func TestParseConfigEnvironmentSupportsShellLiteralSyntax(t *testing.T) {
 	}
 }
 
+func TestParseConfigEnvironmentMatchesV010EnvironmentFileContract(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		key     string
+		want    string
+		wantErr bool
+	}{
+		{name: "URL fragment", content: "URL=https://example.com/page#section\n", key: "URL", want: "https://example.com/page#section"},
+		{name: "export hash", content: "export BEARER=token#a1\n", key: "BEARER", want: "token#a1"},
+		{name: "full line comments", content: "# leading comment\n\nTOKEN=value # explanation\n", key: "TOKEN", want: "value"},
+		{name: "even backslash before space", content: "TOKEN=abc\\\\ #comment\n", key: "TOKEN", want: "abc\\"},
+		{name: "escaped quote", content: "TOKEN=abc\\\" #comment\n", key: "TOKEN", want: "abc\""},
+		{name: "escaped tab", content: "TOKEN=abc\\\t#123\n", key: "TOKEN", want: "abc\t#123"},
+		{name: "trailing escaped space", content: "TOKEN=abc\\ \n", key: "TOKEN", want: "abc "},
+		{name: "trailing escaped tab", content: "TOKEN=abc\\\t\n", key: "TOKEN", want: "abc\t"},
+		{name: "unterminated quote", content: "TOKEN=\"unterminated\n", wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			values, err := parseConfigEnvironment(test.content)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("parseConfigEnvironment accepted an unterminated quote")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(values) != 1 || values[test.key] != test.want {
+				t.Fatalf("parsed values = %#v, want %s=%q", values, test.key, test.want)
+			}
+		})
+	}
+}
+
 func TestParseConfigEnvironmentRejectsExpansionAndControlInput(t *testing.T) {
 	for _, value := range []string{"$ROOT/data", "${ROOT}/data", "$(command)", "`command`", "~/data", "value\x00tail"} {
 		t.Run(value, func(t *testing.T) {

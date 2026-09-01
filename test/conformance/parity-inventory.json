@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 741,
-  "pending_case_count": 71,
+  "mapped_case_count": 749,
+  "pending_case_count": 63,
   "entries": [
     {
       "python": {
@@ -9531,8 +9531,15 @@
         "line": 42
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9541,8 +9548,15 @@
         "line": 46
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9551,8 +9565,15 @@
         "line": 50
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9595,8 +9616,15 @@
         "line": 63
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9605,8 +9633,15 @@
         "line": 67
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9615,8 +9650,15 @@
         "line": 71
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9642,8 +9684,15 @@
         "line": 80
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9737,8 +9786,15 @@
         "line": 126
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {

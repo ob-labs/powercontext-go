@@ -300,6 +300,46 @@
             "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
           ]
         },
+        "test_url_fragment_assignment_survives": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_export_prefix_keeps_hash_values": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_full_line_comments_are_ignored": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_even_backslash_before_space_starts_a_comment_like_shell": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_backslash_escaped_quote_outside_quotes_is_literal": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_backslash_escaped_tab_preserves_hash_value": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_trailing_escaped_whitespace_is_preserved": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
+        "test_unterminated_quote_is_rejected": {
+          "evidence": [
+            "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+          ]
+        },
         "test_unescaped_tab_starts_a_comment_boundary": {
           "evidence": [
             "go:internal/cli/config_command_test.go#TestParseConfigEnvironmentSupportsShellLiteralSyntax"
