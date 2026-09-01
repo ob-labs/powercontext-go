@@ -1291,6 +1291,10 @@ func TestMakefilePinsWorkflowGoToolsInTheRepositoryToolDirectory(t *testing.T) {
 		"license-check: license-eye-tools",
 		"license-fix: license-eye-tools",
 		"actionlint: actionlint-tools",
+		"MODERN_GO_VERSION := v0.1.1",
+		"github.com/JetBrains/go-modern-guidelines@$(MODERN_GO_VERSION)",
+		"modern-go-tools:",
+		"modern-go: modern-go-tools",
 	} {
 		if !strings.Contains(contents, required) {
 			t.Errorf("Makefile is missing pinned repository-local tool contract %q", required)

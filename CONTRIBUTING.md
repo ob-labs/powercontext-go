@@ -48,6 +48,9 @@ make e2e-test
 `make lint` installs the pinned golangci-lint release under `.tools/bin`. Its embedded gofmt, gofumpt, and goimports
 versions are the formatting authority; no mutable global linter installation is required.
 
+`make modern-go` installs the pinned Modern Go Guidelines CLI under `.tools/bin` and lists the guidelines for the Go
+version declared by the current toolchain. Run it before changing Go code when the agent-provided skill is unavailable.
+
 Run `make coverage` when a change affects executable Go behavior. It uses race-enabled atomic coverage and rejects a
 material regression from the recorded baseline.
 
