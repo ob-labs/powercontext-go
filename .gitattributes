@@ -25,6 +25,13 @@
 Dockerfile text eol=lf
 Makefile text eol=lf
 
+# Maintained auxiliary monorepo assets. They remain tested and licensed, but
+# are not implementation languages of the PowerContext Go primary product.
+evaluation/** -linguist-detectable
+integrations/** -linguist-detectable
+test/conformance/*.py -linguist-detectable
+test/differential/*.py -linguist-detectable
+
 *.db binary
 *.db-shm binary
 *.db-wal binary

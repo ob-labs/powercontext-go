@@ -29,6 +29,30 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+func TestGoPrimaryMonorepoLinguistPolicy(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".gitattributes"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attributes := string(payload)
+	for _, required := range []string{
+		"evaluation/** -linguist-detectable",
+		"integrations/** -linguist-detectable",
+		"test/conformance/*.py -linguist-detectable",
+		"test/differential/*.py -linguist-detectable",
+	} {
+		if !strings.Contains(attributes, required) {
+			t.Errorf(".gitattributes is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"linguist-vendored", "linguist-generated"} {
+		if strings.Contains(attributes, forbidden) {
+			t.Errorf(".gitattributes must not classify maintained sources as %q", forbidden)
+		}
+	}
+}
+
 func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	workflows := filepath.Join(repository, ".github", "workflows")
