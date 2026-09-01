@@ -302,11 +302,14 @@ source / artifact / trigger / inference
   value or another option before any read or write. Verify the real CLI exits
   nonzero with an actionable diagnostic even when an option-named file would
   otherwise make the malformed command succeed.
-- When isolated host adapters vendor the same transport policy, drive every
-  configuration and directly constructible client boundary from one shared
-  host-vector fixture. Verify the complete IPv4 `127.0.0.0/8` range, IPv6
-  loopback, remote plaintext rejection, and each explicit trusted-transport
-  exception in the adapter's native test suite.
+- When isolated host adapters vendor the same transport policy or construct
+  proxy-aware HTTP clients, drive every configuration and directly constructible
+  client boundary from one shared host-vector fixture. Bypass environment and OS
+  proxies for loopback routes before bearer credentials can leave the host while
+  preserving configured proxies for non-loopback routes. Verify the complete IPv4
+  `127.0.0.0/8` range, IPv6 loopback, remote plaintext rejection, and each explicit
+  trusted-transport exception, and prove proxy controls after clearing inherited
+  proxy and no-proxy variables case-insensitively.
 - When setup owns a credential-free authorization environment reference, treat
   every syntactically valid generated `${NAME:-}` reference as owned rather
   than only the default name. Verify repeated setup with a custom authorization

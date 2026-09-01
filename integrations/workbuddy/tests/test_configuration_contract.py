@@ -24,6 +24,10 @@ import pytest
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1] / "plugins" / "powercontext"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
 
 
 def load_settings_module() -> ModuleType:
@@ -62,22 +66,34 @@ def test_config_declares_bounded_request_limits(tmp_path: Path) -> None:
     assert settings.source_max_bytes == 16384
 
 
-def test_config_accepts_the_ipv4_loopback_range(tmp_path: Path) -> None:
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_config_accepts_shared_loopback_hosts(tmp_path: Path, host: str) -> None:
     settings_module = load_settings_module()
     payload = configuration()
-    payload["server_url"] = "http://127.2.3.4:8000/"
+    payload["server_url"] = f"http://{host}:8000/"
     configuration_path = tmp_path / "powercontext.json"
     configuration_path.write_text(json.dumps(payload), encoding="utf-8")
 
     settings = settings_module.load_settings(configuration_path)
 
-    assert settings.server_url == "http://127.2.3.4:8000"
+    assert settings.server_url == f"http://{host}:8000"
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+def test_config_rejects_shared_non_loopback_plaintext_hosts(tmp_path: Path, host: str) -> None:
+    settings_module = load_settings_module()
+    payload = configuration()
+    payload["server_url"] = f"http://{host}:8000"
+    configuration_path = tmp_path / "powercontext.json"
+    configuration_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(settings_module.WorkBuddyConfigurationError, match="loopback"):
+        settings_module.load_settings(configuration_path)
 
 
 @pytest.mark.parametrize(
     ("changes", "expected_message"),
     [
-        ({"server_url": "http://198.51.100.4:8000"}, "loopback"),
         ({"request_timeout_seconds": 0}, "timeout"),
         ({"request_timeout_seconds": 4.0}, "budget"),
         ({"prepare_max_bytes": 0}, "prepare"),
