@@ -26,7 +26,8 @@ from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 if TYPE_CHECKING:
     from typing_extensions import override
@@ -40,7 +41,7 @@ else:
 _PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PLUGIN_ROOT))
 
-from claude_code_settings import ClaudeCodePluginSettings  # noqa: E402
+from claude_code_settings import ClaudeCodePluginSettings, _is_loopback_host  # noqa: E402
 from hooks import prepared_context as _prepared_context  # noqa: E402
 from scripts.project_scope import resolve_scope_id  # noqa: E402
 
@@ -84,7 +85,24 @@ class _RejectRedirects(HTTPRedirectHandler):
         return None
 
 
-_URL_OPENER = build_opener(_RejectRedirects)
+class _LoopbackAwareProxyHandler(ProxyHandler):
+    """Bypass any configured proxy for loopback destinations.
+
+    urllib installs a ProxyHandler in every opener, so a loopback request is
+    routed through an environment or registry proxy whenever no_proxy omits
+    the host. Local PowerContext traffic must never leave the host, and each
+    request carries a bearer credential, so loopback targets are always
+    connected to directly. Remote HTTPS endpoints keep proxy behaviour.
+    """
+
+    @override
+    def proxy_open(self, req: Request, proxy: str, type: str) -> object | None:  # noqa: A002 - urllib API name.
+        if _is_loopback_host(urlsplit(req.full_url).hostname or ""):
+            return None
+        return super().proxy_open(req, proxy, type)
+
+
+_URL_OPENER = build_opener(_RejectRedirects, _LoopbackAwareProxyHandler())
 
 
 class _HttpStatusError(RuntimeError):

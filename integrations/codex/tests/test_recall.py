@@ -30,6 +30,11 @@ from typing import Any
 
 import pytest
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
+
 
 @contextmanager
 def _serve(handler: type[BaseHTTPRequestHandler]) -> Iterator[str]:
@@ -699,3 +704,35 @@ def test_prompt_capture_can_be_disabled(
     monkeypatch.setenv("POWERCONTEXT_CODEX_CAPTURE_PROMPTS", "false")
 
     assert recall_module.CodexPluginSettings().capture_prompts is False
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_proxy_handler_bypasses_shared_loopback_hosts(recall_module: ModuleType, host: str) -> None:
+    handler = recall_module._LoopbackAwareProxyHandler()
+    dead_proxy = "http://127.0.0.1:9"
+
+    loopback = recall_module.Request(f"http://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    direct_host = loopback.host
+    assert handler.proxy_open(loopback, dead_proxy, "http") is None
+    assert loopback.host == direct_host
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+@pytest.mark.parametrize("scheme", ("http", "https"))
+def test_proxy_handler_preserves_remote_proxy_for_shared_non_loopback_hosts(
+    recall_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    scheme: str,
+) -> None:
+    monkeypatch.setattr("urllib.request.proxy_bypass", lambda _host: False)
+    handler = recall_module._LoopbackAwareProxyHandler()
+    dead_proxy = "http://127.0.0.1:9"
+
+    remote = recall_module.Request(f"{scheme}://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    original_host = remote.host
+    handler.proxy_open(remote, dead_proxy, scheme)
+
+    assert remote.host == "127.0.0.1:9"
+    if scheme == "https":
+        assert remote._tunnel_host == original_host

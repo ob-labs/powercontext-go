@@ -22,10 +22,16 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_TRANSPORT_VECTORS = json.loads(
+    (REPOSITORY_ROOT / "test" / "transport" / "testdata" / "loopback_hosts.json").read_text(encoding="utf-8")
+)
 
 
 @contextmanager
@@ -550,3 +556,35 @@ def test_hook_rejects_an_oversized_response_body(hook_module: ModuleType) -> Non
             OversizedResponse(),
             deadline=time.monotonic() + 2,
         )
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["loopback"])
+def test_proxy_handler_bypasses_shared_loopback_hosts(hook_module: ModuleType, host: str) -> None:
+    handler = hook_module._LoopbackAwareProxyHandler()
+    dead_proxy = "http://127.0.0.1:9"
+
+    loopback = hook_module.Request(f"http://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    direct_host = loopback.host
+    assert handler.proxy_open(loopback, dead_proxy, "http") is None
+    assert loopback.host == direct_host
+
+
+@pytest.mark.parametrize("host", _TRANSPORT_VECTORS["non_loopback"])
+@pytest.mark.parametrize("scheme", ("http", "https"))
+def test_proxy_handler_preserves_remote_proxy_for_shared_non_loopback_hosts(
+    hook_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    scheme: str,
+) -> None:
+    monkeypatch.setattr("urllib.request.proxy_bypass", lambda _host: False)
+    handler = hook_module._LoopbackAwareProxyHandler()
+    dead_proxy = "http://127.0.0.1:9"
+
+    remote = hook_module.Request(f"{scheme}://{host}:8000/v1/context/prepare", data=b"{}", method="POST")
+    original_host = remote.host
+    handler.proxy_open(remote, dead_proxy, scheme)
+
+    assert remote.host == "127.0.0.1:9"
+    if scheme == "https":
+        assert remote._tunnel_host == original_host

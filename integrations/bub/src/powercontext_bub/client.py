@@ -24,7 +24,7 @@ from time import monotonic
 from typing import Any, Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 MAX_RESPONSE_BYTES = 1_048_576
 _READ_CHUNK_BYTES = 65_536
@@ -74,7 +74,23 @@ class _RejectRedirects(HTTPRedirectHandler):
         return None
 
 
-_URL_OPENER = build_opener(_RejectRedirects)
+class _LoopbackAwareProxyHandler(ProxyHandler):
+    """Bypass any configured proxy for loopback destinations.
+
+    urllib installs a ProxyHandler in every opener, so a loopback request is
+    routed through an environment or registry proxy whenever no_proxy omits
+    the host. Local PowerContext traffic must never leave the host, and each
+    request carries a bearer credential, so loopback targets are always
+    connected to directly. Remote HTTPS endpoints keep proxy behaviour.
+    """
+
+    def proxy_open(self, req: Request, proxy: str, type: str) -> object | None:  # noqa: A002 - urllib API name.
+        if _is_loopback_host(urlsplit(req.full_url).hostname or ""):
+            return None
+        return super().proxy_open(req, proxy, type)
+
+
+_URL_OPENER = build_opener(_RejectRedirects, _LoopbackAwareProxyHandler())
 
 
 class PowerContextHTTPClient:
