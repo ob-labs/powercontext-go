@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -258,7 +259,7 @@ func TestVoyageAIEmbeddingRestoresProviderIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingQuery, 3))
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingQuery, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +267,7 @@ func TestVoyageAIEmbeddingRestoresProviderIndexes(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	request := fake.Requests()[0]
-	if request.path != "/v1/embeddings" || request.body["input_type"] != "query" {
+	if request.path != "/v1/embeddings" || request.body["input_type"] != "query" || request.body["output_dimension"] != float64(384) {
 		t.Fatalf("request = %#v", request)
 	}
 }
@@ -314,17 +315,36 @@ func TestGoogleOfficialSDKMappingAndEmbeddingTaskDefaults(t *testing.T) {
 			if model != "gemini-embedding-2" || config.TaskType != "" || contents[0].Parts[0].Text != "title: none | text: alpha" {
 				t.Fatalf("embedding mapping = %q, %#v, %#v", model, contents, config)
 			}
+			if config.OutputDimensionality == nil || *config.OutputDimensionality != 384 {
+				t.Fatalf("output dimensionality = %#v", config.OutputDimensionality)
+			}
 			return &genai.EmbedContentResponse{Embeddings: []*genai.ContentEmbedding{{
 				Values: []float32{1, 2}, Statistics: &genai.ContentEmbeddingStatistics{TokenCount: 3},
 			}}}, nil
 		},
 	}}
-	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 3))
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(result.Embeddings()[0], []float64{1, 2}) || *result.Usage().InputTokens != 3 {
 		t.Fatalf("embedding result = %#v", result)
+	}
+
+	called := false
+	overflowTransport := &GoogleEmbeddingTransport{route: embeddingRoute, models: googleModelsFake{
+		embed: func(context.Context, string, []*genai.Content, *genai.EmbedContentConfig) (*genai.EmbedContentResponse, error) {
+			called = true
+			return nil, nil
+		},
+	}}
+	_, err = overflowTransport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret overflow input"}, inference.EmbeddingDocument, int(math.MaxInt32)+1))
+	var configurationError *inference.ConfigurationError
+	if !errors.As(err, &configurationError) || configurationError.Code() != "request-rejected" || configurationError.Detail() != "Google embedding dimension exceeds int32" || strings.Contains(err.Error(), "secret overflow input") {
+		t.Fatalf("overflow error = %v", err)
+	}
+	if called {
+		t.Fatal("Google SDK was called for an overflowing dimension")
 	}
 }
 
@@ -363,7 +383,7 @@ func TestCohereOfficialSDKWireAndNoRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 3))
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +394,7 @@ func TestCohereOfficialSDKWireAndNoRetry(t *testing.T) {
 	if len(requests) != 2 || requests[0].path != "/v2/chat" || requests[1].path != "/v2/embed" {
 		t.Fatalf("requests = %#v", requests)
 	}
-	if requests[1].body["input_type"] != "search_document" {
+	if requests[1].body["input_type"] != "search_document" || requests[1].body["output_dimension"] != float64(384) {
 		t.Fatalf("embedding body = %#v", requests[1].body)
 	}
 }

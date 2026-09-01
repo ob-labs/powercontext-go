@@ -24,6 +24,7 @@ import (
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 
@@ -280,8 +281,9 @@ func (t *OpenAIEmbeddingTransport) Embed(
 	inputs := request.Inputs()
 	inputType := request.InputType()
 	response, err := t.shared.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
-		Model: t.shared.route.model,
-		Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: slices.Clone(inputs)},
+		Model:      t.shared.route.model,
+		Input:      openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: slices.Clone(inputs)},
+		Dimensions: param.NewOpt(int64(request.DimensionCount())),
 	})
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, mapOpenAIError(err, "embed")

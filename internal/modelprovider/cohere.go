@@ -162,10 +162,12 @@ func (t *CohereEmbeddingTransport) Embed(
 	if inputType == inference.EmbeddingQuery {
 		wireType = cohere.EmbedInputTypeSearchQuery
 	}
+	dimension := request.DimensionCount()
 	truncate := cohere.V2EmbedRequestTruncateNone
 	response, err := t.client.Embed(ctx, &cohere.V2EmbedRequest{
 		Texts: slices.Clone(inputs), Model: t.route.model, InputType: wireType,
 		EmbeddingTypes: []cohere.EmbeddingType{cohere.EmbeddingTypeFloat}, Truncate: &truncate,
+		OutputDimension: &dimension,
 	})
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, mapCohereError(err, "embed")

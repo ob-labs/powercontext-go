@@ -263,7 +263,7 @@ func TestOpenAIEmbeddingTransportUsesOrderedBatchAndUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(context.Background(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingDocument, 3))
+	result, err := transport.Embed(context.Background(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingDocument, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestOpenAIEmbeddingTransportUsesOrderedBatchAndUsage(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	request := fake.Requests()[0]
-	if request.path != "/v1/embeddings" || request.body["model"] != "text-embedding-test" {
+	if request.path != "/v1/embeddings" || request.body["model"] != "text-embedding-test" || request.body["dimensions"] != float64(384) {
 		t.Fatalf("request = %#v", request)
 	}
 }
