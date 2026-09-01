@@ -214,9 +214,10 @@ func bedrockEmbeddingKind(model string) (bedrockEmbeddingProvider, error) {
 
 func (t *BedrockEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	kind, err := bedrockEmbeddingKind(t.route.model)
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, err

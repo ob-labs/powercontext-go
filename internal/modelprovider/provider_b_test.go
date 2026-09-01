@@ -207,7 +207,7 @@ func TestOpenAICompatibleEmbeddingPrefixesUseFrozenWireEndpoints(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := transport.Embed(t.Context(), []string{"bounded"}, inference.EmbeddingDocument); err != nil {
+			if _, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"bounded"}, inference.EmbeddingDocument, 3)); err != nil {
 				t.Fatal(err)
 			}
 			request := fake.Requests()[0]
@@ -258,7 +258,7 @@ func TestVoyageAIEmbeddingRestoresProviderIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(t.Context(), []string{"alpha", "beta"}, inference.EmbeddingQuery)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingQuery, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestGoogleOfficialSDKMappingAndEmbeddingTaskDefaults(t *testing.T) {
 			}}}, nil
 		},
 	}}
-	result, err := transport.Embed(t.Context(), []string{"alpha"}, inference.EmbeddingDocument)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +363,7 @@ func TestCohereOfficialSDKWireAndNoRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(t.Context(), []string{"alpha"}, inference.EmbeddingDocument)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestBedrockConverseAndEmbeddingFormats(t *testing.T) {
 			return &bedrockruntime.InvokeModelOutput{Body: []byte(`{"embeddings":{"float":[[1,2],[3,4]]}}`)}, nil
 		},
 	}}
-	result, err := transport.Embed(t.Context(), []string{"alpha", "beta"}, inference.EmbeddingQuery)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingQuery, 3))
 	if err != nil {
 		t.Fatal(err)
 	}

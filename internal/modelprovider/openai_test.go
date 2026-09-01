@@ -263,7 +263,7 @@ func TestOpenAIEmbeddingTransportUsesOrderedBatchAndUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(context.Background(), []string{"alpha", "beta"}, inference.EmbeddingDocument)
+	result, err := transport.Embed(context.Background(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingDocument, 3))
 	if err != nil {
 		t.Fatal(err)
 	}

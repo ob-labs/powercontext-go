@@ -107,8 +107,7 @@ func TestRealProviderSmoke(t *testing.T) {
 			}
 			result, callErr := transport.Embed(
 				ctx,
-				[]string{"PowerContext provider smoke test."},
-				inference.EmbeddingDocument,
+				embeddingRequestForProviderTest(t, []string{"PowerContext provider smoke test."}, inference.EmbeddingDocument, 3),
 			)
 			if callErr != nil {
 				t.Fatal(callErr)

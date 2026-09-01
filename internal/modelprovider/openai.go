@@ -275,9 +275,10 @@ func NewOpenAIEmbeddingTransport(route Route, config OpenAIConfig) (*OpenAIEmbed
 
 func (t *OpenAIEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	response, err := t.shared.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Model: t.shared.route.model,
 		Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: slices.Clone(inputs)},

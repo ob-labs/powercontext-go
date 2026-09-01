@@ -39,7 +39,7 @@ func TestLocalEmbeddingTransportPreservesInputsAndVectors(t *testing.T) {
 	}, func() error { return nil })
 
 	inputs := []string{"alpha", "beta"}
-	result, err := transport.Embed(t.Context(), inputs, inference.EmbeddingDocument)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, inputs, inference.EmbeddingDocument, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestLocalEmbeddingTransportCancellationAndCloseDrainNativeCall(t *testing.T
 		callContext, cancelCall := context.WithCancel(t.Context())
 		callDone := make(chan error, 1)
 		go func() {
-			_, err := transport.Embed(callContext, []string{"alpha"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(callContext, embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 3))
 			callDone <- err
 		}()
 		<-started
@@ -106,7 +106,7 @@ func TestLocalEmbeddingTransportCancellationAndCloseDrainNativeCall(t *testing.T
 		defer cancelLate()
 		lateDone := make(chan error, 1)
 		go func() {
-			_, err := transport.Embed(lateContext, []string{"late"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(lateContext, embeddingRequestForProviderTest(t, []string{"late"}, inference.EmbeddingDocument, 3))
 			lateDone <- err
 		}()
 		synctest.Wait()
@@ -170,7 +170,7 @@ func TestLocalEmbeddingTransportSerializesPipeline(t *testing.T) {
 	done := make(chan error, 2)
 	for range 2 {
 		go func() {
-			_, err := transport.Embed(t.Context(), []string{"text"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"text"}, inference.EmbeddingDocument, 3))
 			done <- err
 		}()
 	}
@@ -203,7 +203,7 @@ func TestLocalEmbeddingTransportContainsNativeFailures(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			transport := newLocalEmbeddingTransport(run, func() error { return nil })
-			_, err := transport.Embed(t.Context(), []string{"secret input"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret input"}, inference.EmbeddingDocument, 3))
 			var unavailable *inference.UnavailableError
 			if !errors.As(err, &unavailable) || err.Error() != "inference is temporarily unavailable for embed" {
 				t.Fatalf("error = %v", err)
@@ -221,7 +221,7 @@ func TestLocalEmbeddingTransportPreservesStableInferenceFailures(t *testing.T) {
 		func([]string) ([][]float32, error) { return nil, configuration },
 		func() error { return nil },
 	)
-	_, err := transport.Embed(t.Context(), []string{"text"}, inference.EmbeddingDocument)
+	_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"text"}, inference.EmbeddingDocument, 3))
 	var observed *inference.ConfigurationError
 	if !errors.As(err, &observed) || observed != configuration {
 		t.Fatalf("stable inference error was reclassified: %v", err)

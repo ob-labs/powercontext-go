@@ -147,9 +147,10 @@ func newLocalEmbeddingTransport(run localEmbeddingRun, destroy func() error) *se
 
 func (t *sentenceTransformersTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	if err := context.Cause(ctx); err != nil {
 		return inference.ProviderEmbeddingResult{}, err
 	}

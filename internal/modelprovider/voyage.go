@@ -68,9 +68,10 @@ type voyageEmbeddingResponse struct {
 
 func (t *VoyageAIEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	wireType := "document"
 	if inputType == inference.EmbeddingQuery {
 		wireType = "query"

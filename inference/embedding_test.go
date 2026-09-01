@@ -41,17 +41,83 @@ func (p testEmbeddingProfile) NormalizationMode() string { return p.normalizatio
 type recordedEmbeddingTransport struct {
 	mu       sync.Mutex
 	calls    [][]string
+	requests []EmbeddingRequest
 	complete func(context.Context, []string, EmbeddingInputType) (ProviderEmbeddingResult, error)
+}
+
+func TestEmbeddingRequestClonesInputsAndReportsDimension(t *testing.T) {
+	inputs := []string{"alpha", "beta"}
+	request, err := NewEmbeddingRequest(inputs, EmbeddingQuery, 384)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputs[0] = "changed"
+	got := request.Inputs()
+	got[1] = "mutated"
+	if !slices.Equal(request.Inputs(), []string{"alpha", "beta"}) ||
+		request.InputType() != EmbeddingQuery || request.DimensionCount() != 384 {
+		t.Fatalf("request = %#v", request)
+	}
+}
+
+func TestEmbeddingRequestRejectsInvalidConstruction(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		inputType EmbeddingInputType
+		dimension int
+		reason    string
+	}{
+		{name: "zero dimension", inputType: EmbeddingQuery, dimension: 0, reason: "dimension-positive"},
+		{name: "unknown input type", inputType: EmbeddingInputType("unknown"), dimension: 384, reason: "request-rejected"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewEmbeddingRequest([]string{"secret input"}, test.inputType, test.dimension)
+			var configuration *ConfigurationError
+			if !errors.As(err, &configuration) || configuration.Code() != test.reason || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestBatchedEmbeddingModelSendsProfileDimensionOnEveryBatch(t *testing.T) {
+	transport := &recordedEmbeddingTransport{}
+	model, err := NewBatchedEmbeddingModel(
+		transport,
+		testEmbeddingProfile{id: "test-v1", model: "test:model", dimension: 3, normalization: "none"},
+		2,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.Embed(t.Context(), []string{"a", "b", "c"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 2 ||
+		transport.requests[0].DimensionCount() != 3 ||
+		transport.requests[1].DimensionCount() != 3 {
+		t.Fatalf("requests = %#v", transport.requests)
+	}
 }
 
 func (t *recordedEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType EmbeddingInputType,
+	request EmbeddingRequest,
 ) (ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	t.mu.Lock()
 	t.calls = append(t.calls, slices.Clone(inputs))
+	t.requests = append(t.requests, request)
 	t.mu.Unlock()
+	if t.complete == nil {
+		vectors := make([][]float64, len(inputs))
+		for index := range vectors {
+			vectors[index] = []float64{0, 0, 0}
+		}
+		return NewProviderEmbeddingResult(inputs, inputType, vectors, Usage{})
+	}
 	return t.complete(ctx, inputs, inputType)
 }
 

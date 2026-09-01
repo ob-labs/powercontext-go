@@ -149,9 +149,10 @@ func (m *GoogleTextModel) Complete(ctx context.Context, request inference.TextRe
 
 func (t *GoogleEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	texts := slices.Clone(inputs)
 	config := &genai.EmbedContentConfig{}
 	if t.route.model == "gemini-embedding-2" {
