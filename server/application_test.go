@@ -604,7 +604,7 @@ func TestOpenApplicationReportsMissingOpenAIEmbeddingAPIPrefixAsDegraded(t *test
 		}
 		if body.Status != "degraded" || len(body.Checks) != 3 ||
 			body.Checks["runtime"] != "ready" || body.Checks["database"] != "ready" ||
-			body.Checks["inference.embedding"] != "misconfigured" {
+			body.Checks["inference.embedding"] != "misconfigured: provider-rejected (HTTP 404)" {
 			t.Fatalf("readiness %d = %#v", index, body)
 		}
 		if strings.Contains(response.Body.String(), "secret-api-key") ||
