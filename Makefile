@@ -6,7 +6,6 @@ export SHELLOPTS := errexit:nounset:pipefail
 MAKEFLAGS += --no-builtin-rules
 
 GO ?= go
-GOFMT ?= gofmt
 GOCACHE ?=
 GOMODCACHE ?=
 PNPM ?= pnpm
@@ -228,11 +227,9 @@ license-dependencies: build ## Build dependency-license evidence for every owned
 	$(GO) run ./tools/release licenses -binary bin/powercontext -edition standard -output "$(LICENSE_DEPENDENCY_OUTPUT)" -modules "$(OWNED_MODULES)"
 
 fmt: lint-tools ## Format supported source with the pinned formatter set.
-	$(GOFMT) -w $$(find . -name '*.go' -not -path './vendor/*')
 	"$(GOLANGCI_LINT)" fmt
 
 fmt-check: lint-tools ## Verify supported source formatting without edits.
-	@$(GOFMT) -l $$(find . -name '*.go' -not -path './vendor/*') >/dev/null
 	"$(GOLANGCI_LINT)" fmt --diff
 
 vet: ## Run Go vet across all packages.

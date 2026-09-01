@@ -1450,8 +1450,13 @@ func TestFmtFailsWhenGoSyntaxIsInvalid(t *testing.T) {
 	const linterScript = `#!/bin/sh
 if [ "${1:-}" = "--version" ]; then
   printf 'golangci-lint has version 2.13.1 built with go1.27.0\n'
+  exit 0
 fi
-exit 0
+if [ "${1:-}" = "fmt" ]; then
+  printf 'malformed.go: syntax error\n' >&2
+  exit 1
+fi
+exit 64
 `
 	if writeLinterErr := os.WriteFile(linter, []byte(linterScript), 0o755); writeLinterErr != nil {
 		t.Fatal(writeLinterErr)
@@ -1480,7 +1485,7 @@ exit 64
 		t.Fatal(writeGoErr)
 	}
 
-	command := exec.CommandContext(t.Context(), "make", "fmt", "GO="+fakeGo, "GOFMT=gofmt", "TOOLS_BIN="+toolsBin)
+	command := exec.CommandContext(t.Context(), "make", "fmt", "GO="+fakeGo, "TOOLS_BIN="+toolsBin)
 	command.Dir = temporary
 	output, err := command.CombinedOutput()
 	if err == nil {
@@ -1488,5 +1493,24 @@ exit 64
 	}
 	if !strings.Contains(string(output), "malformed.go") {
 		t.Fatalf("make fmt failed for the wrong reason, output did not mention malformed.go:\n%s", output)
+	}
+}
+
+func TestFmtTargetsUseOnlyThePinnedFormatter(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := string(payload)
+	start := strings.Index(contents, "fmt: lint-tools")
+	end := strings.Index(contents, "vet:")
+	if start < 0 || end < start {
+		t.Fatal("Makefile has no complete formatting target section")
+	}
+	section := contents[start:end]
+	if strings.Contains(section, "GOFMT") || !strings.Contains(section, `"$(GOLANGCI_LINT)" fmt`) ||
+		!strings.Contains(section, `"$(GOLANGCI_LINT)" fmt --diff`) {
+		t.Fatalf("formatting targets do not use only the pinned formatter:\n%s", section)
 	}
 }
