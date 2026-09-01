@@ -311,6 +311,35 @@ func TestSQLiteVecInitializeRejectsIncompatibleProjectionSchema(t *testing.T) {
 	assertSQLiteVecErrorDoesNotLeak(t, err, "CREATE TABLE", "pc_memory_entry_vec (embedding BLOB)")
 }
 
+func TestSQLiteVecInitializeRejectsFreshOversizedDimension(t *testing.T) {
+	database := openSQLiteVecTestDatabase(t)
+	err := database.Transaction(t.Context(), func(tx DBTX) error {
+		return newSQLiteVecTestIndex(t, 65536).Initialize(t.Context(), tx)
+	})
+	capability, ok := errors.AsType[*memory.CapabilityNotSupportedError](err)
+	if !ok || capability.Capability != "vector" {
+		t.Fatalf("capability = %#v, err = %v", capability, err)
+	}
+	if got, want := err.Error(), "memory capability is not supported: vector (sqlite-vec supports at most 8192 dimensions; configured dimension 65536 is unsupported)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	assertSQLiteVecErrorDoesNotLeak(t, err, "projection.db", "migrate", "CREATE VIRTUAL TABLE", "[0 0 0]")
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		var count int
+		if err := tx.QueryRowContext(t.Context(),
+			"SELECT COUNT(*) FROM sqlite_master WHERE name = 'pc_memory_entry_vec'",
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			t.Fatalf("fresh oversized profile created %d vec0 tables", count)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSQLiteVecInitializeClearsStaleProbeRow(t *testing.T) {
 	database := openSQLiteVecTestDatabase(t)
 	initializeSQLiteVecTestIndex(t, database, 3)

@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 719,
-  "pending_case_count": 93,
+  "mapped_case_count": 723,
+  "pending_case_count": 89,
   "entries": [
     {
       "python": {
@@ -2427,8 +2427,15 @@
         "line": 41
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/sqlstore/sqlite_memory_vector_test.go",
+          "test": "TestSQLiteVecInitializeClearsStaleProbeRow"
+        }
+      ]
     },
     {
       "python": {
@@ -2437,8 +2444,20 @@
         "line": 65
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/sqlstore/sqlite_memory_vector_test.go",
+          "test": "TestSQLiteVecInitializeRejectsProjectionDimensionMismatch"
+        },
+        {
+          "kind": "go",
+          "file": "server/application_test.go",
+          "test": "TestOpenApplicationRejectsSQLiteVectorProjectionDimensionMismatch"
+        }
+      ]
     },
     {
       "python": {
@@ -2447,8 +2466,15 @@
         "line": 88
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/sqlstore/sqlite_memory_vector_test.go",
+          "test": "TestSQLiteVecInitializePreservesProbeQueryAndCleanupCauses"
+        }
+      ]
     },
     {
       "python": {
@@ -2457,8 +2483,15 @@
         "line": 112
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/sqlstore/sqlite_memory_vector_test.go",
+          "test": "TestSQLiteVecInitializeRejectsFreshOversizedDimension"
+        }
+      ]
     },
     {
       "python": {

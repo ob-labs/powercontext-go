@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Detect an existing sqlite-vec projection dimension/schema mismatch before probing, preserve safe typed and underlying errors, clean stale probe rows, and fail Server startup without rewriting authoritative Memory data.
+**Goal:** Detect an existing sqlite-vec projection dimension/schema mismatch before probing, reject fresh profiles above the embedded sqlite-vec limit, preserve safe typed and underlying errors, clean stale probe rows, and fail Server startup without rewriting authoritative Memory data.
 
 **Architecture:** `SQLiteMemoryVectorIndex.Initialize` inspects only the owned vec0 projection schema before creating or probing it. An internal wrapper presents a safe `memory.CapabilityNotSupportedError` while unwrapping root causes for matching. Projection mismatch remains an Application-construction failure; no degraded Application, automatic drop, migration, or rebuild is introduced.
 
@@ -18,6 +18,7 @@
 - The vec0 table is a rebuildable projection, but this plan never automatically drops, truncates, rebuilds, or migrates it.
 - Do not modify authoritative Memory revisions, manifests, content, SQL scope identities, provider behavior, OpenAPI, CLI settings, or environment settings.
 - Existing vec0 schema dimension mismatch prevents `OpenApplication` from returning an Application; do not construct a degraded Server solely for `/health/ready`.
+- The embedded sqlite-vec v0.1.9 maximum is 8192 float dimensions; reject a fresh larger configured profile before creating a projection and do not parse extension error text.
 - Public mismatch details may contain only existing/configured numeric dimensions and fixed rebuild guidance.
 - Do not expose raw DDL, SQL, bind values, database paths/URLs, Memory content, vectors, scope IDs, or root-cause text in stable errors.
 - Underlying root causes must remain matchable with `errors.Is`; safe public capability classification must remain matchable with `errors.As`.
@@ -43,7 +44,7 @@
 - Produces: `newSQLiteVecCapabilityFailure(detail string, causes ...error) error`.
 - Preserves: `errors.As(err, *memory.CapabilityNotSupportedError)` and existing `Capability == "vector"` classification.
 
-- [ ] **Step 1: Write failing exact-schema parser tests**
+- [x] **Step 1: Write failing exact-schema parser tests**
 
 Create `sqlite_memory_vector_schema_test.go` with hand-derived DDL literals:
 
@@ -74,7 +75,7 @@ func TestParseSQLiteVecProjectionDimensionRejectsForeignSchema(t *testing.T) {
 
 Use exact complete string matching or a regex anchored to the complete owned DDL; never extract `float[N]` from arbitrary DDL text.
 
-- [ ] **Step 2: Run parser tests and verify RED**
+- [x] **Step 2: Run parser tests and verify RED**
 
 Run:
 
@@ -84,7 +85,7 @@ go test -count=1 ./internal/sqlstore -run '^TestParseSQLiteVecProjectionDimensio
 
 Expected: FAIL because the parser is not defined.
 
-- [ ] **Step 3: Write failing multi-cause safe-error tests**
+- [x] **Step 3: Write failing multi-cause safe-error tests**
 
 Add tests with independent sentinel causes:
 
@@ -117,7 +118,7 @@ sqlite-vec projection dimension 1536 does not match configured dimension 768; re
 
 and rejecting raw DDL/path/vector sentinel text.
 
-- [ ] **Step 4: Run safe-error tests and verify RED**
+- [x] **Step 4: Run safe-error tests and verify RED**
 
 Run:
 
@@ -127,7 +128,7 @@ go test -count=1 ./internal/sqlstore -run '^TestSQLiteVecCapabilityFailure|^Test
 
 Expected: FAIL because the internal wrapper and safe mismatch constructor are absent.
 
-- [ ] **Step 5: Implement parser and internal wrapper**
+- [x] **Step 5: Implement parser and internal wrapper**
 
 Use a package-level anchored regex or an exact parser that accepts only:
 
@@ -167,7 +168,7 @@ func sqliteVecDimensionMismatchError(existing, configured int, causes ...error) 
 func sqliteVecIncompatibleSchemaError(causes ...error) error
 ```
 
-- [ ] **Step 6: Run Task 1 tests and verify GREEN**
+- [x] **Step 6: Run Task 1 tests and verify GREEN**
 
 Run:
 
@@ -181,7 +182,7 @@ package because `sqlite3.h` is missing, run parser/wrapper tests using the
 repository-supported temporary matching header include and record the command;
 the exact Linux CI remains the full proof.
 
-- [ ] **Step 7: Commit schema/error primitives**
+- [x] **Step 7: Commit schema/error primitives**
 
 ```text
 git add internal/sqlstore/sqlite_memory_vector.go internal/sqlstore/sqlite_memory_vector_test.go internal/sqlstore/sqlite_memory_vector_schema_test.go
@@ -202,10 +203,10 @@ git commit \
 
 **Interfaces:**
 - Consumes: `parseSQLiteVecProjectionDimension`, `sqliteVecDimensionMismatchError`, `sqliteVecIncompatibleSchemaError`, and safe multi-cause wrapper from Task 1.
-- Produces: `SQLiteMemoryVectorIndex.Initialize` that validates existing projection dimension before probe and cleans stale probe rows.
+- Produces: `SQLiteMemoryVectorIndex.Initialize` that validates existing projection dimension before probe, rejects a fresh oversized profile, and cleans stale probe rows.
 - Preserves: exact sqlite-vec version v0.1.9, `rowid = -1`, current projection metadata table, and vector search behavior.
 
-- [ ] **Step 1: Add failing real SQLite dimension mismatch tests**
+- [x] **Step 1: Add failing real SQLite dimension mismatch tests**
 
 Use `OpenSQLite` with a temporary file-backed database so initialization can
 run twice across independent transactions. Create profile dimension `3`, call
@@ -227,7 +228,7 @@ Assert the error omits the database path, `CREATE VIRTUAL TABLE`, a Memory
 sentinel, and an embedding/vector sentinel. Assert existing schema remains
 `float[3]`; do not expect a new `float[4]` table.
 
-- [ ] **Step 2: Add failing incompatible-schema and stale-probe tests**
+- [x] **Step 2: Add failing incompatible-schema, fresh-oversized, and stale-probe tests**
 
 Create a same-name ordinary table:
 
@@ -241,7 +242,12 @@ For stale probe cleanup, initialize a valid index, insert `rowid = -1` with a
 valid packed vector, then call `Initialize` again and assert exactly zero
 `rowid = -1` rows remain after successful probing.
 
-- [ ] **Step 3: Add failing query/cleanup cause-preservation tests**
+For a fresh profile dimension `65536`, require the fixed safe detail
+`sqlite-vec supports at most 8192 dimensions; configured dimension 65536 is unsupported`,
+assert that no vec0 projection exists, and reject raw extension text or the
+word `migrate` in the public error.
+
+- [x] **Step 3: Add failing query/cleanup cause-preservation tests**
 
 Introduce a narrow `DBTX` wrapper in the test file that delegates to the real
 database except for the probe query and/or delete statement. The probe must use
@@ -258,7 +264,7 @@ Require `errors.Is(err, queryCause)` and `errors.Is(err, cleanupCause)`, plus
 safe public `CapabilityNotSupportedError` matching and no sentinel text in
 `err.Error()`.
 
-- [ ] **Step 4: Run lifecycle tests and verify RED**
+- [x] **Step 4: Run lifecycle tests and verify RED**
 
 Run:
 
@@ -269,7 +275,7 @@ go test -count=1 ./internal/sqlstore -run 'TestSQLiteVec.*(DimensionMismatch|Inc
 Expected: current initialization either returns generic `sqlite-vec probe
 failed`, leaves stale probe behavior unproven, or loses one of the root causes.
 
-- [ ] **Step 5: Refactor Initialize into schema and probe phases**
+- [x] **Step 5: Refactor Initialize into schema and probe phases**
 
 Keep version validation first. Keep creating `pc_memory_vector_entries` with
 `CREATE TABLE IF NOT EXISTS`. Replace unconditional vec0 `CREATE ... IF NOT
@@ -282,16 +288,19 @@ EXISTS` with:
 3. if type is not `table` or the DDL parser rejects the SQL, return
    `sqliteVecIncompatibleSchemaError` with the underlying database cause only;
 4. if parsed dimension differs, return `sqliteVecDimensionMismatchError`;
-5. delete stale `rowid = -1` before packing/inserting the new probe;
-6. insert the probe, query it with `QueryContext` and scan exactly one row,
+5. after confirming the pinned sqlite-vec version but before any projection DDL,
+   reject a fresh configured dimension above the embedded v0.1.9 limit using a
+   fixed safe capability detail;
+6. delete stale `rowid = -1` before packing/inserting the new probe;
+7. insert the probe, query it with `QueryContext` and scan exactly one row,
    close the resulting rows, always attempt delete, then join any query,
    rows-close, and delete root causes through the Task 1 wrapper;
-7. preserve `rowID == -1` validation after both operations succeed.
+8. preserve `rowID == -1` validation after both operations succeed.
 
 Do not log the DDL, error causes, or database location. Do not call `DROP`,
 `DELETE` against rows other than `rowid = -1`, or rebuild any projection.
 
-- [ ] **Step 6: Run real lifecycle tests and verify GREEN**
+- [x] **Step 6: Run real lifecycle tests and verify GREEN**
 
 Run the Step 4 command, then:
 
@@ -302,7 +311,7 @@ go test -count=1 ./internal/sqlstore -run '^TestSQLiteVec0ReplaceHydrateAndSearc
 
 Expected: PASS. Existing normal vec0 schema/search behavior remains intact.
 
-- [ ] **Step 7: Add a high-repetition probe cleanup check**
+- [x] **Step 7: Add a high-repetition probe cleanup check**
 
 Run the stale-probe test under:
 
@@ -312,7 +321,7 @@ go test -count=25 ./internal/sqlstore -run '^TestSQLiteVecInitializeClearsStaleP
 
 Expected: PASS. This proves initialization repeatedly leaves no probe row.
 
-- [ ] **Step 8: Commit initialization lifecycle**
+- [x] **Step 8: Commit initialization lifecycle**
 
 ```text
 git add internal/sqlstore/sqlite_memory_vector.go internal/sqlstore/sqlite_memory_vector_test.go
@@ -337,7 +346,7 @@ git commit \
 - Consumes: SQLite index safe mismatch error and initialization lifecycle from Tasks 1-2.
 - Produces: public `OpenApplication` startup-failure proof and four case-specific release mappings.
 
-- [ ] **Step 1: Add a failing public Application startup test**
+- [x] **Step 1: Add a failing public Application startup test**
 
 Create a file-backed SQLite database and initialize it with embedding profile
 dimension `3`. Build a normal `ProcessConfig` with a configured embedding
@@ -357,7 +366,7 @@ text. After failure, query the original database and prove its owned vec0
 schema remains `float[3]` and an authoritative artifact/entry sentinel row
 remains present.
 
-- [ ] **Step 2: Run startup test and verify RED**
+- [x] **Step 2: Run startup test and verify RED**
 
 Run:
 
@@ -368,13 +377,13 @@ go test -count=1 -tags sqlite_fts5 ./server -run '^TestOpenApplicationRejectsSQL
 Expected: current code returns a generic probe failure or otherwise fails to
 provide the stable mismatch contract.
 
-- [ ] **Step 3: Run startup test and verify GREEN**
+- [x] **Step 3: Run startup test and verify GREEN**
 
 After Task 2 implementation, run the same command. Expected: PASS on a
 supported CGO SQLite host. The test must not start an HTTP Server or assert a
 manufactured degraded `/health/ready` response.
 
-- [ ] **Step 4: Add four exact parity mappings**
+- [x] **Step 4: Add four exact parity mappings**
 
 Add case-specific rules for:
 
@@ -386,12 +395,13 @@ tests/builtin/persistence/test_sqlite_memory_vector_index.py
   test_vector_index_probe_reports_the_provider_limit_for_a_fresh_oversized_dimension
 ```
 
-Map the first three to the exact real SQLite test declarations added in Tasks
-1-2. Map the startup/mismatch consumer behavior to the public Server test when
-it is the closest exact evidence. Do not map a case to a generic file-level
-reason or an injected error that does not exercise the described boundary.
+Map all four to the exact real SQLite test declarations added in Tasks 1-2.
+The public Server test remains cross-layer evidence for startup failure, but
+does not substitute for the fresh-oversized SQLite case. Do not map a case to
+a generic file-level reason or an injected error that does not exercise the
+described boundary.
 
-- [ ] **Step 5: Regenerate and inspect parity inventory**
+- [x] **Step 5: Regenerate and inspect parity inventory**
 
 Run:
 
@@ -404,7 +414,7 @@ Inspect the diff. Exactly the four named SQLite cases move from pending to
 mapped. Counts change only through the generator. The provider/readiness six
 cases remain mapped.
 
-- [ ] **Step 6: Run final changed-surface validation**
+- [x] **Step 6: Run final changed-surface validation**
 
 Run:
 
@@ -424,7 +434,7 @@ gap and run parser/wrapper tests using only the repository-supported matching
 header include. Do not treat local parser-only success as full index proof.
 Linux exact-Head `Standard` and `Main/tests` jobs are required merge evidence.
 
-- [ ] **Step 7: Perform test-guard review**
+- [x] **Step 7: Perform test-guard review**
 
 Confirm real SQLite is used for schema and row behavior; fake DBTX is limited
 to injecting exact probe query/delete failures while every other operation

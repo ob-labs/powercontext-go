@@ -15,7 +15,30 @@
     },
     "tests/builtin/persistence/test_sqlite_memory_vector_index.py": {
       "mode": "go-port",
-      "reason": "SQLite vector-index dimension and probe behavior maps to the Go SQLite persistence implementation."
+      "reason": "SQLite vector-index dimension and probe behavior maps to the Go SQLite persistence implementation.",
+      "cases": {
+        "test_vector_index_probe_clears_a_leftover_probe_row": {
+          "evidence": [
+            "go:internal/sqlstore/sqlite_memory_vector_test.go#TestSQLiteVecInitializeClearsStaleProbeRow"
+          ]
+        },
+        "test_vector_index_probe_reports_a_table_dimension_mismatch": {
+          "evidence": [
+            "go:internal/sqlstore/sqlite_memory_vector_test.go#TestSQLiteVecInitializeRejectsProjectionDimensionMismatch",
+            "go:server/application_test.go#TestOpenApplicationRejectsSQLiteVectorProjectionDimensionMismatch"
+          ]
+        },
+        "test_vector_index_probe_surfaces_the_underlying_cause": {
+          "evidence": [
+            "go:internal/sqlstore/sqlite_memory_vector_test.go#TestSQLiteVecInitializePreservesProbeQueryAndCleanupCauses"
+          ]
+        },
+        "test_vector_index_probe_reports_the_provider_limit_for_a_fresh_oversized_dimension": {
+          "evidence": [
+            "go:internal/sqlstore/sqlite_memory_vector_test.go#TestSQLiteVecInitializeRejectsFreshOversizedDimension"
+          ]
+        }
+      }
     },
     "tests/builtin/runtime/test_composition_embedding.py": {
       "mode": "go-port",

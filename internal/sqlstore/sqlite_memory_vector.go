@@ -29,7 +29,10 @@ import (
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 )
 
-const requiredSQLiteVecVersion = "v0.1.9"
+const (
+	requiredSQLiteVecVersion  = "v0.1.9"
+	sqliteVecMaximumDimension = 8192 // SQLITE_VEC_VEC0_MAX_DIMENSIONS in the embedded v0.1.9 source.
+)
 
 const (
 	sqliteVecProjectionName         = "pc_memory_entry_vec"
@@ -72,6 +75,9 @@ func (i *SQLiteMemoryVectorIndex) Initialize(ctx context.Context, db DBTX) error
 	}
 	if err := validateSQLiteVecVersion(version); err != nil {
 		return err
+	}
+	if i.profile.Dimension > sqliteVecMaximumDimension {
+		return sqliteVecDimensionLimitError(i.profile.Dimension)
 	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS pc_memory_vector_entries (
             vector_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -129,8 +135,8 @@ func (i *SQLiteMemoryVectorIndex) ensureSQLiteVecProjection(ctx context.Context,
 			"CREATE VIRTUAL TABLE %s USING vec0(embedding float[%d])",
 			sqliteVecProjectionName, i.profile.Dimension,
 		)
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", err)
+		if _, createErr := db.ExecContext(ctx, statement); createErr != nil {
+			return newSQLiteVecCapabilityFailure("sqlite-vec probe failed", createErr)
 		}
 		tableType, schema, err = sqliteVecProjectionDefinition(ctx, db)
 	}
@@ -613,6 +619,16 @@ func sqliteVecDimensionMismatchError(existing, configured int, causes ...error) 
 		fmt.Sprintf(
 			"sqlite-vec projection dimension %d does not match configured dimension %d; rebuild the projection",
 			existing, configured,
+		),
+		causes...,
+	)
+}
+
+func sqliteVecDimensionLimitError(configured int, causes ...error) error {
+	return newSQLiteVecCapabilityFailure(
+		fmt.Sprintf(
+			"sqlite-vec supports at most %d dimensions; configured dimension %d is unsupported",
+			sqliteVecMaximumDimension, configured,
 		),
 		causes...,
 	)
