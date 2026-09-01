@@ -1,9 +1,9 @@
 # Install a PowerContext binary release
 
 Every archive is self-describing and contains the CLI/Server binary, the
-authoritative OpenAPI document, `.env.example`, all nine host adapters, embedded
-sqlite-vec, dependency licenses, build metadata, an SPDX JSON SBOM, and an
-internal `SHA256SUMS` file.
+authoritative OpenAPI document, `.env.example`, retained host-adapter assets,
+embedded sqlite-vec, dependency licenses, build metadata, an SPDX JSON SBOM,
+and an internal `SHA256SUMS` file.
 
 Release verification checks the packaged `.env.example` before starting the
 binary. Its security-sensitive defaults keep the Server and Client on
@@ -31,29 +31,18 @@ host SQLite package is required. The Full archive also contains ONNX Runtime und
 `lib/onnxruntime/`; set `POWERCONTEXT_ONNXRUNTIME_LIBRARY_DIR` to that
 directory before selecting a `sentence-transformers:*` embedding model.
 
-SQLite is the self-contained default. Embedded seekDB is optional on Linux and
-macOS and requires a native `libseekdb` package from the official
-[`oceanbase/seekdb-bindings`](https://github.com/oceanbase/seekdb-bindings)
-release. Keep the `seekdb` executable beside `libseekdb.so` (or
-`libseekdb.dylib`). Either place that library beside the PowerContext binary or
-set its explicit path, then select the profile:
+SQLite is the self-contained default and the only database in the pre-WP6
+installation and acceptance scope. seekDB and OceanBase remain the final P4
+backend-alignment work; their migration, packaging, license/SBOM, and release
+reconciliation instructions are intentionally deferred until that scope is
+accepted.
 
-```sh
-export POWERCONTEXT_SERVER_DATABASE_KIND=seekdb
-export POWERCONTEXT_SERVER_DATABASE_LIBRARY_PATH=/opt/seekdb/lib/libseekdb.so
-# Optional; defaults to $POWERCONTEXT_HOME/seekdb.
-export POWERCONTEXT_SERVER_DATABASE_PATH=/var/lib/powercontext/seekdb
-./bin/powercontext server run
-```
-
-The server fails closed if the native library is missing, incompatible, or
-does not return a valid local connection profile; it never silently falls back
-to a different database.
-
-The binary itself does not require a Python runtime. Codex, Claude Code, Bub,
-Hermes, and LangGraph retain host-native Python adapters; DSH, OpenClaw,
-OpenCode, and Pi retain TypeScript adapters. Each adapter is isolated from the
-Go implementation and calls the Go Server over HTTP or MCP.
+The binary itself does not require a Python runtime. This monorepo tracks
+Python and TypeScript assets for host-native integrations and the evaluation
+control plane, but they are not Go binary runtime requirements. Before WP6,
+the supported acceptance matrix is Codex, WorkBuddy, and SQLite. Other
+retained host adapters are isolated from the Go implementation, call the Go
+Server over HTTP or MCP, and remain in the post-WP6 P3 work plan.
 
 The container images bind `0.0.0.0:8000` and declare the explicit
 controlled-network opt-in required for a published port. That opt-in does not
