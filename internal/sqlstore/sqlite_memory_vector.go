@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 
 	"github.com/ob-labs/powercontext-go/artifact"
@@ -29,6 +30,10 @@ import (
 )
 
 const requiredSQLiteVecVersion = "v0.1.9"
+
+var sqliteVecProjectionSchema = regexp.MustCompile(
+	`^CREATE VIRTUAL TABLE pc_memory_entry_vec USING vec0\(embedding float\[([1-9][0-9]*)\]\)$`,
+)
 
 // SQLiteMemoryVectorIndex maintains the Python-compatible sqlite-vec vec0
 // active-head projection for one exact embedding profile. OpenSQLite embeds
@@ -513,6 +518,59 @@ func sqliteVectorDistance(value any) (float64, error) {
 
 func sqliteVecCapabilityError(detail string) *memory.CapabilityNotSupportedError {
 	return &memory.CapabilityNotSupportedError{Capability: "vector", Detail: detail}
+}
+
+type sqliteVecCapabilityFailure struct {
+	public *memory.CapabilityNotSupportedError
+	causes []error
+}
+
+func (e *sqliteVecCapabilityFailure) Error() string { return e.public.Error() }
+
+func (e *sqliteVecCapabilityFailure) Unwrap() []error {
+	errors := make([]error, 0, 1+len(e.causes))
+	errors = append(errors, e.public)
+	errors = append(errors, e.causes...)
+	return errors
+}
+
+func newSQLiteVecCapabilityFailure(detail string, causes ...error) error {
+	filtered := make([]error, 0, len(causes))
+	for _, cause := range causes {
+		if cause != nil {
+			filtered = append(filtered, cause)
+		}
+	}
+	if len(filtered) == 0 {
+		return sqliteVecCapabilityError(detail)
+	}
+	return &sqliteVecCapabilityFailure{public: sqliteVecCapabilityError(detail), causes: filtered}
+}
+
+func sqliteVecDimensionMismatchError(existing, configured int, causes ...error) error {
+	return newSQLiteVecCapabilityFailure(
+		fmt.Sprintf(
+			"sqlite-vec projection dimension %d does not match configured dimension %d; rebuild the projection",
+			existing, configured,
+		),
+		causes...,
+	)
+}
+
+func sqliteVecIncompatibleSchemaError(causes ...error) error {
+	return newSQLiteVecCapabilityFailure("sqlite-vec projection schema is incompatible; rebuild the projection", causes...)
+}
+
+func parseSQLiteVecProjectionDimension(schema string) (int, bool) {
+	matches := sqliteVecProjectionSchema.FindStringSubmatch(schema)
+	if matches == nil {
+		return 0, false
+	}
+	dimension, err := strconv.Atoi(matches[1])
+	if err != nil || dimension < 1 {
+		return 0, false
+	}
+	return dimension, true
 }
 
 var _ MemoryIndex = (*SQLiteMemoryVectorIndex)(nil)
