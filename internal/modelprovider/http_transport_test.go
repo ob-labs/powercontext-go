@@ -38,12 +38,19 @@ func TestMapProviderHTTPStatus(t *testing.T) {
 		{status: http.StatusUnauthorized, wantConfiguration: true, wantDetail: "HTTP 401"},
 		{status: http.StatusUnprocessableEntity, wantConfiguration: true, wantDetail: "HTTP 422"},
 		{status: http.StatusRequestTimeout, wantDeadline: true},
+		{status: http.StatusConflict, wantUnavailable: true},
 		{status: http.StatusTooEarly, wantUnavailable: true},
 		{status: http.StatusTooManyRequests, wantUnavailable: true},
 		{status: http.StatusInternalServerError, wantUnavailable: true},
+		{status: http.StatusGatewayTimeout, wantDeadline: true},
 		{status: http.StatusFound, wantUnavailable: true},
+		{status: 299, wantUnavailable: true},
 	} {
-		t.Run(http.StatusText(test.status), func(t *testing.T) {
+		name := http.StatusText(test.status)
+		if name == "" {
+			name = "unrecognized status"
+		}
+		t.Run(name, func(t *testing.T) {
 			err := mapProviderHTTPStatus(test.status, "embed", cause)
 			if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "credential") {
 				t.Fatalf("error leaked cause: %q", err)

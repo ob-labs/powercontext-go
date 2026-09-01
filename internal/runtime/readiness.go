@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -49,19 +48,22 @@ func (s CheckStatus) valid() bool {
 }
 
 func providerRejectedCheckStatus(configuration *inference.ConfigurationError) (CheckStatus, bool) {
+	const detailPrefix = "HTTP "
+	const detailLength = len(detailPrefix) + 3
+
 	if configuration == nil || configuration.Code() != "provider-rejected" {
 		return "", false
 	}
 	detail := configuration.Detail()
-	if len(detail) != len("HTTP 000") || !strings.HasPrefix(detail, "HTTP ") {
+	if len(detail) != detailLength || detail[:len(detailPrefix)] != detailPrefix {
 		return "", false
 	}
-	for _, digit := range detail[len("HTTP "):] {
+	for _, digit := range detail[len(detailPrefix):] {
 		if digit < '0' || digit > '9' {
 			return "", false
 		}
 	}
-	status, err := strconv.Atoi(detail[len("HTTP "):])
+	status, err := strconv.Atoi(detail[len(detailPrefix):])
 	if err != nil || status < http.StatusBadRequest || status >= http.StatusInternalServerError ||
 		status == http.StatusRequestTimeout || status == http.StatusConflict ||
 		status == http.StatusTooEarly || status == http.StatusTooManyRequests {
@@ -72,13 +74,17 @@ func providerRejectedCheckStatus(configuration *inference.ConfigurationError) (C
 
 func isProviderRejectedCheckStatus(status CheckStatus) bool {
 	const prefix = "misconfigured: provider-rejected ("
+	const detailLength = len("HTTP ") + 3
+	const suffix = ")"
+	const statusLength = len(prefix) + detailLength + len(suffix)
+
 	value := string(status)
-	if !strings.HasPrefix(value, prefix) || !strings.HasSuffix(value, ")") {
+	if len(value) != statusLength || value[:len(prefix)] != prefix || value[len(value)-len(suffix):] != suffix {
 		return false
 	}
-	detail := value[len(prefix) : len(value)-1]
-	_, ok := providerRejectedCheckStatus(inference.NewConfigurationError("provider-rejected", detail))
-	return ok
+	detail := value[len(prefix) : len(prefix)+detailLength]
+	formatted, ok := providerRejectedCheckStatus(inference.NewConfigurationError("provider-rejected", detail))
+	return ok && status == formatted
 }
 
 type ReadinessStatus string
