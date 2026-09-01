@@ -384,3 +384,8 @@ source / artifact / trigger / inference
   generation and embedding share a marked variable, deduplicate the metadata
   in first-presented order before strict validation and verify the generated
   configuration remains runnable.
+- When a CI job must retain independently observable host-adapter tests, run
+  each adapter in a separate step, continue later evidence-producing steps
+  after an earlier adapter failure, and record every individual step outcome
+  in bounded diagnostics. Verify a workflow contract test rejects a merged
+  step, a missing failure-continuation guard, or a missing adapter outcome.
