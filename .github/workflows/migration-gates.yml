@@ -528,11 +528,16 @@ jobs:
           version: "0.10.12"
           enable-cache: true
 
-      - name: Test pre-WP6 host adapters
-        id: python_adapters
+      - name: Test Codex host adapter
+        id: codex_adapter
         run: |
           uv run --project integrations/codex/plugins/powercontext --locked --with pytest \
             pytest integrations/codex/tests
+
+      - name: Test WorkBuddy host adapter
+        id: workbuddy_adapter
+        if: success() || failure()
+        run: |
           uv run --with pytest pytest integrations/workbuddy/tests
 
       - name: Write bounded pre-WP6 host adapter diagnostics
@@ -540,13 +545,15 @@ jobs:
         if: always()
         shell: bash
         env:
-          PYTHON_ADAPTERS_OUTCOME: ${{ steps.python_adapters.outcome }}
+          CODEX_ADAPTER_OUTCOME: ${{ steps.codex_adapter.outcome }}
+          WORKBUDDY_ADAPTER_OUTCOME: ${{ steps.workbuddy_adapter.outcome }}
         run: |
           diagnostics="$RUNNER_TEMP/powercontext-pre-wp6-host-adapter-diagnostics"
           mkdir -p "$diagnostics"
           {
             printf 'commit=%s\n' "$GITHUB_SHA"
-            printf 'python_adapters_outcome=%s\n' "$PYTHON_ADAPTERS_OUTCOME"
+            printf 'codex_adapter_outcome=%s\n' "$CODEX_ADAPTER_OUTCOME"
+            printf 'workbuddy_adapter_outcome=%s\n' "$WORKBUDDY_ADAPTER_OUTCOME"
             sha256sum \
               integrations/codex/plugins/powercontext/uv.lock \
               integrations/workbuddy/plugins/powercontext/powercontext.json.example \

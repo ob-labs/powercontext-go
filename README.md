@@ -102,8 +102,8 @@ Run `powercontext config init --non-interactive` to create a managed local
 environment file. Inspect it without disclosing credential values with
 `powercontext config show --env-file .env`, and validate syntax, persistent
 storage paths, and Server settings with `powercontext config validate --env-file .env`.
-The same installation guide documents the optional native seekDB profile;
-SQLite remains the zero-dependency default.
+SQLite remains the zero-dependency default. seekDB and OceanBase installation
+and release guidance remain deferred to the final P4 backend-alignment scope.
 
 Plain HTTP is trusted only on loopback (`localhost`, `::1`, or any address in
 `127.0.0.0/8`). The Server refuses an unauthenticated non-loopback bind by

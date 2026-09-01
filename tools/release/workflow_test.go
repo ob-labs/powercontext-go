@@ -35,20 +35,34 @@ func TestGoPrimaryMonorepoLinguistPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	attributes := string(payload)
-	for _, required := range []string{
-		"evaluation/** -linguist-detectable",
-		"integrations/** -linguist-detectable",
-		"test/conformance/*.py -linguist-detectable",
-		"test/differential/*.py -linguist-detectable",
-	} {
-		if !strings.Contains(attributes, required) {
-			t.Errorf(".gitattributes is missing %q", required)
+	wantDetectable := map[string]bool{
+		"evaluation/**":          false,
+		"integrations/**":        false,
+		"test/conformance/*.py":  false,
+		"test/differential/*.py": false,
+	}
+	for _, line := range strings.Split(string(payload), "\n") {
+		fields := strings.Fields(strings.SplitN(line, "#", 2)[0])
+		if len(fields) < 2 {
+			continue
+		}
+		path := fields[0]
+		for _, attribute := range fields[1:] {
+			switch attribute {
+			case "-linguist-detectable":
+				if _, ok := wantDetectable[path]; !ok {
+					t.Errorf(".gitattributes has broad or unowned linguist classification %q", line)
+					continue
+				}
+				wantDetectable[path] = true
+			case "linguist-vendored", "linguist-generated":
+				t.Errorf(".gitattributes must not classify maintained sources as %q", attribute)
+			}
 		}
 	}
-	for _, forbidden := range []string{"linguist-vendored", "linguist-generated"} {
-		if strings.Contains(attributes, forbidden) {
-			t.Errorf(".gitattributes must not classify maintained sources as %q", forbidden)
+	for path, found := range wantDetectable {
+		if !found {
+			t.Errorf(".gitattributes is missing %q", path+" -linguist-detectable")
 		}
 	}
 }
@@ -996,18 +1010,24 @@ func TestPreWP6HostAdapterWorkflowContract(t *testing.T) {
 			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
 		}
 	}
-	python, ok := steps["python_adapters"]
+	codex, ok := steps["codex_adapter"]
 	if !ok {
-		t.Fatal("host-adapters has no python_adapters step")
+		t.Fatal("host-adapters has no codex_adapter step")
 	}
-	for _, required := range []string{"integrations/codex/tests", "integrations/workbuddy/tests"} {
-		if !strings.Contains(python.Run, required) {
-			t.Errorf("pre-WP6 adapter command is missing %q: %s", required, python.Run)
-		}
+	if !strings.Contains(codex.Run, "integrations/codex/tests") || strings.Contains(codex.Run, "integrations/workbuddy") {
+		t.Errorf("Codex adapter command = %q", codex.Run)
+	}
+	workBuddy, ok := steps["workbuddy_adapter"]
+	if !ok {
+		t.Fatal("host-adapters has no workbuddy_adapter step")
+	}
+	if workBuddy.If != "success() || failure()" || !strings.Contains(workBuddy.Run, "integrations/workbuddy/tests") ||
+		strings.Contains(workBuddy.Run, "integrations/codex") {
+		t.Errorf("WorkBuddy adapter contract = %#v", workBuddy)
 	}
 	for _, deferred := range []string{"integrations/bub", "integrations/claude-code", "integrations/hermes", "integrations/langgraph"} {
-		if strings.Contains(python.Run, deferred) {
-			t.Errorf("pre-WP6 adapter command must not include %q: %s", deferred, python.Run)
+		if strings.Contains(codex.Run, deferred) || strings.Contains(workBuddy.Run, deferred) {
+			t.Errorf("pre-WP6 adapter commands must not include %q", deferred)
 		}
 	}
 	for _, deferredID := range []string{"dsh_server", "dsh_adapter", "pi_adapter", "opencode_adapter", "openclaw_adapter"} {
@@ -1019,7 +1039,9 @@ func TestPreWP6HostAdapterWorkflowContract(t *testing.T) {
 	if !ok {
 		t.Fatal("host-adapters has no pre_wp6_adapter_diagnostics step")
 	}
-	if summary.If != "always()" || summary.Env["PYTHON_ADAPTERS_OUTCOME"] != "${{ steps.python_adapters.outcome }}" {
+	if summary.If != "always()" ||
+		summary.Env["CODEX_ADAPTER_OUTCOME"] != "${{ steps.codex_adapter.outcome }}" ||
+		summary.Env["WORKBUDDY_ADAPTER_OUTCOME"] != "${{ steps.workbuddy_adapter.outcome }}" {
 		t.Errorf("pre-WP6 diagnostics contract = %#v", summary)
 	}
 	for _, required := range []string{
