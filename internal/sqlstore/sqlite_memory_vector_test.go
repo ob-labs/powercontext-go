@@ -16,9 +16,11 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"math"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -267,4 +269,210 @@ func TestSQLiteVec0ReplaceHydrateAndSearch(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestSQLiteVecInitializeRejectsProjectionDimensionMismatch(t *testing.T) {
+	database := openSQLiteVecTestDatabase(t)
+	initializeSQLiteVecTestIndex(t, database, 3)
+
+	err := database.Transaction(t.Context(), func(tx DBTX) error {
+		return newSQLiteVecTestIndex(t, 4).Initialize(t.Context(), tx)
+	})
+	capability, ok := errors.AsType[*memory.CapabilityNotSupportedError](err)
+	if !ok || capability.Capability != "vector" {
+		t.Fatalf("capability = %#v, err = %v", capability, err)
+	}
+	if got, want := err.Error(), "memory capability is not supported: vector (sqlite-vec projection dimension 3 does not match configured dimension 4; rebuild the projection)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	assertSQLiteVecErrorDoesNotLeak(t, err, "projection.db", "CREATE VIRTUAL TABLE", "Memory private text", "[0 0 0]")
+	assertSQLiteVecSchema(t, database, "CREATE VIRTUAL TABLE pc_memory_entry_vec USING vec0(embedding float[3])")
+}
+
+func TestSQLiteVecInitializeRejectsIncompatibleProjectionSchema(t *testing.T) {
+	database := openSQLiteVecTestDatabase(t)
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		_, err := tx.ExecContext(t.Context(), "CREATE TABLE pc_memory_entry_vec (embedding BLOB)")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := database.Transaction(t.Context(), func(tx DBTX) error {
+		return newSQLiteVecTestIndex(t, 3).Initialize(t.Context(), tx)
+	})
+	capability, ok := errors.AsType[*memory.CapabilityNotSupportedError](err)
+	if !ok || capability.Capability != "vector" {
+		t.Fatalf("capability = %#v, err = %v", capability, err)
+	}
+	if got, want := err.Error(), "memory capability is not supported: vector (sqlite-vec projection schema is incompatible; rebuild the projection)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	assertSQLiteVecErrorDoesNotLeak(t, err, "CREATE TABLE", "pc_memory_entry_vec (embedding BLOB)")
+}
+
+func TestSQLiteVecInitializeRejectsFreshOversizedDimension(t *testing.T) {
+	database := openSQLiteVecTestDatabase(t)
+	err := database.Transaction(t.Context(), func(tx DBTX) error {
+		return newSQLiteVecTestIndex(t, 65536).Initialize(t.Context(), tx)
+	})
+	capability, ok := errors.AsType[*memory.CapabilityNotSupportedError](err)
+	if !ok || capability.Capability != "vector" {
+		t.Fatalf("capability = %#v, err = %v", capability, err)
+	}
+	if got, want := err.Error(), "memory capability is not supported: vector (sqlite-vec supports at most 8192 dimensions; configured dimension 65536 is unsupported)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	assertSQLiteVecErrorDoesNotLeak(t, err, "projection.db", "migrate", "CREATE VIRTUAL TABLE", "[0 0 0]")
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		var count int
+		if err := tx.QueryRowContext(t.Context(),
+			"SELECT COUNT(*) FROM sqlite_master WHERE name = 'pc_memory_entry_vec'",
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			t.Fatalf("fresh oversized profile created %d vec0 tables", count)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSQLiteVecInitializeClearsStaleProbeRow(t *testing.T) {
+	database := openSQLiteVecTestDatabase(t)
+	initializeSQLiteVecTestIndex(t, database, 3)
+	packed, err := packSQLiteVector([]float64{0, 0, 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		_, err := tx.ExecContext(t.Context(),
+			"INSERT INTO pc_memory_entry_vec (rowid, embedding) VALUES (?, ?)", -1, packed,
+		)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	initializeSQLiteVecTestIndex(t, database, 3)
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		var count int
+		if err := tx.QueryRowContext(t.Context(),
+			"SELECT COUNT(*) FROM pc_memory_entry_vec WHERE rowid = ?", -1,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			t.Fatalf("stale probe rows = %d", count)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSQLiteVecInitializePreservesProbeQueryAndCleanupCauses(t *testing.T) {
+	database := openSQLiteVecTestDatabase(t)
+	queryCause := errors.New("query failure /private/db API_KEY=secret")
+	cleanupCause := errors.New("cleanup failure Memory private text")
+	failed := &sqliteVecProbeFailureDB{DBTX: database.SQLDB(), queryCause: queryCause, cleanupCause: cleanupCause}
+
+	err := newSQLiteVecTestIndex(t, 3).Initialize(t.Context(), failed)
+	capability, ok := errors.AsType[*memory.CapabilityNotSupportedError](err)
+	if !ok || capability.Capability != "vector" {
+		t.Fatalf("capability = %#v, err = %v", capability, err)
+	}
+	if !errors.Is(err, queryCause) || !errors.Is(err, cleanupCause) {
+		t.Fatalf("root causes are not matchable: %v", err)
+	}
+	assertSQLiteVecErrorDoesNotLeak(t, err, "/private/db", "API_KEY=secret", "Memory private text")
+}
+
+func openSQLiteVecTestDatabase(t *testing.T) *Database {
+	t.Helper()
+	database, err := OpenSQLite(t.Context(), DefaultSQLiteConfig(filepath.Join(t.TempDir(), "projection.db")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := database.Close(context.Background()); closeErr != nil {
+			t.Error(closeErr)
+		}
+	})
+	return database
+}
+
+func newSQLiteVecTestIndex(t *testing.T, dimension int) *SQLiteMemoryVectorIndex {
+	t.Helper()
+	profile, err := memory.NewEmbeddingProfile("profile", "model", dimension, "unit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := NewSQLiteMemoryVectorIndex(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return index
+}
+
+func initializeSQLiteVecTestIndex(t *testing.T, database *Database, dimension int) {
+	t.Helper()
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		return newSQLiteVecTestIndex(t, dimension).Initialize(t.Context(), tx)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertSQLiteVecSchema(t *testing.T, database *Database, want string) {
+	t.Helper()
+	if err := database.Transaction(t.Context(), func(tx DBTX) error {
+		var schema string
+		if err := tx.QueryRowContext(t.Context(),
+			"SELECT sql FROM sqlite_master WHERE name = 'pc_memory_entry_vec'",
+		).Scan(&schema); err != nil {
+			return err
+		}
+		if schema != want {
+			t.Fatalf("schema = %q, want %q", schema, want)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertSQLiteVecErrorDoesNotLeak(t *testing.T, err error, forbidden ...string) {
+	t.Helper()
+	for _, value := range forbidden {
+		if strings.Contains(err.Error(), value) {
+			t.Fatalf("error leaked %q: %v", value, err)
+		}
+	}
+}
+
+type sqliteVecProbeFailureDB struct {
+	DBTX
+	queryCause   error
+	cleanupCause error
+	deleteCalls  int
+}
+
+func (d *sqliteVecProbeFailureDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if query == "DELETE FROM pc_memory_entry_vec WHERE rowid = ?" {
+		d.deleteCalls++
+		if d.deleteCalls == 2 {
+			return nil, d.cleanupCause
+		}
+	}
+	return d.DBTX.ExecContext(ctx, query, args...)
+}
+
+func (d *sqliteVecProbeFailureDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if query == "SELECT rowid FROM pc_memory_entry_vec WHERE embedding MATCH ? AND k = 1" {
+		return nil, d.queryCause
+	}
+	return d.DBTX.QueryContext(ctx, query, args...)
 }

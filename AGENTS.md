@@ -367,3 +367,8 @@ source / artifact / trigger / inference
   packaged release-consumer test, prove the installed bundle bytes and manifest
   originate from the release archive rather than asserting a retired installer
   command.
+- When a pinned native extension imposes a fixed schema dimension limit,
+  validate the configured dimension against that exact versioned limit before
+  creating any projection DDL. Verify a fresh over-limit profile returns a
+  typed, redacted error that states both limits, creates no projection, and
+  leaves the extension's raw diagnostic unexposed.

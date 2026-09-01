@@ -106,6 +106,76 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 	}
 }
 
+func TestOpenApplicationRejectsSQLiteVectorProjectionDimensionMismatch(t *testing.T) {
+	config := applicationTestConfig(t)
+	path, err := SQLiteDSN(config.Database.SQLite.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configureSQLiteProjectionEmbedding(&config, 3)
+	application, err := OpenApplication(t.Context(), config, Dependencies{
+		EmbeddingModel: sqliteProjectionEmbedding{dimension: 3},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := application.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	if _, err := database.ExecContext(t.Context(),
+		"INSERT INTO pc_artifacts (scope_id, family, artifact_id, revision, content) VALUES (?, ?, ?, ?, ?)",
+		"scope", memory.Family, "projection-sentinel", 1, []byte(`{"text":"Memory private text"}`),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	configureSQLiteProjectionEmbedding(&config, 4)
+	application, err = OpenApplication(t.Context(), config, Dependencies{
+		EmbeddingModel: sqliteProjectionEmbedding{dimension: 4},
+	})
+	if application != nil {
+		t.Fatal("OpenApplication returned an Application despite projection mismatch")
+	}
+	capability, ok := errors.AsType[*memory.CapabilityNotSupportedError](err)
+	if !ok || capability.Capability != "vector" {
+		t.Fatalf("capability = %#v, err = %v", capability, err)
+	}
+	if got, want := err.Error(), "server: initialize search projections: memory capability is not supported: vector (sqlite-vec projection dimension 3 does not match configured dimension 4; rebuild the projection)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	for _, forbidden := range []string{path, "CREATE VIRTUAL TABLE", "Memory private text", "[0 0 0]"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("startup error leaked %q: %v", forbidden, err)
+		}
+	}
+
+	var schema string
+	if err := database.QueryRowContext(t.Context(),
+		"SELECT sql FROM sqlite_master WHERE name = 'pc_memory_entry_vec'",
+	).Scan(&schema); err != nil {
+		t.Fatal(err)
+	}
+	if schema != "CREATE VIRTUAL TABLE pc_memory_entry_vec USING vec0(embedding float[3])" {
+		t.Fatalf("schema = %q", schema)
+	}
+	var artifactCount int
+	if err := database.QueryRowContext(t.Context(),
+		"SELECT COUNT(*) FROM pc_artifacts WHERE scope_id = ? AND family = ? AND artifact_id = ?",
+		"scope", memory.Family, "projection-sentinel",
+	).Scan(&artifactCount); err != nil {
+		t.Fatal(err)
+	}
+	if artifactCount != 1 {
+		t.Fatalf("authoritative artifact count = %d", artifactCount)
+	}
+}
+
 func TestApplicationCloseWaitsForInFlightHTTPMemoryFlush(t *testing.T) {
 	config := applicationTestConfig(t)
 	pipeline := &blockingApplicationMemoryPipeline{started: make(chan struct{}), release: make(chan struct{})}
@@ -1153,6 +1223,13 @@ func applicationTestConfig(t *testing.T) ProcessConfig {
 	return config
 }
 
+func configureSQLiteProjectionEmbedding(config *ProcessConfig, dimension int) {
+	config.Inference.EmbeddingModel = "test:embedding"
+	config.Inference.EmbeddingProfileID = "projection-test"
+	config.Inference.EmbeddingDimension = dimension
+	config.Inference.EmbeddingNormalization = "unit"
+}
+
 func postApplicationJSON(t *testing.T, handler http.Handler, path string, value any) *httptest.ResponseRecorder {
 	t.Helper()
 	body, err := json.Marshal(value)
@@ -1252,6 +1329,27 @@ type failingReadinessEmbedding struct {
 	calls *atomic.Int64
 	err   error
 }
+
+type sqliteProjectionEmbedding struct{ dimension int }
+
+func (m sqliteProjectionEmbedding) Profile() inference.EmbeddingProfile {
+	return sqliteProjectionEmbeddingProfile{dimension: m.dimension}
+}
+
+func (m sqliteProjectionEmbedding) Embed(_ context.Context, texts []string) (inference.EmbeddingResult, error) {
+	vectors := make([][]float64, len(texts))
+	for index := range vectors {
+		vectors[index] = make([]float64, m.dimension)
+	}
+	return inference.EmbeddingResult{Vectors: vectors}, nil
+}
+
+type sqliteProjectionEmbeddingProfile struct{ dimension int }
+
+func (p sqliteProjectionEmbeddingProfile) ID() string                { return "projection-test" }
+func (p sqliteProjectionEmbeddingProfile) ModelName() string         { return "test:embedding" }
+func (p sqliteProjectionEmbeddingProfile) DimensionCount() int       { return p.dimension }
+func (p sqliteProjectionEmbeddingProfile) NormalizationMode() string { return "unit" }
 
 func (m failingReadinessEmbedding) Profile() inference.EmbeddingProfile {
 	return readinessEmbeddingProfile{}
