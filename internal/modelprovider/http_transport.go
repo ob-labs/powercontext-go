@@ -119,11 +119,16 @@ func mapProviderHTTPStatus(status int, operation string, cause error) error {
 			return inference.WrapUnavailableError(operation, cause)
 		}
 		return inference.NewUnavailableError(operation)
-	default:
-		detail := fmt.Sprintf("provider returned HTTP status %d", status)
+	case status >= http.StatusBadRequest && status < http.StatusInternalServerError:
+		detail := fmt.Sprintf("HTTP %d", status)
 		if cause != nil {
 			return inference.WrapConfigurationError("provider-rejected", detail, cause)
 		}
 		return inference.NewConfigurationError("provider-rejected", detail)
+	default:
+		if cause != nil {
+			return inference.WrapUnavailableError(operation, cause)
+		}
+		return inference.NewUnavailableError(operation)
 	}
 }

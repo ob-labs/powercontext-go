@@ -136,6 +136,47 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 }
 
+func TestProviderSmokeForwardsRequiredEmbeddingDimension(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "provider-smoke.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		On struct {
+			WorkflowDispatch struct {
+				Inputs map[string]struct {
+					Required bool   `yaml:"required"`
+					Type     string `yaml:"type"`
+				} `yaml:"inputs"`
+			} `yaml:"workflow_dispatch"`
+		} `yaml:"on"`
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string            `yaml:"name"`
+				Env  map[string]string `yaml:"env"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	input, found := workflow.On.WorkflowDispatch.Inputs["embedding_dimension"]
+	if !found || !input.Required || input.Type != "string" {
+		t.Fatalf("embedding_dimension input = %#v, found %t", input, found)
+	}
+	for _, step := range workflow.Jobs["real-provider"].Steps {
+		if step.Name != "Make one bounded real request" {
+			continue
+		}
+		if got := step.Env["POWERCONTEXT_REAL_SMOKE_EMBEDDING_DIMENSION"]; got != "${{ inputs.embedding_dimension }}" {
+			t.Fatalf("embedding dimension environment = %q", got)
+		}
+		return
+	}
+	t.Fatal("provider-smoke.yml has no real provider request step")
+}
+
 func TestMigrationQualityRunsModuleIntegrity(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))

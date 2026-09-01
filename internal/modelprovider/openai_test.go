@@ -212,12 +212,12 @@ func TestOpenAISDKRetriesAreDisabledAndErrorsAreSanitized(t *testing.T) {
 		check  func(error) bool
 	}{
 		{status: http.StatusBadRequest, check: func(err error) bool {
-			var target *inference.ConfigurationError
-			return errors.As(err, &target)
+			target, ok := errors.AsType[*inference.ConfigurationError](err)
+			return ok && target.Code() == "provider-rejected" && target.Detail() == "HTTP 400"
 		}},
 		{status: http.StatusTooManyRequests, check: func(err error) bool {
-			var target *inference.UnavailableError
-			return errors.As(err, &target)
+			_, ok := errors.AsType[*inference.UnavailableError](err)
+			return ok
 		}},
 	}
 	for _, test := range tests {
@@ -263,7 +263,7 @@ func TestOpenAIEmbeddingTransportUsesOrderedBatchAndUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(context.Background(), []string{"alpha", "beta"}, inference.EmbeddingDocument)
+	result, err := transport.Embed(context.Background(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingDocument, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,8 +271,38 @@ func TestOpenAIEmbeddingTransportUsesOrderedBatchAndUsage(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	request := fake.Requests()[0]
-	if request.path != "/v1/embeddings" || request.body["model"] != "text-embedding-test" {
+	if request.path != "/v1/embeddings" || request.body["model"] != "text-embedding-test" || request.body["dimensions"] != float64(384) {
 		t.Fatalf("request = %#v", request)
+	}
+}
+
+func TestOpenAIEmbeddingTransportMapsRejectedRequestToRedactedReason(t *testing.T) {
+	fake := &openAIFake{t: t, statuses: []int{http.StatusBadRequest}, responses: []any{
+		map[string]any{"error": map[string]any{
+			"message": "API_KEY=secret https://credential@example.invalid private Memory", "type": "test",
+		}},
+	}}
+	route, _ := Resolve("openai:text-embedding-test", Embedding)
+	transport, err := NewOpenAIEmbeddingTransport(route, OpenAIConfig{
+		APIKey: "test-key", BaseURL: "https://provider.test/v1", HTTPClient: fake.Client(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = transport.Embed(
+		t.Context(), embeddingRequestForProviderTest(t, []string{"embedding input"}, inference.EmbeddingDocument, 3),
+	)
+	configuration, ok := errors.AsType[*inference.ConfigurationError](err)
+	if !ok || configuration.Code() != "provider-rejected" || configuration.Detail() != "HTTP 400" {
+		t.Fatalf("configuration = %#v", configuration)
+	}
+	for _, sentinel := range []string{"API_KEY=secret", "credential@example.invalid", "private Memory"} {
+		if strings.Contains(err.Error(), sentinel) {
+			t.Fatalf("embedding provider error leaked %q", sentinel)
+		}
+	}
+	if errors.Unwrap(err) == nil {
+		t.Fatalf("embedding provider error %T did not retain the SDK cause", err)
 	}
 }
 

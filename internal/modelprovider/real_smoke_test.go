@@ -23,6 +23,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -34,9 +35,11 @@ import (
 // that protocol adapters can complete one real request without logging model
 // input, model output, or credentials.
 func TestRealProviderSmoke(t *testing.T) {
-	generationModel := os.Getenv("POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL")
-	embeddingModel := os.Getenv("POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL")
-	if generationModel == "" && embeddingModel == "" {
+	config, err := realSmokeConfigurationFromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.generationModel == "" && config.embeddingModel == "" {
 		t.Skip("set a POWERCONTEXT_REAL_SMOKE_*_MODEL variable to call a real provider")
 	}
 
@@ -50,11 +53,11 @@ func TestRealProviderSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if generationModel != "" {
+	if config.generationModel != "" {
 		t.Run("generation", func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 			defer cancel()
-			model, buildErr := factory.TextModel(generationModel)
+			model, buildErr := factory.TextModel(config.generationModel)
 			if buildErr != nil {
 				t.Fatal(buildErr)
 			}
@@ -88,11 +91,11 @@ func TestRealProviderSmoke(t *testing.T) {
 		})
 	}
 
-	if embeddingModel != "" {
+	if config.embeddingModel != "" {
 		t.Run("embedding", func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 			defer cancel()
-			transport, buildErr := factory.EmbeddingTransport(embeddingModel)
+			transport, buildErr := factory.EmbeddingTransport(config.embeddingModel)
 			if buildErr != nil {
 				t.Fatal(buildErr)
 			}
@@ -107,20 +110,78 @@ func TestRealProviderSmoke(t *testing.T) {
 			}
 			result, callErr := transport.Embed(
 				ctx,
-				[]string{"PowerContext provider smoke test."},
-				inference.EmbeddingDocument,
+				embeddingRequestForProviderTest(
+					t,
+					[]string{"PowerContext provider smoke test."},
+					inference.EmbeddingDocument,
+					config.embeddingDimension,
+				),
 			)
 			if callErr != nil {
 				t.Fatal(callErr)
 			}
 			vectors := result.Embeddings()
-			if len(vectors) != 1 || len(vectors[0]) == 0 {
+			if len(vectors) != 1 || len(vectors[0]) != config.embeddingDimension {
 				t.Fatal("real embedding provider returned an invalid vector count")
 			}
 			for _, value := range vectors[0] {
 				if math.IsNaN(value) || math.IsInf(value, 0) {
 					t.Fatal("real embedding provider returned a non-finite vector")
 				}
+			}
+		})
+	}
+}
+
+type realSmokeConfiguration struct {
+	generationModel    string
+	embeddingModel     string
+	embeddingDimension int
+}
+
+func realSmokeConfigurationFromEnvironment() (realSmokeConfiguration, error) {
+	config := realSmokeConfiguration{
+		generationModel: os.Getenv("POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL"),
+		embeddingModel:  os.Getenv("POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL"),
+	}
+	if config.embeddingModel == "" {
+		return config, nil
+	}
+	dimension, err := strconv.Atoi(os.Getenv("POWERCONTEXT_REAL_SMOKE_EMBEDDING_DIMENSION"))
+	if err != nil || dimension < 1 {
+		return realSmokeConfiguration{}, errors.New("POWERCONTEXT_REAL_SMOKE_EMBEDDING_DIMENSION must be a positive integer")
+	}
+	config.embeddingDimension = dimension
+	return config, nil
+}
+
+func TestRealSmokeConfigurationRequiresModelSupportedEmbeddingDimension(t *testing.T) {
+	tests := []struct {
+		name               string
+		generationModel    string
+		embeddingModel     string
+		embeddingDimension string
+		wantDimension      int
+		wantError          bool
+	}{
+		{name: "generation only", generationModel: "openai:test"},
+		{name: "explicit model dimension", embeddingModel: "openai:text-embedding-3-small", embeddingDimension: "768", wantDimension: 768},
+		{name: "missing dimension", embeddingModel: "openai:text-embedding-3-small", wantError: true},
+		{name: "zero dimension", embeddingModel: "openai:text-embedding-3-small", embeddingDimension: "0", wantError: true},
+		{name: "negative dimension", embeddingModel: "openai:text-embedding-3-small", embeddingDimension: "-1", wantError: true},
+		{name: "non-numeric dimension", embeddingModel: "openai:text-embedding-3-small", embeddingDimension: "three", wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL", test.generationModel)
+			t.Setenv("POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL", test.embeddingModel)
+			t.Setenv("POWERCONTEXT_REAL_SMOKE_EMBEDDING_DIMENSION", test.embeddingDimension)
+			config, err := realSmokeConfigurationFromEnvironment()
+			if (err != nil) != test.wantError {
+				t.Fatalf("error = %v, want error %t", err, test.wantError)
+			}
+			if err == nil && config.embeddingDimension != test.wantDimension {
+				t.Fatalf("embedding dimension = %d, want %d", config.embeddingDimension, test.wantDimension)
 			}
 		})
 	}

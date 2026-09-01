@@ -72,11 +72,10 @@ type tracedEmbeddingTransport struct {
 
 func (t tracedEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType EmbeddingInputType,
+	request EmbeddingRequest,
 ) (ProviderEmbeddingResult, error) {
 	ctx, span := startInferenceSpan(ctx, t.tracer, "embed")
-	result, err := t.transport.Embed(ctx, inputs, inputType)
+	result, err := t.transport.Embed(ctx, request)
 	finishInferenceSpan(ctx, span, err)
 	return result, err
 }

@@ -51,9 +51,10 @@ func NewVoyageAIEmbeddingTransport(route Route, config VoyageAIConfig) (*VoyageA
 }
 
 type voyageEmbeddingRequest struct {
-	Input     []string `json:"input"`
-	Model     string   `json:"model"`
-	InputType string   `json:"input_type"`
+	Input           []string `json:"input"`
+	Model           string   `json:"model"`
+	InputType       string   `json:"input_type"`
+	OutputDimension int      `json:"output_dimension"`
 }
 
 type voyageEmbeddingResponse struct {
@@ -68,9 +69,10 @@ type voyageEmbeddingResponse struct {
 
 func (t *VoyageAIEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	wireType := "document"
 	if inputType == inference.EmbeddingQuery {
 		wireType = "query"
@@ -78,6 +80,7 @@ func (t *VoyageAIEmbeddingTransport) Embed(
 	var response voyageEmbeddingResponse
 	if err := t.transport.postJSON(ctx, "/embeddings", voyageEmbeddingRequest{
 		Input: slices.Clone(inputs), Model: t.route.model, InputType: wireType,
+		OutputDimension: request.DimensionCount(),
 	}, &response, "embed"); err != nil {
 		return inference.ProviderEmbeddingResult{}, err
 	}

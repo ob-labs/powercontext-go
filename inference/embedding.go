@@ -31,6 +31,26 @@ const (
 	EmbeddingQuery    EmbeddingInputType = "query"
 )
 
+type EmbeddingRequest struct {
+	inputs    []string
+	inputType EmbeddingInputType
+	dimension int
+}
+
+func NewEmbeddingRequest(inputs []string, inputType EmbeddingInputType, dimension int) (EmbeddingRequest, error) {
+	if inputType != EmbeddingDocument && inputType != EmbeddingQuery {
+		return EmbeddingRequest{}, NewConfigurationError("request-rejected", "invalid embedding input type")
+	}
+	if dimension < 1 {
+		return EmbeddingRequest{}, NewConfigurationError("dimension-positive", "")
+	}
+	return EmbeddingRequest{inputs: slices.Clone(inputs), inputType: inputType, dimension: dimension}, nil
+}
+
+func (r EmbeddingRequest) Inputs() []string              { return slices.Clone(r.inputs) }
+func (r EmbeddingRequest) InputType() EmbeddingInputType { return r.inputType }
+func (r EmbeddingRequest) DimensionCount() int           { return r.dimension }
+
 type ProviderEmbeddingResult struct {
 	inputs     []string
 	inputType  EmbeddingInputType
@@ -59,7 +79,7 @@ func (r ProviderEmbeddingResult) Embeddings() [][]float64       { return cloneVe
 func (r ProviderEmbeddingResult) Usage() Usage                  { return cloneUsage(r.usage) }
 
 type EmbeddingTransport interface {
-	Embed(context.Context, []string, EmbeddingInputType) (ProviderEmbeddingResult, error)
+	Embed(context.Context, EmbeddingRequest) (ProviderEmbeddingResult, error)
 }
 
 type fixedEmbeddingProfile struct {
@@ -134,7 +154,11 @@ func (m *BatchedEmbeddingModel) Embed(ctx context.Context, texts []string) (Embe
 	for start := 0; start < len(texts); start += m.batchSize {
 		end := min(start+m.batchSize, len(texts))
 		batch := slices.Clone(texts[start:end])
-		result, err := m.transport.Embed(callCtx, batch, EmbeddingDocument)
+		request, err := NewEmbeddingRequest(batch, EmbeddingDocument, m.profile.dimension)
+		if err != nil {
+			return EmbeddingResult{}, err
+		}
+		result, err := m.transport.Embed(callCtx, request)
 		if err != nil {
 			return EmbeddingResult{}, mapEmbeddingCallError(ctx, callCtx, err, m.limits.timeout)
 		}

@@ -24,6 +24,7 @@ import (
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 
@@ -275,12 +276,14 @@ func NewOpenAIEmbeddingTransport(route Route, config OpenAIConfig) (*OpenAIEmbed
 
 func (t *OpenAIEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	response, err := t.shared.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
-		Model: t.shared.route.model,
-		Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: slices.Clone(inputs)},
+		Model:      t.shared.route.model,
+		Input:      openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: slices.Clone(inputs)},
+		Dimensions: param.NewOpt(int64(request.DimensionCount())),
 	})
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, mapOpenAIError(err, "embed")
@@ -352,14 +355,7 @@ func mapOpenAIError(err error, operation string) error {
 	}
 	var apiError *openai.Error
 	if errors.As(err, &apiError) {
-		status := apiError.StatusCode
-		if status == http.StatusRequestTimeout || status == http.StatusGatewayTimeout {
-			return context.DeadlineExceeded
-		}
-		if status == http.StatusConflict || status == http.StatusTooEarly || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError {
-			return inference.WrapUnavailableError(operation, err)
-		}
-		return inference.WrapConfigurationError("provider-rejected", "", err)
+		return mapProviderHTTPStatus(apiError.StatusCode, operation, err)
 	}
 	return inference.WrapUnavailableError(operation, err)
 }

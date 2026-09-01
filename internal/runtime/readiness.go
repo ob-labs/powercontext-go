@@ -18,7 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -41,7 +43,48 @@ const (
 )
 
 func (s CheckStatus) valid() bool {
-	return s == CheckReady || s == CheckUnavailable || s == CheckTimeout || s == CheckMisconfigured
+	return s == CheckReady || s == CheckUnavailable || s == CheckTimeout || s == CheckMisconfigured ||
+		isProviderRejectedCheckStatus(s)
+}
+
+func providerRejectedCheckStatus(configuration *inference.ConfigurationError) (CheckStatus, bool) {
+	const detailPrefix = "HTTP "
+	const detailLength = len(detailPrefix) + 3
+
+	if configuration == nil || configuration.Code() != "provider-rejected" {
+		return "", false
+	}
+	detail := configuration.Detail()
+	if len(detail) != detailLength || detail[:len(detailPrefix)] != detailPrefix {
+		return "", false
+	}
+	for _, digit := range detail[len(detailPrefix):] {
+		if digit < '0' || digit > '9' {
+			return "", false
+		}
+	}
+	status, err := strconv.Atoi(detail[len(detailPrefix):])
+	if err != nil || status < http.StatusBadRequest || status >= http.StatusInternalServerError ||
+		status == http.StatusRequestTimeout || status == http.StatusConflict ||
+		status == http.StatusTooEarly || status == http.StatusTooManyRequests {
+		return "", false
+	}
+	return CheckStatus("misconfigured: provider-rejected (" + detail + ")"), true
+}
+
+func isProviderRejectedCheckStatus(status CheckStatus) bool {
+	const prefix = "misconfigured: provider-rejected ("
+	const detailLength = len("HTTP ") + 3
+	const suffix = ")"
+	const statusLength = len(prefix) + detailLength + len(suffix)
+
+	value := string(status)
+	if len(value) != statusLength || value[:len(prefix)] != prefix || value[len(value)-len(suffix):] != suffix {
+		return false
+	}
+	detail := value[len(prefix) : len(prefix)+detailLength]
+	formatted, ok := providerRejectedCheckStatus(inference.NewConfigurationError("provider-rejected", detail))
+	return ok && status == formatted
 }
 
 type ReadinessStatus string
@@ -176,8 +219,10 @@ func DependencyProbe(operation DependencyOperation, timeout time.Duration) Probe
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		var configuration *inference.ConfigurationError
-		if errors.As(err, &configuration) {
+		if configuration, ok := errors.AsType[*inference.ConfigurationError](err); ok {
+			if status, ok := providerRejectedCheckStatus(configuration); ok {
+				return status, nil
+			}
 			return CheckMisconfigured, nil
 		}
 		var inferenceTimeout *inference.TimeoutError

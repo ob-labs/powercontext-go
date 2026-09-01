@@ -16,6 +16,7 @@ package inference
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -179,6 +180,22 @@ func TestEmbeddingSpanNestsUnderActiveOperationWithoutRecordingTextOrVectors(t *
 				t.Fatalf("embedding span attribute exposes %q: %s", forbidden, encoded)
 			}
 		}
+	}
+}
+
+func TestTraceEmbeddingTransportForwardsRequestUnchanged(t *testing.T) {
+	transport := &recordedEmbeddingTransport{}
+	request, err := NewEmbeddingRequest([]string{"alpha"}, EmbeddingQuery, 384)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := TraceEmbeddingTransport(transport, nil).Embed(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.requests) != 1 || transport.requests[0].DimensionCount() != 384 ||
+		transport.requests[0].InputType() != EmbeddingQuery ||
+		!slices.Equal(transport.requests[0].Inputs(), []string{"alpha"}) {
+		t.Fatalf("requests = %#v", transport.requests)
 	}
 }
 

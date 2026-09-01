@@ -154,17 +154,20 @@ func (m *CohereTextModel) Complete(ctx context.Context, request inference.TextRe
 
 func (t *CohereEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	wireType := cohere.EmbedInputTypeSearchDocument
 	if inputType == inference.EmbeddingQuery {
 		wireType = cohere.EmbedInputTypeSearchQuery
 	}
+	dimension := request.DimensionCount()
 	truncate := cohere.V2EmbedRequestTruncateNone
 	response, err := t.client.Embed(ctx, &cohere.V2EmbedRequest{
 		Texts: slices.Clone(inputs), Model: t.route.model, InputType: wireType,
 		EmbeddingTypes: []cohere.EmbeddingType{cohere.EmbeddingTypeFloat}, Truncate: &truncate,
+		OutputDimension: &dimension,
 	})
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, mapCohereError(err, "embed")

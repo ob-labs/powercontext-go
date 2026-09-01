@@ -119,6 +119,57 @@ func TestDependencyProbeClassification(t *testing.T) {
 	}
 }
 
+func TestDependencyProbePublishesOnlyAllowlistedProviderRejectionReason(t *testing.T) {
+	t.Parallel()
+	safe := inference.WrapConfigurationError(
+		"provider-rejected", "HTTP 400", errors.New("API_KEY=secret https://credential@example.invalid private Memory"),
+	)
+	status, err := DependencyProbe(func(context.Context) error { return safe }, time.Second)(t.Context())
+	if err != nil || status != "misconfigured: provider-rejected (HTTP 400)" {
+		t.Fatalf("status = %q, err = %v", status, err)
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{name: "arbitrary detail", err: inference.NewConfigurationError("provider-rejected", "credential rejected")},
+		{name: "transient status", err: inference.NewConfigurationError("provider-rejected", "HTTP 429")},
+		{name: "lowercase status", err: inference.NewConfigurationError("provider-rejected", "http 400")},
+		{name: "malformed status", err: inference.NewConfigurationError("provider-rejected", "HTTP four")},
+		{name: "trailing text", err: inference.NewConfigurationError("provider-rejected", "HTTP 400 retry later")},
+		{name: "plain configuration", err: inference.NewConfigurationError("model", "HTTP 400")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			status, err := DependencyProbe(func(context.Context) error { return test.err }, time.Second)(t.Context())
+			if err != nil || status != CheckMisconfigured {
+				t.Fatalf("status = %q, err = %v; want %q", status, err, CheckMisconfigured)
+			}
+		})
+	}
+}
+
+func TestCheckStatusValidProviderRejectionGrammar(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		status CheckStatus
+		want   bool
+	}{
+		{name: "allowlisted", status: "misconfigured: provider-rejected (HTTP 400)", want: true},
+		{name: "wrong prefix", status: "misconfigured: provider response (HTTP 400)"},
+		{name: "lowercase detail", status: "misconfigured: provider-rejected (http 400)"},
+		{name: "trailing content", status: "misconfigured: provider-rejected (HTTP 400) retry"},
+		{name: "transient status", status: "misconfigured: provider-rejected (HTTP 429)"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.status.valid(); got != test.want {
+				t.Fatalf("valid(%q) = %t, want %t", test.status, got, test.want)
+			}
+		})
+	}
+}
+
 func TestCachedProbeCollapsesRefreshAndUsesTransientTTL(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)

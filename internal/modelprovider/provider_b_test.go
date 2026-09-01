@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -207,7 +208,7 @@ func TestOpenAICompatibleEmbeddingPrefixesUseFrozenWireEndpoints(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := transport.Embed(t.Context(), []string{"bounded"}, inference.EmbeddingDocument); err != nil {
+			if _, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"bounded"}, inference.EmbeddingDocument, 3)); err != nil {
 				t.Fatal(err)
 			}
 			request := fake.Requests()[0]
@@ -258,7 +259,7 @@ func TestVoyageAIEmbeddingRestoresProviderIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(t.Context(), []string{"alpha", "beta"}, inference.EmbeddingQuery)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingQuery, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +267,7 @@ func TestVoyageAIEmbeddingRestoresProviderIndexes(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	request := fake.Requests()[0]
-	if request.path != "/v1/embeddings" || request.body["input_type"] != "query" {
+	if request.path != "/v1/embeddings" || request.body["input_type"] != "query" || request.body["output_dimension"] != float64(384) {
 		t.Fatalf("request = %#v", request)
 	}
 }
@@ -314,17 +315,36 @@ func TestGoogleOfficialSDKMappingAndEmbeddingTaskDefaults(t *testing.T) {
 			if model != "gemini-embedding-2" || config.TaskType != "" || contents[0].Parts[0].Text != "title: none | text: alpha" {
 				t.Fatalf("embedding mapping = %q, %#v, %#v", model, contents, config)
 			}
+			if config.OutputDimensionality == nil || *config.OutputDimensionality != 384 {
+				t.Fatalf("output dimensionality = %#v", config.OutputDimensionality)
+			}
 			return &genai.EmbedContentResponse{Embeddings: []*genai.ContentEmbedding{{
 				Values: []float32{1, 2}, Statistics: &genai.ContentEmbeddingStatistics{TokenCount: 3},
 			}}}, nil
 		},
 	}}
-	result, err := transport.Embed(t.Context(), []string{"alpha"}, inference.EmbeddingDocument)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(result.Embeddings()[0], []float64{1, 2}) || *result.Usage().InputTokens != 3 {
 		t.Fatalf("embedding result = %#v", result)
+	}
+
+	called := false
+	overflowTransport := &GoogleEmbeddingTransport{route: embeddingRoute, models: googleModelsFake{
+		embed: func(context.Context, string, []*genai.Content, *genai.EmbedContentConfig) (*genai.EmbedContentResponse, error) {
+			called = true
+			return nil, nil
+		},
+	}}
+	_, err = overflowTransport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret overflow input"}, inference.EmbeddingDocument, int(math.MaxInt32)+1))
+	configurationError, found := errors.AsType[*inference.ConfigurationError](err)
+	if !found || configurationError.Code() != "request-rejected" || configurationError.Detail() != "Google embedding dimension exceeds int32" || strings.Contains(err.Error(), "secret overflow input") {
+		t.Fatalf("overflow error = %v", err)
+	}
+	if called {
+		t.Fatal("Google SDK was called for an overflowing dimension")
 	}
 }
 
@@ -363,7 +383,7 @@ func TestCohereOfficialSDKWireAndNoRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := transport.Embed(t.Context(), []string{"alpha"}, inference.EmbeddingDocument)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +394,7 @@ func TestCohereOfficialSDKWireAndNoRetry(t *testing.T) {
 	if len(requests) != 2 || requests[0].path != "/v2/chat" || requests[1].path != "/v2/embed" {
 		t.Fatalf("requests = %#v", requests)
 	}
-	if requests[1].body["input_type"] != "search_document" {
+	if requests[1].body["input_type"] != "search_document" || requests[1].body["output_dimension"] != float64(384) {
 		t.Fatalf("embedding body = %#v", requests[1].body)
 	}
 }
@@ -430,12 +450,136 @@ func TestBedrockConverseAndEmbeddingFormats(t *testing.T) {
 			return &bedrockruntime.InvokeModelOutput{Body: []byte(`{"embeddings":{"float":[[1,2],[3,4]]}}`)}, nil
 		},
 	}}
-	result, err := transport.Embed(t.Context(), []string{"alpha", "beta"}, inference.EmbeddingQuery)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingQuery, 3))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(result.Embeddings()[1], []float64{3, 4}) {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestBedrockEmbeddingDimensionPayloads(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		assertion func(*testing.T, map[string]any)
+		response  string
+	}{
+		{
+			name:  "titan v1 omits dimensions",
+			model: "amazon.titan-embed-text-v1",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if _, found := body["dimensions"]; found {
+					t.Fatalf("body unexpectedly contains dimensions: %#v", body)
+				}
+			},
+			response: `{"embedding":[1,2]}`,
+		},
+		{
+			name:  "titan v2 sends dimensions",
+			model: "amazon.titan-embed-text-v2:0",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if body["dimensions"] != float64(384) {
+					t.Fatalf("body dimensions = %#v", body["dimensions"])
+				}
+			},
+			response: `{"embedding":[1,2]}`,
+		},
+		{
+			name:  "cohere v3 omits output dimension",
+			model: "cohere.embed-english-v3",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if _, found := body["output_dimension"]; found {
+					t.Fatalf("body unexpectedly contains output_dimension: %#v", body)
+				}
+			},
+			response: `{"embeddings":[[1,2]]}`,
+		},
+		{
+			name:  "cohere v4 sends output dimension",
+			model: "cohere.embed-v4:0",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if body["output_dimension"] != float64(384) {
+					t.Fatalf("body output_dimension = %#v", body["output_dimension"])
+				}
+			},
+			response: `{"embeddings":[[1,2]]}`,
+		},
+		{
+			name:  "nova sends nested embedding dimension",
+			model: "amazon.nova-2-multimodal-embeddings-v1:0",
+			assertion: func(t *testing.T, body map[string]any) {
+				t.Helper()
+				if _, found := body["embeddingDimension"]; found {
+					t.Fatalf("body has top-level embeddingDimension: %#v", body)
+				}
+				params, found := body["singleEmbeddingParams"].(map[string]any)
+				if !found || params["embeddingDimension"] != float64(384) {
+					t.Fatalf("singleEmbeddingParams = %#v", body["singleEmbeddingParams"])
+				}
+			},
+			response: `{"embeddings":[{"embedding":[1,2]}]}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			route, err := Resolve("bedrock:"+test.model, Embedding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			transport := &BedrockEmbeddingTransport{route: route, client: bedrockClientFake{
+				invoke: func(input *bedrockruntime.InvokeModelInput) (*bedrockruntime.InvokeModelOutput, error) {
+					var body map[string]any
+					if err := json.Unmarshal(input.Body, &body); err != nil {
+						t.Fatal(err)
+					}
+					test.assertion(t, body)
+					return &bedrockruntime.InvokeModelOutput{Body: []byte(test.response)}, nil
+				},
+			}}
+			if _, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestBedrockEmbeddingRejectsNearMissModelIDsBeforeInvoke(t *testing.T) {
+	models := []string{
+		"amazon.titan-embed-text-v20:0",
+		"us.cohere.embed-v40:0",
+		"global.amazon.nova-2-lite-v1:0",
+	}
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			route, err := Resolve("bedrock:"+model, Embedding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			invoked := false
+			transport := &BedrockEmbeddingTransport{route: route, client: bedrockClientFake{
+				invoke: func(*bedrockruntime.InvokeModelInput) (*bedrockruntime.InvokeModelOutput, error) {
+					invoked = true
+					return nil, errors.New("unexpected Bedrock invocation")
+				},
+			}}
+			_, err = transport.Embed(
+				t.Context(),
+				embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 384),
+			)
+			configurationError, found := errors.AsType[*inference.ConfigurationError](err)
+			if !found || configurationError.Code() != "embedding-model" {
+				t.Fatalf("error = %v", err)
+			}
+			if invoked {
+				t.Fatal("Bedrock InvokeModel was called for an unsupported embedding model")
+			}
+		})
 	}
 }
 

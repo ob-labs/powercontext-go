@@ -4,7 +4,14 @@
   "files": {
     "tests/builtin/inference/test_pydantic_ai.py": {
       "mode": "go-port",
-      "reason": "Builtin Pydantic AI embedding-provider error classification maps to the Go model-provider boundary."
+      "reason": "Builtin Pydantic AI embedding-provider error classification maps to the Go model-provider boundary.",
+      "cases": {
+        "test_embedding_adapter_maps_a_rejected_request_to_a_stable_reason_without_leaking_body": {
+          "evidence": [
+            "go:internal/modelprovider/openai_test.go#TestOpenAIEmbeddingTransportMapsRejectedRequestToRedactedReason"
+          ]
+        }
+      }
     },
     "tests/builtin/persistence/test_sqlite_memory_vector_index.py": {
       "mode": "go-port",
@@ -12,11 +19,35 @@
     },
     "tests/builtin/runtime/test_composition_embedding.py": {
       "mode": "go-port",
-      "reason": "Embedding model composition and configured dimension propagation map to Go runtime/provider construction."
+      "reason": "Embedding model composition and configured dimension propagation map to Go runtime/provider construction.",
+      "cases": {
+        "test_embedding_models_send_the_configured_dimension_to_the_provider": {
+          "evidence": [
+            "go:server/application_readiness_test.go#TestConfiguredEmbeddingReadinessPassesProfileDimensionToTransport"
+          ]
+        },
+        "test_embedding_models_without_configuration_return_no_models": {
+          "evidence": [
+            "go:server/application_readiness_test.go#TestAssembleDependenciesWithoutEmbeddingConfiguration"
+          ]
+        }
+      }
     },
     "tests/builtin/runtime/test_readiness.py": {
       "mode": "go-port",
-      "reason": "Dependency readiness and redacted provider configuration reasons map to the Go Server readiness boundary."
+      "reason": "Dependency readiness and redacted provider configuration reasons map to the Go Server readiness boundary.",
+      "cases": {
+        "test_dependency_readiness_probe_surfaces_a_stable_redacted_configuration_reason": {
+          "evidence": [
+            "go:internal/runtime/readiness_test.go#TestDependencyProbePublishesOnlyAllowlistedProviderRejectionReason"
+          ]
+        },
+        "test_dependency_readiness_probe_redacts_plain_configuration_errors": {
+          "evidence": [
+            "go:server/application_readiness_test.go#TestApplicationReadinessRedactsPlainConfigurationErrors"
+          ]
+        }
+      }
     },
     "tests/builtin/runtime/test_scheduler.py": {
       "mode": "go-port",
@@ -202,7 +233,14 @@
     },
     "tests/test_server.py": {
       "mode": "go-port",
-      "reason": "Server factory provider rejection and redacted readiness behavior map to Go Server construction."
+      "reason": "Server factory provider rejection and redacted readiness behavior map to Go Server construction.",
+      "cases": {
+        "test_server_factory_reports_a_rejected_embedding_request_with_a_redacted_reason": {
+          "evidence": [
+            "go:server/application_test.go#TestOpenApplicationReportsProviderRejectedEmbeddingReadinessWithoutLeakingProviderBody"
+          ]
+        }
+      }
     },
     "tests/test_server_tracing.py": {
       "mode": "go-port",

@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -39,7 +40,7 @@ func TestLocalEmbeddingTransportPreservesInputsAndVectors(t *testing.T) {
 	}, func() error { return nil })
 
 	inputs := []string{"alpha", "beta"}
-	result, err := transport.Embed(t.Context(), inputs, inference.EmbeddingDocument)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, inputs, inference.EmbeddingDocument, 2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +52,32 @@ func TestLocalEmbeddingTransportPreservesInputsAndVectors(t *testing.T) {
 	}
 	if result.Usage().Requests != 0 || result.Usage().InputTokens != nil || result.Usage().OutputTokens != nil {
 		t.Fatalf("usage = %#v", result.Usage())
+	}
+}
+
+func TestLocalEmbeddingTransportTruncatesToRequestedDimension(t *testing.T) {
+	transport := newLocalEmbeddingTransport(
+		func([]string) ([][]float32, error) { return [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}, nil },
+		func() error { return nil },
+	)
+	result, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"alpha", "beta"}, inference.EmbeddingDocument, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(result.Embeddings()[0], []float64{1, 2}) || !slices.Equal(result.Embeddings()[1], []float64{5, 6}) {
+		t.Fatalf("embeddings = %#v", result.Embeddings())
+	}
+}
+
+func TestLocalEmbeddingTransportRejectsDimensionLargerThanNativeOutput(t *testing.T) {
+	transport := newLocalEmbeddingTransport(
+		func([]string) ([][]float32, error) { return [][]float32{{1, 2}}, nil },
+		func() error { return nil },
+	)
+	_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret input"}, inference.EmbeddingDocument, 3))
+	configuration, found := errors.AsType[*inference.ConfigurationError](err)
+	if !found || configuration.Code() != "request-rejected" || configuration.Detail() != "configured dimension exceeds local model output" || strings.Contains(err.Error(), "secret input") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
@@ -89,7 +116,7 @@ func TestLocalEmbeddingTransportCancellationAndCloseDrainNativeCall(t *testing.T
 		callContext, cancelCall := context.WithCancel(t.Context())
 		callDone := make(chan error, 1)
 		go func() {
-			_, err := transport.Embed(callContext, []string{"alpha"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(callContext, embeddingRequestForProviderTest(t, []string{"alpha"}, inference.EmbeddingDocument, 3))
 			callDone <- err
 		}()
 		<-started
@@ -106,7 +133,7 @@ func TestLocalEmbeddingTransportCancellationAndCloseDrainNativeCall(t *testing.T
 		defer cancelLate()
 		lateDone := make(chan error, 1)
 		go func() {
-			_, err := transport.Embed(lateContext, []string{"late"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(lateContext, embeddingRequestForProviderTest(t, []string{"late"}, inference.EmbeddingDocument, 3))
 			lateDone <- err
 		}()
 		synctest.Wait()
@@ -164,13 +191,13 @@ func TestLocalEmbeddingTransportSerializesPipeline(t *testing.T) {
 		started <- struct{}{}
 		<-release
 		active.Add(-1)
-		return [][]float32{{1}}, nil
+		return [][]float32{{1, 2, 3}}, nil
 	}, func() error { return nil })
 
 	done := make(chan error, 2)
 	for range 2 {
 		go func() {
-			_, err := transport.Embed(t.Context(), []string{"text"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"text"}, inference.EmbeddingDocument, 3))
 			done <- err
 		}()
 	}
@@ -203,7 +230,7 @@ func TestLocalEmbeddingTransportContainsNativeFailures(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			transport := newLocalEmbeddingTransport(run, func() error { return nil })
-			_, err := transport.Embed(t.Context(), []string{"secret input"}, inference.EmbeddingDocument)
+			_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"secret input"}, inference.EmbeddingDocument, 3))
 			var unavailable *inference.UnavailableError
 			if !errors.As(err, &unavailable) || err.Error() != "inference is temporarily unavailable for embed" {
 				t.Fatalf("error = %v", err)
@@ -221,7 +248,7 @@ func TestLocalEmbeddingTransportPreservesStableInferenceFailures(t *testing.T) {
 		func([]string) ([][]float32, error) { return nil, configuration },
 		func() error { return nil },
 	)
-	_, err := transport.Embed(t.Context(), []string{"text"}, inference.EmbeddingDocument)
+	_, err := transport.Embed(t.Context(), embeddingRequestForProviderTest(t, []string{"text"}, inference.EmbeddingDocument, 3))
 	var observed *inference.ConfigurationError
 	if !errors.As(err, &observed) || observed != configuration {
 		t.Fatalf("stable inference error was reclassified: %v", err)

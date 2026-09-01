@@ -17,6 +17,7 @@ package modelprovider
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
 
@@ -149,11 +150,19 @@ func (m *GoogleTextModel) Complete(ctx context.Context, request inference.TextRe
 
 func (t *GoogleEmbeddingTransport) Embed(
 	ctx context.Context,
-	inputs []string,
-	inputType inference.EmbeddingInputType,
+	request inference.EmbeddingRequest,
 ) (inference.ProviderEmbeddingResult, error) {
+	if request.DimensionCount() > math.MaxInt32 {
+		return inference.ProviderEmbeddingResult{}, inference.NewConfigurationError(
+			"request-rejected", "Google embedding dimension exceeds int32",
+		)
+	}
+	inputs := request.Inputs()
+	inputType := request.InputType()
 	texts := slices.Clone(inputs)
 	config := &genai.EmbedContentConfig{}
+	dimension := int32(request.DimensionCount())
+	config.OutputDimensionality = &dimension
 	if t.route.model == "gemini-embedding-2" {
 		for index, value := range texts {
 			if inputType == inference.EmbeddingDocument {

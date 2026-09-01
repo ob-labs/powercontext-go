@@ -148,6 +148,36 @@ func TestGenerationReadinessUsesRawMinimalProviderRequest(t *testing.T) {
 	}
 }
 
+func TestConfiguredEmbeddingReadinessPassesProfileDimensionToTransport(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Inference.EmbeddingModel = "openai:text-embedding-test"
+	config.Inference.EmbeddingProfileID = "test-v1"
+	config.Inference.EmbeddingDimension = 3
+	config.Inference.EmbeddingNormalization = "none"
+
+	transport := &recordingEmbeddingTransport{}
+	assembled, err := assembleDependenciesWithProviderFactory(
+		config,
+		Dependencies{},
+		noop.NewTracerProvider(),
+		func(*http.Client) (assembledProviderFactory, error) {
+			return recordingEmbeddingProviderFactory{transport: transport}, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := assembled.embeddingReadiness(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if transport.calls != 1 || transport.request.DimensionCount() != 3 {
+		t.Fatalf("transport calls = %d, request dimension = %d; want 1 and 3", transport.calls, transport.request.DimensionCount())
+	}
+}
+
 func TestConfiguredEmbeddingReadinessIsUntracedButRuntimeEmbeddingIsTraced(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")
@@ -208,6 +238,20 @@ func TestConfiguredEmbeddingReadinessIsUntracedButRuntimeEmbeddingIsTraced(t *te
 	if operationSpan == nil || embeddingSpan == nil ||
 		embeddingSpan.Parent().SpanID() != operationSpan.SpanContext().SpanID() {
 		t.Fatalf("runtime embedding span was not nested under the application operation: %#v", spans)
+	}
+}
+
+func TestAssembleDependenciesWithoutEmbeddingConfiguration(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assembled, err := assembleDependencies(config, Dependencies{}, noop.NewTracerProvider())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assembled.embeddingModel != nil || assembled.embeddingReadiness != nil {
+		t.Fatalf("unconfigured embedding dependencies = %#v", assembled)
 	}
 }
 
@@ -296,6 +340,87 @@ func TestApplicationReadinessClassifiesConfiguredInferenceWithoutLeakingFailures
 			}
 		})
 	}
+}
+
+func TestProviderRejectedReadinessReportsRedactedReason(t *testing.T) {
+	providerFailure := inference.WrapConfigurationError(
+		"provider-rejected", "HTTP 400", errors.New("API_KEY=secret https://credential@example.invalid private Memory"),
+	)
+	_, handler := readinessTestApplication(
+		t,
+		func(context.Context) error { return nil },
+		assembledDependencies{embeddingReadiness: func(context.Context) error { return providerFailure }},
+		time.Now,
+	)
+	response := perform(handler, http.MethodGet, "/health/ready", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("readiness = %d: %s", response.Code, response.Body.String())
+	}
+	assertReadinessBody(t, response, "degraded", map[string]string{
+		"runtime": "ready", "database": "ready",
+		"inference.embedding": "misconfigured: provider-rejected (HTTP 400)",
+	})
+	for _, sentinel := range []string{"API_KEY=secret", "credential@example.invalid", "private Memory"} {
+		if strings.Contains(response.Body.String(), sentinel) {
+			t.Fatalf("readiness leaked provider failure sentinel %q", sentinel)
+		}
+	}
+}
+
+func TestApplicationReadinessRedactsPlainConfigurationErrors(t *testing.T) {
+	_, handler := readinessTestApplication(
+		t,
+		func(context.Context) error { return nil },
+		assembledDependencies{embeddingReadiness: func(context.Context) error {
+			return inference.NewConfigurationError("embedding-model", "API_KEY=secret private Memory")
+		}},
+		time.Now,
+	)
+	response := perform(handler, http.MethodGet, "/health/ready", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("readiness = %d: %s", response.Code, response.Body.String())
+	}
+	assertReadinessBody(t, response, "degraded", map[string]string{
+		"runtime": "ready", "database": "ready", "inference.embedding": "misconfigured",
+	})
+	for _, sentinel := range []string{"API_KEY=secret", "private Memory"} {
+		if strings.Contains(response.Body.String(), sentinel) {
+			t.Fatalf("readiness leaked configuration sentinel %q", sentinel)
+		}
+	}
+}
+
+type recordingEmbeddingProviderFactory struct {
+	transport inference.EmbeddingTransport
+}
+
+func (f recordingEmbeddingProviderFactory) TextModel(string) (inference.TextModel, error) {
+	return nil, errors.New("generation model was not expected")
+}
+
+func (f recordingEmbeddingProviderFactory) EmbeddingTransport(string) (inference.EmbeddingTransport, error) {
+	return f.transport, nil
+}
+
+type recordingEmbeddingTransport struct {
+	calls   int
+	request inference.EmbeddingRequest
+}
+
+func (t *recordingEmbeddingTransport) Embed(
+	_ context.Context,
+	request inference.EmbeddingRequest,
+) (inference.ProviderEmbeddingResult, error) {
+	t.calls++
+	t.request = request
+	vectors := make([][]float64, len(request.Inputs()))
+	for index := range vectors {
+		vectors[index] = make([]float64, request.DimensionCount())
+		vectors[index][0] = 1
+	}
+	return inference.NewProviderEmbeddingResult(
+		request.Inputs(), request.InputType(), vectors, inference.Usage{},
+	)
 }
 
 func readinessTestApplication(
