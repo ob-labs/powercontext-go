@@ -165,6 +165,9 @@ func (p *pickleParser) markTuple() error {
 	}
 	mark := p.marks[len(p.marks)-1]
 	p.marks = p.marks[:len(p.marks)-1]
+	if mark > len(p.stack) {
+		return invalidState("Pickle tuple mark is outside the stack")
+	}
 	value := append(pickleTuple(nil), p.stack[mark:]...)
 	p.stack = p.stack[:mark]
 	p.push(value)
@@ -177,7 +180,7 @@ func (p *pickleParser) setItems() error {
 	}
 	mark := p.marks[len(p.marks)-1]
 	p.marks = p.marks[:len(p.marks)-1]
-	if mark < 1 || (len(p.stack)-mark)%2 != 0 {
+	if mark < 1 || mark > len(p.stack) || (len(p.stack)-mark)%2 != 0 {
 		return invalidState("Pickle SETITEMS operands differ")
 	}
 	target, ok := p.stack[mark-1].(map[string]any)
