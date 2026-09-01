@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "generators": [
+    {
+      "name": "openapi-go-client",
+      "command": "go run ./tools/api-generate",
+      "inputs": ["openapi/powercontext.yaml"],
+      "outputs": ["api/v1/oas_schemas_gen.go", "client/invoker_gen.go"],
+      "evidence": ["tools/generated-consumers/main_test.go#func TestOpenAPIGeneratorProducesGoldenBuildableConsumer("]
+    },
+    {
+      "name": "mcp-schema",
+      "command": "go run ./tools/mcp-schema-generate",
+      "inputs": ["openapi/powercontext.yaml"],
+      "outputs": ["internal/mcpapi/schemas_gen.go"],
+      "evidence": ["tools/generated-consumers/main_test.go#func TestMCPSchemaGeneratorProducesGoldenBuildableConsumer("]
+    },
+    {
+      "name": "traceability",
+      "command": "go run ./tools/traceability-generate",
+      "inputs": ["test/conformance/testdata/python-v0.0.2/manifest.json", "test/conformance/traceability-rules.json"],
+      "outputs": ["test/conformance/traceability.json"],
+      "evidence": ["tools/generated-consumers/main_test.go#func TestTraceabilityGeneratorProducesGoldenConsumableTable("]
+    },
+    {
+      "name": "frozen-oracle-fixture",
+      "command": "go run ./tools/fixture-generate",
+      "inputs": ["test/conformance/python_oracle_fixture.py"],
+      "outputs": ["test/conformance/testdata/python-v0.0.2/manifest.json"],
+      "evidence": ["tools/release/workflow_test.go#func TestFrozenOracleGeneratorsUseTemporaryGoldenOutput("]
+    },
+    {
+      "name": "parity-inventory",
+      "command": "go run ./tools/parity-inventory-generate",
+      "inputs": ["test/conformance/parity-contract.json", "test/conformance/parity-inventory-rules.json"],
+      "outputs": ["test/conformance/parity-inventory.json"],
+      "evidence": ["tools/release/workflow_test.go#go run ./tools/parity-inventory-generate"]
+    },
+    {
+      "name": "dsh-operations",
+      "command": "node scripts/gen-operations.mjs",
+      "inputs": ["integrations/dsh/plugins/powercontext/openapi/powercontext.yaml", "integrations/dsh/plugins/powercontext/scripts/gen-operations.mjs"],
+      "outputs": ["integrations/dsh/plugins/powercontext/src/operations.generated.ts"],
+      "evidence": ["integrations/dsh/plugins/powercontext/tests/gen-check.spec.ts#it('writes and checks a fresh generated table through the public CLI'"]
+    }
+  ]
+}
