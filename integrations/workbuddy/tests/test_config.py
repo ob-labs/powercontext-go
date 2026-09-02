@@ -61,3 +61,40 @@ def test_config_uses_credential_free_file_and_runtime_authorization_environment(
     assert configuration.authorization == "Bearer test-token"
     assert configuration.authorization_environment == "WORKBUDDY_TOKEN"
     assert "test-token" not in configuration_path.read_text(encoding="utf-8")
+
+
+def test_config_merges_runtime_hook_controls_without_overriding_persisted_connection(tmp_path: Path) -> None:
+    settings_module = load_config_module()
+    configuration_path = tmp_path / "powercontext.json"
+    configuration_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "server_url": "http://127.0.0.1:8000",
+                "scope_mode": "project",
+                "authorization_environment": "WORKBUDDY_TOKEN",
+                "request_timeout_seconds": 1.5,
+                "request_budget_seconds": 3.0,
+                "prepare_max_bytes": 8192,
+                "source_max_bytes": 16384,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    configuration = settings_module.load_settings(
+        configuration_path,
+        environment={
+            "WORKBUDDY_TOKEN": "Bearer test-token",
+            "POWERCONTEXT_WORKBUDDY_SCOPE_ID": "project:workbuddy-service-chain",
+            "POWERCONTEXT_WORKBUDDY_CAPTURE_PROMPTS": "false",
+            "POWERCONTEXT_WORKBUDDY_FLUSH_ON_CAPTURE": "true",
+            "POWERCONTEXT_WORKBUDDY_FLUSH_MAX_CALLS": "2",
+        },
+    )
+
+    assert configuration.server_url == "http://127.0.0.1:8000"
+    assert configuration.scope_id == "project:workbuddy-service-chain"
+    assert configuration.capture_prompts is False
+    assert configuration.flush_on_capture is True
+    assert configuration.flush_max_calls == 2

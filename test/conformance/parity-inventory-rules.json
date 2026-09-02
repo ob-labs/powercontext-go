@@ -467,7 +467,14 @@
     },
     "tests/e2e/test_workbuddy_service_chain.py": {
       "mode": "cross-layer",
-      "reason": "End-to-end chain crossing the WorkBuddy hook and the shared MCP service configuration."
+      "reason": "End-to-end chain crossing the WorkBuddy hook and the shared MCP service configuration.",
+      "cases": {
+        "test_workbuddy_hook_and_mcp_share_one_service_configuration": {
+          "evidence": [
+            "go:test/e2e/workbuddy_service_chain_test.go#TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration"
+          ]
+        }
+      }
     },
     "tests/integrations/test_hermes_provider.py": {
       "mode": "retained-host",

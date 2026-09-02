@@ -332,6 +332,11 @@ source / artifact / trigger / inference
   instead of falling back to legacy environment configuration. Verify through
   the host hook entrypoint that invalid persisted configuration emits no
   recalled context.
+- When an installed host adapter reads a persisted connection configuration,
+  merge only its explicitly runtime-owned scope and capture/flush controls from
+  the environment; do not replace the persisted endpoint, credential reference,
+  scope mode, or request limits. Verify a captured prompt is flushed, recalled,
+  and searchable through the configured Server and MCP endpoint.
 - When a documentation contract test extracts executable shell commands, stop
   parsing at a shell comment before deciding that a command exists. Verify a
   fully commented command cannot satisfy executable-documentation evidence and
