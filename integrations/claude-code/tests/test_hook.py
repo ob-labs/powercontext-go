@@ -443,7 +443,7 @@ def test_http_failures_are_non_blocking_and_content_free(
     assert "secret" not in errors.getvalue()
 
 
-def test_unknown_schema_and_oversized_content_are_not_injected(
+def test_unknown_schema_is_not_injected(
     hook_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -462,10 +462,13 @@ def test_unknown_schema_and_oversized_content_are_not_injected(
         )
         is None
     )
-    with pytest.raises(hook_module._InvalidResponseError):
-        hook_module._validate_prepared_context(_prepared("x" * 8_001))
     assert json.loads(errors.getvalue())["outcome"] == "invalid_response"
     assert "secret" not in errors.getvalue()
+
+
+def test_oversized_prepared_context_is_rejected(hook_module: ModuleType) -> None:
+    with pytest.raises(hook_module._InvalidResponseError):
+        hook_module._validate_prepared_context(_prepared("x" * 8_001))
 
 
 @pytest.mark.parametrize(

@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 773,
-  "pending_case_count": 39,
+  "mapped_case_count": 774,
+  "pending_case_count": 38,
   "entries": [
     {
       "python": {
@@ -4114,8 +4114,15 @@
         "line": 408
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/claude-code/tests/test_hook.py",
+          "test": "test_unknown_schema_is_not_injected"
+        }
+      ]
     },
     {
       "python": {
