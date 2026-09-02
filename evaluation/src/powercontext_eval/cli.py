@@ -358,15 +358,25 @@ def baseline_create(
     source_arm: str = typer.Option(..., "--source-arm"),
     name: str = typer.Option(..., "--name"),
     idempotency_key: str = typer.Option(..., "--idempotency-key"),
-    expected_report_revision: int = typer.Option(
-        0,
+    expected_report_revision: int | None = typer.Option(
+        None,
         "--expected-report-revision",
-        help="Report revision from GET /api/batches/{id}/report; prevents stale snapshots.",
+        help="Report revision from GET /api/batches/{id}/report; auto-fetched when omitted.",
     ),
 ) -> None:
     """Create an immutable baseline from a completed batch arm."""
 
     from powercontext_eval.web.baselines import BaselineCreate
+
+    if expected_report_revision is None:
+        report_endpoint = _api_endpoint(
+            console_url,
+            f"/api/batches/{quote(source_batch_id, safe='')}/report",
+        )
+        report = _http_request("GET", report_endpoint)
+        if not isinstance(report, dict) or "report_revision" not in report:
+            raise typer.BadParameter("Could not determine report revision from the batch.")
+        expected_report_revision = report["report_revision"]
 
     try:
         request = BaselineCreate(
@@ -442,17 +452,35 @@ def baseline_select(
     baseline_id: str = typer.Option(..., "--baseline-id"),
     current_arm: str = typer.Option(..., "--current-arm"),
 ) -> None:
-    """Select a baseline for comparison with a batch."""
+    """Select a baseline for comparison with a batch (appends to existing selections)."""
 
     from powercontext_eval.web.baselines import BaselineSelection, BaselineSelectionUpdate
 
+    endpoint = _api_endpoint(console_url, f"/api/batches/{quote(batch_id, safe='')}/baseline-selections")
+
+    # Read existing selections so we append rather than replace.
+    existing = _http_request("GET", endpoint)
+    existing_selections: list[dict[str, str]] = existing if isinstance(existing, list) else []
+
+    new_selection = {"baseline_id": baseline_id, "current_arm": current_arm}
+    merged = existing_selections + [new_selection]
+
+    # Deduplicate by (baseline_id, current_arm) keeping last occurrence.
+    seen: set[tuple[str, str]] = set()
+    deduped: list[dict[str, str]] = []
+    for sel in reversed(merged):
+        key = (sel["baseline_id"], sel["current_arm"])
+        if key not in seen:
+            seen.add(key)
+            deduped.append(sel)
+    deduped.reverse()
+
     try:
         update = BaselineSelectionUpdate(
-            selections=[BaselineSelection(baseline_id=baseline_id, current_arm=current_arm)],
+            selections=[BaselineSelection(**sel) for sel in deduped],
         )
     except ValidationError:
         raise typer.BadParameter("Invalid baseline selection.") from None
-    endpoint = _api_endpoint(console_url, f"/api/batches/{quote(batch_id, safe='')}/baseline-selections")
     payload = _http_request("PUT", endpoint, update.model_dump_json().encode("utf-8"))
     typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
