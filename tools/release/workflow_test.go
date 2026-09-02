@@ -149,7 +149,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"run: make docs-build", "actions/deploy-pages@",
 		},
 		"release.yml": {
-			"name: Release", "types: [published]", "release-verify:", "deploy-docs:",
+			"name: Release", "push:", "tags:", "workflow_dispatch:", "release-verify:", "deploy-docs:",
 			"uses: ./.github/workflows/release-verify.yml", "uses: ./.github/workflows/deploy-docs.yml",
 		},
 	}
