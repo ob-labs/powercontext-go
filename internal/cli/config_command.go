@@ -17,7 +17,6 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -28,7 +27,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/ob-labs/powercontext-go/server"
 )
@@ -68,21 +66,25 @@ func newConfigInitCommand(state *commandState) *cobra.Command {
 			if exists && !force {
 				return usageError(errors.New("configuration file already exists; use --force to replace the managed block"))
 			}
-			values, err := defaultConfigEnvironment(nonInteractive)
-			if err != nil {
-				return err
+			config := defaultProviderAwareConfig()
+			if !nonInteractive {
+				config, err = collectProviderAwareConfig(command.InOrStdin(), state.stderr)
+				if err != nil {
+					return usageError(err)
+				}
 			}
-			credential, err := promptConfigCredential(command.InOrStdin(), state.stderr, nonInteractive)
-			if err != nil {
-				return err
+			if validationErr := validateProviderAwareConfig(config, !nonInteractive); validationErr != nil {
+				return usageError(validationErr)
 			}
-			if credential != "" {
-				values["OPENROUTER_API_KEY"] = credential
+			documentBlock, renderErr := renderProviderAwareConfigBlock(config)
+			if renderErr != nil {
+				return usageError(renderErr)
 			}
-			document, err := updateConfigDocument(content, values)
-			if err != nil {
-				return usageError(err)
+			document, documentErr := updateConfigDocument(content, providerAwareManagedEnvironment(config))
+			if documentErr != nil {
+				return usageError(documentErr)
 			}
+			document = replaceConfigManagedBlock(document, documentBlock)
 			if writeErr := writeFileAtomically(path, []byte(document), 0o600); writeErr != nil {
 				return errors.New("cannot write configuration file")
 			}
@@ -158,6 +160,15 @@ func newConfigValidateCommand(state *commandState) *cobra.Command {
 			if persistenceErr := validateConfigPersistence(values); persistenceErr != nil {
 				return usageError(persistenceErr)
 			}
+			config, configErr := providerAwareConfigFromDocument(content, values)
+			if configErr != nil {
+				return usageError(configErr)
+			}
+			if config != nil {
+				if providerErr := validateProviderAwareConfig(*config, true); providerErr != nil {
+					return usageError(providerErr)
+				}
+			}
 			if serverValidationErr := validateServerEnvironment(values); serverValidationErr != nil {
 				return usageError(serverValidationErr)
 			}
@@ -177,48 +188,6 @@ func configOutputPath(value string) (string, error) {
 		return "", errors.New("configuration output path must not be blank")
 	}
 	return filepath.Abs(value)
-}
-
-func defaultConfigEnvironment(_ bool) (map[string]string, error) {
-	defaults, err := server.DefaultConfig()
-	if err != nil {
-		return nil, err
-	}
-	return map[string]string{
-		"POWERCONTEXT_SERVER_HTTP_HOST":                   defaults.HTTP.Host,
-		"POWERCONTEXT_SERVER_HTTP_PORT":                   strconv.Itoa(defaults.HTTP.Port),
-		"POWERCONTEXT_SERVER_MCP_ENABLED":                 strconv.FormatBool(defaults.MCP.Enabled),
-		"POWERCONTEXT_SERVER_MCP_PATH":                    defaults.MCP.Path,
-		"POWERCONTEXT_SERVER_AUTH_ENABLED":                strconv.FormatBool(defaults.Auth.Enabled),
-		"POWERCONTEXT_SERVER_DATABASE_KIND":               "sqlite",
-		"POWERCONTEXT_SERVER_DATABASE_URL":                defaults.Database.SQLite.URL,
-		"POWERCONTEXT_SERVER_RUNTIME_SOURCE_WINDOW_LIMIT": strconv.FormatInt(defaults.Runtime.SourceWindowLimit, 10),
-		"OPENROUTER_API_KEY":                              "",
-	}, nil
-}
-
-func promptConfigCredential(input io.Reader, output io.Writer, nonInteractive bool) (string, error) {
-	if nonInteractive {
-		return "", nil
-	}
-	file, ok := input.(*os.File)
-	if !ok || !term.IsTerminal(int(file.Fd())) {
-		return "", nil
-	}
-	if output == nil {
-		output = os.Stderr
-	}
-	if _, err := fmt.Fprint(output, "OPENROUTER_API_KEY: "); err != nil {
-		return "", err
-	}
-	value, err := term.ReadPassword(int(file.Fd()))
-	if _, writeErr := fmt.Fprintln(output); writeErr != nil && err == nil {
-		err = writeErr
-	}
-	if err != nil {
-		return "", errors.New("cannot read credential input")
-	}
-	return strings.TrimSpace(string(value)), nil
 }
 
 func readConfigDocument(path string) (string, bool, error) {

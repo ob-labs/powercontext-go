@@ -20,8 +20,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,6 +35,13 @@ import (
 
 type serverCommandRunner func(context.Context, *commandState, server.ProcessConfig) error
 
+var serverEnvironmentScopeMu sync.Mutex
+
+type serverEnvironmentValue struct {
+	value   string
+	present bool
+}
+
 func newServerCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{Use: "server", Short: "Run a configured PowerContext service."}
 	command.AddCommand(newServerRunCommand(state))
@@ -40,45 +49,122 @@ func newServerCommand(state *commandState) *cobra.Command {
 }
 
 func newServerRunCommand(state *commandState) *cobra.Command {
+	var envFile string
 	var host string
 	var port int
 	command := &cobra.Command{
 		Use: "run", Short: "Run the HTTP and MCP service in the foreground.", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			override := server.HTTPConfigOverride{}
-			if command.Flags().Changed("host") {
-				trimmedHost := strings.TrimSpace(host)
-				if trimmedHost == "" || host != trimmedHost {
-					return usageError(errors.New("server: --host must be a non-empty trimmed value"))
+			run := func() error {
+				override := server.HTTPConfigOverride{}
+				if command.Flags().Changed("host") {
+					trimmedHost := strings.TrimSpace(host)
+					if trimmedHost == "" || host != trimmedHost {
+						return usageError(errors.New("server: --host must be a non-empty trimmed value"))
+					}
+					override.Host = new(host)
 				}
-				override.Host = new(host)
+				if command.Flags().Changed("port") {
+					override.Port = new(port)
+				}
+				config, err := server.LoadConfigWithHTTPOverride(override)
+				if err != nil {
+					if _, ok := errors.AsType[*server.UnauthenticatedNonLoopbackBindError](err); ok {
+						return usageError(err)
+					}
+					if _, ok := errors.AsType[*server.AuthenticationTokenRequiredError](err); ok {
+						return usageError(fmt.Errorf(
+							"server: set POWERCONTEXT_SERVER_AUTH_TOKEN or POWERCONTEXT_SERVER_AUTH_ENABLED=false: %w",
+							err,
+						))
+					}
+					return err
+				}
+				runner := state.serverRun
+				if runner == nil {
+					runner = runServer
+				}
+				return runner(command.Context(), state, config)
 			}
-			if command.Flags().Changed("port") {
-				override.Port = new(port)
+			if !command.Flags().Changed("env-file") {
+				return run()
 			}
-			config, err := server.LoadConfigWithHTTPOverride(override)
+			values, err := loadServerEnvironmentFile(envFile)
 			if err != nil {
-				if _, ok := errors.AsType[*server.UnauthenticatedNonLoopbackBindError](err); ok {
-					return usageError(err)
-				}
-				if _, ok := errors.AsType[*server.AuthenticationTokenRequiredError](err); ok {
-					return usageError(fmt.Errorf(
-						"server: set POWERCONTEXT_SERVER_AUTH_TOKEN or POWERCONTEXT_SERVER_AUTH_ENABLED=false: %w",
-						err,
-					))
-				}
 				return err
 			}
-			runner := state.serverRun
-			if runner == nil {
-				runner = runServer
-			}
-			return runner(command.Context(), state, config)
+			return withServerEnvironment(values, run)
 		},
 	}
+	command.Flags().StringVar(&envFile, "env-file", "", "Load Server and provider settings from this environment file.")
 	command.Flags().StringVar(&host, "host", "", "Address to bind.")
 	command.Flags().IntVar(&port, "port", 0, "Port to bind.")
 	return command
+}
+
+func loadServerEnvironmentFile(path string) (map[string]string, error) {
+	content, exists, err := readConfigDocument(path)
+	if err != nil {
+		return nil, usageError(fmt.Errorf("server: invalid --env-file: %w", err))
+	}
+	if !exists {
+		return nil, usageError(errors.New("server: --env-file does not exist"))
+	}
+	values, err := parseConfigEnvironment(content)
+	if err != nil {
+		return nil, usageError(fmt.Errorf("server: invalid --env-file: %w", err))
+	}
+	return values, nil
+}
+
+func withServerEnvironment(values map[string]string, run func() error) (err error) {
+	serverEnvironmentScopeMu.Lock()
+	defer serverEnvironmentScopeMu.Unlock()
+
+	loadedBefore := make(map[string]serverEnvironmentValue, len(values))
+	for name := range values {
+		value, present := os.LookupEnv(name)
+		loadedBefore[name] = serverEnvironmentValue{value: value, present: present}
+	}
+	serverBefore := make(map[string]string)
+	for _, item := range os.Environ() {
+		name, value, found := strings.Cut(item, "=")
+		if found && strings.HasPrefix(name, "POWERCONTEXT_SERVER_") {
+			serverBefore[name] = value
+		}
+	}
+	defer func() {
+		err = errors.Join(err, restoreServerEnvironment(loadedBefore, serverBefore))
+	}()
+
+	for name := range serverBefore {
+		if unsetErr := os.Unsetenv(name); unsetErr != nil {
+			return fmt.Errorf("server: clear environment: %w", unsetErr)
+		}
+	}
+	for name, value := range values {
+		if setErr := os.Setenv(name, value); setErr != nil {
+			return fmt.Errorf("server: load environment: %w", setErr)
+		}
+	}
+	return run()
+}
+
+func restoreServerEnvironment(loadedBefore map[string]serverEnvironmentValue, serverBefore map[string]string) error {
+	var err error
+	for name, original := range loadedBefore {
+		if original.present {
+			err = errors.Join(err, os.Setenv(name, original.value))
+		} else {
+			err = errors.Join(err, os.Unsetenv(name))
+		}
+	}
+	for name, value := range serverBefore {
+		if _, loaded := loadedBefore[name]; !loaded {
+			err = errors.Join(err, os.Setenv(name, value))
+		}
+	}
+	return err
 }
 
 func runServer(parent context.Context, state *commandState, config server.ProcessConfig) error {

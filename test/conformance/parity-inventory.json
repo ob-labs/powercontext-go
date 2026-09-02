@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 723,
-  "pending_case_count": 89,
+  "mapped_case_count": 755,
+  "pending_case_count": 57,
   "entries": [
     {
       "python": {
@@ -7919,8 +7919,15 @@
         "line": 232
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/python_contract_test.go",
+          "test": "TestServerCommandEnvFileOverridesStaleEnvironmentAndRestores"
+        }
+      ]
     },
     {
       "python": {
@@ -7929,8 +7936,15 @@
         "line": 269
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/python_contract_test.go",
+          "test": "TestServerCommandEnvFileClearsMissingServerValues"
+        }
+      ]
     },
     {
       "python": {
@@ -7939,8 +7953,15 @@
         "line": 293
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/python_contract_test.go",
+          "test": "TestServerCommandEnvFileFailurePreventsRunner"
+        }
+      ]
     },
     {
       "python": {
@@ -8588,8 +8609,15 @@
         "line": 26
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitCollectsOpenAIProtocolAndRedactsCredential"
+        }
+      ]
     },
     {
       "python": {
@@ -8598,8 +8626,15 @@
         "line": 57
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigAllowsSupportedModelsAndExplicitEnvironment"
+        }
+      ]
     },
     {
       "python": {
@@ -8608,8 +8643,15 @@
         "line": 81
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigRejectsCredentialBearingBaseURL"
+        }
+      ]
     },
     {
       "python": {
@@ -8624,7 +8666,7 @@
         {
           "kind": "go",
           "file": "internal/cli/config_command_test.go",
-          "test": "TestConfigInitShowAndValidateManageOneCredentialFreeEnvironmentFile"
+          "test": "TestConfigInitShowAndValidateManageOneProviderEnvironmentFile"
         }
       ]
     },
@@ -8635,8 +8677,15 @@
         "line": 123
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitRejectsServerInvalidConfigurationBeforeWriting"
+        }
+      ]
     },
     {
       "python": {
@@ -8645,8 +8694,15 @@
         "line": 138
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigRejectsUnknownProviderBeforeWriting"
+        }
+      ]
     },
     {
       "python": {
@@ -8672,8 +8728,15 @@
         "line": 177
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigTemplateAllowsBlankCredentialButStrictValidationRejectsIt"
+        }
+      ]
     },
     {
       "python": {
@@ -8682,8 +8745,15 @@
         "line": 192
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigDoesNotInferCredentialsFromModelPrefix"
+        }
+      ]
     },
     {
       "python": {
@@ -8692,8 +8762,15 @@
         "line": 217
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigInitRefusesToReplaceExistingEnvironmentWithoutForce"
+        }
+      ]
     },
     {
       "python": {
@@ -8702,8 +8779,15 @@
         "line": 232
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentRejectsDuplicateAssignments"
+        }
+      ]
     },
     {
       "python": {
@@ -8712,8 +8796,15 @@
         "line": 237
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigValidateReportsInvalidProviderAwareNumericValueWithoutTraceback"
+        }
+      ]
     },
     {
       "python": {
@@ -8739,8 +8830,15 @@
         "line": 267
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestProviderAwareConfigDoesNotInferCredentialsFromModelPrefix"
+        }
+      ]
     },
     {
       "python": {
@@ -8783,8 +8881,15 @@
         "line": 332
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        }
+      ]
     },
     {
       "python": {
@@ -8793,8 +8898,20 @@
         "line": 373
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        },
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRedactsRecordedCustomCredentialAndKeepsUnmarkedValue"
+        }
+      ]
     },
     {
       "python": {
@@ -8803,8 +8920,15 @@
         "line": 396
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        }
+      ]
     },
     {
       "python": {
@@ -8813,8 +8937,15 @@
         "line": 411
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_model_test.go",
+          "test": "TestCollectProviderAwareCustomConnectionMarksOnlyExplicitCredentials"
+        }
+      ]
     },
     {
       "python": {
@@ -8823,8 +8954,15 @@
         "line": 432
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestConfigShowRedactsRecordedCustomCredentialAndKeepsUnmarkedValue"
+        }
+      ]
     },
     {
       "python": {
@@ -8933,8 +9071,15 @@
         "line": 412
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/webui/skill_projection_test.go",
+          "test": "TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenScanFails"
+        }
+      ]
     },
     {
       "python": {
@@ -8943,8 +9088,15 @@
         "line": 517
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/webui/skill_projection_test.go",
+          "test": "TestDashboardSkillProjectionPublishKeepsPublishedSkillWhenDiscoveryListFails"
+        }
+      ]
     },
     {
       "python": {
@@ -9400,8 +9552,15 @@
         "line": 42
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9410,8 +9569,15 @@
         "line": 46
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9420,8 +9586,15 @@
         "line": 50
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9464,8 +9637,15 @@
         "line": 63
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9474,8 +9654,15 @@
         "line": 67
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9484,8 +9671,15 @@
         "line": 71
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9511,8 +9705,15 @@
         "line": 80
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -9606,8 +9807,15 @@
         "line": 126
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/config_command_test.go",
+          "test": "TestParseConfigEnvironmentMatchesV010EnvironmentFileContract"
+        }
+      ]
     },
     {
       "python": {
@@ -12475,8 +12683,15 @@
         "line": 234
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/runtime/scheduled_processor_test.go",
+          "test": "TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+        }
+      ]
     },
     {
       "python": {
@@ -12485,8 +12700,15 @@
         "line": 254
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/runtime_tracing_test.go",
+          "test": "TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+        }
+      ]
     },
     {
       "python": {
@@ -12495,8 +12717,15 @@
         "line": 280
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "server/runtime_tracing_test.go",
+          "test": "TestRuntimeBackgroundRootFailureStartsUnparentedChildSpans"
+        }
+      ]
     },
     {
       "python": {

@@ -221,13 +221,11 @@ func (p *pages) projectionResponse(
 	scopeID string,
 	value skill.Skill,
 ) (projectionResponse, error) {
-	var registrations []skill.Resolution
-	var err error
 	if len(p.projectionTargets) > 0 {
 		if p.projections == nil {
 			return projectionResponse{}, &endpoint.RuntimeNotReadyError{}
 		}
-		registrations, err = p.projections.ListExternalSkills(request.Context(), scopeID, true)
+		registrations, err := p.projections.ListExternalSkills(request.Context(), scopeID, true)
 		if err != nil {
 			serverlogging.LogSafely(
 				request.Context(), p.logger, slog.LevelWarn,
@@ -240,7 +238,33 @@ func (p *pages) projectionResponse(
 			)
 			registrations = nil
 		}
+		return p.projectionResponseWithRegistrations(value, registrations), nil
 	}
+	return p.projectionResponseWithRegistrations(value, nil), nil
+}
+
+func (p *pages) publishedProjectionResponse(
+	request *http.Request,
+	scopeID string,
+	value skill.Skill,
+) (projectionResponse, error) {
+	if p.projections == nil {
+		return projectionResponse{}, &endpoint.RuntimeNotReadyError{}
+	}
+	if _, err := p.projections.ScanExternalSkills(request.Context(), scopeID); err != nil {
+		return p.projectionResponseWithRegistrations(value, nil), nil
+	}
+	registrations, err := p.projections.ListExternalSkills(request.Context(), scopeID, true)
+	if err != nil {
+		return p.projectionResponseWithRegistrations(value, nil), nil
+	}
+	return p.projectionResponseWithRegistrations(value, registrations), nil
+}
+
+func (p *pages) projectionResponseWithRegistrations(
+	value skill.Skill,
+	registrations []skill.Resolution,
+) projectionResponse {
 	result := projectionResponse{
 		Artifact: wireProjectionArtifact(value.Ref()), Name: value.Content().Name(),
 		Targets: make([]projectionTargetResponse, 0, len(p.projectionTargets)),
@@ -286,7 +310,7 @@ func (p *pages) projectionResponse(
 			Discovery: discovery, ExternalSkillID: externalSkillID,
 		})
 	}
-	return result, nil
+	return result
 }
 
 func (p *pages) hasScope(scopeID string) bool {

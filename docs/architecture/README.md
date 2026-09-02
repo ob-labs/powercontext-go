@@ -20,7 +20,7 @@ powercontext-go/
 ├── client/                    typed client for all OpenAPI operations
 ├── cmd/powercontext/          single executable entrypoint
 ├── docs/                      architecture, ADRs, RFCs, release guidance
-├── evaluation/                independent long-horizon evaluation harness
+├── evaluation/                deployment-neutral Codex/SQLite evaluation control plane
 ├── inference/                 provider-neutral generation and embeddings
 ├── integrations/
 │   ├── bub/                   retained Python host adapter
@@ -31,7 +31,8 @@ powercontext-go/
 │   ├── langgraph/             retained Python LangGraph package
 │   ├── openclaw/              retained TypeScript OpenClaw memory plugin
 │   ├── opencode/              retained TypeScript OpenCode plugin
-│   └── pi/                    retained TypeScript Pi extension
+│   ├── pi/                    retained TypeScript Pi extension
+│   └── workbuddy/             retained Python WorkBuddy plugin
 ├── internal/
 │   ├── benchmark/             bounded benchmark adapters and fixtures
 │   ├── cli/                   Cobra command implementation
@@ -69,6 +70,20 @@ Top-level packages are public only when users or integrations need their types.
 Concrete technology choices stay under `internal`; process startup stays in
 `server` and `cmd`. This avoids both a Python-shaped `src` tree and a large
 catch-all infrastructure package.
+
+## Go-primary monorepo boundary
+
+The Go Server, SDK, CLI, OpenAPI contract, and SQLite path are this
+repository's primary product surface. `evaluation/` and `integrations/` remain
+maintained, licensed, and tested auxiliary monorepo assets: the former is a
+deployment-neutral Codex/SQLite evaluation control plane, while the latter
+contains host-native assets that call the Go Server over HTTP or MCP. They are
+not Go binary runtime dependencies or primary implementation languages.
+
+Before WP6 acceptance, Codex, WorkBuddy, and SQLite are the only host/database
+scope. The other retained adapters remain P3 assets with their own executable
+CI job; they are not removed or treated as WP6 evidence. seekDB and OceanBase
+remain the final P4 backend-alignment scope.
 
 ## Dependency direction
 

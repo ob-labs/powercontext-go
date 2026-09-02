@@ -1,19 +1,43 @@
 # PowerContext Go
 
-PowerContext Go requires Go 1.27.0 or newer. It preserves the frozen Python
-`v0.0.2` observable contract while using Go-native domain
-types, lifecycle ownership, concurrency, persistence, transports, and release
-packaging.
+PowerContext Go requires Go 1.27.0 or newer. Its current alignment target is
+the formal PowerContext v0.1.0 release at
+`7b736206a53a6de6f43d4b517893ee1a80e7183d`; the frozen Python v0.0.2
+snapshot remains a historical regression fixture, not the current acceptance
+target. The implementation uses Go-native domain types, lifecycle ownership,
+concurrency, persistence, transports, and release packaging.
 
 ```text
 module github.com/ob-labs/powercontext-go
-oracle 3a6cb0151670eaff7dc0293466edd673124e80da
+parity target powercontext-v0.1.0 7b736206a53a6de6f43d4b517893ee1a80e7183d
+historical fixture python-v0.0.2 3a6cb0151670eaff7dc0293466edd673124e80da
 ```
 
 The HTTP source of truth is [`openapi/powercontext.yaml`](openapi/powercontext.yaml).
 Generated code under `api/v1` and generated operation tables are never edited
-by hand. Compatibility evidence lives under `test/conformance`: all 622 frozen
-Python test cases are inventoried with resolvable Go or retained-host evidence.
+by hand. Compatibility evidence lives under `test/conformance`: the v0.1.0
+release inventory contains 812 Python test cases in 132 files, alongside the
+immutable historical v0.0.2 fixture. At this commit, the generated inventory
+maps 749 release-target cases to case-specific evidence and records 63 as
+pending; the pending set is not a compatibility claim.
+
+## Alignment and support matrix
+
+This table describes the currently implemented and evidenced boundary. The
+upstream Python release is the alignment target; it is not a PowerContext Go
+binary release.
+
+| Surface | Current evidence | Pre-WP6 acceptance boundary |
+| --- | --- | --- |
+| Upstream release identity | `powercontext-v0.1.0` at `7b736206a53a6de6f43d4b517893ee1a80e7183d`; the generated inventory covers 812 cases in 132 files, with 749 mapped and 63 pending. | The exact target, distribution digests, fixtures, and traceability rules are checked by the release-contract workflow. |
+| Go Server, SDK, CLI, and OpenAPI | Go-native implementation with `openapi/powercontext.yaml` as the authoritative HTTP contract. | SQLite is the only database accepted before WP6. |
+| Codex and WorkBuddy | Installed integrations call the running Go Server through HTTP or MCP; their service-chain evidence is a required `Pre-WP6 host adapters` check. | These are the only host integrations counted toward WP6 acceptance. |
+| Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is WP5 evidence, not evidence for every retained host adapter. |
+| Retained adapters | Other maintained adapters retain their own executable `Post-WP6 retained host adapters` CI evidence. | Bub, Claude Code, DSH, Hermes, LangGraph, OpenClaw, OpenCode, and Pi are P3 work and are not WP6 acceptance evidence. |
+| seekDB and OceanBase | Existing code and jobs remain useful backend-plan evidence. | Feature parity, migrations, packaging, license/SBOM work, and release reconciliation are final P4 work. |
+
+See [`docs/release/INSTALL.md`](docs/release/INSTALL.md) for the exact release
+identity, configuration, upgrade, transport, and host-operation contract.
 
 ## Repository shape
 
@@ -31,9 +55,13 @@ Python test cases are inventoried with resolvable Go or retained-host evidence.
   observability. Native seekDB and sqlite-vec ownership lives below
   `internal/sqlstore`.
 
-- `integrations` contains host-native adapters for Codex, Claude Code, Bub,
-  DeepSeek Harness, Hermes, LangGraph, OpenClaw, OpenCode, and Pi. They
-  communicate only with the Go Server.
+- `integrations` contains maintained host-native adapters. They communicate
+  only with the Go Server and are auxiliary monorepo assets rather than Go
+  binary implementation languages. Before WP6 acceptance, the primary host
+  scope is Codex and WorkBuddy only; all other retained hosts are P3 work.
+- `evaluation` contains the deployment-neutral Codex/SQLite evaluation control
+  plane. It is maintained and tested in this repository, but is neither
+  embedded in the Go binary nor a Go release-runtime requirement.
 - `test` contains conformance, differential, and process-level suites; `tools`
   contains generators and release tooling.
 - `benchmark/locomo` contains operator-facing LoCoMo configuration and result
@@ -50,6 +78,13 @@ stability before the first release.
 There is intentionally no `common`, `utils`, generic repository layer, or DI
 container. Shared infrastructure exists only where it has one clear owner—for
 example, privacy-safe `log/slog` setup under `internal/observability/logging`.
+
+This is a Go-primary monorepo: Python and TypeScript host assets and the
+evaluation control plane remain tracked, licensed, and tested, but GitHub
+language statistics deliberately exclude them from the primary Go product
+classification. The pre-WP6 acceptance matrix is Codex, WorkBuddy, and
+SQLite. Retained host adapters expand after WP6; seekDB and OceanBase remain
+the final backend-alignment scope.
 
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the full
 directory map and dependency rules.
@@ -87,8 +122,8 @@ Run `powercontext config init --non-interactive` to create a managed local
 environment file. Inspect it without disclosing credential values with
 `powercontext config show --env-file .env`, and validate syntax, persistent
 storage paths, and Server settings with `powercontext config validate --env-file .env`.
-The same installation guide documents the optional native seekDB profile;
-SQLite remains the zero-dependency default.
+SQLite remains the zero-dependency default. seekDB and OceanBase installation
+and release guidance remain deferred to the final P4 backend-alignment scope.
 
 Plain HTTP is trusted only on loopback (`localhost`, `::1`, or any address in
 `127.0.0.0/8`). The Server refuses an unauthenticated non-loopback bind by

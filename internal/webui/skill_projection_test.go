@@ -332,6 +332,37 @@ func (o *projectionOperations) ScanExternalSkills(ctx context.Context, _ string)
 	return scan, nil
 }
 
+func projectionPublishFixture(t *testing.T) (*http.ServeMux, *projectionOperations, map[string]any) {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), ".agents", "skills")
+	target, err := skill.NewAgentSkillTarget("codex-project", skill.CodexAgent, skill.ProjectScope, root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := skill.NewAgentSkillProvider("workstation-1", []skill.AgentSkillTarget{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := projectionOperationsFixture(t, provider)
+	operations.root = root
+	mux := http.NewServeMux()
+	if err := Mount(mux, Options{
+		DashboardEnabled:  true,
+		Scopes:            []Scope{{ScopeID: "project:example", DisplayName: "Example"}},
+		AgentSkillTargets: []skill.AgentSkillTarget{target},
+		SkillProjections:  operations,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return mux, operations, map[string]any{
+		"scope_id": "project:example", "candidate_id": operations.candidate.ID(), "target_id": target.ID(),
+		"artifact": map[string]any{
+			"family": operations.managed.Ref().Family(), "artifact_id": operations.managed.Ref().ID(),
+			"revision": operations.managed.Ref().Revision(),
+		},
+	}
+}
+
 func requestJSON(t *testing.T, handler http.Handler, target string, value any) *httptest.ResponseRecorder {
 	t.Helper()
 	payload, err := json.Marshal(value)

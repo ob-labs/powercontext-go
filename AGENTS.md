@@ -376,3 +376,24 @@ source / artifact / trigger / inference
   creating any projection DDL. Verify a fresh over-limit profile returns a
   typed, redacted error that states both limits, creates no projection, and
   leaves the extension's raw diagnostic unexposed.
+- When a durable publication succeeds but its post-publication discovery refresh
+  fails, preserve the successful publication result and report only a bounded
+  stale-discovery state. Verify scan and registry-read failures leave the
+  published package intact, return success, and never expose discovery errors.
+- When a configuration generator records provider credentials, derive every
+  display redaction from the explicit managed credential metadata rather than
+  inferring names from a model prefix. Verify marked custom values never appear
+  in `show`, unmarked operational values remain visible, and validation refuses
+  a required recorded credential before writing a runnable configuration. When
+  generation and embedding share a marked variable, deduplicate the metadata
+  in first-presented order before strict validation and verify the generated
+  configuration remains runnable.
+- When a CI job must retain independently observable host-adapter tests, run
+  each adapter in a separate step, continue later evidence-producing steps
+  after an earlier adapter failure, and record every individual step outcome
+  in bounded diagnostics. Verify a workflow contract test rejects a merged
+  step, a missing failure-continuation guard, or a missing adapter outcome.
+- When a background tracing root cannot start, preserve cancellation and value
+  context while explicitly clearing the ambient trace parent before later
+  stages begin. Verify an injected root-start failure leaves child spans
+  unparented and on a different trace ID from the ambient operation.

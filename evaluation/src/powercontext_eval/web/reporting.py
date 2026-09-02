@@ -16,11 +16,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
@@ -29,10 +30,23 @@ from pydantic import ValidationError
 
 from powercontext_eval.artifacts import ArmState
 from powercontext_eval.benchmarks.swebench_pro.adapter import DATASET_REVISION, HARNESS_COMMIT, SweBenchProInstance
+from powercontext_eval.models import Arm
 from powercontext_eval.report import ArmReport, ReportBundle, TestGroupReport
+from powercontext_eval.web.baselines import (
+    BaselineComparison,
+    BaselineCompatibility,
+    BaselineItemRecord,
+    BaselineRecord,
+    BaselineSnapshot,
+    ComparisonCoverage,
+    CompatibilityStatus,
+    HistoricalResolutionComparison,
+    HistoricalTokenComparison,
+)
 from powercontext_eval.web.batches import (
     BatchRecord,
     BatchReportResponse,
+    BatchStatus,
     BatchTaskDetailResponse,
     BatchTaskItem,
     BatchTaskPage,
@@ -115,6 +129,10 @@ class InvalidReportArtifact(ReportingError):
 
     def __init__(self) -> None:
         super().__init__("Evaluation report artifacts are invalid")
+
+
+class StaleReportRevision(ReportingError):
+    """The report changed after the operator chose to save it."""
 
 
 def _directory_flags() -> int:
@@ -622,6 +640,226 @@ def load_batch_report(
         ),
         revisions=revisions,
         configuration=configuration,
+    )
+
+
+def instance_set_digest(tasks: Sequence[TaskRecord]) -> str:
+    """Return a stable identity for the exact ordered benchmark instance set."""
+
+    instance_ids = [task.instance_id for task in tasks]
+    if any(instance_id is None for instance_id in instance_ids):
+        raise InvalidReportArtifact
+    payload = json.dumps(instance_ids, ensure_ascii=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def create_baseline_snapshot(
+    batch: BatchRecord,
+    tasks: Sequence[TaskRecord],
+    *,
+    arm: Arm,
+    expected_report_revision: int,
+    runs_root: Path,
+    catalog: BenchmarkCatalog,
+) -> BaselineSnapshot:
+    """Materialize immutable comparison facts for one exact completed batch arm."""
+
+    if batch.status is not BatchStatus.COMPLETED:
+        raise ValueError("Only completed batches can be saved as baselines")
+    report = load_batch_report(batch, tasks, runs_root=runs_root, catalog=catalog)
+    if report.report_revision != expected_report_revision:
+        raise StaleReportRevision
+    items: list[BaselineItemRecord] = []
+    resolved_tasks = 0
+    for task in tasks:
+        resolved: bool | None = None
+        input_tokens: int | None = None
+        output_tokens: int | None = None
+        total_tokens: int | None = None
+        if task.status is TaskStatus.SUCCEEDED:
+            bundle = _bundle_for_task(task, runs_root)
+            arm_report = bundle.off if arm is Arm.OFF else bundle.on
+            resolved = arm_report.resolved
+            input_tokens = arm_report.metrics.input_tokens
+            output_tokens = arm_report.metrics.output_tokens
+            total_tokens = _arm_total(arm_report)
+            resolved_tasks += int(resolved)
+        if task.instance_id is None or task.source_index is None:
+            raise InvalidReportArtifact
+        items.append(
+            BaselineItemRecord(
+                baseline_id="",
+                instance_id=task.instance_id,
+                source_index=task.source_index,
+                source_task_id=task.task_id,
+                source_attempt_id=task.attempt_id,
+                status=task.status,
+                resolved=resolved,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+            )
+        )
+    dataset_revision = report.revisions.get("dataset")
+    harness_revision = report.revisions.get("harness")
+    if not dataset_revision or not harness_revision:
+        raise InvalidReportArtifact
+    return BaselineSnapshot(
+        benchmark=batch.request.benchmark,
+        task_set=batch.request.task_set,
+        instance_set_digest=instance_set_digest(tasks),
+        total_tasks=batch.total_tasks,
+        resolved_tasks=resolved_tasks,
+        execution_failures=report.execution_failures,
+        model=batch.request.model,
+        reasoning_effort=batch.request.reasoning_effort,
+        dataset_revision=dataset_revision,
+        harness_revision=harness_revision,
+        powercontext_sha=report.revisions.get("powercontext"),
+        codex_version=report.configuration.get("codex"),
+        items=tuple(items),
+    )
+
+
+def baseline_compatibility(
+    baseline: BaselineRecord,
+    batch: BatchRecord,
+    tasks: Sequence[TaskRecord],
+    report: BatchReportResponse,
+    *,
+    current_arm: Arm,
+) -> BaselineCompatibility:
+    """Classify comparison safety without treating the PowerContext revision as a gate."""
+
+    checks = (
+        (baseline.benchmark, batch.request.benchmark, "benchmark differs"),
+        (baseline.task_set, batch.request.task_set, "task set differs"),
+        (baseline.instance_set_digest, instance_set_digest(tasks), "instance set differs"),
+        (baseline.total_tasks, batch.total_tasks, "task count differs"),
+        (baseline.model, batch.request.model, "model differs"),
+        (baseline.reasoning_effort, batch.request.reasoning_effort, "reasoning effort differs"),
+        (baseline.dataset_revision, report.revisions.get("dataset"), "dataset revision differs"),
+        (baseline.harness_revision, report.revisions.get("harness"), "harness revision differs"),
+    )
+    hard_reasons = [reason for baseline_value, current_value, reason in checks if baseline_value != current_value]
+    if baseline.codex_version is not None and baseline.codex_version != report.configuration.get("codex"):
+        hard_reasons.append("Codex version differs")
+    if hard_reasons:
+        return BaselineCompatibility(status=CompatibilityStatus.INCOMPATIBLE, reasons=tuple(hard_reasons))
+    if baseline.source_arm is not current_arm:
+        return BaselineCompatibility(status=CompatibilityStatus.WARNING, reasons=("cross-arm comparison",))
+    return BaselineCompatibility(status=CompatibilityStatus.COMPATIBLE)
+
+
+def _historical_tokens(
+    baseline_items: Sequence[BaselineItemRecord],
+    current_values: Mapping[str, int | None],
+    field: Literal["input_tokens", "output_tokens", "total_tokens"],
+) -> HistoricalTokenComparison | None:
+    baseline_values = [getattr(item, field) for item in baseline_items if getattr(item, field) is not None]
+    measured_current = [value for value in current_values.values() if value is not None]
+    if not baseline_values or not measured_current:
+        return None
+    baseline_total = sum(baseline_values)
+    current_total = sum(measured_current)
+    return HistoricalTokenComparison(
+        baseline=baseline_total,
+        current=current_total,
+        delta=current_total - baseline_total,
+        baseline_measured_tasks=len(baseline_values),
+        current_measured_tasks=len(measured_current),
+    )
+
+
+def compare_batch_to_baseline(
+    batch: BatchRecord,
+    tasks: Sequence[TaskRecord],
+    report: BatchReportResponse,
+    baseline: BaselineRecord,
+    baseline_items: Sequence[BaselineItemRecord],
+    *,
+    current_arm: Arm,
+    runs_root: Path,
+) -> BaselineComparison:
+    """Compare frozen per-instance facts without invoking the evaluation runner."""
+
+    compatibility = baseline_compatibility(baseline, batch, tasks, report, current_arm=current_arm)
+    baseline_by_instance = {item.instance_id: item for item in baseline_items}
+    current_by_instance = {task.instance_id: task for task in tasks if task.instance_id is not None}
+    matched_ids = sorted(set(baseline_by_instance) & set(current_by_instance))
+    categories: dict[
+        Literal["baseline_fail_current_pass", "baseline_pass_current_fail", "both_pass", "both_fail"], int
+    ] = {
+        "baseline_fail_current_pass": 0,
+        "baseline_pass_current_fail": 0,
+        "both_pass": 0,
+        "both_fail": 0,
+    }
+    current_resolved = 0
+    comparable = 0
+    current_failures = 0
+    baseline_failures = 0
+    current_tokens: dict[str, dict[str, int | None]] = {
+        "input_tokens": {},
+        "output_tokens": {},
+        "total_tokens": {},
+    }
+    matched_baseline_items: list[BaselineItemRecord] = []
+    for instance_id in matched_ids:
+        baseline_item = baseline_by_instance[instance_id]
+        task = current_by_instance[instance_id]
+        matched_baseline_items.append(baseline_item)
+        baseline_failures += int(baseline_item.status in _EXECUTION_FAILURE_STATES)
+        current_failures += int(task.status in _EXECUTION_FAILURE_STATES)
+        current_result: bool | None = None
+        values = {"input_tokens": None, "output_tokens": None, "total_tokens": None}
+        if task.status is TaskStatus.SUCCEEDED:
+            bundle = _bundle_for_task(task, runs_root)
+            arm_report = bundle.off if current_arm is Arm.OFF else bundle.on
+            current_result = arm_report.resolved
+            current_resolved += int(current_result)
+            values = {
+                "input_tokens": arm_report.metrics.input_tokens,
+                "output_tokens": arm_report.metrics.output_tokens,
+                "total_tokens": _arm_total(arm_report),
+            }
+        for field, value in values.items():
+            current_tokens[field][instance_id] = value
+        if baseline_item.resolved is not None and current_result is not None:
+            comparable += 1
+            if baseline_item.resolved and current_result:
+                categories["both_pass"] += 1
+            elif baseline_item.resolved:
+                categories["baseline_pass_current_fail"] += 1
+            elif current_result:
+                categories["baseline_fail_current_pass"] += 1
+            else:
+                categories["both_fail"] += 1
+    total = len(matched_ids)
+    baseline_rate = baseline.resolved_tasks / total * 100 if total else 0.0
+    current_rate = current_resolved / total * 100 if total else 0.0
+    return BaselineComparison(
+        baseline=baseline,
+        current_arm=current_arm,
+        compatibility=compatibility,
+        coverage=ComparisonCoverage(
+            matched_tasks=total,
+            comparable_tasks=comparable,
+            current_execution_failures=current_failures,
+            baseline_execution_failures=baseline_failures,
+        ),
+        resolution=HistoricalResolutionComparison(
+            baseline_resolved=baseline.resolved_tasks,
+            current_resolved=current_resolved,
+            total=total,
+            baseline_rate_percent=baseline_rate,
+            current_rate_percent=current_rate,
+            delta_points=current_rate - baseline_rate,
+        ),
+        outcome_categories=categories,
+        input_tokens=_historical_tokens(matched_baseline_items, current_tokens["input_tokens"], "input_tokens"),
+        output_tokens=_historical_tokens(matched_baseline_items, current_tokens["output_tokens"], "output_tokens"),
+        total_tokens=_historical_tokens(matched_baseline_items, current_tokens["total_tokens"], "total_tokens"),
     )
 
 

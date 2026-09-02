@@ -510,7 +510,68 @@ jobs:
           make smoke-full VERSION=ci COMMIT=${{ github.sha }} BUILD_DATE=1970-01-01T00:00:00Z
 
   host-adapters:
-    name: Host adapters
+    name: Pre-WP6 host adapters
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.12"
+          enable-cache: true
+
+      - name: Test Codex host adapter
+        id: codex_adapter
+        run: |
+          uv run --project integrations/codex/plugins/powercontext --locked --with pytest \
+            pytest integrations/codex/tests
+
+      - name: Test WorkBuddy host adapter
+        id: workbuddy_adapter
+        if: success() || failure()
+        run: |
+          uv run --with pytest pytest integrations/workbuddy/tests
+
+      - name: Write bounded pre-WP6 host adapter diagnostics
+        id: pre_wp6_adapter_diagnostics
+        if: always()
+        shell: bash
+        env:
+          CODEX_ADAPTER_OUTCOME: ${{ steps.codex_adapter.outcome }}
+          WORKBUDDY_ADAPTER_OUTCOME: ${{ steps.workbuddy_adapter.outcome }}
+        run: |
+          diagnostics="$RUNNER_TEMP/powercontext-pre-wp6-host-adapter-diagnostics"
+          mkdir -p "$diagnostics"
+          {
+            printf 'commit=%s\n' "$GITHUB_SHA"
+            printf 'codex_adapter_outcome=%s\n' "$CODEX_ADAPTER_OUTCOME"
+            printf 'workbuddy_adapter_outcome=%s\n' "$WORKBUDDY_ADAPTER_OUTCOME"
+            sha256sum \
+              integrations/codex/plugins/powercontext/uv.lock \
+              integrations/workbuddy/plugins/powercontext/powercontext.json.example \
+              integrations/workbuddy/plugins/powercontext/hooks/workbuddy_powercontext_hook.py
+          } > "$diagnostics/summary.txt"
+
+      - name: Upload pre-WP6 host adapter diagnostics
+        id: pre_wp6_adapter_upload
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pre-wp6-host-adapter-diagnostics-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-pre-wp6-host-adapter-diagnostics/summary.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  retained-host-adapters:
+    name: Post-WP6 retained host adapters
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -531,16 +592,13 @@ jobs:
           version: "0.10.12"
           enable-cache: true
 
-      - name: Test Python host adapters
+      - name: Test retained Python host adapters
         id: python_adapters
         run: |
-          uv run --project integrations/codex/plugins/powercontext --locked --with pytest \
-            pytest integrations/codex/tests
           uv run --project integrations/bub --locked --with pytest pytest integrations/bub/tests
           uv run --with pytest pytest integrations/claude-code/tests
           uv run --with pytest --with pydantic --with httpx pytest integrations/hermes/tests
           uv run --project integrations/langgraph --locked --with pytest pytest integrations/langgraph/tests
-          uv run --with pytest pytest integrations/workbuddy/tests
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -603,7 +661,8 @@ jobs:
           pnpm build
           git diff --exit-code -- dist
 
-      - name: Write bounded host adapter diagnostics
+      - name: Write bounded retained host adapter diagnostics
+        id: retained_adapter_diagnostics
         if: always()
         shell: bash
         env:
@@ -614,7 +673,7 @@ jobs:
           OPENCODE_ADAPTER_OUTCOME: ${{ steps.opencode_adapter.outcome }}
           OPENCLAW_ADAPTER_OUTCOME: ${{ steps.openclaw_adapter.outcome }}
         run: |
-          diagnostics="$RUNNER_TEMP/powercontext-host-adapter-diagnostics"
+          diagnostics="$RUNNER_TEMP/powercontext-retained-host-adapter-diagnostics"
           mkdir -p "$diagnostics"
           {
             printf 'commit=%s\n' "$GITHUB_SHA"
@@ -636,17 +695,18 @@ jobs:
             done
           } > "$diagnostics/summary.txt"
 
-      - name: Upload host adapter diagnostics
+      - name: Upload retained host adapter diagnostics
+        id: retained_adapter_upload
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: host-adapter-diagnostics-${{ github.sha }}
-          path: ${{ runner.temp }}/powercontext-host-adapter-diagnostics/summary.txt
+          name: retained-host-adapter-diagnostics-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-retained-host-adapter-diagnostics/summary.txt
           if-no-files-found: error
           retention-days: 14
 
   evaluation:
-    name: Evaluation control plane and console
+    name: Codex/SQLite evaluation control plane
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
