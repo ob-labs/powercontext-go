@@ -22,6 +22,7 @@ import textwrap
 from pathlib import Path
 from typing import Any, Self
 
+import pytest
 from typer.testing import CliRunner
 
 from powercontext_eval.cli import _request_worker_stop, app
@@ -213,58 +214,43 @@ def test_baseline_help_exposes_subcommands() -> None:
     assert "compare" in result.output
 
 
-def test_baseline_create_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "create", "--help"], color=False)
+@pytest.mark.parametrize(
+    ("arguments", "expected_url", "response"),
+    (
+        (("list",), "https://console.example/api/baselines", []),
+        (("get", "baseline/alpha"), "https://console.example/api/baselines/baseline%2Falpha", {}),
+        (("items", "baseline/alpha"), "https://console.example/api/baselines/baseline%2Falpha/items", []),
+        (
+            ("candidates", "batch/alpha", "on"),
+            "https://console.example/api/batches/batch%2Falpha/baseline-candidates?current_arm=on",
+            [],
+        ),
+        (("compare", "batch/alpha"), "https://console.example/api/batches/batch%2Falpha/baseline-comparisons", {}),
+    ),
+)
+def test_baseline_read_commands_request_the_expected_resource(
+    monkeypatch: pytest.MonkeyPatch,
+    arguments: tuple[str, ...],
+    expected_url: str,
+    response: object,
+) -> None:
+    requests: list[Any] = []
 
-    assert result.exit_code == 0
-    assert "--source-batch-id" in result.output
-    assert "--source-arm" in result.output
-    assert "--name" in result.output
-    assert "--idempotency-key" in result.output
+    def urlopen(request: Any, *, timeout: float) -> _JSONResponse:
+        assert timeout == 30
+        requests.append(request)
+        return _JSONResponse(response)
 
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", urlopen)
 
-def test_baseline_list_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "list", "--help"], color=False)
+    result = CliRunner().invoke(
+        app,
+        ["baseline", *arguments, "--console-url", "https://console.example"],
+    )
 
-    assert result.exit_code == 0
-    assert "--console-url" in result.output
-
-
-def test_baseline_get_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "get", "--help"], color=False)
-
-    assert result.exit_code == 0
-    assert "baseline_id" in result.output
-
-
-def test_baseline_items_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "items", "--help"], color=False)
-
-    assert result.exit_code == 0
-    assert "baseline_id" in result.output
-
-
-def test_baseline_candidates_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "candidates", "--help"], color=False)
-
-    assert result.exit_code == 0
-    assert "batch_id" in result.output
-    assert "current_arm" in result.output
-
-
-def test_baseline_select_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "select", "--help"], color=False)
-
-    assert result.exit_code == 0
-    assert "--baseline-id" in result.output
-    assert "--current-arm" in result.output
-
-
-def test_baseline_compare_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "compare", "--help"], color=False)
-
-    assert result.exit_code == 0
-    assert "batch_id" in result.output
+    assert result.exit_code == 0, result.output
+    assert [(request.get_method(), request.full_url) for request in requests] == [("GET", expected_url)]
+    assert json.loads(result.output) == response
 
 
 def test_baseline_create_fetches_the_current_report_revision_when_omitted(monkeypatch) -> None:
