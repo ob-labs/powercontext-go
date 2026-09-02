@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 802,
-  "pending_case_count": 10,
+  "mapped_case_count": 812,
+  "pending_case_count": 0,
   "entries": [
     {
       "python": {
@@ -5516,8 +5516,15 @@
         "line": 56
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_go_server_chain.py",
+          "test": "test_pydantic_ai_capture_checkpoint_recall_and_search_chain"
+        }
+      ]
     },
     {
       "python": {
@@ -5526,8 +5533,15 @@
         "line": 148
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_go_server_chain.py",
+          "test": "test_pydantic_ai_final_flush_catches_up_across_more_than_ten_source_windows"
+        }
+      ]
     },
     {
       "python": {
@@ -6682,8 +6696,15 @@
         "line": 142
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_middleware_injects_recall_without_persisting_it"
+        }
+      ]
     },
     {
       "python": {
@@ -6692,8 +6713,15 @@
         "line": 169
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_middleware_injects_only_approved_experience"
+        }
+      ]
     },
     {
       "python": {
@@ -6702,8 +6730,15 @@
         "line": 229
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_middleware_does_not_capture_completed_turn_by_default"
+        }
+      ]
     },
     {
       "python": {
@@ -6712,8 +6747,15 @@
         "line": 254
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_middleware_captures_completed_turn_when_enabled"
+        }
+      ]
     },
     {
       "python": {
@@ -6722,8 +6764,15 @@
         "line": 285
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_middleware_captures_tool_strategy_structured_response"
+        }
+      ]
     },
     {
       "python": {
@@ -6732,8 +6781,15 @@
         "line": 314
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_async_agent_reaches_end_when_server_unreachable"
+        }
+      ]
     },
     {
       "python": {
@@ -6742,8 +6798,15 @@
         "line": 334
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/langchain/tests/test_middleware.py",
+          "test": "test_sync_agent_reaches_end_when_server_unreachable"
+        }
+      ]
     },
     {
       "python": {
@@ -7432,8 +7495,15 @@
         "line": 68
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_packaging.py",
+          "test": "test_documented_openai_agent_constructs_from_installed_wheels"
+        }
+      ]
     },
     {
       "python": {

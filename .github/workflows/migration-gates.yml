@@ -602,6 +602,8 @@ jobs:
           uv run --project integrations/pydantic-ai --locked --with pytest pytest \
             integrations/pydantic-ai/tests/test_capability.py \
             integrations/pydantic-ai/tests/test_capture.py \
+            integrations/pydantic-ai/tests/test_go_server_chain.py \
+            integrations/pydantic-ai/tests/test_packaging.py \
             integrations/pydantic-ai/tests/test_settings_scope.py \
             integrations/pydantic-ai/tests/test_toolset.py
           uv run --project integrations/langchain --locked --with pytest pytest integrations/langchain/tests
