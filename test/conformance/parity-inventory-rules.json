@@ -541,15 +541,39 @@
     },
     "tests/langchain_middleware/test_packaging.py": {
       "mode": "retained-host",
-      "reason": "LangChain middleware packaging owned by the LangChain adapter."
+      "reason": "LangChain middleware packaging owned by the LangChain adapter.",
+      "cases": {
+        "test_wheel_bundles_middleware_license": {
+          "evidence": ["py:integrations/langchain/tests/test_packaging.py#test_wheel_bundles_middleware_license"]
+        }
+      }
     },
     "tests/langchain_middleware/test_scope.py": {
       "mode": "retained-host",
-      "reason": "LangChain scope handling owned by the LangChain adapter."
+      "reason": "LangChain scope handling owned by the LangChain adapter.",
+      "cases": {
+        "test_missing_scope_names_langchain_configuration": {
+          "evidence": ["py:integrations/langchain/tests/test_scope.py#test_missing_scope_names_langchain_configuration"]
+        },
+        "test_normalize_git_remote_removes_credentials": {
+          "evidence": ["py:integrations/langchain/tests/test_scope.py#test_normalize_git_remote_removes_credentials"]
+        },
+        "test_resolve_scope_id_rejects_windows_local_remote": {
+          "evidence": ["py:integrations/langchain/tests/test_scope.py#test_resolve_scope_id_rejects_windows_local_remote"]
+        }
+      }
     },
     "tests/langchain_middleware/test_settings.py": {
       "mode": "retained-host",
-      "reason": "LangChain settings handling owned by the LangChain adapter."
+      "reason": "LangChain settings handling owned by the LangChain adapter.",
+      "cases": {
+        "test_langchain_settings_use_their_own_environment_prefix": {
+          "evidence": ["py:integrations/langchain/tests/test_settings.py#test_langchain_settings_use_their_own_environment_prefix"]
+        },
+        "test_explicit_scope_overrides_langchain_settings": {
+          "evidence": ["py:integrations/langchain/tests/test_settings.py#test_explicit_scope_overrides_langchain_settings"]
+        }
+      }
     },
     "tests/pydantic_ai_adapter/test_capability.py": {
       "mode": "retained-host",
