@@ -229,6 +229,27 @@ def _load_evidence(run_fd: int, arm: str) -> TreatmentEvidence:
         raise InvalidReportArtifact from None
 
 
+def _reject_unrequested_arm_artifacts(run_fd: int, treatment_mode: TreatmentMode) -> None:
+    arms_fd = -1
+    try:
+        arms_fd = _open_relative_directory(run_fd, ("arms",))
+        for arm in Arm:
+            if arm in treatment_mode.arms:
+                continue
+            try:
+                os.stat(arm.value, dir_fd=arms_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise InvalidReportArtifact
+    except InvalidReportArtifact:
+        raise
+    except (NotADirectoryError, OSError, RuntimeError):
+        raise InvalidReportArtifact from None
+    finally:
+        if arms_fd >= 0:
+            os.close(arms_fd)
+
+
 def _validate_evidence(
     bundle: ReportBundle,
     run_id: str,
@@ -321,6 +342,7 @@ def load_report(run_dir: Path, run_root: Path | None = None) -> ReportResponse:
     run_fd, run_id = _open_run(run_dir, run_root)
     try:
         bundle, report_metadata = _load_bundle(run_fd)
+        _reject_unrequested_arm_artifacts(run_fd, bundle.treatment_mode)
         evidence = {arm: _load_evidence(run_fd, arm.value) for arm in bundle.treatment_mode.arms}
         _validate_evidence(bundle, run_id, evidence)
         return ReportResponse(

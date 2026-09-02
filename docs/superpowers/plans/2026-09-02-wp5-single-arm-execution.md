@@ -49,6 +49,8 @@ models, SQLite-backed task store, Docker SUT runner.
 - [x] Add `TreatmentMode`, nullable report/result fields, and strict selected
   arm validation; render a single-arm report without a comparison section.
 - [x] Run the report test and its paired-report regression tests.
+- [x] Reject a retained `arms/off` or `arms/on` entry that is absent from the
+  declared single-arm mode through the already-opened directory descriptor.
 - [x] Commit the model/report contract change.
 
 ### Task 2: Run Only Requested Arms
@@ -90,6 +92,9 @@ models, SQLite-backed task store, Docker SUT runner.
 - [x] Run it and verify the current worker accepts the mismatched result.
 - [x] Pass the task mode into `_batch_run_config`; compare non-null runner
   result arms with `task.request.treatment_mode.arms` in `_validated_result`.
+- [x] Bind the loaded retained report's mode, report/evidence arm sets, and
+  resolved outcomes to the requested arms and validated runner result before
+  persistence; prove rejection with real retained artifacts.
 - [x] Run focused worker tests, including existing paired success and retry
   cases.
 - [x] Commit the worker change.
