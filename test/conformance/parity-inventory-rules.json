@@ -726,7 +726,15 @@
     },
     "tests/test_hermes_cli.py": {
       "mode": "go-port",
-      "reason": "Hermes setup CLI commands; the CLI is Go (internal/cli)."
+      "reason": "Hermes setup CLI commands; the CLI is Go (internal/cli).",
+      "cases": {
+        "test_setup_hermes_restores_both_plugins_when_second_replace_fails": {
+          "evidence": ["go:internal/cli/integration_hosts_test.go#TestHermesPluginPairRestoresBothTargetsWhenSecondActivationFails"]
+        },
+        "test_setup_hermes_restores_both_plugins_when_enable_fails": {
+          "evidence": ["go:internal/cli/integration_hosts_test.go#TestHermesPluginPairRestoresBothTargetsWhenEnableFails"]
+        }
+      }
     },
     "tests/test_opencode_cli.py": {
       "mode": "go-port",

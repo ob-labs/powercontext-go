@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 758,
-  "pending_case_count": 54,
+  "mapped_case_count": 760,
+  "pending_case_count": 52,
   "entries": [
     {
       "python": {
@@ -10698,8 +10698,15 @@
         "line": 105
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestHermesPluginPairRestoresBothTargetsWhenSecondActivationFails"
+        }
+      ]
     },
     {
       "python": {
@@ -10708,8 +10715,15 @@
         "line": 146
       },
       "mode": "go-port",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestHermesPluginPairRestoresBothTargetsWhenEnableFails"
+        }
+      ]
     },
     {
       "python": {

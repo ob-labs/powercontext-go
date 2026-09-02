@@ -829,7 +829,7 @@ func TestSetupHermesStagesDoctorAndAtomicallyReplacesPlugin(t *testing.T) {
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"hermes": "/usr/bin/hermes"},
 		results: []systemCommandResult{
-			{output: "Hermes Agent v0.20.4\n"}, {}, {output: "Hermes Agent v0.20.4\n"}, {},
+			{output: "Hermes Agent v0.20.4\n"}, {}, {}, {}, {output: "Hermes Agent v0.20.4\n"}, {}, {},
 		},
 	}
 	stdout, _, err := executeSystemCLI(t, nil, commands, "setup", "hermes", "--source", checkout, "--json")
@@ -844,6 +844,79 @@ func TestSetupHermesStagesDoctorAndAtomicallyReplacesPlugin(t *testing.T) {
 	}
 	if _, ok := findHermesPlugin(target); !ok {
 		t.Fatal("installed Hermes plugin is incomplete")
+	}
+}
+
+func TestHermesPluginPairRestoresBothTargetsWhenSecondActivationFails(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "checkout")
+	writeHermesPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "hermes")
+	provider := filepath.Join(home, "plugins", hermesPluginName)
+	command := filepath.Join(home, "plugins", hermesCommandPluginName)
+	for path, marker := range map[string]string{provider: "old provider\n", command: "old command\n"} {
+		writeTestFile(t, filepath.Join(path, "__init__.py"), "def register(): pass\n")
+		writeTestFile(t, filepath.Join(path, "plugin.yaml"), "name: test\n")
+		writeTestFile(t, filepath.Join(path, "version.txt"), marker)
+	}
+	writeTestFile(t, filepath.Join(home, "plugins", "other", "keep.txt"), "keep\n")
+	sources, ok := findHermesPluginPair(checkout)
+	if !ok {
+		t.Fatal("source pair is missing")
+	}
+	original := hermesRename
+	t.Cleanup(func() { hermesRename = original })
+	failed := false
+	hermesRename = func(source, target string) error {
+		if !failed && target == command && strings.HasPrefix(filepath.Base(source), ".powercontext-") {
+			failed = true
+			return errors.New("injected second activation failure")
+		}
+		return original(source, target)
+	}
+	err := installHermesPlugins(t.Context(), &scriptedSystemCommands{t: t, results: []systemCommandResult{{}, {}}}, "/usr/bin/hermes", sources, map[string]string{hermesPluginName: provider, hermesCommandPluginName: command})
+	if err == nil || !failed {
+		t.Fatalf("install error = %v, failed = %t", err, failed)
+	}
+	for path, want := range map[string]string{provider: "old provider\n", command: "old command\n"} {
+		got, readErr := os.ReadFile(filepath.Join(path, "version.txt"))
+		if readErr != nil || string(got) != want {
+			t.Fatalf("restored %s = %q, %v", path, got, readErr)
+		}
+	}
+	if got, err := os.ReadFile(filepath.Join(home, "plugins", "other", "keep.txt")); err != nil || string(got) != "keep\n" {
+		t.Fatalf("unrelated plugin = %q, %v", got, err)
+	}
+}
+
+func TestHermesPluginPairRestoresBothTargetsWhenEnableFails(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "checkout")
+	writeHermesPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "hermes")
+	provider := filepath.Join(home, "plugins", hermesPluginName)
+	command := filepath.Join(home, "plugins", hermesCommandPluginName)
+	for path, marker := range map[string]string{provider: "old provider\n", command: "old command\n"} {
+		writeTestFile(t, filepath.Join(path, "__init__.py"), "def register(): pass\n")
+		writeTestFile(t, filepath.Join(path, "plugin.yaml"), "name: test\n")
+		writeTestFile(t, filepath.Join(path, "version.txt"), marker)
+	}
+	writeTestFile(t, filepath.Join(home, "plugins", "other", "keep.txt"), "keep\n")
+	sources, ok := findHermesPluginPair(checkout)
+	if !ok {
+		t.Fatal("source pair is missing")
+	}
+	commands := &scriptedSystemCommands{t: t, results: []systemCommandResult{{}, {}, {err: errors.New("enable failed")}}}
+	err := installHermesPlugins(t.Context(), commands, "/usr/bin/hermes", sources, map[string]string{hermesPluginName: provider, hermesCommandPluginName: command})
+	if err == nil {
+		t.Fatal("enable failure unexpectedly succeeded")
+	}
+	for path, want := range map[string]string{provider: "old provider\n", command: "old command\n"} {
+		got, readErr := os.ReadFile(filepath.Join(path, "version.txt"))
+		if readErr != nil || string(got) != want {
+			t.Fatalf("restored %s = %q, %v", path, got, readErr)
+		}
+	}
+	if got, err := os.ReadFile(filepath.Join(home, "plugins", "other", "keep.txt")); err != nil || string(got) != "keep\n" {
+		t.Fatalf("unrelated plugin = %q, %v", got, err)
 	}
 }
 
@@ -903,9 +976,12 @@ func TestHermesDiagnosticsCoverInstalledMissingBrokenAndUnsupportedProviders(t *
 		plugin := filepath.Join(home, "plugins", hermesPluginName)
 		writeTestFile(t, filepath.Join(plugin, "__init__.py"), "def register(): pass\n")
 		writeTestFile(t, filepath.Join(plugin, "plugin.yaml"), "name: powercontext\n")
+		commandPlugin := filepath.Join(home, "plugins", hermesCommandPluginName)
+		writeTestFile(t, filepath.Join(commandPlugin, "__init__.py"), "def register(context): pass\n")
+		writeTestFile(t, filepath.Join(commandPlugin, "plugin.yaml"), "name: powercontext-command\nkind: standalone\n")
 		commands := &scriptedSystemCommands{
 			t: t, paths: map[string]string{"hermes": "/resolved/bin/hermes"},
-			results: []systemCommandResult{{output: "Hermes Agent v0.20.4\n"}, {}},
+			results: []systemCommandResult{{output: "Hermes Agent v0.20.4\n"}, {}, {}},
 		}
 		checks := runHermesDiagnostics(t.Context(), commands)
 		if checks["hermes"].Status != "ok" || checks["plugin"].Status != "ok" {
@@ -930,6 +1006,9 @@ func TestHermesDiagnosticsCoverInstalledMissingBrokenAndUnsupportedProviders(t *
 		plugin := filepath.Join(home, "plugins", hermesPluginName)
 		writeTestFile(t, filepath.Join(plugin, "__init__.py"), "def register(): pass\n")
 		writeTestFile(t, filepath.Join(plugin, "plugin.yaml"), "name: powercontext\n")
+		commandPlugin := filepath.Join(home, "plugins", hermesCommandPluginName)
+		writeTestFile(t, filepath.Join(commandPlugin, "__init__.py"), "def register(context): pass\n")
+		writeTestFile(t, filepath.Join(commandPlugin, "plugin.yaml"), "name: powercontext-command\nkind: standalone\n")
 		commands := &scriptedSystemCommands{
 			t: t, paths: map[string]string{"hermes": "/resolved/bin/hermes"},
 			results: []systemCommandResult{{output: "Hermes Agent v0.20.4\n"}, {err: errors.New("provider doctor failed")}},
@@ -1127,6 +1206,9 @@ func writeHermesPlugin(t *testing.T, root string) string {
 	path := filepath.Join(root, filepath.FromSlash(hermesRelative))
 	writeTestFile(t, filepath.Join(path, "__init__.py"), "def register(): pass\n")
 	writeTestFile(t, filepath.Join(path, "plugin.yaml"), "name: powercontext\n")
+	command := filepath.Join(root, filepath.FromSlash(hermesCommandRelative))
+	writeTestFile(t, filepath.Join(command, "__init__.py"), "def register(context): pass\n")
+	writeTestFile(t, filepath.Join(command, "plugin.yaml"), "name: powercontext-command\nkind: standalone\n")
 	resolved, err := resolvePath(path)
 	if err != nil {
 		t.Fatal(err)

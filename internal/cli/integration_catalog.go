@@ -60,7 +60,7 @@ var firstClassIntegrationHosts = [...]integrationHostSpec{
 		missingDetail: "Pi CLI is not installed or is not on PATH", probe: runPiDiagnostics,
 	},
 	{
-		name: "hermes", label: "Hermes", cliKey: "hermes", integrationKeys: []string{"plugin"},
+		name: "hermes", label: "Hermes", cliKey: "hermes", integrationKeys: []string{"plugin", "command_plugin"},
 		missingDetail: "Hermes CLI is not installed or is not on PATH", probe: runHermesDiagnostics,
 	},
 }
