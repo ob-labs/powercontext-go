@@ -214,6 +214,7 @@ def test_baseline_help_exposes_subcommands() -> None:
     assert "compare" in result.output
 
 
+
 @pytest.mark.parametrize(
     ("arguments", "expected_url", "response"),
     (
