@@ -215,6 +215,7 @@ def test_baseline_help_exposes_subcommands() -> None:
 
 
 
+
 @pytest.mark.parametrize(
     ("arguments", "expected_url", "response"),
     (
