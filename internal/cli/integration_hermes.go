@@ -288,11 +288,11 @@ func installHermesPlugins(ctx context.Context, commands systemCommandExecutor, e
 				rollback()
 				return errors.New("cannot create Hermes plugin backup")
 			}
-			if err := os.Remove(backup); err != nil {
+			if removeErr := os.Remove(backup); removeErr != nil {
 				rollback()
-				return err
+				return removeErr
 			}
-			if err := hermesRename(plugin.target, backup); err != nil {
+			if renameErr := hermesRename(plugin.target, backup); renameErr != nil {
 				rollback()
 				return errors.New("cannot preserve existing Hermes plugin")
 			}
