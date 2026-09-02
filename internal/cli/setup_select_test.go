@@ -299,6 +299,8 @@ func TestSetupSelectFailsRowsWhenPostInstallVerificationFails(t *testing.T) {
 					results: []systemCommandResult{
 						{output: "Hermes Agent v0.20.4\n"},
 						{},
+						{},
+						{},
 						{output: "Hermes Agent v0.20.4\n"},
 						{err: errors.New("provider doctor failed")},
 					},
@@ -328,7 +330,7 @@ func TestSetupSelectPrintsHermesNextStepOnlyWhenInstalled(t *testing.T) {
 	hermesCommands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"hermes": "/usr/bin/hermes"},
 		results: []systemCommandResult{
-			{output: "Hermes Agent v0.20.4\n"}, {}, {output: "Hermes Agent v0.20.4\n"}, {},
+			{output: "Hermes Agent v0.20.4\n"}, {}, {}, {}, {output: "Hermes Agent v0.20.4\n"}, {}, {},
 		},
 	}
 	installed, _, err := executeSystemCLIWithInput(
