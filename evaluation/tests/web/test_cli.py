@@ -20,7 +20,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from typer.testing import CliRunner
 
@@ -32,7 +32,7 @@ class _JSONResponse:
     def __init__(self, payload: object) -> None:
         self._payload = payload
 
-    def __enter__(self) -> _JSONResponse:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_args: object) -> None:

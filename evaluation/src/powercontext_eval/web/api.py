@@ -22,8 +22,8 @@ import mimetypes
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import AsyncIterator, Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -1277,7 +1277,11 @@ def create_app(
             def _compare(entry: tuple) -> Any:
                 sel, bl, items = entry
                 return compare_batch_to_baseline(
-                    batch, tasks, report, bl, items,
+                    batch,
+                    tasks,
+                    report,
+                    bl,
+                    items,
                     current_arm=sel.current_arm,
                     runs_root=config.run_root / "runs",
                 )
