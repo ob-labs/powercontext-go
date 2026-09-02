@@ -718,6 +718,11 @@
       "mode": "go-port",
       "reason": "OpenCode activation probe CLI commands; the CLI is Go (internal/cli).",
       "cases": {
+        "test_interrupted_plugin_install_recovers_on_retry": {
+          "evidence": [
+            "go:internal/cli/integration_hosts_test.go#TestInterruptedOpenCodePluginInstallRecoversOnRetry"
+          ]
+        },
         "test_activation_probe_uses_headless_server_without_model": {
           "evidence": [
             "go:internal/cli/integration_hosts_test.go#TestOpenCodeActivationProbeUsesHeadlessServerWithoutModel"
