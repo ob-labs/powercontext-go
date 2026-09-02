@@ -143,6 +143,11 @@ class BaselineCompatibility(_FrozenModel):
     reasons: tuple[str, ...] = ()
 
 
+class BaselineCandidate(_FrozenModel):
+    baseline: BaselineRecord
+    compatibility: BaselineCompatibility
+
+
 class BaselineSelection(_FrozenModel):
     baseline_id: str
     current_arm: Arm
@@ -151,6 +156,22 @@ class BaselineSelection(_FrozenModel):
     @classmethod
     def parse_arm(cls, value: object) -> object:
         return Arm(value) if isinstance(value, str) else value
+
+
+class BaselineSelectionUpdate(_FrozenModel):
+    selections: tuple[BaselineSelection, ...] = Field(max_length=10)
+
+    @field_validator("selections", mode="before")
+    @classmethod
+    def parse_json_array(cls, value: object) -> object:
+        return tuple(value) if isinstance(value, list) else value
+
+    @model_validator(mode="after")
+    def unique_selections(self) -> BaselineSelectionUpdate:
+        keys = {(selection.baseline_id, selection.current_arm) for selection in self.selections}
+        if len(keys) != len(self.selections):
+            raise ValueError("Baseline selections must be unique")
+        return self
 
 
 class ComparisonCoverage(_FrozenModel):
@@ -195,3 +216,9 @@ class BaselineComparison(_FrozenModel):
     @classmethod
     def parse_arm(cls, value: object) -> object:
         return Arm(value) if isinstance(value, str) else value
+
+
+class BaselineComparisonResponse(_FrozenModel):
+    batch_id: str
+    report_revision: Annotated[int, Field(ge=0)]
+    comparisons: tuple[BaselineComparison, ...]
