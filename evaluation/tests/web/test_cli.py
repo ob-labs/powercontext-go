@@ -201,7 +201,7 @@ def test_invalid_configuration_is_concise_and_does_not_print_secrets(monkeypatch
 
 
 def test_baseline_help_exposes_subcommands() -> None:
-    result = CliRunner().invoke(app, ["baseline", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "create" in result.output
@@ -214,7 +214,7 @@ def test_baseline_help_exposes_subcommands() -> None:
 
 
 def test_baseline_create_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "create", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "create", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "--source-batch-id" in result.output
@@ -224,28 +224,28 @@ def test_baseline_create_help_shows_options() -> None:
 
 
 def test_baseline_list_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "list", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "list", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "--console-url" in result.output
 
 
 def test_baseline_get_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "get", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "get", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "baseline_id" in result.output
 
 
 def test_baseline_items_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "items", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "items", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "baseline_id" in result.output
 
 
 def test_baseline_candidates_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "candidates", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "candidates", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "batch_id" in result.output
@@ -253,7 +253,7 @@ def test_baseline_candidates_help_shows_options() -> None:
 
 
 def test_baseline_select_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "select", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "select", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "--baseline-id" in result.output
@@ -261,7 +261,7 @@ def test_baseline_select_help_shows_options() -> None:
 
 
 def test_baseline_compare_help_shows_options() -> None:
-    result = CliRunner().invoke(app, ["baseline", "compare", "--help"])
+    result = CliRunner().invoke(app, ["baseline", "compare", "--help"], color=False)
 
     assert result.exit_code == 0
     assert "batch_id" in result.output
