@@ -17,9 +17,10 @@ The HTTP source of truth is [`openapi/powercontext.yaml`](openapi/powercontext.y
 Generated code under `api/v1` and generated operation tables are never edited
 by hand. Compatibility evidence lives under `test/conformance`: the v0.1.0
 release inventory contains 812 Python test cases in 132 files, alongside the
-immutable historical v0.0.2 fixture. At this commit, the generated inventory
-maps 749 release-target cases to case-specific evidence and records 63 as
-pending; the pending set is not a compatibility claim.
+immutable historical v0.0.2 fixture. The generated
+[`parity-inventory.json`](test/conformance/parity-inventory.json) is the
+current case-by-case mapping: `mapped` cases resolve to specific evidence, and
+`pending` cases are not compatibility claims.
 
 ## Alignment and support matrix
 
@@ -29,7 +30,7 @@ binary release.
 
 | Surface | Current evidence | Pre-WP6 acceptance boundary |
 | --- | --- | --- |
-| Upstream release identity | `powercontext-v0.1.0` at `7b736206a53a6de6f43d4b517893ee1a80e7183d`; the generated inventory covers 812 cases in 132 files, with 749 mapped and 63 pending. | The exact target, distribution digests, fixtures, and traceability rules are checked by the release-contract workflow. |
+| Upstream release identity | `powercontext-v0.1.0` at `7b736206a53a6de6f43d4b517893ee1a80e7183d`; the generated [case-by-case inventory](test/conformance/parity-inventory.json) covers 812 cases in 132 files. | The exact target, distribution digests, fixtures, traceability rules, and generated inventory are checked by the release-contract workflow. |
 | Go Server, SDK, CLI, and OpenAPI | Go-native implementation with `openapi/powercontext.yaml` as the authoritative HTTP contract. | SQLite is the only database accepted before WP6. |
 | Codex and WorkBuddy | Installed integrations call the running Go Server through HTTP or MCP; their service-chain evidence is a required `Pre-WP6 host adapters` check. | These are the only host integrations counted toward WP6 acceptance. |
 | Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is WP5 evidence, not evidence for every retained host adapter. |
