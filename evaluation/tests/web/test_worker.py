@@ -731,11 +731,14 @@ def test_worker_rejects_retained_report_that_does_not_match_the_task(
 
     assert worker.run_once() is True
 
-    failed = store.get(task.task_id)
-    assert failed.status is TaskStatus.FAILED
-    assert failed.result is None
-    assert failed.failure_category is FailureCategory.REPORT_GENERATION
-    assert failed.failure_summary == "Evaluation report validation failed."
+    current = store.get(task.task_id)
+    assert current.status is not TaskStatus.SUCCEEDED
+    assert current.result is None
+    attempts = store.list_task_attempts(batch.batch_id, task.task_id)
+    assert attempts[0].status is TaskStatus.FAILED
+    assert attempts[0].result is None
+    assert attempts[0].failure_category is FailureCategory.REPORT_GENERATION
+    assert attempts[0].failure_summary == "Evaluation report validation failed."
 
 
 def test_only_one_child_runs_physically_across_multiple_batches(tmp_path: Path) -> None:
