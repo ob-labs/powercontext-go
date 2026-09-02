@@ -496,6 +496,21 @@
       "mode": "go-port",
       "reason": "CLI server command transport overrides; the CLI is Go (internal/cli) and the behavior is part of the WP2 transport surface.",
       "cases": {
+        "test_server_command_uses_env_file_instead_of_stale_shell_environment": {
+          "evidence": [
+            "go:internal/cli/python_contract_test.go#TestServerCommandEnvFileOverridesStaleEnvironmentAndRestores"
+          ]
+        },
+        "test_server_command_clears_stale_server_values_missing_from_env_file": {
+          "evidence": [
+            "go:internal/cli/python_contract_test.go#TestServerCommandEnvFileClearsMissingServerValues"
+          ]
+        },
+        "test_server_command_reports_a_missing_env_file_without_starting": {
+          "evidence": [
+            "go:internal/cli/python_contract_test.go#TestServerCommandEnvFileFailurePreventsRunner"
+          ]
+        },
         "test_server_command_rejects_an_unauthenticated_non_loopback_host_override": {
           "evidence": [
             "go:internal/cli/python_contract_test.go#TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride"
