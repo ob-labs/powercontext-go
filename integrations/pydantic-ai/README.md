@@ -21,9 +21,9 @@ agent = Agent(
     "openai:gpt-5.2",
     capabilities=[PowerContext()],
 )
-result = agent.run_sync("Which API constraints have we already agreed on?")
-print(result.output)
 ```
+
+Run the agent with an application prompt only after configuring a real provider credential.
 
 `PowerContext` contributes these model tools:
 

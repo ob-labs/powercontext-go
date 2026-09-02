@@ -64,7 +64,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer application.Close(context.Background())
+	defer func() { _ = application.Close(context.Background()) }()
 	handler, err := application.HTTPHandler()
 	if err != nil {
 		return err
