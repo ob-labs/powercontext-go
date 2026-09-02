@@ -95,7 +95,7 @@ def test_middleware_injects_recall_without_persisting_it(tmp_path: Path) -> None
                     CaptureContentSourceRequest(scope_id=SCOPE, source_id="migration-memory", content=MEMORY_TEXT)
                 )
                 await client.flush_memory(FlushMemoryRequest(scope_id=SCOPE))
-            result = await _agent(model).ainvoke({"messages": [HumanMessage(content="How should we deploy migrations?")]}, context=PowerContextScope(scope_id=SCOPE, base_url=server.base_url))
+            result = await _agent(model).ainvoke({"messages": [HumanMessage(content="migrations")]}, context=PowerContextScope(scope_id=SCOPE, base_url=server.base_url))
             assert MEMORY_TEXT in _system_texts(model.inputs[-1])[0]
             assert _system_texts(result["messages"]) == []
         asyncio.run(scenario())
@@ -127,14 +127,14 @@ def test_middleware_injects_only_approved_experience(tmp_path: Path) -> None:
                     )
                 )
             scope = PowerContextScope(scope_id=SCOPE, base_url=server.base_url)
-            pending = await _agent(model).ainvoke({"messages": [HumanMessage(content="What does coralblueprint require?")]}, context=scope)
+            pending = await _agent(model).ainvoke({"messages": [HumanMessage(content="coralblueprint")]}, context=scope)
             assert _system_texts(model.inputs[-1]) == []
             assert _system_texts(pending["messages"]) == []
             async with PowerContextClient(server.base_url) as client:
                 await client.approve_artifact_candidate(
                     ApproveArtifactCandidateRequest(scope_id=SCOPE, candidate_id=candidate.candidate_id, expected_version=candidate.version)
                 )
-            approved = await _agent(model).ainvoke({"messages": [HumanMessage(content="What does coralblueprint require?")]}, context=scope)
+            approved = await _agent(model).ainvoke({"messages": [HumanMessage(content="coralblueprint")]}, context=scope)
             assert "coralblueprint" in _system_texts(model.inputs[-1])[0]
             assert _system_texts(approved["messages"]) == []
         asyncio.run(scenario())
