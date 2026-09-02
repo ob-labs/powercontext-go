@@ -69,8 +69,7 @@ func validateJSONUnicodeWithLimit(next http.Handler, limit int64) http.Handler {
 		payload, readErr := io.ReadAll(r.Body)
 		_ = r.Body.Close()
 		if readErr != nil {
-			var tooLarge *http.MaxBytesError
-			if errors.As(readErr, &tooLarge) {
+			if tooLarge, ok := errors.AsType[*http.MaxBytesError](readErr); ok {
 				writeRequestBodyTooLarge(w, tooLarge.Limit)
 				return
 			}
