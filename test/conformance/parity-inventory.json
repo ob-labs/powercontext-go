@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 756,
-  "pending_case_count": 56,
+  "mapped_case_count": 757,
+  "pending_case_count": 55,
   "entries": [
     {
       "python": {
@@ -5876,8 +5876,15 @@
         "line": 51
       },
       "mode": "cross-layer",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "go",
+          "file": "test/e2e/workbuddy_service_chain_test.go",
+          "test": "TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration"
+        }
+      ]
     },
     {
       "python": {

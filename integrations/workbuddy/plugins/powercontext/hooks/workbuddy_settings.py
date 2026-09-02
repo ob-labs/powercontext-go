@@ -161,11 +161,27 @@ def load_settings(
         server_url=_text_field(payload, "server_url"),
         authorization=runtime_environment.get(authorization_environment),
         authorization_environment=authorization_environment,
+        scope_id=runtime_environment.get("POWERCONTEXT_WORKBUDDY_SCOPE_ID"),
         scope_mode=_text_field(payload, "scope_mode"),
+        capture_prompts=_environment_bool(
+            "POWERCONTEXT_WORKBUDDY_CAPTURE_PROMPTS",
+            default=True,
+            environment=runtime_environment,
+        ),
+        flush_on_capture=_environment_bool(
+            "POWERCONTEXT_WORKBUDDY_FLUSH_ON_CAPTURE",
+            default=False,
+            environment=runtime_environment,
+        ),
         request_timeout_seconds=_float_field(payload, "request_timeout_seconds"),
         request_budget_seconds=_float_field(payload, "request_budget_seconds"),
         prepare_max_bytes=_int_field(payload, "prepare_max_bytes"),
         source_max_bytes=_int_field(payload, "source_max_bytes"),
+        flush_max_calls=_environment_int(
+            "POWERCONTEXT_WORKBUDDY_FLUSH_MAX_CALLS",
+            default=4,
+            environment=runtime_environment,
+        ),
     )
 
 
@@ -198,8 +214,13 @@ def _int_field(payload: Mapping[str, object], name: str) -> int:
     return value
 
 
-def _environment_bool(*names: str, default: bool) -> bool:
-    value = _first_environment(*names)
+def _environment_bool(
+    *names: str,
+    default: bool,
+    environment: Mapping[str, str] | None = None,
+) -> bool:
+    source = os.environ if environment is None else environment
+    value = next((source[name] for name in names if name in source), None)
     if value is None:
         return default
     normalized = value.strip().casefold()
@@ -215,8 +236,14 @@ def _environment_float(*names: str, default: float) -> float:
     return default if value is None else float(value)
 
 
-def _environment_int(name: str, *, default: int) -> int:
-    value = os.environ.get(name)
+def _environment_int(
+    name: str,
+    *,
+    default: int,
+    environment: Mapping[str, str] | None = None,
+) -> int:
+    source = os.environ if environment is None else environment
+    value = source.get(name)
     return default if value is None else int(value)
 
 
