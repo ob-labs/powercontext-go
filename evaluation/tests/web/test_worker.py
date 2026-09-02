@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -25,12 +26,13 @@ from typing import Any
 
 import pytest
 
+from powercontext_eval.artifacts import ArmState
 from powercontext_eval.benchmarks.base import GoldCheckFailed
 from powercontext_eval.benchmarks.swebench_pro.adapter import DatasetSchemaError, SweBenchProInstance
 from powercontext_eval.benchmarks.swebench_pro.evaluator import OfficialResultError
 from powercontext_eval.codex import CodexCapacityError, CodexInfrastructureError
 from powercontext_eval.errors import CommandFailed, GitSourceError
-from powercontext_eval.models import Arm
+from powercontext_eval.models import Arm, TreatmentMode
 from powercontext_eval.powercontext_sut import (
     InvalidTreatment,
     PluginInspectionFailure,
@@ -40,19 +42,25 @@ from powercontext_eval.powercontext_sut import (
     UnsafeSutConfiguration,
 )
 from powercontext_eval.process import CommandResult
+from powercontext_eval.report import ArmReport, InvalidReportBundle, MetricSet, ReportBundle
 from powercontext_eval.runner import MinimalRunConfig, MinimalRunResult, RunConfig, RunPhase
 from powercontext_eval.tokensflow import TokensFlowFinalizationDescriptor, TokensFlowInfrastructureError
 from powercontext_eval.web.batches import BatchControlEventType, BatchCreate, BatchStatus
 from powercontext_eval.web.config import WebConfig
 from powercontext_eval.web.controls import BatchControlIntent, BatchPauseReason
 from powercontext_eval.web.models import (
+    ArmResponse,
+    ComparisonResponse,
+    EvidenceResponse,
     FailureCategory,
     FailureCode,
+    ReportResponse,
     RetryDisposition,
     SafeFailure,
     TaskCreate,
     TaskPhase,
     TaskStatus,
+    TreatmentEvidence,
 )
 from powercontext_eval.web.resources import FilesystemCapacity, FilesystemResourceProbe
 from powercontext_eval.web.revision import RUNTIME_SCHEMA_VERSION, current_build_revision
@@ -61,6 +69,53 @@ from powercontext_eval.web.usage import CodexUsageProbe, UsageSnapshot, UsageUna
 from powercontext_eval.web.worker import EvaluationWorker, TaskPairWorker
 
 NOW = datetime(2026, 7, 29, 1, 2, 3, tzinfo=UTC)
+
+
+def _loaded_pair_report(*, off_resolved: bool = True, on_resolved: bool = True) -> ReportResponse:
+    return ReportResponse(
+        task_id="mocked-report",
+        acceptance_valid=off_resolved and on_resolved,
+        off=ArmResponse(
+            arm="off",
+            state=ArmState.TREATMENT_VALIDATED,
+            resolution="resolved" if off_resolved else "unresolved",
+            passed=off_resolved,
+            treatment_valid=True,
+        ),
+        on=ArmResponse(
+            arm="on",
+            state=ArmState.TREATMENT_VALIDATED,
+            resolution="resolved" if on_resolved else "unresolved",
+            passed=on_resolved,
+            treatment_valid=True,
+        ),
+        comparison=ComparisonResponse(),
+        evidence=EvidenceResponse(
+            off=TreatmentEvidence(
+                mcp_requests=0,
+                prompt_sources=0,
+                plugin_checkout_sha="a" * 40,
+                plugin_id="powercontext@powercontext",
+                plugin_installed=True,
+                plugin_version="0.1.0",
+                scope_id="eval:mocked-report:off",
+                server_ready=True,
+            ),
+            on=TreatmentEvidence(
+                mcp_requests=1,
+                prompt_sources=1,
+                plugin_checkout_sha="a" * 40,
+                plugin_id="powercontext@powercontext",
+                plugin_installed=True,
+                plugin_version="0.1.0",
+                scope_id="eval:mocked-report:on",
+                server_ready=True,
+            ),
+        ),
+        revisions={},
+        configuration={},
+        generated_at=NOW,
+    )
 
 
 def _usage(used_percent: int, *, observed_at: datetime = NOW) -> UsageSnapshot:
@@ -178,6 +233,7 @@ def _create_batch(
     key: str = "batch-worker-test",
     instance_ids: tuple[str, ...] = ("instance_owner__repo-a", "instance_owner__repo-b"),
     model: str = "gpt-5.6-sol",
+    treatment_mode: TreatmentMode = TreatmentMode.OFF_ON,
 ) -> Any:
     return store.create_batch(
         BatchCreate(
@@ -186,7 +242,7 @@ def _create_batch(
             task_set="swebench-pro-public-v2",
             model=model,
             reasoning_effort="medium",
-            treatment_mode="off_on",
+            treatment_mode=treatment_mode,
             idempotency_key=key,
         ),
         instance_ids,
@@ -331,7 +387,7 @@ def test_worker_finishes_current_task_before_honoring_user_pause(
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
     worker = EvaluationWorker(
         config,
         store,
@@ -368,7 +424,10 @@ def test_worker_finishes_current_task_before_cancelling_remaining_tasks(
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, False, False)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr(
+        "powercontext_eval.web.worker.load_report",
+        lambda *args: _loaded_pair_report(off_resolved=False, on_resolved=False),
+    )
     worker = EvaluationWorker(
         config,
         store,
@@ -505,7 +564,10 @@ def test_latest_is_pinned_once_and_every_child_uses_catalog_instance(
     source = FakeSource()
     catalog = FakeCatalog(instance_ids)
     calls: list[tuple[RunConfig, SweBenchProInstance]] = []
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr(
+        "powercontext_eval.web.worker.load_report",
+        lambda *args: _loaded_pair_report(on_resolved=False),
+    )
     worker = EvaluationWorker(
         config,
         store,
@@ -538,7 +600,10 @@ def test_worker_uses_each_batch_immutable_model_for_runner_configuration(
         model="gpt-5.6-luna",
     )
     calls: list[tuple[RunConfig, SweBenchProInstance]] = []
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr(
+        "powercontext_eval.web.worker.load_report",
+        lambda *args: _loaded_pair_report(on_resolved=False),
+    )
     worker = EvaluationWorker(
         config,
         store,
@@ -551,6 +616,129 @@ def test_worker_uses_each_batch_immutable_model_for_runner_configuration(
     assert worker.run_once() is True
     assert calls[0][0].model == batch.request.model == "gpt-5.6-luna"
     assert calls[0][0].reasoning_effort == batch.request.reasoning_effort == "medium"
+
+
+def test_worker_rejects_runner_outcomes_outside_the_requested_treatment_mode(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    store = _store(config)
+    batch = _create_batch(
+        store,
+        key="on-only-worker-outcome",
+        instance_ids=("instance_owner__repo-a",),
+        treatment_mode=TreatmentMode.ON_ONLY,
+    )
+
+    task = store.list_batch_tasks(batch.batch_id)[0]
+    report = config.run_root / "runs" / task.task_id / "report.md"
+    report.parent.mkdir(parents=True)
+    report.write_text("safe")
+    worker = TaskPairWorker(
+        config,
+        store,
+        worker_id="single-arm-validator",
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(InvalidReportBundle, match="requested treatment mode"):
+        worker._validated_result(task, MinimalRunResult(task.task_id, report, True, None))
+
+
+@pytest.mark.parametrize(
+    ("retained_mode", "retained_on_resolved"),
+    ((TreatmentMode.OFF_ON, True), (TreatmentMode.ON_ONLY, False)),
+)
+def test_worker_rejects_retained_report_that_does_not_match_the_task(
+    retained_mode: TreatmentMode,
+    retained_on_resolved: bool,
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    store = _store(config)
+    batch = _create_batch(
+        store,
+        key="on-only-retained-pair",
+        instance_ids=("instance_owner__repo-a",),
+        treatment_mode=TreatmentMode.ON_ONLY,
+    )
+    task = store.list_batch_tasks(batch.batch_id)[0]
+
+    def runner(run_config: RunConfig, *, instance: SweBenchProInstance, on_phase: Any) -> MinimalRunResult:
+        del instance, on_phase
+        run_dir = config.run_root / "runs" / run_config.run_id
+        report_path = run_dir / "report.md"
+        report_path.parent.mkdir(parents=True)
+        report_path.write_text("safe")
+        bundle = ReportBundle(
+            title="SWE-bench Pro evaluation",
+            revisions={"harness": "b" * 40, "powercontext": "a" * 40},
+            configuration={
+                "instance": task.instance_id or "",
+                "model": batch.request.model,
+                "reasoning_effort": batch.request.reasoning_effort,
+            },
+            treatment_mode=retained_mode,
+            off=(
+                ArmReport(
+                    arm="off",
+                    state=ArmState.TREATMENT_VALIDATED,
+                    resolved=False,
+                    passed=False,
+                    treatment_valid=True,
+                    metrics=MetricSet(input_tokens=1, output_tokens=1, elapsed_seconds=1, patch_bytes=1),
+                )
+                if Arm.OFF in retained_mode.arms
+                else None
+            ),
+            on=ArmReport(
+                arm="on",
+                state=ArmState.TREATMENT_VALIDATED,
+                resolved=retained_on_resolved,
+                passed=retained_on_resolved,
+                treatment_valid=True,
+                metrics=MetricSet(input_tokens=1, output_tokens=1, elapsed_seconds=1, patch_bytes=1),
+            ),
+        )
+        (run_dir / "report.json").write_text(bundle.model_dump_json())
+        for arm in retained_mode.arms:
+            evidence_dir = run_dir / "arms" / arm.value / "powercontext"
+            evidence_dir.mkdir(parents=True)
+            (evidence_dir / "treatment.json").write_text(
+                json.dumps(
+                    {
+                        "mcp_requests": 0 if arm is Arm.OFF else 1,
+                        "plugin_checkout_sha": "a" * 40,
+                        "plugin_id": "powercontext@powercontext",
+                        "plugin_installed": True,
+                        "plugin_version": "0.1.0",
+                        "prompt_sources": 0 if arm is Arm.OFF else 1,
+                        "scope_id": f"eval:{run_config.run_id}:{arm.value}",
+                        "server_ready": True,
+                    }
+                )
+            )
+        return MinimalRunResult(run_config.run_id, report_path, None, True)
+
+    worker = EvaluationWorker(
+        config,
+        store,
+        runner=runner,
+        source=FakeSource(),
+        catalog=FakeCatalog(("instance_owner__repo-a",)),
+        clock=lambda: NOW,
+    )
+
+    assert worker.run_once() is True
+
+    current = store.get(task.task_id)
+    assert current.status is not TaskStatus.SUCCEEDED
+    assert current.result is None
+    attempts = store.list_task_attempts(batch.batch_id, task.task_id)
+    assert attempts[0].status is TaskStatus.FAILED
+    assert attempts[0].result is None
+    assert attempts[0].failure_category is FailureCategory.REPORT_GENERATION
+    assert attempts[0].failure_summary == "Evaluation report validation failed."
 
 
 def test_only_one_child_runs_physically_across_multiple_batches(tmp_path: Path) -> None:
@@ -622,7 +810,7 @@ def test_failed_batch_child_does_not_block_later_children(monkeypatch: pytest.Mo
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
     worker = EvaluationWorker(
         config,
         store,
@@ -680,7 +868,7 @@ def test_upstream_capacity_failure_requeues_the_child_without_pausing_the_batch(
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
     worker = _capacity_worker(config, store, instance_ids, runner)
 
     assert worker.run_once() is True
@@ -827,7 +1015,10 @@ def test_restart_reuses_persisted_batch_sha_and_completed_children(
     batch = _create_batch(store, instance_ids=instance_ids)
     catalog = FakeCatalog(instance_ids)
     calls: list[tuple[RunConfig, SweBenchProInstance]] = []
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr(
+        "powercontext_eval.web.worker.load_report",
+        lambda *args: _loaded_pair_report(on_resolved=False),
+    )
     first_source = FakeSource()
     first = EvaluationWorker(
         config,
@@ -892,7 +1083,7 @@ def test_run_once_maps_config_phases_and_success(monkeypatch: pytest.MonkeyPatch
     loaded = []
     monkeypatch.setattr(
         "powercontext_eval.web.worker.load_report",
-        lambda run_dir, run_root: loaded.append((run_dir, run_root)) or object(),
+        lambda run_dir, run_root: loaded.append((run_dir, run_root)) or _loaded_pair_report(on_resolved=False),
     )
     worker = EvaluationWorker(config, store, runner=runner, clock=lambda: NOW)
 
@@ -1229,7 +1420,7 @@ def test_heartbeat_thread_stops_and_joins(succeeds: bool, monkeypatch: pytest.Mo
         path.write_text("report")
         return MinimalRunResult(task.task_id, path, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
 
     def thread_factory(**kwargs: Any) -> RecordingThread:
         thread = RecordingThread(**kwargs)
@@ -1388,7 +1579,6 @@ def test_runner_report_must_be_exact_regular_canonical_report(
             returned = expected
         return MinimalRunResult(task.task_id, returned, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
     assert EvaluationWorker(config, store, runner=runner, clock=lambda: NOW).run_once() is True
     failed = store.get(task.task_id)
     assert failed.status is TaskStatus.FAILED
@@ -1540,7 +1730,7 @@ def test_supervisor_respects_configured_isolated_task_pair_capacity_and_stop_pre
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
     worker = EvaluationWorker(
         config,
         store,
@@ -1587,7 +1777,7 @@ def test_task_pair_worker_directly_preserves_phase_order_and_report_boundary(
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
     slot = TaskPairWorker(config, store, runner=runner, worker_id="direct-slot", clock=lambda: NOW)
 
     assert slot.run_once() is True
@@ -1742,7 +1932,7 @@ def test_supervisor_slot_failure_stops_replacements_joins_active_slots_and_raise
         report.write_text("safe")
         return MinimalRunResult(run_config.run_id, report, True, True)
 
-    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: object())
+    monkeypatch.setattr("powercontext_eval.web.worker.load_report", lambda *args: _loaded_pair_report())
     worker = EvaluationWorker(config, store, runner=runner, worker_id="failing-supervisor", clock=lambda: NOW)
     failing_slot = worker._slots[0]
 
