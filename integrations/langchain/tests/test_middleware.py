@@ -30,7 +30,14 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 from powercontext.client import PowerContextClient
-from powercontext.http import FlushMemoryRequest, ListMemoryEntriesRequest, RememberMemoryRequest
+from powercontext.http import (
+    ApproveArtifactCandidateRequest,
+    CaptureContentSourceRequest,
+    ExperienceProposal,
+    FlushMemoryRequest,
+    ListMemoryEntriesRequest,
+    ProposeExperienceRequest,
+)
 
 from powercontext_langchain import PowerContextMiddleware, PowerContextScope
 
@@ -84,7 +91,10 @@ def test_middleware_injects_recall_without_persisting_it(tmp_path: Path) -> None
     with running_go_server(tmp_path) as server:
         async def scenario() -> None:
             async with PowerContextClient(server.base_url) as client:
-                await client.remember_memory(RememberMemoryRequest(scope_id=SCOPE, kind="decision", text=MEMORY_TEXT))
+                await client.capture_content_source(
+                    CaptureContentSourceRequest(scope_id=SCOPE, source_id="migration-memory", content=MEMORY_TEXT)
+                )
+                await client.flush_memory(FlushMemoryRequest(scope_id=SCOPE))
             result = await _agent(model).ainvoke({"messages": [HumanMessage(content="How should we deploy migrations?")]}, context=PowerContextScope(scope_id=SCOPE, base_url=server.base_url))
             assert MEMORY_TEXT in _system_texts(model.inputs[-1])[0]
             assert _system_texts(result["messages"]) == []
@@ -96,9 +106,37 @@ def test_middleware_injects_only_approved_experience(tmp_path: Path) -> None:
     with running_go_server(tmp_path) as server:
         async def scenario() -> None:
             async with PowerContextClient(server.base_url) as client:
-                await client.remember_memory(RememberMemoryRequest(scope_id=SCOPE, kind="experience", text="approved deployment experience coralblueprint"))
-            await _agent(model).ainvoke({"messages": [HumanMessage(content="What does coralblueprint require?")]}, context=PowerContextScope(scope_id=SCOPE, base_url=server.base_url))
+                source = await client.capture_content_source(
+                    CaptureContentSourceRequest(
+                        scope_id=SCOPE,
+                        source_id="approved-experience-evidence",
+                        content="The coralblueprint migration-first deployment completed without schema errors.",
+                    )
+                )
+                candidate = await client.propose_experience(
+                    ProposeExperienceRequest(
+                        scope_id=SCOPE,
+                        proposal=ExperienceProposal(
+                            situation="A coralblueprint deployment includes schema changes.",
+                            action="Apply database migrations before deploying the application.",
+                            outcome="The application starts against the expected schema.",
+                            lesson="Migrate the database before rolling out application code.",
+                        ),
+                        source_refs=[source.source],
+                        artifact_refs=[],
+                    )
+                )
+            scope = PowerContextScope(scope_id=SCOPE, base_url=server.base_url)
+            pending = await _agent(model).ainvoke({"messages": [HumanMessage(content="What does coralblueprint require?")]}, context=scope)
+            assert _system_texts(model.inputs[-1]) == []
+            assert _system_texts(pending["messages"]) == []
+            async with PowerContextClient(server.base_url) as client:
+                await client.approve_artifact_candidate(
+                    ApproveArtifactCandidateRequest(scope_id=SCOPE, candidate_id=candidate.candidate_id, expected_version=candidate.version)
+                )
+            approved = await _agent(model).ainvoke({"messages": [HumanMessage(content="What does coralblueprint require?")]}, context=scope)
             assert "coralblueprint" in _system_texts(model.inputs[-1])[0]
+            assert _system_texts(approved["messages"]) == []
         asyncio.run(scenario())
 
 
