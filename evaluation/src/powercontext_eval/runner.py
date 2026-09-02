@@ -469,9 +469,7 @@ def _run_swebench_pro_instance(
         GoldResult(instance.instance_id, gold.resolved),
         arms,
     )
-    arm_reports = {
-        arm: _arm_report(arm, official[arm], outcomes[arm], patch_sizes[arm]) for arm in selected_arms
-    }
+    arm_reports = {arm: _arm_report(arm, official[arm], outcomes[arm], patch_sizes[arm]) for arm in selected_arms}
     emit_phase(RunPhase.GENERATING_REPORT)
     report = ReportBundle(
         title=(

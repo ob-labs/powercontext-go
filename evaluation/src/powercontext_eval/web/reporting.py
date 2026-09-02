@@ -383,12 +383,13 @@ def _bundle_for_task(task: TaskRecord, runs_root: Path) -> ReportBundle:
     if task.status is not TaskStatus.SUCCEEDED or task.result is None:
         raise InvalidReportArtifact
     bundle = _load_batch_bundle(task_run_dir(task, runs_root), runs_root)
+    present = {arm for arm, report in ((Arm.OFF, bundle.off), (Arm.ON, bundle.on)) if report is not None}
     if (
-        bundle.off.arm != "off"
-        or bundle.on.arm != "on"
+        bundle.treatment_mode is not task.request.treatment_mode
+        or present != set(task.request.treatment_mode.arms)
         or bundle.configuration.get("instance") != task.request.instance_id
-        or bundle.off.resolved != task.result.off_resolved
-        or bundle.on.resolved != task.result.on_resolved
+        or (bundle.off.resolved if bundle.off is not None else None) != task.result.off_resolved
+        or (bundle.on.resolved if bundle.on is not None else None) != task.result.on_resolved
     ):
         raise InvalidReportArtifact
     return bundle
@@ -420,7 +421,9 @@ def _pair_category(off_resolved: bool, on_resolved: bool) -> PairCategory:
     return PairCategory.BOTH_FAIL
 
 
-def _arm_total(arm: ArmReport) -> int | None:
+def _arm_total(arm: ArmReport | None) -> int | None:
+    if arm is None:
+        return None
     metrics = arm.metrics
     if metrics.input_tokens is None or metrics.output_tokens is None:
         return None
@@ -451,11 +454,22 @@ def _task_item(
     tokens = TaskTokenDelta()
     if task.status is TaskStatus.SUCCEEDED:
         bundle = _bundle_for_task(task, runs_root)
-        category = _pair_category(bundle.off.resolved, bundle.on.resolved)
-        off = _task_arm(bundle.off)
-        on = _task_arm(bundle.on)
-        delta = None if off.total_tokens is None or on.total_tokens is None else on.total_tokens - off.total_tokens
-        tokens = TaskTokenDelta(off=off.total_tokens, on=on.total_tokens, delta=delta)
+        if bundle.off is not None:
+            off = _task_arm(bundle.off)
+        if bundle.on is not None:
+            on = _task_arm(bundle.on)
+        if bundle.off is not None and bundle.on is not None:
+            category = _pair_category(bundle.off.resolved, bundle.on.resolved)
+        delta = (
+            None
+            if off is None or on is None or off.total_tokens is None or on.total_tokens is None
+            else on.total_tokens - off.total_tokens
+        )
+        tokens = TaskTokenDelta(
+            off=off.total_tokens if off is not None else None,
+            on=on.total_tokens if on is not None else None,
+            delta=delta,
+        )
     elif task.status in _EXECUTION_FAILURE_STATES:
         category = PairCategory.EXECUTION_FAILURE
     return BatchTaskItem(
@@ -479,15 +493,15 @@ def _task_item(
     )
 
 
-def _metric_aggregate(values: dict[str, list[int]]) -> TokenMetricAggregate:
-    off = sum(values["off"])
-    on = sum(values["on"])
+def _metric_aggregate(values: dict[str, list[int]], treatment_mode: TreatmentMode) -> TokenMetricAggregate:
+    off = sum(values["off"]) if Arm.OFF in treatment_mode.arms else None
+    on = sum(values["on"]) if Arm.ON in treatment_mode.arms else None
     return TokenMetricAggregate(
         off=off,
         on=on,
-        delta=on - off,
-        off_measured_tasks=len(values["off"]),
-        on_measured_tasks=len(values["on"]),
+        delta=on - off if off is not None and on is not None else None,
+        off_measured_tasks=len(values["off"]) if off is not None else None,
+        on_measured_tasks=len(values["on"]) if on is not None else None,
     )
 
 
@@ -498,7 +512,7 @@ def load_batch_estimate_samples(
     runs_root: Path,
     catalog: BenchmarkCatalog,
 ) -> tuple[EstimateSample, ...]:
-    """Return only complete paired metrics compatible with the current runner schema."""
+    """Return metrics from the exact treatment arms executed by the batch."""
 
     _validate_batch_tasks(batch, tasks)
     samples: list[EstimateSample] = []
@@ -516,13 +530,14 @@ def load_batch_estimate_samples(
             or task.finished_at is None
         ):
             continue
-        off_total = _arm_total(bundle.off)
-        on_total = _arm_total(bundle.on)
-        if off_total is None or on_total is None:
+        selected_totals = [
+            _arm_total(bundle.off if arm is Arm.OFF else bundle.on) for arm in batch.request.treatment_mode.arms
+        ]
+        if any(total is None for total in selected_totals):
             continue
         samples.append(
             EstimateSample(
-                tokens=off_total + on_total,
+                tokens=sum(total for total in selected_totals if total is not None),
                 duration_seconds=max(0, round((task.finished_at - task.started_at).total_seconds())),
             )
         )
@@ -556,30 +571,45 @@ def load_batch_report(
         catalog.require(task.request.instance_id)
         if task.status is TaskStatus.SUCCEEDED:
             bundle = _bundle_for_task(task, runs_root)
-            category = _pair_category(bundle.off.resolved, bundle.on.resolved)
-            categories[category] += 1
-            comparable += 1
-            off_resolved += int(bundle.off.resolved)
-            on_resolved += int(bundle.on.resolved)
-            metric_pairs = {
-                "input": (bundle.off.metrics.input_tokens, bundle.on.metrics.input_tokens),
-                "output": (bundle.off.metrics.output_tokens, bundle.on.metrics.output_tokens),
-                "total": (_arm_total(bundle.off), _arm_total(bundle.on)),
+            if bundle.off is not None:
+                off_resolved += int(bundle.off.resolved)
+            if bundle.on is not None:
+                on_resolved += int(bundle.on.resolved)
+            if bundle.off is not None and bundle.on is not None:
+                category = _pair_category(bundle.off.resolved, bundle.on.resolved)
+                categories[category] += 1
+                comparable += 1
+            metric_values = {
+                "input": {
+                    "off": bundle.off.metrics.input_tokens if bundle.off is not None else None,
+                    "on": bundle.on.metrics.input_tokens if bundle.on is not None else None,
+                },
+                "output": {
+                    "off": bundle.off.metrics.output_tokens if bundle.off is not None else None,
+                    "on": bundle.on.metrics.output_tokens if bundle.on is not None else None,
+                },
+                "total": {
+                    "off": _arm_total(bundle.off) if bundle.off is not None else None,
+                    "on": _arm_total(bundle.on) if bundle.on is not None else None,
+                },
             }
-            for metric_name, (off_value, on_value) in metric_pairs.items():
-                if off_value is not None and on_value is not None:
-                    token_values[metric_name]["off"].append(off_value)
-                    token_values[metric_name]["on"].append(on_value)
-            paired_tokens = metric_pairs["total"]
+            for metric_name, arm_values in metric_values.items():
+                if batch.request.treatment_mode is TreatmentMode.OFF_ON and any(
+                    value is None for value in arm_values.values()
+                ):
+                    continue
+                for arm_name, value in arm_values.items():
+                    if value is not None:
+                        token_values[metric_name][arm_name].append(value)
+            selected_totals = [metric_values["total"][arm.value] for arm in batch.request.treatment_mode.arms]
             if (
-                paired_tokens[0] is not None
-                and paired_tokens[1] is not None
+                all(value is not None for value in selected_totals)
                 and task.started_at is not None
                 and task.finished_at is not None
             ):
                 estimate_samples.append(
                     EstimateSample(
-                        tokens=paired_tokens[0] + paired_tokens[1],
+                        tokens=sum(value for value in selected_totals if value is not None),
                         duration_seconds=max(0, round((task.finished_at - task.started_at).total_seconds())),
                     )
                 )
@@ -591,7 +621,8 @@ def load_batch_report(
             elif revisions != candidate_revisions or configuration != candidate_configuration:
                 raise InvalidReportArtifact
         elif task.status in _EXECUTION_FAILURE_STATES:
-            categories[PairCategory.EXECUTION_FAILURE] += 1
+            if batch.request.treatment_mode is TreatmentMode.OFF_ON:
+                categories[PairCategory.EXECUTION_FAILURE] += 1
             execution_failures += 1
 
     if revisions is None:
@@ -618,21 +649,32 @@ def load_batch_report(
     on_rate = on_resolved / denominator * 100
     return BatchReportResponse(
         batch_id=batch.batch_id,
+        treatment_mode=batch.request.treatment_mode,
         report_revision=batch.control.version + sum(task.attempt_count * 100 + task.version for task in tasks),
         total_tasks=total,
         terminal_tasks=terminal_tasks,
-        comparable_pairs=comparable,
+        comparable_pairs=comparable if batch.request.treatment_mode is TreatmentMode.OFF_ON else None,
         execution_failures=execution_failures,
         cancelled_tasks=status_counts[TaskStatus.CANCELLED],
-        off=ResolutionAggregate(resolved=off_resolved, total=terminal_tasks, rate_percent=off_rate),
-        on=ResolutionAggregate(resolved=on_resolved, total=terminal_tasks, rate_percent=on_rate),
-        resolution_rate_delta_points=on_rate - off_rate,
-        pair_categories=categories,
+        off=(
+            ResolutionAggregate(resolved=off_resolved, total=terminal_tasks, rate_percent=off_rate)
+            if Arm.OFF in batch.request.treatment_mode.arms
+            else None
+        ),
+        on=(
+            ResolutionAggregate(resolved=on_resolved, total=terminal_tasks, rate_percent=on_rate)
+            if Arm.ON in batch.request.treatment_mode.arms
+            else None
+        ),
+        resolution_rate_delta_points=(
+            on_rate - off_rate if batch.request.treatment_mode is TreatmentMode.OFF_ON else None
+        ),
+        pair_categories=categories if batch.request.treatment_mode is TreatmentMode.OFF_ON else None,
         task_statuses={status: status_counts[status] for status in TaskStatus},
         tokens=TokenAggregate(
-            input=_metric_aggregate(token_values["input"]),
-            output=_metric_aggregate(token_values["output"]),
-            total=_metric_aggregate(token_values["total"]),
+            input=_metric_aggregate(token_values["input"], batch.request.treatment_mode),
+            output=_metric_aggregate(token_values["output"], batch.request.treatment_mode),
+            total=_metric_aggregate(token_values["total"], batch.request.treatment_mode),
         ),
         control=batch.control,
         latest_usage=latest_usage,
@@ -673,6 +715,8 @@ def create_baseline_snapshot(
 
     if batch.status is not BatchStatus.COMPLETED:
         raise ValueError("Only completed batches can be saved as baselines")
+    if arm not in batch.request.treatment_mode.arms:
+        raise ValueError("The selected baseline arm was not executed")
     report = load_batch_report(batch, tasks, runs_root=runs_root, catalog=catalog)
     if report.report_revision != expected_report_revision:
         raise StaleReportRevision
@@ -686,6 +730,8 @@ def create_baseline_snapshot(
         if task.status is TaskStatus.SUCCEEDED:
             bundle = _bundle_for_task(task, runs_root)
             arm_report = bundle.off if arm is Arm.OFF else bundle.on
+            if arm_report is None:
+                raise InvalidReportArtifact
             resolved = arm_report.resolved
             input_tokens = arm_report.metrics.input_tokens
             output_tokens = arm_report.metrics.output_tokens
@@ -751,6 +797,8 @@ def baseline_compatibility(
     hard_reasons = [reason for baseline_value, current_value, reason in checks if baseline_value != current_value]
     if baseline.codex_version is not None and baseline.codex_version != report.configuration.get("codex"):
         hard_reasons.append("Codex version differs")
+    if current_arm not in batch.request.treatment_mode.arms:
+        hard_reasons.append("current arm was not executed")
     if hard_reasons:
         return BaselineCompatibility(status=CompatibilityStatus.INCOMPATIBLE, reasons=tuple(hard_reasons))
     if baseline.source_arm is not current_arm:
@@ -823,6 +871,8 @@ def compare_batch_to_baseline(
         if task.status is TaskStatus.SUCCEEDED:
             bundle = _bundle_for_task(task, runs_root)
             arm_report = bundle.off if current_arm is Arm.OFF else bundle.on
+            if arm_report is None:
+                raise InvalidReportArtifact
             current_result = arm_report.resolved
             current_resolved += int(current_result)
             values = {
@@ -985,8 +1035,8 @@ def load_batch_task_detail(
     on = None
     if task.status is TaskStatus.SUCCEEDED:
         bundle = _bundle_for_task(task, runs_root)
-        off = _detail_arm(bundle.off)
-        on = _detail_arm(bundle.on)
+        off = _detail_arm(bundle.off) if bundle.off is not None else None
+        on = _detail_arm(bundle.on) if bundle.on is not None else None
     finalization_by_arm = {record.arm: tokensflow_finalization_summary(record) for record in finalizations}
     return BatchTaskDetailResponse(
         task=item,

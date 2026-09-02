@@ -221,11 +221,11 @@ class ResolutionAggregate(_FrozenModel):
 
 
 class TokenMetricAggregate(_FrozenModel):
-    off: Annotated[int, Field(ge=0)]
-    on: Annotated[int, Field(ge=0)]
-    delta: int
-    off_measured_tasks: Annotated[int, Field(ge=0)]
-    on_measured_tasks: Annotated[int, Field(ge=0)]
+    off: Annotated[int, Field(ge=0)] | None = None
+    on: Annotated[int, Field(ge=0)] | None = None
+    delta: int | None = None
+    off_measured_tasks: Annotated[int, Field(ge=0)] | None = None
+    on_measured_tasks: Annotated[int, Field(ge=0)] | None = None
 
 
 class TokenAggregate(_FrozenModel):
@@ -236,16 +236,17 @@ class TokenAggregate(_FrozenModel):
 
 class BatchReportResponse(_FrozenModel):
     batch_id: str
+    treatment_mode: TreatmentMode = TreatmentMode.OFF_ON
     report_revision: Annotated[int, Field(ge=0)]
     total_tasks: Annotated[int, Field(ge=1)]
     terminal_tasks: Annotated[int, Field(ge=0)]
-    comparable_pairs: Annotated[int, Field(ge=0)]
+    comparable_pairs: Annotated[int, Field(ge=0)] | None = None
     execution_failures: Annotated[int, Field(ge=0)]
     cancelled_tasks: Annotated[int, Field(ge=0)]
-    off: ResolutionAggregate
-    on: ResolutionAggregate
-    resolution_rate_delta_points: Annotated[float, Field(allow_inf_nan=False)]
-    pair_categories: dict[PairCategory, Annotated[int, Field(ge=0)]]
+    off: ResolutionAggregate | None = None
+    on: ResolutionAggregate | None = None
+    resolution_rate_delta_points: Annotated[float, Field(allow_inf_nan=False)] | None = None
+    pair_categories: dict[PairCategory, Annotated[int, Field(ge=0)]] | None = None
     task_statuses: dict[TaskStatus, Annotated[int, Field(ge=0)]]
     tokens: TokenAggregate
     control: BatchControlState
@@ -253,6 +254,11 @@ class BatchReportResponse(_FrozenModel):
     estimate: BatchEstimate
     revisions: dict[str, str]
     configuration: dict[str, str]
+
+    @field_validator("treatment_mode", mode="before")
+    @classmethod
+    def parse_report_treatment_mode(cls, value: object) -> object:
+        return TreatmentMode(value) if isinstance(value, str) else value
 
 
 class TaskArmSummary(_FrozenModel):

@@ -333,7 +333,7 @@ class Capabilities(FrozenModel):
     instances: tuple[Literal["instance_flipt-io__flipt-518ec324b66a07fdd95464a5e9ca5fe7681ad8f9"], ...] = (INSTANCE_ID,)
     models: tuple[str, ...] = (DEFAULT_CODEX_MODEL,)
     reasoning_efforts: tuple[Literal["medium"], ...] = ("medium",)
-    treatment_modes: tuple[TreatmentMode, ...] = tuple(TreatmentMode)
+    treatment_modes: tuple[TreatmentMode, ...] = (TreatmentMode.OFF_ON,)
 
     @field_validator("treatment_modes", mode="before")
     @classmethod
