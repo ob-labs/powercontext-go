@@ -374,7 +374,14 @@
     },
     "tests/test_full_capability_docs.py": {
       "mode": "cross-layer",
-      "reason": "Executable full-capability documentation binds CLI capture, Memory evidence, and cursor behavior across layers."
+      "reason": "Executable full-capability documentation binds CLI capture, Memory evidence, and cursor behavior across layers.",
+      "cases": {
+        "test_full_capability_guide_binds_memory_evidence_to_the_captured_source": {
+          "evidence": [
+            "go:test/conformance/full_capability_docs_test.go#TestFullCapabilityGuidesBindMemoryEvidenceToCapturedSource"
+          ]
+        }
+      }
     },
     "tests/test_mcp.py": {
       "mode": "go-port",
