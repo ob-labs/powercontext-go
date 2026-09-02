@@ -26,7 +26,7 @@ from pathlib import Path
 from types import FrameType
 from typing import TYPE_CHECKING, Annotated, Any, Protocol, cast
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 import typer
@@ -43,7 +43,9 @@ if TYPE_CHECKING:
 
 app = typer.Typer(no_args_is_help=True, help="PowerContext evaluation runner.")
 swebench_pro_app = typer.Typer(no_args_is_help=True, help="Pinned SWE-bench Pro evaluation.")
+baseline_app = typer.Typer(no_args_is_help=True, help="Baseline management.")
 app.add_typer(swebench_pro_app, name="swebench-pro")
+app.add_typer(baseline_app, name="baseline")
 
 
 @app.callback()
@@ -302,6 +304,10 @@ def swebench_pro_create_batch(
 
 
 def _batch_api_endpoint(console_url: str) -> str:
+    return _api_endpoint(console_url, "/api/batches")
+
+
+def _api_endpoint(console_url: str, path: str) -> str:
     parsed = urlsplit(console_url)
     if (
         parsed.scheme not in {"http", "https"}
@@ -313,7 +319,154 @@ def _batch_api_endpoint(console_url: str) -> str:
         or parsed.path not in {"", "/"}
     ):
         raise typer.BadParameter("Invalid console URL.", param_hint="--console-url")
-    return console_url.rstrip("/") + "/api/batches"
+    return console_url.rstrip("/") + path
+
+
+def _http_request(method: str, url: str, body: bytes | None = None) -> Any:
+    headers = {"Content-Type": "application/json"} if body else {"Accept": "application/json"}
+    request = Request(url, data=body, headers=headers, method=method)
+    try:
+        with urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read())
+    except HTTPError as error:
+        if error.code == 404:
+            raise typer.BadParameter("Resource not found.") from None
+        if error.code == 409:
+            try:
+                detail = error.read().decode("utf-8", errors="replace")
+            except (OSError, ValueError):
+                detail = ""
+            raise typer.BadParameter("Conflict: " + (detail or "idempotency conflict")) from None
+        if error.code == 422:
+            try:
+                detail = error.read().decode("utf-8", errors="replace")
+            except (OSError, ValueError):
+                detail = ""
+            raise typer.BadParameter("Invalid request: " + (detail or "validation failed.")) from None
+        raise typer.Exit(code=1) from None
+    except (URLError, OSError, ValueError, UnicodeDecodeError):
+        raise typer.Exit(code=1) from None
+    if not isinstance(payload, (dict, list)):
+        raise typer.Exit(code=1)
+    return payload
+
+
+@baseline_app.command("create")
+def baseline_create(
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+    source_batch_id: str = typer.Option(..., "--source-batch-id"),
+    source_arm: str = typer.Option(..., "--source-arm"),
+    name: str = typer.Option(..., "--name"),
+    idempotency_key: str = typer.Option(..., "--idempotency-key"),
+    expected_report_revision: int = typer.Option(
+        0,
+        "--expected-report-revision",
+        help="Report revision from GET /api/batches/{id}/report; prevents stale snapshots.",
+    ),
+) -> None:
+    """Create an immutable baseline from a completed batch arm."""
+
+    from powercontext_eval.web.baselines import BaselineCreate
+
+    try:
+        request = BaselineCreate(
+            name=name,
+            source_batch_id=source_batch_id,
+            source_arm=source_arm,
+            expected_report_revision=expected_report_revision,
+            idempotency_key=idempotency_key,
+        )
+    except ValidationError:
+        raise typer.BadParameter("Invalid baseline configuration.") from None
+    endpoint = _api_endpoint(console_url, "/api/baselines")
+    payload = _http_request("POST", endpoint, request.model_dump_json().encode("utf-8"))
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@baseline_app.command("list")
+def baseline_list(
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+) -> None:
+    """List all immutable baselines, newest first."""
+
+    endpoint = _api_endpoint(console_url, "/api/baselines")
+    payload = _http_request("GET", endpoint)
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@baseline_app.command("get")
+def baseline_get(
+    baseline_id: str = typer.Argument(...),
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+) -> None:
+    """Get baseline details by ID."""
+
+    endpoint = _api_endpoint(console_url, f"/api/baselines/{quote(baseline_id, safe='')}")
+    payload = _http_request("GET", endpoint)
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@baseline_app.command("items")
+def baseline_items(
+    baseline_id: str = typer.Argument(...),
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+) -> None:
+    """List all items in a baseline."""
+
+    endpoint = _api_endpoint(console_url, f"/api/baselines/{quote(baseline_id, safe='')}/items")
+    payload = _http_request("GET", endpoint)
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@baseline_app.command("candidates")
+def baseline_candidates(
+    batch_id: str = typer.Argument(...),
+    current_arm: str = typer.Argument(...),
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+) -> None:
+    """List baseline candidates with compatibility checks for a batch."""
+
+    endpoint = _api_endpoint(
+        console_url,
+        f"/api/batches/{quote(batch_id, safe='')}/baseline-candidates",
+    )
+    endpoint += f"?current_arm={quote(current_arm, safe='')}"
+    payload = _http_request("GET", endpoint)
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@baseline_app.command("select")
+def baseline_select(
+    batch_id: str = typer.Argument(...),
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+    baseline_id: str = typer.Option(..., "--baseline-id"),
+    current_arm: str = typer.Option(..., "--current-arm"),
+) -> None:
+    """Select a baseline for comparison with a batch."""
+
+    from powercontext_eval.web.baselines import BaselineSelection, BaselineSelectionUpdate
+
+    try:
+        update = BaselineSelectionUpdate(
+            selections=[BaselineSelection(baseline_id=baseline_id, current_arm=current_arm)],
+        )
+    except ValidationError:
+        raise typer.BadParameter("Invalid baseline selection.") from None
+    endpoint = _api_endpoint(console_url, f"/api/batches/{quote(batch_id, safe='')}/baseline-selections")
+    payload = _http_request("PUT", endpoint, update.model_dump_json().encode("utf-8"))
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+@baseline_app.command("compare")
+def baseline_compare(
+    batch_id: str = typer.Argument(...),
+    console_url: str = typer.Option("http://127.0.0.1:8787", "--console-url"),
+) -> None:
+    """Compare a batch to all selected baselines."""
+
+    endpoint = _api_endpoint(console_url, f"/api/batches/{quote(batch_id, safe='')}/baseline-comparisons")
+    payload = _http_request("GET", endpoint)
+    typer.echo(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
 def main() -> None:
