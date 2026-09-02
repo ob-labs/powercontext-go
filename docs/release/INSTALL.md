@@ -3,22 +3,24 @@
 ## Upstream v0.1.0 alignment contract
 
 The current PowerContext Go alignment target is the upstream PowerContext
-v0.1.0 release, not a published PowerContext Go binary. PowerContext Go has no
-published release archive or image yet, so do not treat the upstream Python
-wheel or source distribution as a Go installation input. They are the
-independently verifiable provenance for the behavior being aligned.
+v0.1.0 release. The published PowerContext Go binary release is
+[`powercontext-v0.1.0`](https://github.com/ob-labs/powercontext-go/releases/tag/powercontext-v0.1.0),
+whose archive version is `0.1.0`. Do not treat the upstream Python wheel or
+source distribution as a Go installation input. They are the independently
+verifiable provenance for the behavior being aligned.
 
 | Provenance | Exact value | Verification use |
 | --- | --- | --- |
 | Upstream release | [`powercontext-v0.1.0`](https://github.com/oceanbase/powercontext/releases/tag/powercontext-v0.1.0) at `7b736206a53a6de6f43d4b517893ee1a80e7183d` | Current parity identity; do not substitute a moving upstream branch. |
+| PowerContext Go binary release | [`powercontext-v0.1.0`](https://github.com/ob-labs/powercontext-go/releases/tag/powercontext-v0.1.0) at `17a6f000c58ec5801e7341013a42211af97f6d0a` | Download the standard or Full archive, its SPDX SBOM, `SHA256SUMS`, and `IMAGE-DIGESTS.json` from this release. |
 | Wheel | `powercontext-0.1.0-py3-none-any.whl` | SHA-256 `94f8fef36d4afcee09dd5231fbe5edfe47e42e41994596b775e2f203ef6fac72`. |
 | Source distribution | `powercontext-0.1.0.tar.gz` | SHA-256 `18d47a335340b0870216e2cc0fb1fd8e4d865880155daeea3b01187c950fd746`. |
 | Python distribution provenance | [PyPI `powercontext` 0.1.0](https://pypi.org/project/powercontext/0.1.0/) | Cross-check the pinned release asset before changing parity fixtures or assertions. |
 
-When the first PowerContext Go release is published, obtain its archive and
-container digests from that Go release only. The release-verification workflow
-will then verify its release-level checksums, SBOM, archive contents, version
-metadata, and bounded CLI, Server, MCP, Memory, restart, and shutdown smokes.
+Obtain binary archives and container digests from the published PowerContext Go
+release only. Its release-verification workflow verifies release-level
+checksums, SBOMs, archive contents, version metadata, and bounded CLI, Server,
+MCP, Memory, restart, and shutdown smokes.
 
 Every archive is self-describing and contains the CLI/Server binary, the
 authoritative OpenAPI document, `.env.example`, retained host-adapter assets,
@@ -37,14 +39,23 @@ Verify the downloaded archive and its detached SBOM against the release-level
 `SHA256SUMS`, extract it, then verify the files inside the archive:
 
 ```sh
-sha256sum --check SHA256SUMS
-tar -xzf powercontext-*.tar.gz
-cd powercontext-*/
+release_tag=powercontext-v0.1.0
+release_url="https://github.com/ob-labs/powercontext-go/releases/download/$release_tag"
+artifact=powercontext-0.1.0-linux-amd64 # use powercontext-full-0.1.0-linux-amd64 for Full
+curl -fLO "$release_url/SHA256SUMS"
+curl -fLO "$release_url/$artifact.tar.gz"
+curl -fLO "$release_url/$artifact.spdx.json"
+awk -v archive="$artifact.tar.gz" -v sbom="$artifact.spdx.json" \
+  '$2 == archive || $2 == sbom { print }' SHA256SUMS | sha256sum --check --strict
+tar -xzf "$artifact.tar.gz"
+cd "$artifact"
 sha256sum --check SHA256SUMS
 ./bin/powercontext --version
 ```
 
-On macOS, use `shasum -a 256 -c SHA256SUMS` in place of `sha256sum`.
+On macOS, replace the release-level pipeline with
+`awk -v archive="$artifact.tar.gz" -v sbom="$artifact.spdx.json" '$2 == archive || $2 == sbom { print }' SHA256SUMS | shasum -a 256 -c - --strict`,
+then use `shasum -a 256 -c SHA256SUMS` after extracting the archive.
 
 ## Configure the SQLite pre-WP6 installation
 
