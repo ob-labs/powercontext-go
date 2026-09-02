@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 774,
-  "pending_case_count": 38,
+  "mapped_case_count": 796,
+  "pending_case_count": 16,
   "entries": [
     {
       "python": {
@@ -7169,8 +7169,15 @@
         "line": 34
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capability.py",
+          "test": "test_context_is_replaced_once_per_run_when_reusing_old_history"
+        }
+      ]
     },
     {
       "python": {
@@ -7179,8 +7186,15 @@
         "line": 70
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capability.py",
+          "test": "test_empty_context_is_not_injected"
+        }
+      ]
     },
     {
       "python": {
@@ -7189,8 +7203,15 @@
         "line": 93
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capability.py",
+          "test": "test_unreachable_server_fails_open_for_recall"
+        }
+      ]
     },
     {
       "python": {
@@ -7199,8 +7220,15 @@
         "line": 120
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capability.py",
+          "test": "test_authentication_failure_logs_one_credential_free_configuration_warning"
+        }
+      ]
     },
     {
       "python": {
@@ -7209,8 +7237,15 @@
         "line": 56
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_capture_disabled_makes_no_source_or_flush_requests"
+        }
+      ]
     },
     {
       "python": {
@@ -7219,8 +7254,15 @@
         "line": 75
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_capture_is_bounded_redacted_checkpointed_and_serialized_under_parallel_tools"
+        }
+      ]
     },
     {
       "python": {
@@ -7229,8 +7271,15 @@
         "line": 149
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_checkpoint_flush_catches_up_across_more_than_ten_source_windows"
+        }
+      ]
     },
     {
       "python": {
@@ -7239,8 +7288,15 @@
         "line": 176
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_shared_capture_redacts_compact_keys_and_structured_json_strings"
+        }
+      ]
     },
     {
       "python": {
@@ -7249,8 +7305,15 @@
         "line": 198
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_shared_capture_structures_supported_objects_without_stringifying_unknown_objects"
+        }
+      ]
     },
     {
       "python": {
@@ -7259,8 +7322,15 @@
         "line": 226
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_capture_redacts_pydantic_model_tool_results"
+        }
+      ]
     },
     {
       "python": {
@@ -7269,8 +7339,15 @@
         "line": 270
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_shared_capture_redacts_codex_auth_values_outside_sensitive_keys"
+        }
+      ]
     },
     {
       "python": {
@@ -7279,8 +7356,15 @@
         "line": 292
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_capture_failure_does_not_change_tool_or_model_results_or_log_arbitrary_exception_messages"
+        }
+      ]
     },
     {
       "python": {
@@ -7289,8 +7373,15 @@
         "line": 339
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_capture.py",
+          "test": "test_flush_failure_does_not_change_model_result"
+        }
+      ]
     },
     {
       "python": {
@@ -7309,8 +7400,15 @@
         "line": 35
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_settings_load_all_environment_values_and_keep_token_secret"
+        }
+      ]
     },
     {
       "python": {
@@ -7319,8 +7417,15 @@
         "line": 69
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_settings_reject_unsafe_server_urls"
+        }
+      ]
     },
     {
       "python": {
@@ -7329,8 +7434,15 @@
         "line": 74
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_settings_require_a_bare_token_without_leaking_invalid_input"
+        }
+      ]
     },
     {
       "python": {
@@ -7339,8 +7451,15 @@
         "line": 91
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_scope_reuses_codex_remote_normalization"
+        }
+      ]
     },
     {
       "python": {
@@ -7349,8 +7468,15 @@
         "line": 95
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_scope_uses_normalized_git_origin_then_local_path"
+        }
+      ]
     },
     {
       "python": {
@@ -7359,8 +7485,15 @@
         "line": 114
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_explicit_scope_skips_git_and_is_deterministically_bounded"
+        }
+      ]
     },
     {
       "python": {
@@ -7369,8 +7502,15 @@
         "line": 130
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_settings_scope.py",
+          "test": "test_constructor_scope_callback_wins_and_runs_once_per_agent_run"
+        }
+      ]
     },
     {
       "python": {
@@ -7379,8 +7519,15 @@
         "line": 31
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_toolset.py",
+          "test": "test_toolset_exposes_exact_schemas_instructions_request_mapping_and_full_responses"
+        }
+      ]
     },
     {
       "python": {
@@ -7389,8 +7536,15 @@
         "line": 116
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/pydantic-ai/tests/test_toolset.py",
+          "test": "test_toolset_converts_client_failure_to_model_retry"
+        }
+      ]
     },
     {
       "python": {
