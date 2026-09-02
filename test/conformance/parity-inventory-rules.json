@@ -123,7 +123,14 @@
     },
     "tests/claude_code_plugin/test_hook.py": {
       "mode": "retained-host",
-      "reason": "Claude Code prompt hook behavior is owned by the retained Claude Code adapter."
+      "reason": "Claude Code prompt hook behavior is owned by the retained Claude Code adapter.",
+      "cases": {
+        "test_unknown_schema_is_not_injected": {
+          "evidence": [
+            "py:integrations/claude-code/tests/test_hook.py#test_unknown_schema_is_not_injected"
+          ]
+        }
+      }
     },
     "tests/e2e/test_observability.py": {
       "mode": "cross-layer",
