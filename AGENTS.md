@@ -389,3 +389,7 @@ source / artifact / trigger / inference
   after an earlier adapter failure, and record every individual step outcome
   in bounded diagnostics. Verify a workflow contract test rejects a merged
   step, a missing failure-continuation guard, or a missing adapter outcome.
+- When a background tracing root cannot start, preserve cancellation and value
+  context while explicitly clearing the ambient trace parent before later
+  stages begin. Verify an injected root-start failure leaves child spans
+  unparented and on a different trace ID from the ambient operation.

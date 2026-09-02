@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 )
@@ -118,6 +119,67 @@ func TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope(t *testi
 			}
 		})
 	}
+}
+
+func TestRuntimeBackgroundRootFailureStartsUnparentedChildSpans(t *testing.T) {
+	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSpanProcessor(recorder),
+	)
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	operation := pcruntime.ProcessSourceWindowOperation
+	runtime, err := pcruntime.NewConfigured(pcruntime.RuntimeOptions{
+		Tracing: newRuntimeStageTracing(failNamedTracerProvider{TracerProvider: provider, name: operation}),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, ambient := provider.Tracer("test").Start(t.Context(), "HTTP flush_memory")
+	err = runtime.BackgroundOperation(ctx, operation, func(ctx context.Context) (string, error) {
+		return pcruntime.ScheduledProcessingSuccess,
+			runtime.ScopedWrite(ctx, "project:private-scheduled-scope", func(context.Context, string) error { return nil })
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ambient.End()
+
+	spans := recorder.Ended()
+	for _, span := range spans {
+		if span.Name() == operation {
+			t.Fatalf("recorded background root despite injected start failure: %#v", span)
+		}
+	}
+	child := endedSpan(t, spans, "scope.context")
+	if child.Parent().IsValid() {
+		t.Fatalf("child span inherited parent %s after background root failure", child.Parent().SpanID())
+	}
+	if child.SpanContext().TraceID() == ambient.SpanContext().TraceID() {
+		t.Fatalf("child span retained ambient trace ID %s after background root failure", child.SpanContext().TraceID())
+	}
+}
+
+type failNamedTracerProvider struct {
+	trace.TracerProvider
+	name string
+}
+
+func (p failNamedTracerProvider) Tracer(name string, options ...trace.TracerOption) trace.Tracer {
+	return failNamedTracer{Tracer: p.TracerProvider.Tracer(name, options...), name: p.name}
+}
+
+type failNamedTracer struct {
+	trace.Tracer
+	name string
+}
+
+func (t failNamedTracer) Start(ctx context.Context, name string, options ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if name == t.name {
+		panic("injected background root tracer failure")
+	}
+	return t.Tracer.Start(ctx, name, options...)
 }
 
 func hasTraceAttributes(attributes []attribute.KeyValue, want map[string]string) bool {
