@@ -38,11 +38,24 @@ import (
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 )
 
+// maxRequestBodyBytes bounds how much of an application/json request body the
+// transport buffers for the Unicode pre-check. Contract-valid requests stay
+// far below it (string fields cap at 200,000 characters and arrays at 32
+// items); the bound exists so unauthenticated callers cannot exhaust server
+// memory through unbounded buffering.
+const maxRequestBodyBytes = 32 << 20 // 32 MiB
+
 // ValidateJSONUnicode rejects malformed UTF-8 and unpaired JSON surrogate
 // escapes before Go's JSON decoder replaces them with U+FFFD. Pydantic rejects
 // the same input at the Python transport boundary; preserving that distinction
 // also prevents malformed private input from reaching application handlers.
+// Bodies larger than maxRequestBodyBytes are rejected with 413 before any
+// buffering can grow without bound.
 func ValidateJSONUnicode(next http.Handler) http.Handler {
+	return validateJSONUnicodeWithLimit(next, maxRequestBodyBytes)
+}
+
+func validateJSONUnicodeWithLimit(next http.Handler, limit int64) http.Handler {
 	if next == nil {
 		return nil
 	}
@@ -52,9 +65,15 @@ func ValidateJSONUnicode(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		payload, readErr := io.ReadAll(r.Body)
 		_ = r.Body.Close()
 		if readErr != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(readErr, &tooLarge) {
+				writeRequestBodyTooLarge(w, tooLarge.Limit)
+				return
+			}
 			writeInvalidUnicode(w, "")
 			return
 		}
@@ -64,6 +83,14 @@ func ValidateJSONUnicode(next http.Handler) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+func writeRequestBodyTooLarge(w http.ResponseWriter, limit int64) {
+	writeError(w, http.StatusRequestEntityTooLarge, Error{
+		Code:    "request_too_large",
+		Message: "The request body exceeds the transport limit.",
+		Details: map[string]any{"limit_bytes": limit},
 	})
 }
 
@@ -243,7 +270,7 @@ func Wrap(next http.Handler, options Options) (http.Handler, error) {
 			http.NotFound(writer, ctx)
 			return
 		}
-		if options.BearerToken != "" && !isPublicPath(r.URL.Path) && !validBearer(r.Header.Get("Authorization"), options.BearerToken) {
+		if options.BearerToken != "" && !isPublicPath(r.Method, r.URL.Path) && !validBearer(r.Header.Get("Authorization"), options.BearerToken) {
 			writer.Header().Set("WWW-Authenticate", "Bearer")
 			writeError(writer, http.StatusUnauthorized, Error{
 				Code:    "unauthorized",
@@ -256,7 +283,15 @@ func Wrap(next http.Handler, options Options) (http.Handler, error) {
 	}), nil
 }
 
-func isPublicPath(path string) bool {
+// isPublicPath reports whether a request may skip bearer authentication. All
+// public surfaces (dashboard and report shells, health probes, static assets)
+// are registered read-only, so only GET and HEAD qualify. Restricting the
+// method keeps the prefix match for /static/ from exempting arbitrary
+// state-changing verbs that the mux would otherwise reject after the bypass.
+func isPublicPath(method, path string) bool {
+	if method != http.MethodGet && method != http.MethodHead {
+		return false
+	}
 	if _, ok := publicPaths[path]; ok {
 		return true
 	}
