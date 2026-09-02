@@ -180,3 +180,70 @@ def test_invalid_configuration_is_concise_and_does_not_print_secrets(monkeypatch
     assert "Invalid evaluation configuration" in result.output
     assert secret not in result.output
     assert "validation error" not in result.output.casefold()
+
+
+def test_baseline_help_exposes_subcommands() -> None:
+    result = CliRunner().invoke(app, ["baseline", "--help"])
+
+    assert result.exit_code == 0
+    assert "create" in result.output
+    assert "list" in result.output
+    assert "get" in result.output
+    assert "items" in result.output
+    assert "candidates" in result.output
+    assert "select" in result.output
+    assert "compare" in result.output
+
+
+def test_baseline_create_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "create", "--help"])
+
+    assert result.exit_code == 0
+    assert "--source-batch-id" in result.output
+    assert "--source-arm" in result.output
+    assert "--name" in result.output
+    assert "--idempotency-key" in result.output
+
+
+def test_baseline_list_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "list", "--help"])
+
+    assert result.exit_code == 0
+    assert "--console-url" in result.output
+
+
+def test_baseline_get_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "get", "--help"])
+
+    assert result.exit_code == 0
+    assert "baseline_id" in result.output
+
+
+def test_baseline_items_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "items", "--help"])
+
+    assert result.exit_code == 0
+    assert "baseline_id" in result.output
+
+
+def test_baseline_candidates_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "candidates", "--help"])
+
+    assert result.exit_code == 0
+    assert "batch_id" in result.output
+    assert "current_arm" in result.output
+
+
+def test_baseline_select_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "select", "--help"])
+
+    assert result.exit_code == 0
+    assert "--baseline-id" in result.output
+    assert "--current-arm" in result.output
+
+
+def test_baseline_compare_help_shows_options() -> None:
+    result = CliRunner().invoke(app, ["baseline", "compare", "--help"])
+
+    assert result.exit_code == 0
+    assert "batch_id" in result.output
