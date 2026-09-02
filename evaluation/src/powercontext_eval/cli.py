@@ -378,7 +378,6 @@ def baseline_create(
             raise typer.BadParameter("Could not determine report revision from the batch.")
         expected_report_revision = report["report_revision"]
 
-
     try:
         request = BaselineCreate(
             name=name,
