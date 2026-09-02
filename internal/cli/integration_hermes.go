@@ -30,11 +30,16 @@ import (
 )
 
 const (
-	hermesPluginName = "powercontext"
-	hermesRelative   = "integrations/hermes/plugins/powercontext"
+	hermesPluginName        = "powercontext"
+	hermesCommandPluginName = "powercontext-command"
+	hermesRelative          = "integrations/hermes/plugins/powercontext"
+	hermesCommandRelative   = "integrations/hermes/plugins/powercontext-command"
 )
 
-var hermesVersionPattern = regexp.MustCompile(`Hermes Agent v?(\d+)\.(\d+)\.(\d+)`)
+var (
+	hermesVersionPattern = regexp.MustCompile(`Hermes Agent v?(\d+)\.(\d+)\.(\d+)`)
+	hermesRename         = os.Rename
+)
 
 func newSetupHermesCommand(state *commandState) *cobra.Command {
 	var source, ref string
@@ -52,7 +57,7 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			sourcePlugin, err := resolveHermesPlugin(command.Context(), state.system, source, ref, dataDirectory)
+			sourcePlugins, err := resolveHermesPlugins(command.Context(), state.system, source, ref, dataDirectory)
 			if err != nil {
 				return err
 			}
@@ -61,7 +66,8 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 				return err
 			}
 			target := filepath.Join(home, "plugins", hermesPluginName)
-			if installErr := installHermesPlugin(command.Context(), state.system, executable, sourcePlugin, target); installErr != nil {
+			commandTarget := filepath.Join(home, "plugins", hermesCommandPluginName)
+			if installErr := installHermesPlugins(command.Context(), state.system, executable, sourcePlugins, map[string]string{hermesPluginName: target, hermesCommandPluginName: commandTarget}); installErr != nil {
 				return installErr
 			}
 			checks := runHermesDiagnostics(command.Context(), state.system)
@@ -72,7 +78,7 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 				return alreadyReported(setupVerificationError(checks))
 			}
 			result := map[string]string{
-				"plugin": hermesPluginName, "plugin_path": target, "hermes_home": home, "data_dir": dataDirectory,
+				"plugin": hermesPluginName, "plugin_path": target, "command_plugin_path": commandTarget, "hermes_home": home, "data_dir": dataDirectory,
 			}
 			if state.json {
 				return writeJSON(state.stdout, result)
@@ -87,6 +93,57 @@ func newSetupHermesCommand(state *commandState) *cobra.Command {
 	command.Flags().StringVar(&source, "source", defaultMarketplaceSource, "PowerContext Git source or local checkout path.")
 	command.Flags().StringVar(&ref, "ref", defaultMarketplaceRef, "Git ref used for a remote source.")
 	return command
+}
+
+func resolveHermesPlugins(ctx context.Context, commands systemCommandExecutor, source, ref, dataDirectory string) (map[string]string, error) {
+	root, local, err := normalizeMarketplaceSource(source)
+	if err != nil {
+		return nil, err
+	}
+	if !local {
+		if err := validateRemoteRef(ref); err != nil {
+			return nil, errors.New("invalid Hermes ref")
+		}
+		cloneURL, err := githubRepositoryCloneURL(source)
+		if err != nil {
+			return nil, errors.New("invalid Hermes source")
+		}
+		sourceHash, refHash := sha256.Sum256([]byte(strings.ToLower(cloneURL))), sha256.Sum256([]byte(ref))
+		target := filepath.Join(dataDirectory, "checkouts", "hermes", hex.EncodeToString(sourceHash[:8]), hex.EncodeToString(refHash[:8]), "current")
+		root, err = refreshIntegrationCheckout(ctx, commands, cloneURL, ref, target, func(path string) error {
+			_, ok := findHermesPluginPair(path)
+			if !ok {
+				return errors.New("PowerContext Hermes plugins were not found under the selected source")
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	pair, ok := findHermesPluginPair(root)
+	if !ok {
+		return nil, errors.New("PowerContext Hermes plugins were not found under the selected source")
+	}
+	return pair, nil
+}
+
+func findHermesPluginPair(root string) (map[string]string, bool) {
+	for _, candidate := range []string{root, filepath.Join(root, filepath.FromSlash("integrations/hermes/plugins"))} {
+		result := map[string]string{}
+		for name := range map[string]string{hermesPluginName: hermesPluginName, hermesCommandPluginName: hermesCommandPluginName} {
+			path := filepath.Join(candidate, name)
+			if _, ok := findHermesPlugin(path); !ok {
+				result = nil
+				break
+			}
+			result[name] = path
+		}
+		if result != nil {
+			return result, true
+		}
+	}
+	return nil, false
 }
 
 func newDoctorHermesCommand(state *commandState) *cobra.Command {
@@ -194,49 +251,73 @@ func findHermesPlugin(root string) (string, bool) {
 	return "", false
 }
 
-func installHermesPlugin(
-	ctx context.Context,
-	commands systemCommandExecutor,
-	executable, source, target string,
-) error {
-	parent := filepath.Dir(target)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return errors.New("cannot create Hermes plugin directory")
-	}
-	staging, err := os.MkdirTemp(parent, ".powercontext-")
-	if err != nil {
-		return errors.New("cannot create Hermes plugin staging directory")
-	}
-	defer func() { _ = os.RemoveAll(staging) }()
-	if err := copyRegularTree(source, staging); err != nil {
-		return errors.New("cannot copy the PowerContext Hermes plugin")
-	}
-	if _, doctorErr := commands.Run(ctx, executable, "plugins", "doctor", "--ci", staging); doctorErr != nil {
-		return doctorErr
-	}
-	backup := ""
-	if _, err := os.Lstat(target); err == nil {
-		backup, err = os.MkdirTemp(parent, ".powercontext-backup-")
+func installHermesPlugins(ctx context.Context, commands systemCommandExecutor, executable string, sources, targets map[string]string) error {
+	type stagedPlugin struct{ name, target, staging, backup string }
+	plugins := make([]stagedPlugin, 0, 2)
+	for _, name := range []string{hermesPluginName, hermesCommandPluginName} {
+		target := targets[name]
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return errors.New("cannot create Hermes plugin directory")
+		}
+		staging, err := os.MkdirTemp(filepath.Dir(target), ".powercontext-")
 		if err != nil {
-			return errors.New("cannot create Hermes plugin backup")
+			return errors.New("cannot create Hermes plugin staging directory")
 		}
-		if removeErr := os.Remove(backup); removeErr != nil {
-			return removeErr
+		plugins = append(plugins, stagedPlugin{name: name, target: target, staging: staging})
+		if err := copyRegularTree(sources[name], staging); err != nil {
+			return errors.New("cannot copy the PowerContext Hermes plugin")
 		}
-		if renameErr := os.Rename(target, backup); renameErr != nil {
-			return errors.New("cannot preserve existing Hermes plugin")
+		if _, err := commands.Run(ctx, executable, "plugins", "doctor", "--ci", staging); err != nil {
+			return err
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return errors.New("cannot inspect existing Hermes plugin")
 	}
-	if activateErr := os.Rename(staging, target); activateErr != nil {
-		if backup != "" {
-			_ = os.Rename(backup, target)
+	rollback := func() {
+		for _, plugin := range plugins {
+			_ = os.RemoveAll(plugin.staging)
+			if plugin.backup != "" {
+				_ = os.RemoveAll(plugin.target)
+				_ = hermesRename(plugin.backup, plugin.target)
+			}
 		}
-		return errors.New("cannot activate Hermes plugin")
 	}
-	if backup != "" {
-		_ = os.RemoveAll(backup)
+	for index := range plugins {
+		plugin := &plugins[index]
+		if _, err := os.Lstat(plugin.target); err == nil {
+			backup, backupErr := os.MkdirTemp(filepath.Dir(plugin.target), ".powercontext-backup-")
+			if backupErr != nil {
+				rollback()
+				return errors.New("cannot create Hermes plugin backup")
+			}
+			if removeErr := os.Remove(backup); removeErr != nil {
+				rollback()
+				return removeErr
+			}
+			if renameErr := hermesRename(plugin.target, backup); renameErr != nil {
+				rollback()
+				return errors.New("cannot preserve existing Hermes plugin")
+			}
+			plugin.backup = backup
+		} else if !errors.Is(err, os.ErrNotExist) {
+			rollback()
+			return errors.New("cannot inspect existing Hermes plugin")
+		}
+	}
+	for index := range plugins {
+		plugin := &plugins[index]
+		if err := hermesRename(plugin.staging, plugin.target); err != nil {
+			rollback()
+			return errors.New("cannot activate Hermes plugin")
+		}
+		plugin.staging = ""
+	}
+	if _, err := commands.Run(ctx, executable, "plugins", "enable", hermesCommandPluginName); err != nil {
+		rollback()
+		return err
+	}
+	for _, plugin := range plugins {
+		if plugin.backup != "" {
+			_ = os.RemoveAll(plugin.backup)
+		}
 	}
 	return nil
 }
@@ -245,15 +326,17 @@ func runHermesDiagnostics(ctx context.Context, commands systemCommandExecutor) m
 	executable, err := commands.LookPath("hermes")
 	if err != nil {
 		return map[string]diagnostic{
-			"hermes": {Status: "failed", Detail: "Hermes CLI is not installed or is not on PATH"},
-			"plugin": {Status: "skipped", Detail: "not checked because Hermes CLI is unavailable"},
+			"hermes":         {Status: "failed", Detail: "Hermes CLI is not installed or is not on PATH"},
+			"plugin":         {Status: "skipped", Detail: "not checked because Hermes CLI is unavailable"},
+			"command_plugin": {Status: "skipped", Detail: "not checked because Hermes CLI is unavailable"},
 		}
 	}
 	version, err := hermesVersion(ctx, commands, executable)
 	if err != nil {
 		return map[string]diagnostic{
-			"hermes": {Status: "failed", Detail: err.Error()},
-			"plugin": {Status: "skipped", Detail: "not checked because Hermes version validation failed"},
+			"hermes":         {Status: "failed", Detail: err.Error()},
+			"plugin":         {Status: "skipped", Detail: "not checked because Hermes version validation failed"},
+			"command_plugin": {Status: "skipped", Detail: "not checked because Hermes version validation failed"},
 		}
 	}
 	home, err := hermesHome()
@@ -264,18 +347,37 @@ func runHermesDiagnostics(ctx context.Context, commands systemCommandExecutor) m
 		}
 	}
 	pluginPath := filepath.Join(home, "plugins", hermesPluginName)
+	commandPath := filepath.Join(home, "plugins", hermesCommandPluginName)
 	if _, ok := findHermesPlugin(pluginPath); !ok {
 		return map[string]diagnostic{
-			"hermes": {OK: true, Status: "ok", Detail: fmt.Sprintf("%s (Hermes Agent v%s)", executable, version)},
-			"plugin": {Status: "failed", Detail: "PowerContext Hermes plugin is not installed"},
+			"hermes":         {OK: true, Status: "ok", Detail: fmt.Sprintf("%s (Hermes Agent v%s)", executable, version)},
+			"plugin":         {Status: "failed", Detail: "PowerContext Hermes plugin is not installed"},
+			"command_plugin": {Status: "skipped", Detail: "not checked because the provider plugin is unavailable"},
+		}
+	}
+	if _, ok := findHermesPlugin(commandPath); !ok {
+		return map[string]diagnostic{
+			"hermes":         {OK: true, Status: "ok", Detail: fmt.Sprintf("%s (Hermes Agent v%s)", executable, version)},
+			"plugin":         {OK: true, Status: "ok", Detail: "powercontext passed Hermes plugin doctor"},
+			"command_plugin": {Status: "failed", Detail: "PowerContext Hermes command plugin is not installed"},
 		}
 	}
 	pluginCheck := diagnostic{OK: true, Status: "ok", Detail: "powercontext passed Hermes plugin doctor"}
 	if _, err := commands.Run(ctx, executable, "plugins", "doctor", "--ci", pluginPath); err != nil {
 		pluginCheck = diagnostic{Status: "failed", Detail: err.Error()}
+		return map[string]diagnostic{
+			"hermes":         {OK: true, Status: "ok", Detail: fmt.Sprintf("%s (Hermes Agent v%s)", executable, version)},
+			"plugin":         pluginCheck,
+			"command_plugin": {Status: "skipped", Detail: "not checked because the provider plugin doctor failed"},
+		}
+	}
+	commandCheck := diagnostic{OK: true, Status: "ok", Detail: "powercontext-command passed Hermes plugin doctor"}
+	if _, err := commands.Run(ctx, executable, "plugins", "doctor", "--ci", commandPath); err != nil {
+		commandCheck = diagnostic{Status: "failed", Detail: err.Error()}
 	}
 	return map[string]diagnostic{
-		"hermes": {OK: true, Status: "ok", Detail: fmt.Sprintf("%s (Hermes Agent v%s)", executable, version)},
-		"plugin": pluginCheck,
+		"hermes":         {OK: true, Status: "ok", Detail: fmt.Sprintf("%s (Hermes Agent v%s)", executable, version)},
+		"plugin":         pluginCheck,
+		"command_plugin": commandCheck,
 	}
 }
