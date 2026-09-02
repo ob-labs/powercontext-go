@@ -400,7 +400,24 @@
     },
     "tests/test_server_tracing.py": {
       "mode": "go-port",
-      "reason": "Background and runtime trace-root outcomes map to Go Server tracing orchestration."
+      "reason": "Background and runtime trace-root outcomes map to Go Server tracing orchestration.",
+      "cases": {
+        "test_runtime_stage_records_explicit_noop_and_failure_outcomes": {
+          "evidence": [
+            "go:internal/runtime/scheduled_processor_test.go#TestScheduledProcessorRecordsBackgroundRootsAndOutcomes"
+          ]
+        },
+        "test_background_stage_starts_a_fresh_trace_outside_an_ambient_span": {
+          "evidence": [
+            "go:server/runtime_tracing_test.go#TestRuntimeBackgroundOperationStartsIndependentRootWithoutRawScope"
+          ]
+        },
+        "test_background_isolates_child_spans_when_root_start_fails": {
+          "evidence": [
+            "go:server/runtime_tracing_test.go#TestRuntimeBackgroundRootFailureStartsUnparentedChildSpans"
+          ]
+        }
+      }
     },
     "e2e/bub/tests/test_bub_transport_trust.py": {
       "mode": "retained-host",

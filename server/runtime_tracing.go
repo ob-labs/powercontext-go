@@ -45,7 +45,14 @@ func (t runtimeStageTracing) StartBackground(
 	ctx context.Context,
 	name string,
 	attributes map[string]pcruntime.TraceAttribute,
-) (context.Context, pcruntime.StageSpan) {
+) (backgroundContext context.Context, stage pcruntime.StageSpan) {
+	backgroundContext = ctx
+	defer func() {
+		if recover() != nil {
+			backgroundContext = trace.ContextWithSpanContext(ctx, trace.SpanContext{})
+			stage = nil
+		}
+	}()
 	spanContext, operation := requesttrace.StartBackgroundOperation(ctx, t.provider, name, name)
 	operation.SetAttributes(attributes)
 	return spanContext, operation
