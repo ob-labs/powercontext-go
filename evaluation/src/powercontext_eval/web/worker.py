@@ -38,7 +38,7 @@ from powercontext_eval.benchmarks.swebench_pro.prediction import BinaryPatchErro
 from powercontext_eval.codex import CodexCapacityError, CodexInfrastructureError, UnsafeCodexInvocation
 from powercontext_eval.errors import CommandCancelled, CommandError, GitSourceError, PowerContextEvalError
 from powercontext_eval.git_source import GitSource
-from powercontext_eval.models import PowerContextRef
+from powercontext_eval.models import Arm, PowerContextRef
 from powercontext_eval.paths import EvaluationPaths
 from powercontext_eval.powercontext_sut import (
     InvalidTreatment,
@@ -63,6 +63,7 @@ from powercontext_eval.web.finalization import DockerFinalizationRuntime, Tokens
 from powercontext_eval.web.models import (
     FailureCategory,
     FailureCode,
+    ReportResponse,
     RetryDisposition,
     SafeFailure,
     TaskPhase,
@@ -247,7 +248,8 @@ class TaskPairWorker:
             if ownership_lost.is_set():
                 return True
             task_result = self._validated_result(task, result)
-            load_report(layout.run_artifacts, self._config.run_root / "runs")
+            report = load_report(layout.run_artifacts, self._config.run_root / "runs")
+            self._validated_retained_report(task, task_result, report)
             self._store.succeed(task.task_id, self._worker_id, task_result, now=self._clock())
             attempt_finished = True
         except (TaskOwnershipError, TaskConflict):
@@ -324,6 +326,7 @@ class TaskPairWorker:
             docker_network_pool=self._config.docker_network_pool,
             extra_no_proxy_hosts=self._config.extra_no_proxy_hosts,
             run_id=_execution_run_id(task),
+            treatment_mode=task.request.treatment_mode,
             model=task.request.model,
             reasoning_effort=task.request.reasoning_effort,
             finalization_registrar=self._finalization_registrar(task),
@@ -464,12 +467,44 @@ class TaskPairWorker:
                 os.close(descriptor)
         except (FileNotFoundError, OSError, RuntimeError, ValueError, InvalidReportBundle):
             raise InvalidReportBundle("Runner returned an unsafe report path") from None
+        returned_arms = {
+            arm
+            for arm, resolved in ((Arm.OFF, result.off_resolved), (Arm.ON, result.on_resolved))
+            if resolved is not None
+        }
+        if returned_arms != set(task.request.treatment_mode.arms):
+            raise InvalidReportBundle("Runner outcomes do not match the requested treatment mode")
         return TaskResult(
             artifact_dir=os.fspath(layout.run_artifacts.relative_to(self._config.run_root)),
             report_path=os.fspath(expected_report.relative_to(self._config.run_root)),
             off_resolved=result.off_resolved,
             on_resolved=result.on_resolved,
         )
+
+    def _validated_retained_report(self, task: TaskRecord, result: TaskResult, report: ReportResponse) -> None:
+        expected_arms = set(task.request.treatment_mode.arms)
+        report_arms = {arm for arm, value in ((Arm.OFF, report.off), (Arm.ON, report.on)) if value is not None}
+        evidence_arms = {
+            arm for arm, value in ((Arm.OFF, report.evidence.off), (Arm.ON, report.evidence.on)) if value is not None
+        }
+        result_arms = {
+            arm for arm, value in ((Arm.OFF, result.off_resolved), (Arm.ON, result.on_resolved)) if value is not None
+        }
+        if (
+            report.treatment_mode is not task.request.treatment_mode
+            or report_arms != expected_arms
+            or evidence_arms != expected_arms
+            or result_arms != expected_arms
+        ):
+            raise InvalidReportBundle("Retained report does not match the requested treatment mode")
+        for arm, report_arm, resolved in (
+            (Arm.OFF, report.off, result.off_resolved),
+            (Arm.ON, report.on, result.on_resolved),
+        ):
+            if arm not in expected_arms:
+                continue
+            if report_arm is None or resolved is None or (report_arm.resolution == "resolved") is not resolved:
+                raise InvalidReportBundle("Retained report outcomes do not match the runner result")
 
     def _fail(self, task: TaskRecord, failure: SafeFailure, ownership_lost: threading.Event) -> bool:
         if ownership_lost.is_set():

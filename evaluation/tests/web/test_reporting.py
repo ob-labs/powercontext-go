@@ -117,6 +117,56 @@ def test_loads_validated_report_and_derives_exact_comparisons(tmp_path: Path) ->
     assert dict(response.configuration) == dict(_bundle().configuration)
 
 
+@pytest.mark.parametrize(("mode", "arm"), (("on_only", "on"), ("off_only", "off")))
+def test_loads_single_arm_report_without_inventing_the_missing_arm(
+    tmp_path: Path,
+    mode: str,
+    arm: str,
+) -> None:
+    runs_root = tmp_path / "runs"
+    run_dir = runs_root / "run-single"
+    evidence_dir = run_dir / "arms" / arm / "powercontext"
+    evidence_dir.mkdir(parents=True)
+    (evidence_dir / "treatment.json").write_text(json.dumps(_evidence(run_dir.name, arm)))
+    payload = json.loads(_bundle().model_dump_json())
+    payload["treatment_mode"] = mode
+    payload["off" if arm == "on" else "on"] = None
+    (run_dir / "report.json").write_text(json.dumps(payload))
+
+    response = load_report(run_dir, runs_root)
+
+    assert response.treatment_mode.value == mode
+    assert (response.off is not None) is (arm == "off")
+    assert (response.on is not None) is (arm == "on")
+    assert response.comparison is None
+
+
+@pytest.mark.parametrize(
+    ("mode", "selected_arm", "unexpected_arm"),
+    (("on_only", "on", "off"), ("off_only", "off", "on")),
+)
+def test_rejects_unrequested_arm_evidence_from_single_arm_run(
+    tmp_path: Path,
+    mode: str,
+    selected_arm: str,
+    unexpected_arm: str,
+) -> None:
+    runs_root = tmp_path / "runs"
+    run_dir = runs_root / "run-extra-arm"
+    payload = json.loads(_bundle().model_dump_json())
+    payload["treatment_mode"] = mode
+    payload["off" if selected_arm == "on" else "on"] = None
+    (run_dir / "report.json").parent.mkdir(parents=True)
+    (run_dir / "report.json").write_text(json.dumps(payload))
+    for arm in (selected_arm, unexpected_arm):
+        evidence_dir = run_dir / "arms" / arm / "powercontext"
+        evidence_dir.mkdir(parents=True)
+        (evidence_dir / "treatment.json").write_text(json.dumps(_evidence(run_dir.name, arm)))
+
+    with pytest.raises(InvalidReportArtifact):
+        load_report(run_dir, runs_root)
+
+
 @pytest.mark.parametrize(
     ("relative_path", "contents"),
     [
