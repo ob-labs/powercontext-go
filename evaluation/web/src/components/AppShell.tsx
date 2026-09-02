@@ -48,11 +48,18 @@ export function AppShell({ api, path, batchId, navigate, children }: AppShellPro
   const encodedBatchId = batchId === null ? null : encodeURIComponent(batchId);
   const taskReport = path.match(/^\/report\/[^/]+\/tasks(?:\/|$)/) !== null;
   const runtimeReport = path.match(/^\/report\/[^/]+\/running$/) !== null;
+  const baselineLibrary = path === "/baselines";
   const links = [
+    {
+      href: "/baselines",
+      label: "基线库",
+      current: baselineLibrary,
+      disabled: false,
+    },
     {
       href: encodedBatchId === null ? "/" : `/report/${encodedBatchId}`,
       label: "总体报告",
-      current: !taskReport && !runtimeReport,
+      current: !baselineLibrary && !taskReport && !runtimeReport,
       disabled: false,
     },
     {
