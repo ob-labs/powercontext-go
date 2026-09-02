@@ -322,6 +322,13 @@ def _api_endpoint(console_url: str, path: str) -> str:
     return console_url.rstrip("/") + path
 
 
+def _read_error_body(error: HTTPError) -> str:
+    try:
+        return error.read().decode("utf-8", errors="replace")
+    except (OSError, ValueError):
+        return ""
+
+
 def _http_request(method: str, url: str, body: bytes | None = None) -> Any:
     headers = {"Content-Type": "application/json"} if body else {"Accept": "application/json"}
     request = Request(url, data=body, headers=headers, method=method)
@@ -332,16 +339,10 @@ def _http_request(method: str, url: str, body: bytes | None = None) -> Any:
         if error.code == 404:
             raise typer.BadParameter("Resource not found.") from None
         if error.code == 409:
-            try:
-                detail = error.read().decode("utf-8", errors="replace")
-            except (OSError, ValueError):
-                detail = ""
+            detail = _read_error_body(error)
             raise typer.BadParameter("Conflict: " + (detail or "idempotency conflict")) from None
         if error.code == 422:
-            try:
-                detail = error.read().decode("utf-8", errors="replace")
-            except (OSError, ValueError):
-                detail = ""
+            detail = _read_error_body(error)
             raise typer.BadParameter("Invalid request: " + (detail or "validation failed.")) from None
         raise typer.Exit(code=1) from None
     except (URLError, OSError, ValueError, UnicodeDecodeError):
@@ -462,18 +463,10 @@ def baseline_select(
     existing = _http_request("GET", endpoint)
     existing_selections: list[dict[str, str]] = existing if isinstance(existing, list) else []
 
-    new_selection = {"baseline_id": baseline_id, "current_arm": current_arm}
-    merged = existing_selections + [new_selection]
-
-    # Deduplicate by (baseline_id, current_arm) keeping last occurrence.
-    seen: set[tuple[str, str]] = set()
-    deduped: list[dict[str, str]] = []
-    for sel in reversed(merged):
-        key = (sel["baseline_id"], sel["current_arm"])
-        if key not in seen:
-            seen.add(key)
-            deduped.append(sel)
-    deduped.reverse()
+    # Deduplicate by (baseline_id, current_arm), last occurrence wins.
+    merged = {**{f"{s['baseline_id']}:{s['current_arm']}": s for s in existing_selections},
+              f"{baseline_id}:{current_arm}": {"baseline_id": baseline_id, "current_arm": current_arm}}
+    deduped = list(merged.values())
 
     try:
         update = BaselineSelectionUpdate(

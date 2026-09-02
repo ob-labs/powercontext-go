@@ -1116,6 +1116,24 @@ def create_app(
         except BatchNotFound:
             return _error(404, "batch_not_found", "The requested evaluation batch does not exist.")
 
+    def _batch_report(
+        batch_id: str,
+    ) -> tuple[BatchRecord, list[TaskRecord], BatchReportResponse] | Response:
+        selected = _batch_inputs(batch_id)
+        if isinstance(selected, Response):
+            return selected
+        batch, tasks = selected
+        try:
+            report = load_batch_report(
+                batch,
+                tasks,
+                runs_root=config.run_root / "runs",
+                catalog=get_catalog(),
+            )
+        except (CatalogError, ReportingError, OSError, ValueError):
+            return _error(409, "report_unavailable", "The batch report is not available.")
+        return batch, tasks, report
+
     @app.post("/api/baselines")
     def create_baseline(request: BaselineCreate) -> Response:
         selected = _batch_inputs(request.source_batch_id)
@@ -1172,32 +1190,23 @@ def create_app(
 
     @app.get("/api/batches/{batch_id}/baseline-candidates")
     def baseline_candidates(batch_id: str, current_arm: Arm) -> Response:
-        selected = _batch_inputs(batch_id)
+        selected = _batch_report(batch_id)
         if isinstance(selected, Response):
             return selected
-        batch, tasks = selected
-        try:
-            report = load_batch_report(
-                batch,
-                tasks,
-                runs_root=config.run_root / "runs",
-                catalog=get_catalog(),
+        batch, tasks, report = selected
+        candidates = [
+            BaselineCandidate(
+                baseline=baseline,
+                compatibility=baseline_compatibility(
+                    baseline,
+                    batch,
+                    tasks,
+                    report,
+                    current_arm=current_arm,
+                ),
             )
-            candidates = [
-                BaselineCandidate(
-                    baseline=baseline,
-                    compatibility=baseline_compatibility(
-                        baseline,
-                        batch,
-                        tasks,
-                        report,
-                        current_arm=current_arm,
-                    ),
-                )
-                for baseline in task_store.list_baselines()
-            ]
-        except (CatalogError, ReportingError, OSError, ValueError):
-            return _error(409, "report_unavailable", "The batch report is not available.")
+            for baseline in task_store.list_baselines()
+        ]
         return JSONResponse(
             content=[candidate.model_dump(mode="json") for candidate in candidates],
             headers=_NO_STORE,
@@ -1216,17 +1225,11 @@ def create_app(
 
     @app.put("/api/batches/{batch_id}/baseline-selections")
     def update_baseline_selections(batch_id: str, request: BaselineSelectionUpdate) -> Response:
-        selected = _batch_inputs(batch_id)
+        selected = _batch_report(batch_id)
         if isinstance(selected, Response):
             return selected
-        batch, tasks = selected
+        batch, tasks, report = selected
         try:
-            report = load_batch_report(
-                batch,
-                tasks,
-                runs_root=config.run_root / "runs",
-                catalog=get_catalog(),
-            )
             for selection in request.selections:
                 baseline = task_store.get_baseline(selection.baseline_id)
                 compatibility = baseline_compatibility(
@@ -1256,17 +1259,11 @@ def create_app(
 
     @app.get("/api/batches/{batch_id}/baseline-comparisons")
     def baseline_comparisons(batch_id: str) -> Response:
-        selected = _batch_inputs(batch_id)
+        selected = _batch_report(batch_id)
         if isinstance(selected, Response):
             return selected
-        batch, tasks = selected
+        batch, tasks, report = selected
         try:
-            report = load_batch_report(
-                batch,
-                tasks,
-                runs_root=config.run_root / "runs",
-                catalog=get_catalog(),
-            )
             selections = task_store.list_baseline_selections(batch_id)
             baselines_with_items = []
             for selection in selections:
