@@ -553,11 +553,54 @@
     },
     "tests/pydantic_ai_adapter/test_capability.py": {
       "mode": "retained-host",
-      "reason": "Pydantic AI adapter capability behavior owned by the Pydantic AI adapter."
+      "reason": "Pydantic AI adapter capability behavior owned by the Pydantic AI adapter.",
+      "cases": {
+        "test_context_is_replaced_once_per_run_when_reusing_old_history": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capability.py#test_context_is_replaced_once_per_run_when_reusing_old_history"]
+        },
+        "test_empty_context_is_not_injected": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capability.py#test_empty_context_is_not_injected"]
+        },
+        "test_unreachable_server_fails_open_for_recall": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capability.py#test_unreachable_server_fails_open_for_recall"]
+        },
+        "test_authentication_failure_logs_one_credential_free_configuration_warning": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capability.py#test_authentication_failure_logs_one_credential_free_configuration_warning"]
+        }
+      }
     },
     "tests/pydantic_ai_adapter/test_capture.py": {
       "mode": "retained-host",
-      "reason": "Pydantic AI shared capture behavior owned by the Pydantic AI adapter."
+      "reason": "Pydantic AI shared capture behavior owned by the Pydantic AI adapter.",
+      "cases": {
+        "test_capture_disabled_makes_no_source_or_flush_requests": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_capture_disabled_makes_no_source_or_flush_requests"]
+        },
+        "test_capture_is_bounded_redacted_checkpointed_and_serialized_under_parallel_tools": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_capture_is_bounded_redacted_checkpointed_and_serialized_under_parallel_tools"]
+        },
+        "test_checkpoint_flush_catches_up_across_more_than_ten_source_windows": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_checkpoint_flush_catches_up_across_more_than_ten_source_windows"]
+        },
+        "test_shared_capture_redacts_compact_keys_and_structured_json_strings": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_shared_capture_redacts_compact_keys_and_structured_json_strings"]
+        },
+        "test_shared_capture_structures_supported_objects_without_stringifying_unknown_objects": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_shared_capture_structures_supported_objects_without_stringifying_unknown_objects"]
+        },
+        "test_capture_redacts_pydantic_model_tool_results": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_capture_redacts_pydantic_model_tool_results"]
+        },
+        "test_shared_capture_redacts_codex_auth_values_outside_sensitive_keys": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_shared_capture_redacts_codex_auth_values_outside_sensitive_keys"]
+        },
+        "test_capture_failure_does_not_change_tool_or_model_results_or_log_arbitrary_exception_messages": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_capture_failure_does_not_change_tool_or_model_results_or_log_arbitrary_exception_messages"]
+        },
+        "test_flush_failure_does_not_change_model_result": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_capture.py#test_flush_failure_does_not_change_model_result"]
+        }
+      }
     },
     "tests/pydantic_ai_adapter/test_packaging.py": {
       "mode": "retained-host",
@@ -565,11 +608,42 @@
     },
     "tests/pydantic_ai_adapter/test_settings_scope.py": {
       "mode": "retained-host",
-      "reason": "Pydantic AI settings and scope behavior owned by the Pydantic AI adapter."
+      "reason": "Pydantic AI settings and scope behavior owned by the Pydantic AI adapter.",
+      "cases": {
+        "test_settings_load_all_environment_values_and_keep_token_secret": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_settings_load_all_environment_values_and_keep_token_secret"]
+        },
+        "test_settings_reject_unsafe_server_urls": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_settings_reject_unsafe_server_urls"]
+        },
+        "test_settings_require_a_bare_token_without_leaking_invalid_input": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_settings_require_a_bare_token_without_leaking_invalid_input"]
+        },
+        "test_scope_reuses_codex_remote_normalization": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_scope_reuses_codex_remote_normalization"]
+        },
+        "test_scope_uses_normalized_git_origin_then_local_path": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_scope_uses_normalized_git_origin_then_local_path"]
+        },
+        "test_explicit_scope_skips_git_and_is_deterministically_bounded": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_explicit_scope_skips_git_and_is_deterministically_bounded"]
+        },
+        "test_constructor_scope_callback_wins_and_runs_once_per_agent_run": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_settings_scope.py#test_constructor_scope_callback_wins_and_runs_once_per_agent_run"]
+        }
+      }
     },
     "tests/pydantic_ai_adapter/test_toolset.py": {
       "mode": "retained-host",
-      "reason": "Pydantic AI toolset behavior owned by the Pydantic AI adapter."
+      "reason": "Pydantic AI toolset behavior owned by the Pydantic AI adapter.",
+      "cases": {
+        "test_toolset_exposes_exact_schemas_instructions_request_mapping_and_full_responses": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_toolset.py#test_toolset_exposes_exact_schemas_instructions_request_mapping_and_full_responses"]
+        },
+        "test_toolset_converts_client_failure_to_model_retry": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_toolset.py#test_toolset_converts_client_failure_to_model_retry"]
+        }
+      }
     },
     "tests/test_cli.py": {
       "mode": "go-port",
