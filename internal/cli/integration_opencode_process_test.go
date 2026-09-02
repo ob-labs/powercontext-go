@@ -29,6 +29,8 @@ const (
 	openCodeProbeHelperEnabled = "POWERCONTEXT_OPENCODE_PROBE_HELPER"
 	openCodeProbeHelperMode    = "POWERCONTEXT_OPENCODE_PROBE_HELPER_MODE"
 	openCodeProbeHelperPID     = "POWERCONTEXT_OPENCODE_PROBE_HELPER_PID"
+	// A cold test-binary child can take longer than the probe's production poll interval on Intel macOS.
+	openCodeProbeTestTimeout = 2 * time.Second
 )
 
 func TestRunOpenCodeProbeExecutesRequestWaitsForNonceAndStopsProcess(t *testing.T) {
@@ -106,7 +108,7 @@ func TestRunOpenCodeProbeTimesOutAndStopsProcess(t *testing.T) {
 	requests := 0
 
 	err = runOpenCodeProbeProcessWithRequest(
-		t.Context(), openCodeProbeHelperCommand(port), environment, 200*time.Millisecond,
+		t.Context(), openCodeProbeHelperCommand(port), environment, openCodeProbeTestTimeout,
 		func(context.Context, string) error { requests++; return nil },
 	)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {

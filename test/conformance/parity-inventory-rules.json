@@ -485,7 +485,48 @@
     },
     "tests/integrations/test_hermes_provider.py": {
       "mode": "retained-host",
-      "reason": "Hermes provider plugin behavior; evidence will live in the retained Hermes adapter tests."
+      "reason": "Hermes provider plugin behavior; evidence lives in the retained Hermes adapter tests.",
+      "cases": {
+        "test_evaluation_trace_is_partitioned_by_session_and_records_parent": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_evaluation_trace_is_partitioned_by_session_and_records_parent"]
+        },
+        "test_evaluation_trace_slash_command_reads_named_session": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_evaluation_trace_slash_command_reads_named_session"]
+        },
+        "test_register_does_not_install_session_bound_slash_handlers": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_register_does_not_install_session_bound_slash_handlers"]
+        },
+        "test_powercontext_subcommands_are_available_to_hermes_completer": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_powercontext_subcommands_are_available_to_hermes_completer"]
+        },
+        "test_standalone_command_companion_registers_before_agent_and_forwards": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_standalone_command_companion_registers_before_agent_and_forwards"]
+        },
+        "test_standalone_command_companion_keeps_interleaved_sessions_isolated": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_standalone_command_companion_keeps_interleaved_sessions_isolated"]
+        },
+        "test_extended_tools_are_registered_and_scope_bound": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_extended_tools_are_registered_and_scope_bound"]
+        },
+        "test_extended_slash_commands_dispatch_json_operations": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_extended_slash_commands_dispatch_json_operations"]
+        },
+        "test_slash_commands_parse_unwrapped_citation_json_from_readme": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_slash_commands_parse_unwrapped_citation_json_from_readme"]
+        },
+        "test_workstream_binding_is_shared_with_hermes_scope": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_workstream_binding_is_shared_with_hermes_scope"]
+        },
+        "test_workstream_clear_restores_default_scope": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_workstream_clear_restores_default_scope"]
+        },
+        "test_workstream_bind_isolates_queued_background_work": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_workstream_bind_isolates_queued_background_work"]
+        },
+        "test_http_client_dispatches_operation_paths_and_get_query": {
+          "evidence": ["py:integrations/hermes/tests/test_provider.py#test_http_client_dispatches_operation_paths_and_get_query"]
+        }
+      }
     },
     "tests/langchain_middleware/test_middleware.py": {
       "mode": "retained-host",
