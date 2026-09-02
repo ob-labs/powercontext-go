@@ -217,6 +217,140 @@ func TestServerCommandLayersPartialCLIOverridesOverEnvironment(t *testing.T) {
 	}
 }
 
+func TestServerCommandEnvFileOverridesStaleEnvironmentAndRestores(t *testing.T) {
+	t.Setenv(server.PowerContextHomeEnv, t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "shell-secret")
+	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "192.0.2.20")
+	t.Setenv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK", "true")
+	path := filepath.Join(t.TempDir(), "powercontext.env")
+	if err := os.WriteFile(path, []byte(strings.Join([]string{
+		"POWERCONTEXT_SERVER_HTTP_HOST=127.0.0.2",
+		"POWERCONTEXT_SERVER_HTTP_PORT=8125",
+		"OPENAI_API_KEY=file-secret",
+		"",
+	}, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var received server.ProcessConfig
+	runner := func(_ context.Context, _ *commandState, config server.ProcessConfig) error {
+		received = config
+		if value := os.Getenv("OPENAI_API_KEY"); value != "file-secret" {
+			t.Fatalf("OPENAI_API_KEY during run = %q", value)
+		}
+		if _, present := os.LookupEnv("POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK"); present {
+			t.Fatal("stale Server opt-in remained during env-file run")
+		}
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run", "--env-file", path})
+	if err := command.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if received.HTTP.Host != "127.0.0.2" || received.HTTP.Port != 8125 {
+		t.Fatalf("HTTP config = %s:%d, want 127.0.0.2:8125", received.HTTP.Host, received.HTTP.Port)
+	}
+	if value := os.Getenv("OPENAI_API_KEY"); value != "shell-secret" {
+		t.Fatalf("OPENAI_API_KEY after run = %q", value)
+	}
+	if value := os.Getenv("POWERCONTEXT_SERVER_HTTP_HOST"); value != "192.0.2.20" {
+		t.Fatalf("Server host after run = %q", value)
+	}
+}
+
+func TestServerCommandEnvFileClearsMissingServerValues(t *testing.T) {
+	t.Setenv(server.PowerContextHomeEnv, t.TempDir())
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "true")
+	t.Setenv("POWERCONTEXT_SERVER_AUTH_TOKEN", "")
+	path := filepath.Join(t.TempDir(), "powercontext.env")
+	if err := os.WriteFile(path, []byte("POWERCONTEXT_SERVER_HTTP_HOST=127.0.0.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var received server.ProcessConfig
+	runner := func(_ context.Context, _ *commandState, config server.ProcessConfig) error {
+		received = config
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run", "--env-file", path})
+	if err := command.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if received.Auth.Enabled {
+		t.Fatal("stale authentication setting affected env-file run")
+	}
+	if value := os.Getenv("POWERCONTEXT_SERVER_AUTH_ENABLED"); value != "true" {
+		t.Fatalf("authentication setting after run = %q", value)
+	}
+}
+
+func TestServerCommandEnvFileFailurePreventsRunner(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		content []byte
+	}{
+		{name: "missing"},
+		{name: "invalid syntax", content: []byte("TOKEN=$(command)\n")},
+		{name: "invalid UTF-8", content: []byte("TOKEN=\xff\n")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "powercontext.env")
+			if test.content != nil {
+				if err := os.WriteFile(path, test.content, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			called := false
+			runner := func(context.Context, *commandState, server.ProcessConfig) error {
+				called = true
+				return nil
+			}
+			var stdout, stderr bytes.Buffer
+			command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+			command.SetArgs([]string{"server", "run", "--env-file", path})
+			err := command.ExecuteContext(t.Context())
+			if err == nil || ExitCode(err) != 2 || !strings.Contains(err.Error(), "--env-file") {
+				t.Fatalf("server run error = %v, exit = %d", err, ExitCode(err))
+			}
+			if called {
+				t.Fatal("Server runner started for an invalid environment file")
+			}
+		})
+	}
+}
+
+func TestServerCommandEnvFileRetainsCLIHTTPOverridePrecedence(t *testing.T) {
+	t.Setenv(server.PowerContextHomeEnv, t.TempDir())
+	path := filepath.Join(t.TempDir(), "powercontext.env")
+	if err := os.WriteFile(path, []byte(strings.Join([]string{
+		"POWERCONTEXT_SERVER_HTTP_HOST=0.0.0.0",
+		"POWERCONTEXT_SERVER_AUTH_ENABLED=false",
+		"POWERCONTEXT_SERVER_ALLOW_UNAUTHENTICATED_NON_LOOPBACK=false",
+		"",
+	}, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var received server.ProcessConfig
+	runner := func(_ context.Context, _ *commandState, config server.ProcessConfig) error {
+		received = config
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run", "--env-file", path, "--host", "127.0.0.1", "--port", "8126"})
+	if err := command.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if received.HTTP.Host != "127.0.0.1" || received.HTTP.Port != 8126 {
+		t.Fatalf("HTTP config = %s:%d, want 127.0.0.1:8126", received.HTTP.Host, received.HTTP.Port)
+	}
+}
+
 func TestServerCommandRejectsUnauthenticatedNonLoopbackHostOverride(t *testing.T) {
 	called := false
 	runner := func(context.Context, *commandState, server.ProcessConfig) error {
