@@ -161,6 +161,93 @@ func TestWrapBearerPolicy(t *testing.T) {
 	}
 }
 
+func TestValidateJSONUnicodeRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	called := 0
+	handler := validateJSONUnicodeWithLimit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusNoContent)
+	}), 64)
+
+	oversized := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/memory/search",
+		strings.NewReader(`{"query":"`+strings.Repeat("a", 128)+`"}`),
+	)
+	oversized.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, oversized)
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusRequestEntityTooLarge, response.Body.String())
+	}
+	var envelope errorEnvelope
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Error.Code != "request_too_large" || envelope.Error.Details["limit_bytes"] != float64(64) {
+		t.Fatalf("unexpected envelope: %#v", envelope)
+	}
+	if called != 0 {
+		t.Fatalf("application called %d times, want 0", called)
+	}
+
+	bounded := httptest.NewRequest(http.MethodPost, "/v1/memory/search", strings.NewReader(`{"query":"ok"}`))
+	bounded.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, bounded)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusNoContent, response.Body.String())
+	}
+	if called != 1 {
+		t.Fatalf("application called %d times, want 1", called)
+	}
+}
+
+func TestWrapPublicPathsRequireReadOnlyMethods(t *testing.T) {
+	t.Parallel()
+
+	called := 0
+	handler, err := Wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusNoContent)
+	}), Options{BearerToken: "server-secret", HandoffReportRoutes: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{name: "static GET stays public", method: http.MethodGet, path: "/static/dashboard.js", wantStatus: http.StatusNoContent},
+		{name: "static HEAD stays public", method: http.MethodHead, path: "/static/dashboard.js", wantStatus: http.StatusNoContent},
+		{name: "static POST requires bearer", method: http.MethodPost, path: "/static/dashboard.js", wantStatus: http.StatusUnauthorized},
+		{name: "static PUT requires bearer", method: http.MethodPut, path: "/static/dashboard.js", wantStatus: http.StatusUnauthorized},
+		{name: "dashboard shell POST requires bearer", method: http.MethodPost, path: "/", wantStatus: http.StatusUnauthorized},
+		{name: "health POST requires bearer", method: http.MethodPost, path: "/health/live", wantStatus: http.StatusUnauthorized},
+		{name: "report shell DELETE requires bearer", method: http.MethodDelete, path: "/handoff-reports", wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(test.method, test.path, nil)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", response.Code, test.wantStatus, response.Body.String())
+			}
+			if test.wantStatus == http.StatusUnauthorized {
+				assertUnauthorized(t, response)
+			}
+		})
+	}
+
+	if called != 2 {
+		t.Fatalf("application called %d times, want 2", called)
+	}
+}
+
 func TestWrapRejectsDisabledHandoffReportRoutesBeforeApplication(t *testing.T) {
 	t.Parallel()
 

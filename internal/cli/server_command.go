@@ -187,7 +187,7 @@ func runServer(parent context.Context, state *commandState, config server.Proces
 	}
 	httpServer := &http.Server{
 		Addr: config.HTTP.Address(), Handler: handler,
-		ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 5 * time.Minute, IdleTimeout: 60 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
