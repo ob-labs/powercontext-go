@@ -4,8 +4,8 @@
   "oracle_commit": "3a6cb0151670eaff7dc0293466edd673124e80da",
   "python_test_file_count": 132,
   "python_test_case_count": 812,
-  "mapped_case_count": 760,
-  "pending_case_count": 52,
+  "mapped_case_count": 773,
+  "pending_case_count": 39,
   "entries": [
     {
       "python": {
@@ -6114,8 +6114,15 @@
         "line": 168
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_evaluation_trace_is_partitioned_by_session_and_records_parent"
+        }
+      ]
     },
     {
       "python": {
@@ -6124,8 +6131,15 @@
         "line": 206
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_evaluation_trace_slash_command_reads_named_session"
+        }
+      ]
     },
     {
       "python": {
@@ -6134,8 +6148,15 @@
         "line": 230
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_register_does_not_install_session_bound_slash_handlers"
+        }
+      ]
     },
     {
       "python": {
@@ -6144,8 +6165,15 @@
         "line": 256
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_powercontext_subcommands_are_available_to_hermes_completer"
+        }
+      ]
     },
     {
       "python": {
@@ -6154,8 +6182,15 @@
         "line": 272
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_standalone_command_companion_registers_before_agent_and_forwards"
+        }
+      ]
     },
     {
       "python": {
@@ -6164,8 +6199,15 @@
         "line": 320
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_standalone_command_companion_keeps_interleaved_sessions_isolated"
+        }
+      ]
     },
     {
       "python": {
@@ -6480,8 +6522,15 @@
         "line": 762
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_extended_tools_are_registered_and_scope_bound"
+        }
+      ]
     },
     {
       "python": {
@@ -6490,8 +6539,15 @@
         "line": 790
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_extended_slash_commands_dispatch_json_operations"
+        }
+      ]
     },
     {
       "python": {
@@ -6500,8 +6556,15 @@
         "line": 810
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_slash_commands_parse_unwrapped_citation_json_from_readme"
+        }
+      ]
     },
     {
       "python": {
@@ -6510,8 +6573,15 @@
         "line": 848
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_workstream_binding_is_shared_with_hermes_scope"
+        }
+      ]
     },
     {
       "python": {
@@ -6520,8 +6590,15 @@
         "line": 879
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_workstream_clear_restores_default_scope"
+        }
+      ]
     },
     {
       "python": {
@@ -6530,8 +6607,15 @@
         "line": 918
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_workstream_bind_isolates_queued_background_work"
+        }
+      ]
     },
     {
       "python": {
@@ -6574,8 +6658,15 @@
         "line": 1002
       },
       "mode": "retained-host",
-      "status": "pending",
-      "source": "rules"
+      "status": "mapped",
+      "source": "rules",
+      "evidence": [
+        {
+          "kind": "py",
+          "file": "integrations/hermes/tests/test_provider.py",
+          "test": "test_http_client_dispatches_operation_paths_and_get_query"
+        }
+      ]
     },
     {
       "python": {
