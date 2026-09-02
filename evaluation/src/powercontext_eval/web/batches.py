@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from powercontext_eval.benchmarks.swebench_pro.catalog import TaskSet
 from powercontext_eval.codex import DEFAULT_CODEX_MODEL, DEFAULT_REASONING_EFFORT, is_safe_codex_model
-from powercontext_eval.models import PowerContextRef
+from powercontext_eval.models import PowerContextRef, TreatmentMode
 from powercontext_eval.web.controls import BatchControlState
 from powercontext_eval.web.estimation import BatchEstimate
 from powercontext_eval.web.models import FailureCategory, FailureCode, TaskPhase, TaskStatus
@@ -41,11 +41,16 @@ class BatchCreate(_FrozenModel):
     task_set: TaskSet
     model: str = DEFAULT_CODEX_MODEL
     reasoning_effort: Literal["medium"] = DEFAULT_REASONING_EFFORT
-    treatment_mode: Literal["off_on"]
+    treatment_mode: TreatmentMode
     idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._-]+$")
     usage_pause_percent: Annotated[int, Field(ge=1, le=100)] = 80
     initial_control_intent: Literal["run", "pause"] = "run"
     container_env: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("treatment_mode", mode="before")
+    @classmethod
+    def parse_treatment_mode(cls, value: object) -> object:
+        return TreatmentMode(value) if isinstance(value, str) else value
 
     @field_validator("powercontext_ref")
     @classmethod
@@ -69,13 +74,18 @@ class BatchPreviewResponse(_FrozenModel):
     task_set: TaskSet
     model: str
     reasoning_effort: Literal["medium"]
-    treatment_mode: Literal["off_on"]
+    treatment_mode: TreatmentMode
     total_tasks: Annotated[int, Field(ge=1)]
     usage_pause_percent: Annotated[int, Field(ge=1, le=100)]
     usage: UsageSnapshot | None
     estimate: BatchEstimate
     can_start: bool
     block_reason: Literal["usage_threshold_reached"] | None = None
+
+    @field_validator("treatment_mode", mode="before")
+    @classmethod
+    def parse_treatment_mode(cls, value: object) -> object:
+        return TreatmentMode(value) if isinstance(value, str) else value
 
 
 class TaskRetryRequest(_FrozenModel):

@@ -30,7 +30,7 @@ from powercontext_eval.benchmarks.swebench_pro.adapter import DatasetSchemaError
 from powercontext_eval.benchmarks.swebench_pro.evaluator import OfficialResultError
 from powercontext_eval.codex import CodexCapacityError, CodexInfrastructureError
 from powercontext_eval.errors import CommandFailed, GitSourceError
-from powercontext_eval.models import Arm
+from powercontext_eval.models import Arm, TreatmentMode
 from powercontext_eval.powercontext_sut import (
     InvalidTreatment,
     PluginInspectionFailure,
@@ -40,6 +40,7 @@ from powercontext_eval.powercontext_sut import (
     UnsafeSutConfiguration,
 )
 from powercontext_eval.process import CommandResult
+from powercontext_eval.report import InvalidReportBundle
 from powercontext_eval.runner import MinimalRunConfig, MinimalRunResult, RunConfig, RunPhase
 from powercontext_eval.tokensflow import TokensFlowFinalizationDescriptor, TokensFlowInfrastructureError
 from powercontext_eval.web.batches import BatchControlEventType, BatchCreate, BatchStatus
@@ -178,6 +179,7 @@ def _create_batch(
     key: str = "batch-worker-test",
     instance_ids: tuple[str, ...] = ("instance_owner__repo-a", "instance_owner__repo-b"),
     model: str = "gpt-5.6-sol",
+    treatment_mode: TreatmentMode = TreatmentMode.OFF_ON,
 ) -> Any:
     return store.create_batch(
         BatchCreate(
@@ -186,7 +188,7 @@ def _create_batch(
             task_set="swebench-pro-public-v2",
             model=model,
             reasoning_effort="medium",
-            treatment_mode="off_on",
+            treatment_mode=treatment_mode,
             idempotency_key=key,
         ),
         instance_ids,
@@ -551,6 +553,33 @@ def test_worker_uses_each_batch_immutable_model_for_runner_configuration(
     assert worker.run_once() is True
     assert calls[0][0].model == batch.request.model == "gpt-5.6-luna"
     assert calls[0][0].reasoning_effort == batch.request.reasoning_effort == "medium"
+
+
+def test_worker_rejects_runner_outcomes_outside_the_requested_treatment_mode(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    store = _store(config)
+    batch = _create_batch(
+        store,
+        key="on-only-worker-outcome",
+        instance_ids=("instance_owner__repo-a",),
+        treatment_mode=TreatmentMode.ON_ONLY,
+    )
+
+    task = store.list_batch_tasks(batch.batch_id)[0]
+    report = config.run_root / "runs" / task.task_id / "report.md"
+    report.parent.mkdir(parents=True)
+    report.write_text("safe")
+    worker = TaskPairWorker(
+        config,
+        store,
+        worker_id="single-arm-validator",
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(InvalidReportBundle, match="requested treatment mode"):
+        worker._validated_result(task, MinimalRunResult(task.task_id, report, True, None))
 
 
 def test_only_one_child_runs_physically_across_multiple_batches(tmp_path: Path) -> None:

@@ -30,7 +30,7 @@ from pydantic import ValidationError
 
 from powercontext_eval.artifacts import ArmState
 from powercontext_eval.benchmarks.swebench_pro.adapter import DATASET_REVISION, HARNESS_COMMIT, SweBenchProInstance
-from powercontext_eval.models import Arm
+from powercontext_eval.models import Arm, TreatmentMode
 from powercontext_eval.report import ArmReport, ReportBundle, TestGroupReport
 from powercontext_eval.web.baselines import (
     BaselineComparison,
@@ -214,8 +214,6 @@ def _load_bundle(run_fd: int) -> tuple[ReportBundle, os.stat_result]:
         bundle = ReportBundle.model_validate_json(raw, strict=True)
     except (ValidationError, ValueError, UnicodeDecodeError):
         raise InvalidReportArtifact from None
-    if bundle.off.arm != "off" or bundle.on.arm != "on":
-        raise InvalidReportArtifact
     return bundle, metadata
 
 
@@ -234,29 +232,32 @@ def _load_evidence(run_fd: int, arm: str) -> TreatmentEvidence:
 def _validate_evidence(
     bundle: ReportBundle,
     run_id: str,
-    off: TreatmentEvidence,
-    on: TreatmentEvidence,
+    evidence: Mapping[Arm, TreatmentEvidence],
 ) -> None:
     expected_sha = bundle.revisions.get("powercontext")
     configured_plugin_id = bundle.configuration.get("plugin_id", _PLUGIN_ID)
-    configured_plugin_version = bundle.configuration.get("plugin_version", off.plugin_version)
-    common = (
-        expected_sha is not None
-        and off.plugin_checkout_sha == expected_sha
-        and on.plugin_checkout_sha == expected_sha
-        and off.plugin_id == configured_plugin_id == on.plugin_id == _PLUGIN_ID
-        and bool(off.plugin_version)
-        and off.plugin_version == configured_plugin_version == on.plugin_version
-        and off.plugin_installed
-        and on.plugin_installed
-        and off.server_ready
-        and on.server_ready
-        and off.scope_id == f"eval:{run_id}:off"
-        and on.scope_id == f"eval:{run_id}:on"
-    )
-    activity = off.prompt_sources == 0 and off.mcp_requests == 0 and on.prompt_sources > 0 and on.mcp_requests > 0
-    if not common or not activity:
+    if set(evidence) != set(bundle.treatment_mode.arms) or expected_sha is None:
         raise InvalidReportArtifact
+    versions = {item.plugin_version for item in evidence.values()}
+    configured_plugin_version = bundle.configuration.get("plugin_version", next(iter(versions), ""))
+    if len(versions) != 1 or not configured_plugin_version:
+        raise InvalidReportArtifact
+    for arm, item in evidence.items():
+        common = (
+            item.plugin_checkout_sha == expected_sha
+            and item.plugin_id == configured_plugin_id == _PLUGIN_ID
+            and item.plugin_version == configured_plugin_version
+            and item.plugin_installed
+            and item.server_ready
+            and item.scope_id == f"eval:{run_id}:{arm.value}"
+        )
+        activity = (
+            (item.prompt_sources == 0 and item.mcp_requests == 0)
+            if arm is Arm.OFF
+            else (item.prompt_sources > 0 and item.mcp_requests > 0)
+        )
+        if not common or not activity:
+            raise InvalidReportArtifact
 
 
 def _arm_response(arm: Literal["off", "on"], report: ArmReport) -> ArmResponse:
@@ -298,6 +299,10 @@ def _comparisons(off: ArmReport, on: ArmReport) -> ComparisonResponse:
 
 
 def _acceptance_valid(bundle: ReportBundle) -> bool:
+    if bundle.treatment_mode is not TreatmentMode.OFF_ON:
+        return False
+    if bundle.off is None or bundle.on is None:
+        return False
     lifecycle_is_comparable = bundle.off.state == bundle.on.state and bundle.off.state in _COMPARABLE_STATES
     official_outcomes_are_coherent = (
         bundle.off.passed is True and bundle.on.passed is True and bundle.off.resolved and bundle.on.resolved
@@ -316,16 +321,18 @@ def load_report(run_dir: Path, run_root: Path | None = None) -> ReportResponse:
     run_fd, run_id = _open_run(run_dir, run_root)
     try:
         bundle, report_metadata = _load_bundle(run_fd)
-        off_evidence = _load_evidence(run_fd, "off")
-        on_evidence = _load_evidence(run_fd, "on")
-        _validate_evidence(bundle, run_id, off_evidence, on_evidence)
+        evidence = {arm: _load_evidence(run_fd, arm.value) for arm in bundle.treatment_mode.arms}
+        _validate_evidence(bundle, run_id, evidence)
         return ReportResponse(
             task_id=run_id,
             acceptance_valid=_acceptance_valid(bundle),
-            off=_arm_response("off", bundle.off),
-            on=_arm_response("on", bundle.on),
-            comparison=_comparisons(bundle.off, bundle.on),
-            evidence=EvidenceResponse(off=off_evidence, on=on_evidence),
+            treatment_mode=bundle.treatment_mode,
+            off=_arm_response("off", bundle.off) if bundle.off is not None else None,
+            on=_arm_response("on", bundle.on) if bundle.on is not None else None,
+            comparison=(
+                _comparisons(bundle.off, bundle.on) if bundle.off is not None and bundle.on is not None else None
+            ),
+            evidence=EvidenceResponse(off=evidence.get(Arm.OFF), on=evidence.get(Arm.ON)),
             gold_validation=bundle.gold_validation,
             revisions=bundle.revisions,
             configuration=bundle.configuration,
