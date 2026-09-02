@@ -2241,3 +2241,375 @@ def test_put_auth_rejects_missing_tokens(config: WebConfig, client: TestClient) 
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_auth_json"
+
+
+# --- Baseline API tests ---
+
+
+def _report_revision(client: TestClient, batch_id: str) -> int:
+    """Fetch the current report revision for a completed batch."""
+    response = client.get(f"/api/batches/{batch_id}/report")
+    assert response.status_code == 200, f"Failed to load report: {response.json()}"
+    return response.json()["report_revision"]
+
+
+def test_create_baseline_from_completed_batch(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-source")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+
+    response = client.post(
+        "/api/baselines",
+        json={
+            "name": "test-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-idem-key-001",
+        },
+    )
+
+    assert response.status_code == 201
+    baseline = response.json()
+    assert baseline["name"] == "test-baseline"
+    assert baseline["source_batch_id"] == batch["batch_id"]
+    assert baseline["source_arm"] == "off"
+    assert baseline["benchmark"] == "swebench-pro"
+    assert baseline["total_tasks"] == 5
+    assert baseline["baseline_id"].startswith("baseline-")
+
+
+def test_create_baseline_is_idempotent(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-idem")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    request = {
+        "name": "idem-baseline",
+        "source_batch_id": batch["batch_id"],
+        "source_arm": "on",
+        "expected_report_revision": revision,
+        "idempotency_key": "baseline-idem-key-002",
+    }
+
+    first = client.post("/api/baselines", json=request)
+    second = client.post("/api/baselines", json=request)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert first.json()["baseline_id"] == second.json()["baseline_id"]
+
+
+def test_create_baseline_rejects_nonexistent_batch(config: WebConfig, store: TaskStore) -> None:
+    client = TestClient(create_app(config, store, catalog=_BatchCatalog()))
+
+    response = client.post(
+        "/api/baselines",
+        json={
+            "name": "missing-batch",
+            "source_batch_id": "nonexistent-batch",
+            "source_arm": "off",
+            "expected_report_revision": 0,
+            "idempotency_key": "baseline-missing-001",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "batch_not_found"
+
+
+def test_list_baselines_returns_newest_first(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch1 = client.post("/api/batches", json=_batch_payload("baseline-list-1")).json()
+    _finish_batch(config, store, batch1["batch_id"])
+    revision1 = _report_revision(client, batch1["batch_id"])
+    client.post(
+        "/api/baselines",
+        json={
+            "name": "first-baseline",
+            "source_batch_id": batch1["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision1,
+            "idempotency_key": "baseline-list-key-001",
+        },
+    )
+    batch2 = client.post("/api/batches", json=_batch_payload("baseline-list-2")).json()
+    _finish_batch(config, store, batch2["batch_id"])
+    revision2 = _report_revision(client, batch2["batch_id"])
+    client.post(
+        "/api/baselines",
+        json={
+            "name": "second-baseline",
+            "source_batch_id": batch2["batch_id"],
+            "source_arm": "on",
+            "expected_report_revision": revision2,
+            "idempotency_key": "baseline-list-key-002",
+        },
+    )
+
+    response = client.get("/api/baselines")
+
+    assert response.status_code == 200
+    baselines = response.json()
+    assert len(baselines) == 2
+    assert baselines[0]["name"] == "second-baseline"
+    assert baselines[1]["name"] == "first-baseline"
+
+
+def test_get_baseline_returns_baseline_record(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-get")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    created = client.post(
+        "/api/baselines",
+        json={
+            "name": "get-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-get-key-001",
+        },
+    ).json()
+
+    response = client.get(f"/api/baselines/{created['baseline_id']}")
+
+    assert response.status_code == 200
+    assert response.json()["baseline_id"] == created["baseline_id"]
+    assert response.json()["name"] == "get-baseline"
+
+
+def test_get_baseline_returns_404_for_nonexistent(config: WebConfig, store: TaskStore) -> None:
+    client = TestClient(create_app(config, store, catalog=_BatchCatalog()))
+
+    response = client.get("/api/baselines/nonexistent-baseline-id")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "baseline_not_found"
+
+
+def test_baseline_candidates_returns_all_baselines_with_compatibility(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-candidates")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    client.post(
+        "/api/baselines",
+        json={
+            "name": "candidates-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-candidates-key-001",
+        },
+    )
+
+    response = client.get(
+        f"/api/batches/{batch['batch_id']}/baseline-candidates",
+        params={"current_arm": "off"},
+    )
+
+    assert response.status_code == 200
+    candidates = response.json()
+    assert len(candidates) == 1
+    assert candidates[0]["baseline"]["name"] == "candidates-baseline"
+    assert "compatibility" in candidates[0]
+    assert candidates[0]["compatibility"]["status"] == "compatible"
+
+
+def test_update_baseline_selections(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-select")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    baseline = client.post(
+        "/api/baselines",
+        json={
+            "name": "select-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-select-key-001",
+        },
+    ).json()
+
+    response = client.put(
+        f"/api/batches/{batch['batch_id']}/baseline-selections",
+        json={"selections": [{"baseline_id": baseline["baseline_id"], "current_arm": "off"}]},
+    )
+
+    assert response.status_code == 200
+    selections = response.json()
+    assert len(selections) == 1
+    assert selections[0]["baseline_id"] == baseline["baseline_id"]
+    assert selections[0]["current_arm"] == "off"
+
+
+def test_list_baseline_selections(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-list-sel")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    baseline = client.post(
+        "/api/baselines",
+        json={
+            "name": "list-sel-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-list-sel-key-001",
+        },
+    ).json()
+    client.put(
+        f"/api/batches/{batch['batch_id']}/baseline-selections",
+        json={"selections": [{"baseline_id": baseline["baseline_id"], "current_arm": "on"}]},
+    )
+
+    response = client.get(f"/api/batches/{batch['batch_id']}/baseline-selections")
+
+    assert response.status_code == 200
+    selections = response.json()
+    assert len(selections) == 1
+    assert selections[0]["baseline_id"] == baseline["baseline_id"]
+
+
+def test_baseline_comparisons(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-compare")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    baseline = client.post(
+        "/api/baselines",
+        json={
+            "name": "compare-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-compare-key-001",
+        },
+    ).json()
+    client.put(
+        f"/api/batches/{batch['batch_id']}/baseline-selections",
+        json={"selections": [{"baseline_id": baseline["baseline_id"], "current_arm": "off"}]},
+    )
+
+    response = client.get(f"/api/batches/{batch['batch_id']}/baseline-comparisons")
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["batch_id"] == batch["batch_id"]
+    assert "report_revision" in result
+    assert len(result["comparisons"]) == 1
+    comparison = result["comparisons"][0]
+    assert comparison["baseline"]["baseline_id"] == baseline["baseline_id"]
+    assert comparison["current_arm"] == "off"
+    assert "compatibility" in comparison
+    assert "coverage" in comparison
+    assert "resolution" in comparison
+    assert "outcome_categories" in comparison
+
+
+def test_baseline_comparisons_returns_empty_when_no_selections(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-compare-empty")).json()
+    _finish_batch(config, store, batch["batch_id"])
+
+    response = client.get(f"/api/batches/{batch['batch_id']}/baseline-comparisons")
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["batch_id"] == batch["batch_id"]
+    assert len(result["comparisons"]) == 0
+
+
+def test_update_baseline_selections_rejects_nonexistent_baseline(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-sel-404")).json()
+    _finish_batch(config, store, batch["batch_id"])
+
+    response = client.put(
+        f"/api/batches/{batch['batch_id']}/baseline-selections",
+        json={"selections": [{"baseline_id": "nonexistent-baseline", "current_arm": "off"}]},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "baseline_not_found"
+
+
+def test_baseline_items_returns_all_items(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-items")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    created = client.post(
+        "/api/baselines",
+        json={
+            "name": "items-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-items-key-001",
+        },
+    ).json()
+
+    response = client.get(f"/api/baselines/{created['baseline_id']}/items")
+
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) == 5
+    for item in items:
+        assert item["baseline_id"] == created["baseline_id"]
+        assert "instance_id" in item
+        assert "status" in item
+
+
+def test_baseline_items_returns_404_for_nonexistent(config: WebConfig, store: TaskStore) -> None:
+    client = TestClient(create_app(config, store, catalog=_BatchCatalog()))
+
+    response = client.get("/api/baselines/nonexistent-baseline-id/items")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "baseline_not_found"
+
+
+def test_update_baseline_selections_rejects_duplicate_selections(config: WebConfig, store: TaskStore) -> None:
+    catalog = _BatchCatalog()
+    client = TestClient(create_app(config, store, catalog=catalog))
+    batch = client.post("/api/batches", json=_batch_payload("baseline-dup-sel")).json()
+    _finish_batch(config, store, batch["batch_id"])
+    revision = _report_revision(client, batch["batch_id"])
+    baseline = client.post(
+        "/api/baselines",
+        json={
+            "name": "dup-baseline",
+            "source_batch_id": batch["batch_id"],
+            "source_arm": "off",
+            "expected_report_revision": revision,
+            "idempotency_key": "baseline-dup-key-001",
+        },
+    ).json()
+
+    response = client.put(
+        f"/api/batches/{batch['batch_id']}/baseline-selections",
+        json={
+            "selections": [
+                {"baseline_id": baseline["baseline_id"], "current_arm": "off"},
+                {"baseline_id": baseline["baseline_id"], "current_arm": "off"},
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"

@@ -12,16 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import json
 import signal
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import Any, Self
 
+import pytest
 from typer.testing import CliRunner
 
 from powercontext_eval.cli import _request_worker_stop, app
 from powercontext_eval.web.config import WebConfig
+
+
+class _JSONResponse:
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
 
 
 def test_top_level_help_exposes_service_commands() -> None:
@@ -180,3 +199,143 @@ def test_invalid_configuration_is_concise_and_does_not_print_secrets(monkeypatch
     assert "Invalid evaluation configuration" in result.output
     assert secret not in result.output
     assert "validation error" not in result.output.casefold()
+
+
+def test_baseline_help_exposes_subcommands() -> None:
+    result = CliRunner().invoke(app, ["baseline", "--help"], color=False)
+
+    assert result.exit_code == 0
+    assert "create" in result.output
+    assert "list" in result.output
+    assert "get" in result.output
+    assert "items" in result.output
+    assert "candidates" in result.output
+    assert "select" in result.output
+    assert "compare" in result.output
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_url", "response"),
+    (
+        (("list",), "https://console.example/api/baselines", []),
+        (("get", "baseline/alpha"), "https://console.example/api/baselines/baseline%2Falpha", {}),
+        (("items", "baseline/alpha"), "https://console.example/api/baselines/baseline%2Falpha/items", []),
+        (
+            ("candidates", "batch/alpha", "on"),
+            "https://console.example/api/batches/batch%2Falpha/baseline-candidates?current_arm=on",
+            [],
+        ),
+        (("compare", "batch/alpha"), "https://console.example/api/batches/batch%2Falpha/baseline-comparisons", {}),
+    ),
+)
+def test_baseline_read_commands_request_the_expected_resource(
+    monkeypatch: pytest.MonkeyPatch,
+    arguments: tuple[str, ...],
+    expected_url: str,
+    response: object,
+) -> None:
+    requests: list[Any] = []
+
+    def urlopen(request: Any, *, timeout: float) -> _JSONResponse:
+        assert timeout == 30
+        requests.append(request)
+        return _JSONResponse(response)
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        ["baseline", *arguments, "--console-url", "https://console.example"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [(request.get_method(), request.full_url) for request in requests] == [("GET", expected_url)]
+    assert json.loads(result.output) == response
+
+
+def test_baseline_create_fetches_the_current_report_revision_when_omitted(monkeypatch) -> None:
+    requests: list[Any] = []
+    responses = iter(({"report_revision": 217}, {"baseline_id": "baseline-217"}))
+
+    def urlopen(request: Any, *, timeout: float) -> _JSONResponse:
+        assert timeout == 30
+        requests.append(request)
+        return _JSONResponse(next(responses))
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "baseline",
+            "create",
+            "--console-url",
+            "https://console.example",
+            "--source-batch-id",
+            "batch/alpha",
+            "--source-arm",
+            "on",
+            "--name",
+            "Release candidate",
+            "--idempotency-key",
+            "baseline-create-217",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [(request.get_method(), request.full_url) for request in requests] == [
+        ("GET", "https://console.example/api/batches/batch%2Falpha/report"),
+        ("POST", "https://console.example/api/baselines"),
+    ]
+    assert json.loads(requests[1].data) == {
+        "name": "Release candidate",
+        "source_batch_id": "batch/alpha",
+        "source_arm": "on",
+        "expected_report_revision": 217,
+        "idempotency_key": "baseline-create-217",
+    }
+    assert json.loads(result.output) == {"baseline_id": "baseline-217"}
+
+
+def test_baseline_select_preserves_existing_selections_when_adding_one(monkeypatch) -> None:
+    requests: list[Any] = []
+    existing = [{"baseline_id": "baseline-existing", "current_arm": "off"}]
+    responses = iter((existing, [*existing, {"baseline_id": "baseline-new", "current_arm": "on"}]))
+
+    def urlopen(request: Any, *, timeout: float) -> _JSONResponse:
+        assert timeout == 30
+        requests.append(request)
+        return _JSONResponse(next(responses))
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "baseline",
+            "select",
+            "batch/alpha",
+            "--console-url",
+            "https://console.example",
+            "--baseline-id",
+            "baseline-new",
+            "--current-arm",
+            "on",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert [(request.get_method(), request.full_url) for request in requests] == [
+        ("GET", "https://console.example/api/batches/batch%2Falpha/baseline-selections"),
+        ("PUT", "https://console.example/api/batches/batch%2Falpha/baseline-selections"),
+    ]
+    assert json.loads(requests[1].data) == {
+        "selections": [
+            {"baseline_id": "baseline-existing", "current_arm": "off"},
+            {"baseline_id": "baseline-new", "current_arm": "on"},
+        ]
+    }
+    assert json.loads(result.output) == [
+        {"baseline_id": "baseline-existing", "current_arm": "off"},
+        {"baseline_id": "baseline-new", "current_arm": "on"},
+    ]
