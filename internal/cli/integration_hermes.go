@@ -251,53 +251,6 @@ func findHermesPlugin(root string) (string, bool) {
 	return "", false
 }
 
-func installHermesPlugin(
-	ctx context.Context,
-	commands systemCommandExecutor,
-	executable, source, target string,
-) error {
-	parent := filepath.Dir(target)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
-		return errors.New("cannot create Hermes plugin directory")
-	}
-	staging, err := os.MkdirTemp(parent, ".powercontext-")
-	if err != nil {
-		return errors.New("cannot create Hermes plugin staging directory")
-	}
-	defer func() { _ = os.RemoveAll(staging) }()
-	if err := copyRegularTree(source, staging); err != nil {
-		return errors.New("cannot copy the PowerContext Hermes plugin")
-	}
-	if _, doctorErr := commands.Run(ctx, executable, "plugins", "doctor", "--ci", staging); doctorErr != nil {
-		return doctorErr
-	}
-	backup := ""
-	if _, err := os.Lstat(target); err == nil {
-		backup, err = os.MkdirTemp(parent, ".powercontext-backup-")
-		if err != nil {
-			return errors.New("cannot create Hermes plugin backup")
-		}
-		if removeErr := os.Remove(backup); removeErr != nil {
-			return removeErr
-		}
-		if renameErr := os.Rename(target, backup); renameErr != nil {
-			return errors.New("cannot preserve existing Hermes plugin")
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return errors.New("cannot inspect existing Hermes plugin")
-	}
-	if activateErr := os.Rename(staging, target); activateErr != nil {
-		if backup != "" {
-			_ = os.Rename(backup, target)
-		}
-		return errors.New("cannot activate Hermes plugin")
-	}
-	if backup != "" {
-		_ = os.RemoveAll(backup)
-	}
-	return nil
-}
-
 func installHermesPlugins(ctx context.Context, commands systemCommandExecutor, executable string, sources, targets map[string]string) error {
 	type stagedPlugin struct{ name, target, staging, backup string }
 	plugins := make([]stagedPlugin, 0, 2)
@@ -330,8 +283,8 @@ func installHermesPlugins(ctx context.Context, commands systemCommandExecutor, e
 	for index := range plugins {
 		plugin := &plugins[index]
 		if _, err := os.Lstat(plugin.target); err == nil {
-			backup, err := os.MkdirTemp(filepath.Dir(plugin.target), ".powercontext-backup-")
-			if err != nil {
+			backup, backupErr := os.MkdirTemp(filepath.Dir(plugin.target), ".powercontext-backup-")
+			if backupErr != nil {
 				rollback()
 				return errors.New("cannot create Hermes plugin backup")
 			}
