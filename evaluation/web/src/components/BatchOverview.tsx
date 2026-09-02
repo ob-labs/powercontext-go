@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react
 import type { EvaluationApi } from "../api";
 import { batchStatusLabel } from "../batchStatus";
 import type { BatchRecord, BatchReport, PairCategory, TokenMetricAggregate } from "../types";
+import { BatchBaselinePanel } from "./BatchBaselinePanel";
 import { BatchControls } from "./BatchControls";
 
 interface BatchOverviewProps {
@@ -188,6 +189,8 @@ export function BatchOverview({ api, batchId, navigate }: BatchOverviewProps) {
           <TokenCard label="总 Token" metric={report.tokens.total} total={report.total_tasks} />
         </div>
       </section>
+
+      <BatchBaselinePanel key={batch.batch_id} api={api} batch={batch} report={report} />
     </div>
   );
 }
