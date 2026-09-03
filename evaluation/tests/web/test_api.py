@@ -2930,9 +2930,7 @@ def test_baseline_comparison_cross_arm_returns_warning(config: WebConfig, store:
     assert "cross-arm comparison" in comparison["compatibility"]["reasons"]
 
 
-def test_update_baseline_selections_rejects_incompatible_baseline(
-    config: WebConfig, store: TaskStore
-) -> None:
+def test_update_baseline_selections_rejects_incompatible_baseline(config: WebConfig, store: TaskStore) -> None:
     catalog = _BatchCatalog()
     client = TestClient(create_app(config, store, catalog=catalog))
     batch1 = client.post("/api/batches", json=_batch_payload("baseline-compat-1")).json()
@@ -3104,9 +3102,7 @@ def _finish_batch_subset(
     return children
 
 
-def test_baseline_selection_rejects_incompatible_instance_sets(
-    config: WebConfig, store: TaskStore
-) -> None:
+def test_baseline_selection_rejects_incompatible_instance_sets(config: WebConfig, store: TaskStore) -> None:
     """The API guards against baseline_rate denominator mismatch by rejecting incompatible baselines.
 
     reporting.py:918 computes baseline_rate = baseline.resolved_tasks / len(matched_ids).
@@ -3134,7 +3130,9 @@ def test_baseline_selection_rejects_incompatible_instance_sets(
     subset_client = TestClient(create_app(config, store, catalog=subset_catalog))
     subset_batch = subset_client.post("/api/batches", json=_batch_payload("rate-subset")).json()
     _finish_batch_subset(
-        config, store, subset_batch["batch_id"],
+        config,
+        store,
+        subset_batch["batch_id"],
         outcomes=[
             (True, True, (100, 10), (80, 8)),
             (True, True, (120, 12), (90, 9)),
