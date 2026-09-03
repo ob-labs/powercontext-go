@@ -915,10 +915,11 @@ func TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease(t *testing.
 	for _, required := range []string{
 		"workflow_dispatch:",
 		"release_tag:",
+		"publish_release:",
+		"default: false",
 		"tags:",
 		"v[0-9]*",
 		"needs.prepare.outputs.release_tag",
-		"needs: [prepare, binaries, images]",
 		"needs: [prepare, publish]",
 		"make package-standard",
 		"make package-full",
@@ -928,19 +929,53 @@ func TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease(t *testing.
 		`test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 17`,
 		"dist/IMAGE-DIGESTS.json",
 		"dist/SHA256SUMS",
-		"fail_on_unmatched_files: true",
-		"draft: true",
-		`gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false`,
 		"uses: ./.github/workflows/release-verify.yml",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("release workflow is missing %q", required)
 		}
 	}
+	for _, obsolete := range []string{"fail_on_unmatched_files: true", "draft: true"} {
+		if strings.Contains(workflow, obsolete) {
+			t.Errorf("release workflow still uses the retired action-only setting %q", obsolete)
+		}
+	}
+	draftStart := strings.Index(workflow, "\n  draft:\n")
+	publishStart := strings.Index(workflow, "\n  publish:\n")
+	releaseVerifyStart := strings.Index(workflow, "\n  release-verify:\n")
+	if draftStart < 0 || publishStart < 0 || releaseVerifyStart < 0 || draftStart >= publishStart || publishStart >= releaseVerifyStart {
+		t.Fatal("release workflow must order draft, publish, and release verification jobs")
+	}
+	draft := workflow[draftStart:publishStart]
+	for _, required := range []string{
+		"needs: [prepare, binaries, images]",
+		"Generate or refresh the reviewed release draft",
+		`--draft --generate-notes --verify-tag`,
+		`gh release create "$RELEASE_TAG"`,
+		`gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber`,
+	} {
+		if !strings.Contains(draft, required) {
+			t.Errorf("release draft job is missing %q", required)
+		}
+	}
+	publish := workflow[publishStart:releaseVerifyStart]
+	for _, required := range []string{
+		"needs: [prepare, draft]",
+		"if: github.event_name == 'workflow_dispatch' && inputs.publish_release",
+		`test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true`,
+		`gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false`,
+	} {
+		if !strings.Contains(publish, required) {
+			t.Errorf("release publish job is missing %q", required)
+		}
+	}
 	for _, publishedReleaseTrigger := range []string{"types: [published]", "github.event.release.tag_name"} {
 		if strings.Contains(workflow, publishedReleaseTrigger) {
 			t.Errorf("release workflow publishes assets after an immutable release through %q", publishedReleaseTrigger)
 		}
+	}
+	if strings.Contains(publish, "github.event_name == 'push'") {
+		t.Error("release workflow must not publish a reviewed draft from a tag push")
 	}
 	for _, prereleaseFilter := range []string{"prerelease == false", "prerelease: false", "!github.event.release.prerelease"} {
 		if strings.Contains(workflow, prereleaseFilter) {

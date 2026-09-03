@@ -827,7 +827,7 @@ exit 24
 	if err == nil {
 		t.Fatalf("make api-compat accepted an unexpected release tag identity:\n%s", output)
 	}
-	if !strings.Contains(output, "public API release tag v0.1.0 resolves to") {
+	if !strings.Contains(output, "public API release tag HEAD resolves to") {
 		t.Fatalf("release tag mismatch is not actionable:\n%s", output)
 	}
 	if _, statErr := os.Stat(baselineLog); !errors.Is(statErr, os.ErrNotExist) {
@@ -854,7 +854,7 @@ exit 24
 	if err == nil {
 		t.Fatalf("make api-compat accepted a mismatched release bundle:\n%s", output)
 	}
-	if !strings.Contains(output, "does not match release tag v0.1.0") {
+	if !strings.Contains(output, "does not match release tag HEAD") {
 		t.Fatalf("release bundle mismatch is not actionable:\n%s", output)
 	}
 	if _, statErr := os.Stat(baselineLog); !errors.Is(statErr, os.ErrNotExist) {
@@ -985,6 +985,10 @@ func runAPICompatWithFake(t *testing.T, apidiffScript string) (string, string, s
 func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string, additionalArguments ...string) (string, string, string, error) {
 	t.Helper()
 	repository := filepath.Clean(filepath.Join("..", ".."))
+	baselineCommit, err := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{commit}").Output()
+	if err != nil {
+		t.Fatalf("resolve local API compatibility baseline commit: %v", err)
+	}
 	temporary := t.TempDir()
 	baselineLog := filepath.Join(temporary, "baseline.txt")
 	apidiffLog := filepath.Join(temporary, "apidiff.txt")
@@ -1005,6 +1009,9 @@ func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string,
 		"APIDIFF=" + fakeAPIDiff,
 		"APIDIFF_STAMP=" + stamp,
 		"API_BASELINE_GENERATOR=" + fakeBaseline,
+		"API_RELEASE_TAG=HEAD",
+		"API_RELEASE_COMMIT=" + strings.TrimSpace(string(baselineCommit)),
+		"API_RELEASE_TAG_BASELINE=test/api-compat/v0.1.0.apidiff",
 	}
 	arguments = append(arguments, additionalArguments...)
 	command := exec.CommandContext(t.Context(), "make", arguments...)
