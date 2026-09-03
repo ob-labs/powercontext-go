@@ -415,17 +415,10 @@ source / artifact / trigger / inference
   after an earlier adapter failure, and record every individual step outcome
   in bounded diagnostics. Verify a workflow contract test rejects a merged
   step, a missing failure-continuation guard, or a missing adapter outcome.
-- When adding a source file covered by the license checker, copy the complete
-  configured header (including the license URL and disclaimer) before adding
-  code. Verify `make license-check` reports zero invalid files.
 - When a background tracing root cannot start, preserve cancellation and value
   context while explicitly clearing the ambient trace parent before later
   stages begin. Verify an injected root-start failure leaves child spans
   unparented and on a different trace ID from the ambient operation.
-- When an integration middleware receives an optional or host-supplied runtime
-  object, treat missing runtime fields as a fail-open boundary. Access context
-  defensively and verify a partial runtime preserves the host operation result
-  without an adapter exception.
 - When transport middleware buffers a request body before routing, bound the
   read with `http.MaxBytesReader` and map `*http.MaxBytesError` to an
   explicit over-limit response before any downstream decoding. When an

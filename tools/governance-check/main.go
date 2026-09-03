@@ -164,12 +164,15 @@ func checkRepository(root string) error {
 		return errors.New("go.mod must declare the supported Go 1.27.0 toolchain")
 	}
 	if err := requirePhrases(root, "CONTRIBUTING.md", []string{
-		"GOTOOLCHAIN=local", "make lint", "make check-generated", "tracking issue", "AI assistance",
+		"GOTOOLCHAIN=local", "make lint", "make check-generated", "tracking issue", "AI assistance", "Code of Conduct",
 	}); err != nil {
 		return err
 	}
+	if err := checkCodeOfConduct(root); err != nil {
+		return err
+	}
 	if err := requirePhrases(root, ".github/pull_request_template.md", []string{
-		"## Tracking", "Part of #", "Closes #", "## Behavior and compatibility", "## Validation", "git diff --check", "Formatter evidence", "Generated-consumer evidence", "Compatibility evidence", "## AI usage",
+		"## Tracking", "Part of #", "Closes #", "## Behavior and compatibility", "## Backport declaration (release/v* only)", "Original Issue and change", "Target release line", "Conflict resolution", "Compatibility impact", "Validation on target release line", "## Validation", "git diff --check", "Formatter evidence", "Generated-consumer evidence", "Compatibility evidence", "## AI usage",
 	}); err != nil {
 		return err
 	}
@@ -424,6 +427,14 @@ func checkReleasePolicy(root string) error {
 	})
 }
 
+func checkCodeOfConduct(root string) error {
+	return requirePhrases(root, "CODE_OF_CONDUCT.md", []string{
+		"Contributor Covenant Code of Conduct",
+		"open_contact@oceanbase.com",
+		"Contributor Covenant, version 2.1",
+	})
+}
+
 func checkReleaseNotesConfig(root string) error {
 	const name = ".github/release.yml"
 	contents, err := readRepositoryFile(root, name)
@@ -534,7 +545,33 @@ func checkReleaseWorkflow(root string) error {
 	if !ok || inputType != "string" {
 		return errors.New(`release workflow workflow_dispatch input "release_tag" must be a string`)
 	}
-	return nil
+	publishRelease, ok := inputs["publish_release"].(map[any]any)
+	if !ok {
+		return errors.New(`release workflow must require workflow_dispatch input "publish_release"`)
+	}
+	required, ok = publishRelease["required"].(bool)
+	if !ok || !required {
+		return errors.New(`release workflow workflow_dispatch input "publish_release" must be required`)
+	}
+	inputType, ok = publishRelease["type"].(string)
+	if !ok || inputType != "boolean" {
+		return errors.New(`release workflow workflow_dispatch input "publish_release" must be a boolean`)
+	}
+	defaultValue, ok := publishRelease["default"].(bool)
+	if !ok || defaultValue {
+		return errors.New(`release workflow workflow_dispatch input "publish_release" must default to false`)
+	}
+	return requirePhrases(root, name, []string{
+		"previous_tag: ${{ steps.release.outputs.previous_tag }}",
+		`git tag --merged "${commit}^"`,
+		"--draft --generate-notes --verify-tag",
+		`--notes-start-tag "$PREVIOUS_TAG"`,
+		`gh release create "$RELEASE_TAG"`,
+		"if: github.event_name == 'workflow_dispatch' && inputs.publish_release",
+		`--json isDraft --jq .isDraft`,
+		`gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false`,
+		"if: needs.publish.result == 'success'",
+	})
 }
 
 func stringSlice(value any) ([]string, bool) {
