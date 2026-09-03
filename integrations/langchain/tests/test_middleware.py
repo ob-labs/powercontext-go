@@ -17,8 +17,10 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from langchain.agents import create_agent
@@ -37,9 +39,11 @@ from powercontext.http import (
     FlushMemoryRequest,
     ListMemoryEntriesRequest,
     ProposeExperienceRequest,
+    PreparedContextStatus,
 )
 
 from powercontext_langchain import PowerContextMiddleware, PowerContextScope
+from powercontext_langchain.client import ResolvedConfig
 
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / "test" / "retainedhost"))
@@ -187,3 +191,111 @@ def test_sync_agent_reaches_end_when_server_unreachable() -> None:
     result = _agent(model).invoke({"messages": [HumanMessage(content="Continue without memory.")]}, context=PowerContextScope(scope_id=SCOPE, base_url="http://127.0.0.1:9", timeout=0.2))
     assert result["messages"][-1].text == FINAL_ANSWER
     assert _system_texts(model.inputs[-1]) == []
+
+
+@dataclass
+class _Request:
+    messages: list[Any]
+    system_message: Any = None
+    runtime: Any = None
+
+    def override(self, **changes: Any) -> "_Request":
+        values = {"messages": self.messages, "system_message": self.system_message, "runtime": self.runtime}
+        values.update(changes)
+        return _Request(**values)
+
+
+class _FakeClient:
+    def __init__(self, *, content: str | None = "remembered", fail: Exception | None = None) -> None:
+        self.content = content
+        self.fail = fail
+        self.prepared: list[Any] = []
+        self.captured: list[Any] = []
+
+    async def __aenter__(self) -> "_FakeClient":
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        return None
+
+    async def prepare_context(self, request: Any) -> Any:
+        if self.fail:
+            raise self.fail
+        self.prepared.append(request)
+        status = PreparedContextStatus.EMPTY if self.content is None else SimpleNamespace(value="ready")
+        return SimpleNamespace(status=status, content=self.content or "")
+
+    async def capture_content_source(self, request: Any) -> None:
+        if self.fail:
+            raise self.fail
+        self.captured.append(request)
+
+
+def _config() -> ResolvedConfig:
+    return ResolvedConfig(base_url="http://127.0.0.1:8000", scope_id="project:test", token=None, timeout=1, max_bytes=8000)
+
+
+def test_async_model_call_injects_recall_without_mutating_messages(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeClient()
+    monkeypatch.setattr("powercontext_langchain.middleware.resolve_config", lambda _scope: _config())
+    monkeypatch.setattr("powercontext_langchain.middleware.open_client", lambda _config: fake)
+    request = _Request([HumanMessage(content="question")], runtime=SimpleNamespace(context=PowerContextScope()))
+    seen: list[_Request] = []
+
+    async def handler(value: _Request) -> object:
+        seen.append(value)
+        return object()
+
+    asyncio.run(PowerContextMiddleware().awrap_model_call(request, handler))
+    assert len(fake.prepared) == 1
+    assert "remembered" in str(seen[0].system_message.content)
+    assert request.messages == [request.messages[0]]
+
+
+def test_async_model_call_fails_open_and_preserves_result(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeClient(fail=OSError("offline"))
+    monkeypatch.setattr("powercontext_langchain.middleware.resolve_config", lambda _scope: _config())
+    monkeypatch.setattr("powercontext_langchain.middleware.open_client", lambda _config: fake)
+    request = _Request([HumanMessage(content="question")])
+    result = object()
+
+    async def handler(value: _Request) -> object:
+        assert value.system_message is None
+        return result
+
+    assert asyncio.run(PowerContextMiddleware().awrap_model_call(request, handler)) is result
+
+
+def test_after_agent_captures_completed_turn(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeClient()
+    monkeypatch.setattr("powercontext_langchain.middleware.resolve_config", lambda _scope: _config())
+    monkeypatch.setattr("powercontext_langchain.middleware.open_client", lambda _config: fake)
+    state = {"messages": [HumanMessage(content="question"), AIMessage(content="answer")]}
+    asyncio.run(PowerContextMiddleware(auto_capture=True).aafter_agent(state, SimpleNamespace(context=None)))
+    assert len(fake.captured) == 1
+    assert "question" in fake.captured[0].content
+    assert "answer" in fake.captured[0].content
+
+
+def test_missing_runtime_context_is_fail_open(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeClient()
+    monkeypatch.setattr("powercontext_langchain.middleware.resolve_config", lambda _scope: _config())
+    monkeypatch.setattr("powercontext_langchain.middleware.open_client", lambda _config: fake)
+    request = _Request([HumanMessage(content="question")], runtime=object())
+
+    async def handler(value: _Request) -> object:
+        return value
+
+    assert asyncio.run(PowerContextMiddleware().awrap_model_call(request, handler)) is not None
+
+
+def test_empty_recall_does_not_add_system_message(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeClient(content=None)
+    monkeypatch.setattr("powercontext_langchain.middleware.resolve_config", lambda _scope: _config())
+    monkeypatch.setattr("powercontext_langchain.middleware.open_client", lambda _config: fake)
+    request = _Request([HumanMessage(content="question")])
+
+    async def handler(value: _Request) -> _Request:
+        return value
+
+    assert asyncio.run(PowerContextMiddleware().awrap_model_call(request, handler)).system_message is None
