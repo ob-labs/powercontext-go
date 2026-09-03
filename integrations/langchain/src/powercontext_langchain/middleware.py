@@ -211,7 +211,7 @@ class PowerContextMiddleware(AgentMiddleware[AgentState[ResponseT], PowerContext
 
 
 def _runtime_scope(runtime: Any | None) -> PowerContextScope | None:
-    context = None if runtime is None else runtime.context
+    context = None if runtime is None else getattr(runtime, "context", None)
     return context if isinstance(context, PowerContextScope) else None
 
 
