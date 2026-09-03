@@ -1,5 +1,26 @@
 # PowerContext Go Engineering Rules
 
+## Agent Instructions and Language
+
+This file is a repository-level engineering contract, not a generic role prompt.
+Keep it limited to project-specific sources of truth, non-negotiable architecture
+or security boundaries, and the evidence required to declare work complete.
+
+- Reply to users in Chinese by default, unless they request another language.
+- Write repository code comments, Go doc comments, and maintained documentation
+  in English. Preserve quoted external material and user-provided text in its
+  original language unless the task explicitly requests translation.
+- Rules in this file must be stable, project-specific, and traceable to code,
+  tests, generators, CI checks, or authoritative documentation. An agent's
+  completion statement or a single green status is not sufficient behavioral
+  evidence.
+- Prefer encoding mechanically enforceable requirements in tests, static
+  checks, generator validation, Make targets, or CI. Keep in this file only the
+  context and boundaries that materially affect implementation decisions and
+  cannot be expressed there.
+- Do not add generic capability claims, generic command lists, per-tool calling
+  recipes, or incident detail that is not a reusable and verifiable rule.
+
 ## Research and evidence before execution
 
 - When a task depends on external or version-sensitive facts, perform a bounded
