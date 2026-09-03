@@ -629,3 +629,92 @@ export interface ContextPageOptions {
 export interface BatchEventSubscription {
   close(): void;
 }
+
+export interface BaselineCreate {
+  name: string;
+  source_batch_id: string;
+  source_arm: "off" | "on";
+  expected_report_revision: number;
+  idempotency_key: string;
+}
+
+export interface BaselineRecord {
+  baseline_id: string;
+  name: string;
+  source_batch_id: string;
+  source_arm: "off" | "on";
+  source_report_revision: number;
+  benchmark: "swebench-pro";
+  task_set: BatchTaskSet;
+  instance_set_digest: string;
+  total_tasks: number;
+  resolved_tasks: number;
+  execution_failures: number;
+  model: string;
+  reasoning_effort: "medium";
+  dataset_revision: string;
+  harness_revision: string;
+  powercontext_sha: string | null;
+  codex_version: string | null;
+  created_at: string;
+}
+
+export interface BaselineCompatibility {
+  status: "compatible" | "warning" | "incompatible";
+  reasons: string[];
+}
+
+export interface BaselineCandidate {
+  baseline: BaselineRecord;
+  compatibility: BaselineCompatibility;
+}
+
+export interface BaselineSelection {
+  baseline_id: string;
+  current_arm: "off" | "on";
+}
+
+export interface BaselineComparisonCoverage {
+  matched_tasks: number;
+  comparable_tasks: number;
+  current_execution_failures: number;
+  baseline_execution_failures: number;
+}
+
+export interface HistoricalResolutionComparison {
+  baseline_resolved: number;
+  current_resolved: number;
+  total: number;
+  baseline_rate_percent: number;
+  current_rate_percent: number;
+  delta_points: number;
+}
+
+export interface HistoricalTokenComparison {
+  baseline: number;
+  current: number;
+  delta: number;
+  baseline_measured_tasks: number;
+  current_measured_tasks: number;
+}
+
+export interface BaselineComparison {
+  baseline: BaselineRecord;
+  current_arm: "off" | "on";
+  compatibility: BaselineCompatibility;
+  coverage: BaselineComparisonCoverage;
+  resolution: HistoricalResolutionComparison;
+  outcome_categories: Record<
+    "baseline_fail_current_pass" | "baseline_pass_current_fail" | "both_pass" | "both_fail",
+    number
+  >;
+  input_tokens: HistoricalTokenComparison | null;
+  output_tokens: HistoricalTokenComparison | null;
+  total_tokens: HistoricalTokenComparison | null;
+}
+
+export interface BaselineComparisonResponse {
+  batch_id: string;
+  report_revision: number;
+  comparisons: BaselineComparison[];
+}

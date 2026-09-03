@@ -23,6 +23,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { BatchOverview } from "./components/BatchOverview";
 import { BatchRuntime } from "./components/BatchRuntime";
 import { BatchTaskReport } from "./components/BatchTaskReport";
+import { BaselineLibrary } from "./components/BaselineLibrary";
 import { ReportIndex } from "./components/ReportIndex";
 import { TaskRunDetail } from "./components/TaskRunDetail";
 
@@ -48,10 +49,13 @@ function useLocation(): [string, (next: string) => void] {
 interface Route {
   batchId: string | null;
   taskId: string | null;
-  page: "overview" | "runtime" | "tasks" | "task";
+  page: "overview" | "runtime" | "tasks" | "task" | "baselines";
 }
 
 function parseRoute(path: string): Route {
+  if (path === "/baselines") {
+    return { batchId: null, taskId: null, page: "baselines" };
+  }
   const runtimeMatch = path.match(/^\/report\/([^/]+)\/running$/);
   if (runtimeMatch?.[1]) {
     return { batchId: decodeURIComponent(runtimeMatch[1]), taskId: null, page: "runtime" };
@@ -85,7 +89,13 @@ export function App({ api: injectedApi }: AppProps) {
   const route = parseRoute(path);
 
   let content;
-  if (route.page === "task" && route.batchId !== null && route.taskId !== null) {
+  if (route.page === "baselines") {
+    content = (
+      <div className="page">
+        <BaselineLibrary api={api} navigate={navigate} />
+      </div>
+    );
+  } else if (route.page === "task" && route.batchId !== null && route.taskId !== null) {
     content = (
       <div className="page">
         <TaskRunDetail

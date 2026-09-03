@@ -6565,7 +6565,7 @@
         {
           "kind": "go",
           "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "test": "TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         },
         {
           "kind": "go",
@@ -6586,7 +6586,7 @@
         {
           "kind": "go",
           "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "test": "TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         }
       ]
     },
@@ -6602,7 +6602,7 @@
         {
           "kind": "go",
           "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "test": "TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         }
       ]
     },
@@ -6618,7 +6618,7 @@
         {
           "kind": "go",
           "file": "tools/release/main_test.go",
-          "test": "TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "test": "TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         }
       ]
     },

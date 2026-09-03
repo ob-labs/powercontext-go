@@ -1,14 +1,22 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v[0-9]*"
+      - "powercontext-v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to build, stage, and publish
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -23,19 +31,20 @@ jobs:
       build_date: ${{ steps.release.outputs.build_date }}
       commit: ${{ steps.release.outputs.commit }}
       image_tag: ${{ steps.release.outputs.image_tag }}
+      release_tag: ${{ steps.release.outputs.release_tag }}
       version: ${{ steps.release.outputs.version }}
     steps:
       - name: Check out the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.release_tag || github.ref_name }}
           fetch-depth: 0
 
       - name: Resolve and validate immutable release metadata
         id: release
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           version="${RELEASE_TAG#powercontext-v}"
           version="${version#v}"
@@ -50,6 +59,7 @@ jobs:
           build_date="$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)"
           image_tag="${version//+/-}"
           {
+            echo "release_tag=$RELEASE_TAG"
             echo "version=$version"
             echo "commit=$commit"
             echo "build_date=$build_date"
@@ -77,7 +87,7 @@ jobs:
       - name: Check out the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.prepare.outputs.release_tag }}
           fetch-depth: 0
 
       - name: Set up the Go environment
@@ -170,7 +180,7 @@ jobs:
       - name: Check out the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.prepare.outputs.release_tag }}
           fetch-depth: 0
 
       - name: Set up the Go environment
@@ -273,7 +283,7 @@ jobs:
       - name: Check out the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.prepare.outputs.release_tag }}
 
       - name: Set up the Go environment
         uses: ./.github/actions/setup-go-env
@@ -293,10 +303,11 @@ jobs:
           test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 8
           test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 17
 
-      - name: Upload GitHub Release assets
+      - name: Upload GitHub Release assets as a draft
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          draft: true
           files: |
             dist/*.tar.gz
             dist/*.spdx.json
@@ -304,15 +315,22 @@ jobs:
             dist/SHA256SUMS
           fail_on_unmatched_files: true
 
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
   release-verify:
     name: Verify the published release
-    needs: publish
+    needs: [prepare, publish]
     permissions:
       contents: read
       packages: read
     uses: ./.github/workflows/release-verify.yml
     with:
-      release_tag: ${{ github.event.release.tag_name }}
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
 
   deploy-docs:
     name: Deploy documentation

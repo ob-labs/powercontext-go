@@ -791,6 +791,46 @@ td small {
   gap: 20px;
 }
 
+.baseline-library {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+.baseline-library__table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.baseline-library__table {
+  min-width: 900px;
+}
+
+.baseline-library__table th,
+.baseline-library__table td {
+  vertical-align: top;
+}
+
+.baseline-library__table tbody tr:hover {
+  background: #f5f7f2;
+}
+
+.baseline-library__table tbody th strong,
+.baseline-library__table tbody th span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.baseline-library__table tbody th span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
 .auth-panel {
   padding: 24px;
 }
@@ -1348,6 +1388,81 @@ td small {
 
 .report-section--batch {
   padding: 22px;
+}
+
+.baseline-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.baseline-create-form {
+  grid-template-columns: minmax(0, 1fr) minmax(130px, .35fr) auto;
+  align-items: end;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: #f7f9f4;
+}
+
+.baseline-create-form label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.baseline-create-form .primary-button {
+  min-width: 118px;
+}
+
+.baseline-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.baseline-candidates,
+.baseline-comparisons {
+  display: grid;
+  gap: 10px;
+}
+
+.baseline-candidates h3,
+.baseline-comparisons h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.baseline-table {
+  min-width: 480px;
+}
+
+.baseline-table th,
+.baseline-table td {
+  vertical-align: top;
+}
+
+.baseline-compatibility {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.baseline-compatibility--compatible {
+  color: var(--green-dark);
+}
+
+.baseline-compatibility--warning {
+  color: var(--amber);
+}
+
+.baseline-compatibility--incompatible {
+  color: var(--red);
+}
+
+.baseline-reason {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .section-heading {
@@ -1983,6 +2098,8 @@ td small {
   }
 
   .form-row,
+  .baseline-create-form,
+  .baseline-candidate-grid,
   .detail-grid,
   .validity-list,
   .arm-grid {

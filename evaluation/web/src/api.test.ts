@@ -64,6 +64,191 @@ function apiWithResponse(response: Response): {
   return { api: new EvaluationApi({ fetch }), fetch };
 }
 
+const baseline = {
+  baseline_id: "baseline/a",
+  name: "Release",
+  source_batch_id: "batch/a",
+  source_arm: "on",
+  source_report_revision: 217,
+  benchmark: "swebench-pro",
+  task_set: "swebench-pro-public-v2",
+  instance_set_digest: "a".repeat(64),
+  total_tasks: 5,
+  resolved_tasks: 3,
+  execution_failures: 1,
+  model: "gpt-5.6-sol",
+  reasoning_effort: "medium",
+  dataset_revision: "dataset-1",
+  harness_revision: "harness-1",
+  powercontext_sha: "b".repeat(40),
+  codex_version: "0.1.0",
+  created_at: "2026-09-02T00:00:00Z",
+} as const;
+
+describe("EvaluationApi baseline contracts", () => {
+  it("calls every baseline endpoint with encoded identifiers and complete replacement selections", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(jsonResponse([baseline]))
+      .mockResolvedValueOnce(jsonResponse(baseline))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            baseline,
+            compatibility: { status: "warning", reasons: ["cross-arm comparison"] },
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse([{ baseline_id: baseline.baseline_id, current_arm: "off" }]))
+      .mockResolvedValueOnce(jsonResponse([{ baseline_id: baseline.baseline_id, current_arm: "off" }]))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          batch_id: "batch/a",
+          report_revision: 218,
+          comparisons: [
+            {
+              baseline,
+              current_arm: "off",
+              compatibility: { status: "compatible", reasons: [] },
+              coverage: {
+                matched_tasks: 5,
+                comparable_tasks: 4,
+                current_execution_failures: 0,
+                baseline_execution_failures: 1,
+              },
+              resolution: {
+                baseline_resolved: 3,
+                current_resolved: 4,
+                total: 5,
+                baseline_rate_percent: 60,
+                current_rate_percent: 80,
+                delta_points: 20,
+              },
+              outcome_categories: {
+                baseline_fail_current_pass: 1,
+                baseline_pass_current_fail: 0,
+                both_pass: 3,
+                both_fail: 1,
+              },
+              input_tokens: {
+                baseline: 100,
+                current: 90,
+                delta: -10,
+                baseline_measured_tasks: 4,
+                current_measured_tasks: 4,
+              },
+              output_tokens: null,
+              total_tokens: null,
+            },
+          ],
+        }),
+      );
+    const api = new EvaluationApi({ fetch });
+
+    await expect(api.listBaselines()).resolves.toEqual([baseline]);
+    await expect(
+      api.createBaseline({
+        name: "Release",
+        source_batch_id: "batch/a",
+        source_arm: "on",
+        expected_report_revision: 217,
+        idempotency_key: "baseline-create-217",
+      }),
+    ).resolves.toEqual(baseline);
+    await expect(api.getBaselineCandidates("batch/a", "off")).resolves.toHaveLength(1);
+    await expect(api.getBaselineSelections("batch/a")).resolves.toEqual([
+      { baseline_id: "baseline/a", current_arm: "off" },
+    ]);
+    await expect(
+      api.replaceBaselineSelections("batch/a", [{ baseline_id: "baseline/a", current_arm: "off" }]),
+    ).resolves.toEqual([{ baseline_id: "baseline/a", current_arm: "off" }]);
+    await expect(api.getBaselineComparisons("batch/a")).resolves.toMatchObject({
+      report_revision: 218,
+      comparisons: [{ coverage: { comparable_tasks: 4 }, input_tokens: { delta: -10 } }],
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(1, "/api/baselines", expect.any(Object));
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/baselines",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "Release",
+          source_batch_id: "batch/a",
+          source_arm: "on",
+          expected_report_revision: 217,
+          idempotency_key: "baseline-create-217",
+        }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      "/api/batches/batch%2Fa/baseline-candidates?current_arm=off",
+      expect.any(Object),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      "/api/batches/batch%2Fa/baseline-selections",
+      expect.any(Object),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      5,
+      "/api/batches/batch%2Fa/baseline-selections",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ selections: [{ baseline_id: "baseline/a", current_arm: "off" }] }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      6,
+      "/api/batches/batch%2Fa/baseline-comparisons",
+      expect.any(Object),
+    );
+  });
+
+  it("rejects malformed nested baseline comparison data", async () => {
+    const { api } = apiWithResponse(
+      jsonResponse({
+        batch_id: "batch/a",
+        report_revision: 218,
+        comparisons: [
+          {
+            baseline,
+            current_arm: "off",
+            compatibility: { status: "compatible", reasons: [] },
+            coverage: {
+              matched_tasks: 5,
+              comparable_tasks: -1,
+              current_execution_failures: 0,
+              baseline_execution_failures: 0,
+            },
+            resolution: {
+              baseline_resolved: 3,
+              current_resolved: 4,
+              total: 5,
+              baseline_rate_percent: 60,
+              current_rate_percent: 80,
+              delta_points: 20,
+            },
+            outcome_categories: {
+              baseline_fail_current_pass: 1,
+              baseline_pass_current_fail: 0,
+              both_pass: 3,
+              both_fail: 1,
+            },
+            input_tokens: null,
+            output_tokens: null,
+            total_tokens: null,
+          },
+        ],
+      }),
+    );
+
+    await expect(api.getBaselineComparisons("batch/a")).rejects.toMatchObject({ code: "invalid_response" });
+  });
+});
+
 describe("EvaluationApi HTTP", () => {
   it("accepts an API-key admission response without subscription usage", async () => {
     const response = { mode: "api_key", sufficient: true, usage: null } as const;

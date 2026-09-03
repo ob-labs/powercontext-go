@@ -905,7 +905,7 @@ func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 	}
 }
 
-func TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases(t *testing.T) {
+func TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
 	if err != nil {
@@ -913,8 +913,13 @@ func TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases(t *testing.T
 	}
 	workflow := string(payload)
 	for _, required := range []string{
-		"types: [published]",
+		"workflow_dispatch:",
+		"release_tag:",
+		"tags:",
+		"v[0-9]*",
+		"needs.prepare.outputs.release_tag",
 		"needs: [prepare, binaries, images]",
+		"needs: [prepare, publish]",
 		"make package-standard",
 		"make package-full",
 		"Smoke test both released process surfaces",
@@ -924,15 +929,61 @@ func TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases(t *testing.T
 		"dist/IMAGE-DIGESTS.json",
 		"dist/SHA256SUMS",
 		"fail_on_unmatched_files: true",
+		"draft: true",
+		`gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false`,
 		"uses: ./.github/workflows/release-verify.yml",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("release workflow is missing %q", required)
 		}
 	}
+	for _, publishedReleaseTrigger := range []string{"types: [published]", "github.event.release.tag_name"} {
+		if strings.Contains(workflow, publishedReleaseTrigger) {
+			t.Errorf("release workflow publishes assets after an immutable release through %q", publishedReleaseTrigger)
+		}
+	}
 	for _, prereleaseFilter := range []string{"prerelease == false", "prerelease: false", "!github.event.release.prerelease"} {
 		if strings.Contains(workflow, prereleaseFilter) {
 			t.Errorf("release workflow rejects published prereleases through %q", prereleaseFilter)
+		}
+	}
+}
+
+func TestReleaseVerificationSmokesEveryPublishedImageByDigest(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workflow := string(payload)
+	for _, runtime := range []struct {
+		name  string
+		id    string
+		image string
+	}{
+		{name: "standard", id: "standard_image_runtime", image: "${{ steps.images.outputs.standard }}"},
+		{name: "Full", id: "full_image_runtime", image: "${{ steps.images.outputs.full }}"},
+	} {
+		stepName := "Run the published " + runtime.name + " image by digest"
+		stepStart := strings.Index(workflow, stepName)
+		if stepStart < 0 {
+			t.Errorf("release verification does not smoke the published %s image by digest: missing %q", runtime.name, stepName)
+			continue
+		}
+		step := workflow[stepStart:]
+		if nextStep := strings.Index(step, "\n      - name:"); nextStep >= 0 {
+			step = step[:nextStep]
+		}
+		for _, required := range []string{
+			"id: " + runtime.id,
+			"IMAGE: " + runtime.image,
+			`docker pull "$IMAGE"`,
+			`"$IMAGE" server run`,
+			"/health/ready",
+		} {
+			if !strings.Contains(step, required) {
+				t.Errorf("release verification does not smoke the published %s image by digest: missing %q", runtime.name, required)
+			}
 		}
 	}
 }

@@ -202,7 +202,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Run the published standard image by digest
-        id: image_runtime
+        id: standard_image_runtime
         shell: bash
         env:
           BUILD_DATE: ${{ steps.release.outputs.build_date }}
@@ -210,7 +210,46 @@ jobs:
           IMAGE: ${{ steps.images.outputs.standard }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          container="powercontext-release-verify-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          container="powercontext-release-verify-standard-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm --force "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker pull "$IMAGE"
+          test "$(docker image inspect "$IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')" = "$VERSION"
+          test "$(docker image inspect "$IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" = "$COMMIT"
+          test "$(docker image inspect "$IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.created" }}')" = "$BUILD_DATE"
+          docker run \
+            --detach \
+            --name "$container" \
+            --env POWERCONTEXT_SERVER_HTTP_HOST=0.0.0.0 \
+            --env POWERCONTEXT_SERVER_HTTP_PORT=8000 \
+            --publish 127.0.0.1::8000 \
+            "$IMAGE" server run
+          endpoint="$(docker port "$container" 8000/tcp | head -n 1)"
+          ready=false
+          for _ in $(seq 1 45); do
+            if curl --fail --silent --show-error "http://${endpoint}/health/ready" >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            docker logs "$container"
+            exit 1
+          fi
+
+      - name: Run the published Full image by digest
+        id: full_image_runtime
+        shell: bash
+        env:
+          BUILD_DATE: ${{ steps.release.outputs.build_date }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+          IMAGE: ${{ steps.images.outputs.full }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          container="powercontext-release-verify-full-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           cleanup() {
             docker rm --force "$container" >/dev/null 2>&1 || true
           }
@@ -246,11 +285,12 @@ jobs:
           ARCHIVES: ${{ steps.archives.outcome }}
           ASSETS: ${{ steps.assets.outcome }}
           FULL_SMOKE: ${{ steps.full_smoke.outcome }}
-          IMAGE_RUNTIME: ${{ steps.image_runtime.outcome }}
+          FULL_IMAGE_RUNTIME: ${{ steps.full_image_runtime.outcome }}
           IMAGES: ${{ steps.images.outcome }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           VERSION: ${{ steps.release.outputs.version }}
           STANDARD_SMOKE: ${{ steps.standard_smoke.outcome }}
+          STANDARD_IMAGE_RUNTIME: ${{ steps.standard_image_runtime.outcome }}
         run: |
           {
             echo "## Release health"
@@ -262,5 +302,6 @@ jobs:
             echo "- Standard process contract: **$STANDARD_SMOKE**"
             echo "- Full process contract: **$FULL_SMOKE**"
             echo "- Immutable GHCR manifests: **$IMAGES**"
-            echo "- Published image runtime: **$IMAGE_RUNTIME**"
+            echo "- Published standard image runtime: **$STANDARD_IMAGE_RUNTIME**"
+            echo "- Published Full image runtime: **$FULL_IMAGE_RUNTIME**"
           } >> "$GITHUB_STEP_SUMMARY"

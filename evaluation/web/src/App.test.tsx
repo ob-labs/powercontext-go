@@ -15,6 +15,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -32,7 +33,7 @@ describe("App batch report navigation", () => {
     expect(screen.getByRole("link", { name: "任务详细报告" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("link", { name: "当前运行任务" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
-    expect(screen.getAllByRole("link")).toHaveLength(4);
+    expect(screen.getAllByRole("link")).toHaveLength(5);
     expect(screen.queryByRole("link", { name: /工作台|测试任务|验收报告|单任务详情/ })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "预览评测" })).toBeVisible();
     expect(await screen.findByText("Worker 工作中")).toBeVisible();
@@ -41,6 +42,17 @@ describe("App batch report navigation", () => {
     expect(screen.getByText("资源门禁开放")).toBeVisible();
     expect(screen.getByText("Worker 按配置并行运行独立任务对")).toBeVisible();
     expect(screen.queryByText("全局同时只运行一个任务，其余任务排队")).not.toBeInTheDocument();
+  });
+
+  it("navigates to the baseline library without reloading the document", async () => {
+    const user = userEvent.setup();
+    render(<App api={apiStub({ listBaselines: vi.fn().mockResolvedValue([]) })} />);
+
+    await user.click(screen.getByRole("link", { name: "基线库" }));
+
+    expect(window.location.pathname).toBe("/baselines");
+    expect(await screen.findByRole("heading", { name: "基线库" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "基线库" })).toHaveAttribute("aria-current", "page");
   });
 
   it("describes an inactive worker lease as idle instead of disconnected", async () => {

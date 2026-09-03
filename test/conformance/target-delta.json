@@ -175,20 +175,20 @@
       "case": {"file": "tests/test_ci_release_verification.py", "name": "test_github_release_allows_prereleases"},
       "disposition": "superseded",
       "reason": "Go release workflow tests own prerelease and published-asset verification for the shipped implementation.",
-      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"]
+      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"]
     },
     {
       "case": {"file": "tests/test_ci_release_verification.py", "name": "test_github_release_requires_published_state_and_expected_assets"},
       "disposition": "superseded",
       "reason": "Go release workflow tests own published-state and complete-asset verification for the shipped implementation.",
-      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"]
+      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"]
     },
     {
       "case": {"file": "tests/test_ci_release_verification.py", "name": "test_pypi_release_requires_wheel_and_sdist"},
       "disposition": "superseded",
       "reason": "The Go release contract records and verifies the complete distribution asset set.",
       "evidence": [
-        "go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases",
+        "go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease",
         "go:tools/release/main_test.go#TestNativeAssetManifestSupportsReleaseMatrix"
       ]
     },
@@ -196,7 +196,7 @@
       "case": {"file": "tests/test_ci_release_verification.py", "name": "test_pypi_verification_retries_until_release_is_complete"},
       "disposition": "superseded",
       "reason": "The Go release workflow owns bounded publication verification for the shipped release process.",
-      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"]
+      "evidence": ["go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"]
     },
     {
       "case": {"file": "tests/test_transport.py", "name": "test_vendored_plugin_shares_the_loopback_host_set"},

@@ -1443,17 +1443,17 @@
           "go:tools/release/main_test.go#TestReleaseArchiveKeepsStableExecutablePathAndMode"
         ],
         "test_pypi_release_requires_wheel_and_sdist": [
-          "go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases",
+          "go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease",
           "go:tools/release/main_test.go#TestNativeAssetManifestSupportsReleaseMatrix"
         ],
         "test_pypi_verification_retries_until_release_is_complete": [
-          "go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         ],
         "test_github_release_requires_published_state_and_expected_assets": [
-          "go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         ],
         "test_github_release_allows_prereleases": [
-          "go:tools/release/main_test.go#TestReleaseWorkflowPublishesCompleteAssetsAndAllowsPrereleases"
+          "go:tools/release/main_test.go#TestReleaseWorkflowStagesAssetsBeforePublishingImmutableRelease"
         ]
       }
     },

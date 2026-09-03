@@ -27,6 +27,11 @@ import type {
   BatchTaskListOptions,
   BatchTaskPage,
   BatchTaskSet,
+  BaselineCandidate,
+  BaselineComparisonResponse,
+  BaselineCreate,
+  BaselineRecord,
+  BaselineSelection,
   Capabilities,
   ContextEvent,
   ContextEventPage,
@@ -642,6 +647,80 @@ const contextEventPageSchema = z.strictObject({
   limit: z.number().int().positive(),
   offset: nonnegativeIntegerSchema,
 });
+const baselineRecordSchema = z.strictObject({
+  baseline_id: z.string(),
+  name: z.string(),
+  source_batch_id: z.string(),
+  source_arm: z.enum(["off", "on"]),
+  source_report_revision: nonnegativeIntegerSchema,
+  benchmark: z.literal("swebench-pro"),
+  task_set: batchTaskSetSchema,
+  instance_set_digest: z.string().regex(/^[0-9a-f]{64}$/),
+  total_tasks: z.number().int().positive(),
+  resolved_tasks: nonnegativeIntegerSchema,
+  execution_failures: nonnegativeIntegerSchema,
+  model: z.string(),
+  reasoning_effort: z.literal("medium"),
+  dataset_revision: z.string(),
+  harness_revision: z.string(),
+  powercontext_sha: z.string().regex(/^[0-9a-f]{40}$/).nullable(),
+  codex_version: z.string().nullable(),
+  created_at: timestampSchema,
+});
+const baselineCompatibilitySchema = z.strictObject({
+  status: z.enum(["compatible", "warning", "incompatible"]),
+  reasons: z.array(z.string()),
+});
+const baselineCandidateSchema = z.strictObject({
+  baseline: baselineRecordSchema,
+  compatibility: baselineCompatibilitySchema,
+});
+const baselineSelectionSchema = z.strictObject({
+  baseline_id: z.string(),
+  current_arm: z.enum(["off", "on"]),
+});
+const baselineComparisonCoverageSchema = z.strictObject({
+  matched_tasks: nonnegativeIntegerSchema,
+  comparable_tasks: nonnegativeIntegerSchema,
+  current_execution_failures: nonnegativeIntegerSchema,
+  baseline_execution_failures: nonnegativeIntegerSchema,
+});
+const historicalResolutionComparisonSchema = z.strictObject({
+  baseline_resolved: nonnegativeIntegerSchema,
+  current_resolved: nonnegativeIntegerSchema,
+  total: nonnegativeIntegerSchema,
+  baseline_rate_percent: z.number().min(0).max(100),
+  current_rate_percent: z.number().min(0).max(100),
+  delta_points: z.number(),
+});
+const historicalTokenComparisonSchema = z.strictObject({
+  baseline: nonnegativeIntegerSchema,
+  current: nonnegativeIntegerSchema,
+  delta: z.number().int(),
+  baseline_measured_tasks: nonnegativeIntegerSchema,
+  current_measured_tasks: nonnegativeIntegerSchema,
+});
+const baselineComparisonSchema = z.strictObject({
+  baseline: baselineRecordSchema,
+  current_arm: z.enum(["off", "on"]),
+  compatibility: baselineCompatibilitySchema,
+  coverage: baselineComparisonCoverageSchema,
+  resolution: historicalResolutionComparisonSchema,
+  outcome_categories: z.strictObject({
+    baseline_fail_current_pass: nonnegativeIntegerSchema,
+    baseline_pass_current_fail: nonnegativeIntegerSchema,
+    both_pass: nonnegativeIntegerSchema,
+    both_fail: nonnegativeIntegerSchema,
+  }),
+  input_tokens: historicalTokenComparisonSchema.nullable(),
+  output_tokens: historicalTokenComparisonSchema.nullable(),
+  total_tokens: historicalTokenComparisonSchema.nullable(),
+});
+const baselineComparisonResponseSchema = z.strictObject({
+  batch_id: z.string(),
+  report_revision: nonnegativeIntegerSchema,
+  comparisons: z.array(baselineComparisonSchema),
+});
 const errorEnvelopeSchema = z.strictObject({
   error: z.strictObject({
     code: z.string(),
@@ -721,6 +800,22 @@ function validateBatchControlEvent(value: unknown): BatchControlEvent {
   return validateWithSchema(batchControlEventSchema, value);
 }
 
+function validateBaselineRecord(value: unknown): BaselineRecord {
+  return validateWithSchema(baselineRecordSchema, value);
+}
+
+function validateBaselineCandidate(value: unknown): BaselineCandidate {
+  return validateWithSchema(baselineCandidateSchema, value);
+}
+
+function validateBaselineSelection(value: unknown): BaselineSelection {
+  return validateWithSchema(baselineSelectionSchema, value);
+}
+
+function validateBaselineComparisonResponse(value: unknown): BaselineComparisonResponse {
+  return validateWithSchema(baselineComparisonResponseSchema, value);
+}
+
 function mediaType(response: Response): string {
   return response.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
@@ -735,6 +830,11 @@ function taskPath(taskId: string, suffix = ""): string {
 
 function batchPath(batchId: string, suffix = ""): string {
   return apiPath(`/batches/${encodeURIComponent(batchId)}${suffix}`);
+}
+
+function baselineCandidatesPath(batchId: string, currentArm: "off" | "on"): string {
+  const query = new URLSearchParams({ current_arm: currentArm });
+  return batchPath(batchId, `/baseline-candidates?${query.toString()}`);
 }
 
 function withSignal(signal: AbortSignal | undefined): Pick<RequestInit, "signal"> {
@@ -753,6 +853,80 @@ export class EvaluationApi {
 
   getCapabilities(signal?: AbortSignal): Promise<Capabilities> {
     return this.#json(apiPath("/capabilities"), validateCapabilities, withSignal(signal));
+  }
+
+  listBaselines(signal?: AbortSignal): Promise<BaselineRecord[]> {
+    return this.#json(
+      apiPath("/baselines"),
+      (value) => {
+        if (!Array.isArray(value)) throw new ApiError(null, "invalid_response", GENERIC_ERROR_MESSAGE);
+        return value.map(validateBaselineRecord);
+      },
+      withSignal(signal),
+    );
+  }
+
+  createBaseline(baseline: BaselineCreate, signal?: AbortSignal): Promise<BaselineRecord> {
+    return this.#json(apiPath("/baselines"), validateBaselineRecord, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(baseline),
+      ...withSignal(signal),
+    });
+  }
+
+  getBaselineCandidates(
+    batchId: string,
+    currentArm: "off" | "on",
+    signal?: AbortSignal,
+  ): Promise<BaselineCandidate[]> {
+    return this.#json(
+      baselineCandidatesPath(batchId, currentArm),
+      (value) => {
+        if (!Array.isArray(value)) throw new ApiError(null, "invalid_response", GENERIC_ERROR_MESSAGE);
+        return value.map(validateBaselineCandidate);
+      },
+      withSignal(signal),
+    );
+  }
+
+  getBaselineSelections(batchId: string, signal?: AbortSignal): Promise<BaselineSelection[]> {
+    return this.#json(
+      batchPath(batchId, "/baseline-selections"),
+      (value) => {
+        if (!Array.isArray(value)) throw new ApiError(null, "invalid_response", GENERIC_ERROR_MESSAGE);
+        return value.map(validateBaselineSelection);
+      },
+      withSignal(signal),
+    );
+  }
+
+  replaceBaselineSelections(
+    batchId: string,
+    selections: BaselineSelection[],
+    signal?: AbortSignal,
+  ): Promise<BaselineSelection[]> {
+    return this.#json(
+      batchPath(batchId, "/baseline-selections"),
+      (value) => {
+        if (!Array.isArray(value)) throw new ApiError(null, "invalid_response", GENERIC_ERROR_MESSAGE);
+        return value.map(validateBaselineSelection);
+      },
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selections }),
+        ...withSignal(signal),
+      },
+    );
+  }
+
+  getBaselineComparisons(batchId: string, signal?: AbortSignal): Promise<BaselineComparisonResponse> {
+    return this.#json(
+      batchPath(batchId, "/baseline-comparisons"),
+      validateBaselineComparisonResponse,
+      withSignal(signal),
+    );
   }
 
   listBatches(signal?: AbortSignal): Promise<BatchRecord[]> {
