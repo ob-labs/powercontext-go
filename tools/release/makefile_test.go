@@ -985,9 +985,9 @@ func runAPICompatWithFake(t *testing.T, apidiffScript string) (string, string, s
 func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string, additionalArguments ...string) (string, string, string, error) {
 	t.Helper()
 	repository := filepath.Clean(filepath.Join("..", ".."))
-	baselineCommit, err := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{commit}").Output()
-	if err != nil {
-		t.Fatalf("resolve local API compatibility baseline commit: %v", err)
+	baselineCommit, resolveErr := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{commit}").Output()
+	if resolveErr != nil {
+		t.Fatalf("resolve local API compatibility baseline commit: %v", resolveErr)
 	}
 	temporary := t.TempDir()
 	baselineLog := filepath.Join(temporary, "baseline.txt")
