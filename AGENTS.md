@@ -394,6 +394,9 @@ source / artifact / trigger / inference
   after an earlier adapter failure, and record every individual step outcome
   in bounded diagnostics. Verify a workflow contract test rejects a merged
   step, a missing failure-continuation guard, or a missing adapter outcome.
+- When adding a source file covered by the license checker, copy the complete
+  configured header (including the license URL and disclaimer) before adding
+  code. Verify `make license-check` reports zero invalid files.
 - When a background tracing root cannot start, preserve cancellation and value
   context while explicitly clearing the ambient trace parent before later
   stages begin. Verify an injected root-start failure leaves child spans

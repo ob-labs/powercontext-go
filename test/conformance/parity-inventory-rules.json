@@ -477,7 +477,15 @@
     },
     "tests/e2e/test_pydantic_ai_chain.py": {
       "mode": "cross-layer",
-      "reason": "End-to-end capture/checkpoint/recall/search chain crossing the Pydantic AI adapter and the Server."
+      "reason": "End-to-end capture/checkpoint/recall/search chain crossing the Pydantic AI adapter and the Server.",
+      "cases": {
+        "test_pydantic_ai_capture_checkpoint_recall_and_search_chain": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_go_server_chain.py#test_pydantic_ai_capture_checkpoint_recall_and_search_chain"]
+        },
+        "test_pydantic_ai_final_flush_catches_up_across_more_than_ten_source_windows": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_go_server_chain.py#test_pydantic_ai_final_flush_catches_up_across_more_than_ten_source_windows"]
+        }
+      }
     },
     "tests/e2e/test_workbuddy_service_chain.py": {
       "mode": "cross-layer",
@@ -537,7 +545,16 @@
     },
     "tests/langchain_middleware/test_middleware.py": {
       "mode": "retained-host",
-      "reason": "LangChain middleware observable behavior owned by the LangChain adapter named in the WP2 retained-adapter alignment list."
+      "reason": "LangChain middleware observable behavior owned by the LangChain adapter named in the WP2 retained-adapter alignment list.",
+      "cases": {
+        "test_middleware_injects_recall_without_persisting_it": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_middleware_injects_recall_without_persisting_it"]},
+        "test_middleware_injects_only_approved_experience": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_middleware_injects_only_approved_experience"]},
+        "test_middleware_does_not_capture_completed_turn_by_default": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_middleware_does_not_capture_completed_turn_by_default"]},
+        "test_middleware_captures_completed_turn_when_enabled": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_middleware_captures_completed_turn_when_enabled"]},
+        "test_middleware_captures_tool_strategy_structured_response": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_middleware_captures_tool_strategy_structured_response"]},
+        "test_async_agent_reaches_end_when_server_unreachable": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_async_agent_reaches_end_when_server_unreachable"]},
+        "test_sync_agent_reaches_end_when_server_unreachable": {"evidence": ["py:integrations/langchain/tests/test_middleware.py#test_sync_agent_reaches_end_when_server_unreachable"]}
+      }
     },
     "tests/langchain_middleware/test_packaging.py": {
       "mode": "retained-host",
@@ -628,7 +645,12 @@
     },
     "tests/pydantic_ai_adapter/test_packaging.py": {
       "mode": "retained-host",
-      "reason": "Pydantic AI adapter packaging owned by the Pydantic AI adapter."
+      "reason": "Pydantic AI adapter packaging owned by the Pydantic AI adapter.",
+      "cases": {
+        "test_documented_openai_agent_constructs_from_installed_wheels": {
+          "evidence": ["py:integrations/pydantic-ai/tests/test_packaging.py#test_documented_openai_agent_constructs_from_installed_wheels"]
+        }
+      }
     },
     "tests/pydantic_ai_adapter/test_settings_scope.py": {
       "mode": "retained-host",

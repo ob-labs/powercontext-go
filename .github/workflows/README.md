@@ -24,6 +24,12 @@ Four Go-specific workflows extend, rather than replace, that Python topology:
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
 | `windows-contract.yml` | Windows checkout-only contract guard: verifies LF attributes, both versioned fixture SHA-256 inventories, and generated-contract cleanliness without claiming Windows binary support. |
 
+Release-line governance is checked by `make governance-check` in the `governance-contract` job and by the explicit
+`release-contract` job. The release-contract job also runs `make release-contract-check` against the recorded upstream
+release tag, assets, and PyPI provenance. Together they keep `docs/release/POLICY.md`, `.github/release.yml`, the
+`release.yml` tag/manual-dispatch triggers, and exact release metadata aligned so branch/version/tag/backport/release-note
+consistency does not depend on prose review alone.
+
 The committed `test/conformance/testdata/python-v0.0.2` baseline remains immutable. The separate
 `test/conformance/testdata/python-v0.1.0` directory freezes exact release metadata and portable fixture evidence;
 it does not silently replace the historical Oracle. Pull requests regenerate both directories from their pinned

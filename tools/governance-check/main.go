@@ -116,6 +116,20 @@ type dependabotExpectation struct {
 	Group     string
 }
 
+type releaseNotesConfig struct {
+	Changelog struct {
+		Categories []releaseNoteCategory `yaml:"categories"`
+		Exclude    struct {
+			Labels []string `yaml:"labels"`
+		} `yaml:"exclude"`
+	} `yaml:"changelog"`
+}
+
+type releaseNoteCategory struct {
+	Title  string   `yaml:"title"`
+	Labels []string `yaml:"labels"`
+}
+
 type workflowContract struct {
 	Permissions map[string]any         `yaml:"permissions"`
 	Jobs        map[string]workflowJob `yaml:"jobs"`
@@ -195,6 +209,15 @@ func checkRepository(root string) error {
 		return err
 	}
 	if err := checkDependabotConfig(root); err != nil {
+		return err
+	}
+	if err := checkReleasePolicy(root); err != nil {
+		return err
+	}
+	if err := checkReleaseNotesConfig(root); err != nil {
+		return err
+	}
+	if err := checkReleaseWorkflow(root); err != nil {
 		return err
 	}
 	return checkWorkflowContracts(root)
@@ -373,6 +396,161 @@ func checkDependabotUpdate(update dependabotUpdate, expectation dependabotExpect
 		return fmt.Errorf("group %q must contain only minor and patch updates", expectation.Group)
 	}
 	return nil
+}
+
+func checkReleasePolicy(root string) error {
+	return requirePhrases(root, "docs/release/POLICY.md", []string{
+		"default branch receives features and fixes",
+		"supported release branches receive approved fixes and security backports only",
+		"release branch naming convention",
+		"backport PR",
+		"original Issue",
+		"target release line",
+		"compatibility impact",
+		"validation performed on that line",
+		"force-push and deletion",
+		"squash merge",
+		"breaking-change label",
+		"version decision",
+		"release draft",
+		"previous-tag comparison",
+		"contributor attribution",
+		"root-module",
+		"CLI",
+		"generator",
+		"adapter",
+		"binary versions",
+		"DCO sign-off is not required",
+	})
+}
+
+func checkReleaseNotesConfig(root string) error {
+	const name = ".github/release.yml"
+	contents, err := readRepositoryFile(root, name)
+	if err != nil {
+		return err
+	}
+	var document any
+	if err := yaml.UnmarshalStrict(contents, &document); err != nil {
+		return fmt.Errorf("%s is invalid: %w", name, err)
+	}
+	var config releaseNotesConfig
+	if err := yaml.Unmarshal(contents, &config); err != nil {
+		return fmt.Errorf("%s cannot be inspected: %w", name, err)
+	}
+	expected := []releaseNoteCategory{
+		{Title: "Breaking changes", Labels: []string{"breaking"}},
+		{Title: "Features", Labels: []string{"enhancement"}},
+		{Title: "Bug fixes", Labels: []string{"bug"}},
+		{Title: "Security", Labels: []string{"security"}},
+		{Title: "Dependencies", Labels: []string{"dependencies"}},
+		{Title: "Documentation", Labels: []string{"documentation"}},
+		{Title: "Maintenance", Labels: []string{"maintenance"}},
+	}
+	if len(config.Changelog.Categories) != len(expected) {
+		return fmt.Errorf("%s must define %d release-note categories", name, len(expected))
+	}
+	seen := make(map[string]struct{}, len(config.Changelog.Categories))
+	for _, category := range config.Changelog.Categories {
+		title := strings.TrimSpace(category.Title)
+		if title == "" {
+			return fmt.Errorf("%s contains a release-note category without a title", name)
+		}
+		if _, exists := seen[title]; exists {
+			return fmt.Errorf("%s contains duplicate release-note category %q", name, title)
+		}
+		seen[title] = struct{}{}
+	}
+	for _, category := range expected {
+		if !releaseNotesCategoryContains(config.Changelog.Categories, category.Title, category.Labels[0]) {
+			return fmt.Errorf("%s must define the %q category with label %q", name, category.Title, category.Labels[0])
+		}
+	}
+	for _, label := range []string{"duplicate", "invalid", "question", "wontfix"} {
+		if !slices.Contains(config.Changelog.Exclude.Labels, label) {
+			return fmt.Errorf("%s must exclude label %q from release notes", name, label)
+		}
+	}
+	return nil
+}
+
+func releaseNotesCategoryContains(categories []releaseNoteCategory, title, label string) bool {
+	for _, category := range categories {
+		if category.Title == title && slices.Contains(category.Labels, label) {
+			return true
+		}
+	}
+	return false
+}
+
+func checkReleaseWorkflow(root string) error {
+	const name = ".github/workflows/release.yml"
+	contents, err := readRepositoryFile(root, name)
+	if err != nil {
+		return err
+	}
+	var document map[any]any
+	if err := yaml.UnmarshalStrict(contents, &document); err != nil {
+		return fmt.Errorf("%s is invalid: %w", name, err)
+	}
+	on, ok := document["on"]
+	if !ok {
+		on = document[true]
+	}
+	onMap, ok := on.(map[any]any)
+	if !ok {
+		return fmt.Errorf("%s must define structured workflow triggers", name)
+	}
+	push, ok := onMap["push"].(map[any]any)
+	if !ok {
+		return fmt.Errorf("%s must run on tag pushes", name)
+	}
+	tags, ok := stringSlice(push["tags"])
+	if !ok {
+		return fmt.Errorf("%s push trigger must define tags", name)
+	}
+	for _, pattern := range []string{"v[0-9]*", "powercontext-v[0-9]*"} {
+		if !slices.Contains(tags, pattern) {
+			return fmt.Errorf("release workflow must run for tag pattern %q", pattern)
+		}
+	}
+	dispatch, ok := onMap["workflow_dispatch"].(map[any]any)
+	if !ok {
+		return fmt.Errorf("%s must support workflow_dispatch", name)
+	}
+	inputs, ok := dispatch["inputs"].(map[any]any)
+	if !ok {
+		return errors.New(`release workflow must require workflow_dispatch input "release_tag"`)
+	}
+	releaseTag, ok := inputs["release_tag"].(map[any]any)
+	if !ok {
+		return errors.New(`release workflow must require workflow_dispatch input "release_tag"`)
+	}
+	required, ok := releaseTag["required"].(bool)
+	if !ok || !required {
+		return errors.New(`release workflow must require workflow_dispatch input "release_tag"`)
+	}
+	inputType, ok := releaseTag["type"].(string)
+	if !ok || inputType != "string" {
+		return errors.New(`release workflow workflow_dispatch input "release_tag" must be a string`)
+	}
+	return nil
+}
+
+func stringSlice(value any) ([]string, bool) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, false
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok || strings.TrimSpace(text) == "" {
+			return nil, false
+		}
+		result = append(result, text)
+	}
+	return result, true
 }
 
 func checkWorkflowContracts(root string) error {
