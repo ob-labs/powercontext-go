@@ -62,6 +62,12 @@ the number of open version-update pull requests and follows the live default bra
 target branch. Dependency pull requests must not be auto-merged; they must pass the repository's normal review and CI
 contracts.
 
+## Release governance
+
+The release branch, backport, merge-strategy, version-source, DCO, and release-note rules live in
+`docs/release/POLICY.md`. The `governance-contract` CI job runs `make governance-check`, which verifies that policy,
+the release workflow tag/manual-dispatch triggers, and `.github/release.yml` label categories stay synchronized.
+
 ## Code and generated contracts
 
 - Match the existing package boundaries, names, and error model. Avoid unrelated refactors or speculative extension
@@ -107,6 +113,7 @@ Every implementation pull request must:
 - identify generated, dependency, workflow, security, or user-facing changes;
 - disclose material AI assistance and describe the human verification performed;
 - avoid weakening assertions, broad exclusions, hidden skips, or unrelated cleanup to make a gate pass.
+- apply the release labels required by `.github/release.yml` when the change should appear in generated release notes.
 
 After every pushed change, recheck the exact pull request Head, current comments, and current CI conclusions before
 claiming the work is ready.
