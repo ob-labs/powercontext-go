@@ -18,6 +18,14 @@ Describe the verified problem and why this is the smallest safe solution.
 - Breaking changes or migration requirements:
 - Explicit non-goals:
 
+## Backport declaration (release/v* only)
+
+- Original Issue and change:
+- Target release line:
+- Conflict resolution:
+- Compatibility impact:
+- Validation on target release line:
+
 ## Generated, dependency, and workflow impact
 
 - [ ] No generated contract changed, or every required output was regenerated from its source.

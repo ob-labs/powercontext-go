@@ -35,7 +35,9 @@ categories are the release-note contract:
 
 Compatibility-affecting pull requests need an explicit breaking-change label and version decision. Do not infer that
 every release is a patch release. A release draft must be generated with an exact previous-tag comparison and
-contributor attribution, then reviewed before publication.
+contributor attribution, then reviewed before publication. Tag pushes and a normal `release` workflow dispatch only
+create or refresh that draft. A maintainer publishes it only through a separate `release` workflow dispatch with
+`publish_release` set to true after review; publication then unlocks release verification and documentation deployment.
 
 ## Version Sources
 

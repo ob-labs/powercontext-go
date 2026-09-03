@@ -730,7 +730,7 @@ fi
 	if !slices.Contains(strings.Fields(checkFlags), "-trimpath") {
 		t.Errorf("api baseline check GOFLAGS = %q, want -trimpath", checkFlags)
 	}
-	wantCheck := append([]string{"-check", "test/api-compat/pre-release.apidiff"}, wantPackages...)
+	wantCheck := append([]string{"-check", "test/api-compat/v0.1.0.apidiff"}, wantPackages...)
 	if got := strings.Fields(checkArguments); !slices.Equal(got, wantCheck) {
 		t.Fatalf("api baseline check arguments = %q, want %q", got, wantCheck)
 	}
@@ -759,7 +759,7 @@ fi
 	if !slices.Contains(strings.Fields(apidiffFlags), "-trimpath") {
 		t.Errorf("apidiff GOFLAGS = %q, want -trimpath", apidiffFlags)
 	}
-	wantAPIDiff := []string{"-m", "-incompatible", "test/api-compat/pre-release.apidiff", currentBundle}
+	wantAPIDiff := []string{"-m", "-incompatible", "test/api-compat/v0.1.0.apidiff", currentBundle}
 	if got := strings.Fields(apidiffArguments); !slices.Equal(got, wantAPIDiff) {
 		t.Fatalf("apidiff arguments = %q, want %q", got, wantAPIDiff)
 	}
@@ -779,8 +779,8 @@ func TestAPIBaselinesDoNotEmbedMachinePaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 1 || filepath.Base(paths[0]) != "pre-release.apidiff" {
-		t.Fatalf("public API baselines = %q, want only pre-release.apidiff", paths)
+	if len(paths) != 1 || filepath.Base(paths[0]) != "v0.1.0.apidiff" {
+		t.Fatalf("public API baselines = %q, want only v0.1.0.apidiff", paths)
 	}
 	for _, path := range paths {
 		payload, readErr := os.ReadFile(path)
@@ -805,6 +805,60 @@ func TestAPIBaselinesDoNotEmbedMachinePaths(t *testing.T) {
 		if match := regexp.MustCompile(`[A-Za-z]:\\`).Find(payload); match != nil {
 			t.Fatalf("%s contains Windows absolute path prefix %q", filepath.Base(path), match)
 		}
+	}
+}
+
+func TestAPICompatRejectsAnUnexpectedReleaseBaselineIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	const unexpectedAPIDiff = `#!/bin/sh
+set -eu
+printf 'apidiff must not run before release baseline verification\n' >&2
+exit 24
+`
+	output, baselineLog, _, err := runAPICompatWithScripts(
+		t,
+		successfulAPIBaselineScript,
+		unexpectedAPIDiff,
+		"API_RELEASE_COMMIT=0000000000000000000000000000000000000000",
+	)
+	if err == nil {
+		t.Fatalf("make api-compat accepted an unexpected release tag identity:\n%s", output)
+	}
+	if !strings.Contains(output, "public API release tag HEAD resolves to") {
+		t.Fatalf("release tag mismatch is not actionable:\n%s", output)
+	}
+	if _, statErr := os.Stat(baselineLog); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("api baseline ran before release tag validation: %v", statErr)
+	}
+}
+
+func TestAPICompatRejectsAReleaseBundleMismatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	const unexpectedAPIDiff = `#!/bin/sh
+set -eu
+printf 'apidiff must not run before release bundle verification\n' >&2
+exit 24
+`
+	output, baselineLog, _, err := runAPICompatWithScripts(
+		t,
+		successfulAPIBaselineScript,
+		unexpectedAPIDiff,
+		"API_RELEASE_TAG_BASELINE=test/api-compat/README.md",
+	)
+	if err == nil {
+		t.Fatalf("make api-compat accepted a mismatched release bundle:\n%s", output)
+	}
+	if !strings.Contains(output, "does not match release tag HEAD") {
+		t.Fatalf("release bundle mismatch is not actionable:\n%s", output)
+	}
+	if _, statErr := os.Stat(baselineLog); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("api baseline ran before release bundle validation: %v", statErr)
 	}
 }
 
@@ -928,9 +982,13 @@ func runAPICompatWithFake(t *testing.T, apidiffScript string) (string, string, s
 	return runAPICompatWithScripts(t, successfulAPIBaselineScript, apidiffScript)
 }
 
-func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string) (string, string, string, error) {
+func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string, additionalArguments ...string) (string, string, string, error) {
 	t.Helper()
 	repository := filepath.Clean(filepath.Join("..", ".."))
+	baselineCommit, resolveErr := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{commit}").Output()
+	if resolveErr != nil {
+		t.Fatalf("resolve local API compatibility baseline commit: %v", resolveErr)
+	}
 	temporary := t.TempDir()
 	baselineLog := filepath.Join(temporary, "baseline.txt")
 	apidiffLog := filepath.Join(temporary, "apidiff.txt")
@@ -946,14 +1004,17 @@ func runAPICompatWithScripts(t *testing.T, baselineScript, apidiffScript string)
 	if err := os.WriteFile(stamp, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.CommandContext(
-		t.Context(),
-		"make",
+	arguments := []string{
 		"api-compat",
-		"APIDIFF="+fakeAPIDiff,
-		"APIDIFF_STAMP="+stamp,
-		"API_BASELINE_GENERATOR="+fakeBaseline,
-	)
+		"APIDIFF=" + fakeAPIDiff,
+		"APIDIFF_STAMP=" + stamp,
+		"API_BASELINE_GENERATOR=" + fakeBaseline,
+		"API_RELEASE_TAG=HEAD",
+		"API_RELEASE_COMMIT=" + strings.TrimSpace(string(baselineCommit)),
+		"API_RELEASE_TAG_BASELINE=test/api-compat/v0.1.0.apidiff",
+	}
+	arguments = append(arguments, additionalArguments...)
+	command := exec.CommandContext(t.Context(), "make", arguments...)
 	command.Dir = repository
 	command.Env = append(
 		os.Environ(),
@@ -1166,7 +1227,15 @@ fi
 
 func TestCoverageTargetUsesRaceAtomicProfileAndThreshold(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
-	command := exec.CommandContext(t.Context(), "make", "--dry-run", "coverage", "GO=go")
+	const configuredTestOutput = "coverage/configured-test-output.txt"
+	command := exec.CommandContext(
+		t.Context(),
+		"make",
+		"--dry-run",
+		"coverage",
+		"GO=go",
+		"COVERAGE_TEST_OUTPUT="+configuredTestOutput,
+	)
 	command.Dir = repository
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -1174,13 +1243,103 @@ func TestCoverageTargetUsesRaceAtomicProfileAndThreshold(t *testing.T) {
 	}
 	contents := string(output)
 	for _, required := range []string{
-		"go test -race -covermode=atomic -coverprofile=\"coverage/coverage.out\" ./...",
+		"go test -v -race -covermode=atomic -coverprofile=\"coverage/coverage.out\" ./...",
+		"test_output=\"" + configuredTestOutput + "\"",
+		"tee \"$test_output\"",
+		"grep -q '^--- PASS:' \"$test_output\"",
 		"go tool cover -func=\"coverage/coverage.out\"",
 		"make coverage-check",
 	} {
 		if !strings.Contains(contents, required) {
 			t.Errorf("make coverage output is missing %q:\n%s", required, output)
 		}
+	}
+}
+
+func TestCoverageTargetRequiresAtLeastOneExecutedTest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the repository Makefile requires a POSIX shell")
+	}
+
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	tests := []struct {
+		name        string
+		testOutput  string
+		wantSuccess bool
+		wantOutput  string
+	}{
+		{
+			name:        "executed test",
+			testOutput:  "=== RUN   TestCoverageGate\n--- PASS: TestCoverageGate (0.00s)\nPASS\nok  example.invalid/coverage  0.001s\n",
+			wantSuccess: true,
+		},
+		{
+			name:       "skipped only",
+			testOutput: "=== RUN   TestCoverageGate\n--- SKIP: TestCoverageGate (0.00s)\nPASS\nok  example.invalid/coverage  0.001s\n",
+			wantOutput: "coverage gate ran no tests that passed",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			temporary := t.TempDir()
+			fakeGo := filepath.Join(temporary, "go")
+			coverageDirectory := filepath.Join(temporary, "coverage")
+			fakeGoScript := `#!/usr/bin/env bash
+set -eu
+
+case "${1:-} ${2:-}" in
+  "env GOEXE")
+    exit 0
+    ;;
+  "test -v")
+    for argument in "$@"; do
+      case "$argument" in
+        -coverprofile=*)
+          profile="${argument#-coverprofile=}"
+          ;;
+      esac
+    done
+    test -n "${profile:-}"
+    mkdir -p "$(dirname "$profile")"
+    printf 'mode: atomic\nexample.invalid/coverage.go:1.1,1.2 1 1\n' > "$profile"
+    printf '%s' "$POWERCONTEXT_FAKE_TEST_OUTPUT"
+    ;;
+  "tool cover")
+    printf 'total:\t(statements)\t16.1%%\n'
+    ;;
+  *)
+    printf 'unexpected go invocation: %s\n' "$*" >&2
+    exit 64
+    ;;
+esac
+`
+			if err := os.WriteFile(fakeGo, []byte(fakeGoScript), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			command := exec.CommandContext(
+				t.Context(),
+				"make",
+				"--no-print-directory",
+				"coverage",
+				"GO="+fakeGo,
+				"COVERAGE_DIR="+coverageDirectory,
+				"COVERAGE_MINIMUM=16.0",
+			)
+			command.Dir = repository
+			command.Env = append(os.Environ(), "POWERCONTEXT_FAKE_TEST_OUTPUT="+test.testOutput)
+			output, err := command.CombinedOutput()
+			if test.wantSuccess && err != nil {
+				t.Fatalf("make coverage failed: %v\n%s", err, output)
+			}
+			if !test.wantSuccess && err == nil {
+				t.Fatalf("make coverage accepted skipped-only tests:\n%s", output)
+			}
+			if test.wantOutput != "" && !strings.Contains(string(output), test.wantOutput) {
+				t.Fatalf("make coverage output = %q, want %q", output, test.wantOutput)
+			}
+		})
 	}
 }
 

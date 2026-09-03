@@ -37,6 +37,13 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			wantError: "Part of #",
 		},
 		{
+			name: "missing backport conflict declaration",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/pull_request_template.md", "Conflict resolution", "Resolution")
+			},
+			wantError: "Conflict resolution",
+		},
+		{
 			name: "duplicate issue form field",
 			mutate: func(t *testing.T, root string) {
 				contents := validIssueForm("Bug report", []string{
@@ -157,6 +164,22 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			wantError: "read docs/release/POLICY.md",
 		},
 		{
+			name: "missing code of conduct",
+			mutate: func(t *testing.T, root string) {
+				if err := os.Remove(filepath.Join(root, "CODE_OF_CONDUCT.md")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantError: "read CODE_OF_CONDUCT.md",
+		},
+		{
+			name: "code of conduct missing report contact",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, "CODE_OF_CONDUCT.md", "open_contact@oceanbase.com", "example@example.invalid")
+			},
+			wantError: "open_contact@oceanbase.com",
+		},
+		{
 			name: "release workflow missing semantic tag trigger",
 			mutate: func(t *testing.T, root string) {
 				replaceFixtureText(t, root, ".github/workflows/release.yml", `      - "v[0-9]*"
@@ -169,16 +192,37 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 		{
 			name: "release workflow missing manual release tag input",
 			mutate: func(t *testing.T, root string) {
-				replaceFixtureText(t, root, ".github/workflows/release.yml", `  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Existing release tag
-        required: true
-        type: string
-`, `  workflow_dispatch:
-`)
+				replaceFixtureText(t, root, ".github/workflows/release.yml", "      release_tag:\n", "      source_tag:\n")
 			},
-			wantError: ".github/workflows/release.yml must support workflow_dispatch",
+			wantError: `release workflow must require workflow_dispatch input "release_tag"`,
+		},
+		{
+			name: "release workflow publishes without an explicit manual input",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/workflows/release.yml", "      publish_release:\n", "      publish_now:\n")
+			},
+			wantError: `release workflow must require workflow_dispatch input "publish_release"`,
+		},
+		{
+			name: "release workflow enables publication by default",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/workflows/release.yml", "        default: false\n", "        default: true\n")
+			},
+			wantError: `release workflow workflow_dispatch input "publish_release" must default to false`,
+		},
+		{
+			name: "release workflow omits exact previous tag notes",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/workflows/release.yml", `--notes-start-tag "$PREVIOUS_TAG"`, "--notes-start-tag")
+			},
+			wantError: "$PREVIOUS_TAG",
+		},
+		{
+			name: "release workflow publishes on a tag push",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/workflows/release.yml", "if: github.event_name == 'workflow_dispatch' && inputs.publish_release", "if: github.event_name == 'push'")
+			},
+			wantError: "if: github.event_name == 'workflow_dispatch' && inputs.publish_release",
 		},
 		{
 			name: "valid reusable workflow caller",
@@ -371,8 +415,9 @@ func writeGovernanceFixture(t *testing.T) string {
 	root := t.TempDir()
 	writeFixtureFile(t, root, "go.mod", "module example.invalid/project\r\n\r\ngo 1.27.0\r\n")
 	writeFixtureFile(t, root, "CONTRIBUTING.md", strings.Join([]string{
-		"GOTOOLCHAIN=local", "make lint", "make check-generated", "tracking issue", "AI assistance",
+		"GOTOOLCHAIN=local", "make lint", "make check-generated", "tracking issue", "AI assistance", "Code of Conduct",
 	}, "\n"))
+	writeFixtureFile(t, root, "CODE_OF_CONDUCT.md", validCodeOfConduct())
 	writeFixtureFile(t, root, ".github/pull_request_template.md", validPullRequestTemplate(true))
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/bug_report.yml", validIssueForm("Bug report", []string{
 		"current_behavior", "expected_behavior", "reproduction", "evidence", "environment", "confirmations",
@@ -425,7 +470,11 @@ updates:
 }
 
 func validPullRequestTemplate(includeRelationship bool) string {
-	parts := []string{"## Tracking", "Closes #", "## Behavior and compatibility", "## Validation", "git diff --check", "Formatter evidence", "Generated-consumer evidence", "Compatibility evidence", "## AI usage"}
+	parts := []string{
+		"## Tracking", "Closes #", "## Behavior and compatibility", "## Backport declaration (release/v* only)",
+		"Original Issue and change", "Target release line", "Conflict resolution", "Compatibility impact", "Validation on target release line",
+		"## Validation", "git diff --check", "Formatter evidence", "Generated-consumer evidence", "Compatibility evidence", "## AI usage",
+	}
 	if includeRelationship {
 		parts = append(parts, "Part of #")
 	}
@@ -489,13 +538,44 @@ on:
         description: Existing release tag
         required: true
         type: string
+      publish_release:
+        description: Publish the previously reviewed draft
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 jobs:
   prepare:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    steps: []
+    steps:
+      - run: |
+          previous_tag: ${{ steps.release.outputs.previous_tag }}
+          git tag --merged "${commit}^"
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - run: |
+          args=(--draft --generate-notes --verify-tag)
+          args+=(--notes-start-tag "$PREVIOUS_TAG")
+          gh release create "$RELEASE_TAG"
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - run: |
+          gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+  release-verify:
+    if: needs.publish.result == 'success'
+    uses: ./.github/workflows/release-verify.yml
 `
 }
 
@@ -555,6 +635,14 @@ func validReleasePolicy() string {
 		"adapter",
 		"binary versions",
 		"DCO sign-off is not required",
+	}, "\n")
+}
+
+func validCodeOfConduct() string {
+	return strings.Join([]string{
+		"Contributor Covenant Code of Conduct",
+		"open_contact@oceanbase.com",
+		"Contributor Covenant, version 2.1",
 	}, "\n")
 }
 

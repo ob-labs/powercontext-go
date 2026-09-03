@@ -4,6 +4,9 @@ PowerContext Go accepts focused fixes, compatibility work, documentation, and qu
 repository's observable contracts. Start from the current repository state and keep each pull request limited to one
 reviewable concern.
 
+All participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). Report conduct concerns privately to
+`open_contact@oceanbase.com`; do not put reports about people in public issues, discussions, pull requests, or commits.
+
 ## Support and compatibility policy
 
 - Go 1.27.0 is the minimum supported toolchain. The `go` directive in `go.mod` is authoritative.

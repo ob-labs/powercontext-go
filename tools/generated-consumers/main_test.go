@@ -17,6 +17,7 @@ package generatedconsumers
 import (
 	"bytes"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -251,6 +252,76 @@ func TestGeneratorInventoryListsCheckedContracts(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGeneratorInventoryListsEveryOpenAPIGeneratorOutput(t *testing.T) {
+	repository := repositoryRoot(t)
+	payload, err := os.ReadFile(filepath.Join(repository, "test", "generator-inventory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inventory generatorInventory
+	if err := json.Unmarshal(payload, &inventory, json.RejectUnknownMembers(true)); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateOpenAPIGeneratorOutputs(inventory, openAPIGeneratorOutputs(t, repository)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenAPIInventoryRejectsMissingGeneratedOutput(t *testing.T) {
+	repository := repositoryRoot(t)
+	payload, err := os.ReadFile(filepath.Join(repository, "test", "generator-inventory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inventory generatorInventory
+	if err := json.Unmarshal(payload, &inventory, json.RejectUnknownMembers(true)); err != nil {
+		t.Fatal(err)
+	}
+	mutated := generatorInventory{SchemaVersion: inventory.SchemaVersion, Generators: slices.Clone(inventory.Generators)}
+	for index := range mutated.Generators {
+		if mutated.Generators[index].Name != "openapi-go-client" {
+			continue
+		}
+		outputs := slices.Clone(mutated.Generators[index].Outputs)
+		for outputIndex, output := range outputs {
+			if output == "api/v1/time.go" {
+				mutated.Generators[index].Outputs = slices.Delete(outputs, outputIndex, outputIndex+1)
+				if err := validateOpenAPIGeneratorOutputs(mutated, openAPIGeneratorOutputs(t, repository)); err == nil {
+					t.Fatal("OpenAPI generator inventory accepted missing time support output")
+				}
+				return
+			}
+		}
+		t.Fatal("OpenAPI generator inventory has no time support output")
+	}
+	t.Fatal("generator inventory has no openapi-go-client entry")
+}
+
+func openAPIGeneratorOutputs(t *testing.T, repository string) []string {
+	t.Helper()
+	outputs := []string{"client/invoker_gen.go"}
+	for _, path := range generatedTreeFiles(t, filepath.Join(repository, "api", "v1")) {
+		outputs = append(outputs, filepath.ToSlash(filepath.Join("api", "v1", path)))
+	}
+	slices.Sort(outputs)
+	return outputs
+}
+
+func validateOpenAPIGeneratorOutputs(inventory generatorInventory, want []string) error {
+	for _, generator := range inventory.Generators {
+		if generator.Name != "openapi-go-client" {
+			continue
+		}
+		got := slices.Clone(generator.Outputs)
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			return fmt.Errorf("OpenAPI generator outputs = %v, want %v", got, want)
+		}
+		return nil
+	}
+	return errors.New("generator inventory has no openapi-go-client entry")
 }
 
 func TestRetainedAdapterOperationMirrorsMatchDSHGeneratorOutput(t *testing.T) {
