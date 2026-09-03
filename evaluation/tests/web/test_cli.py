@@ -362,12 +362,18 @@ def test_baseline_create_sends_post_and_echoes_result(monkeypatch) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "baseline", "create",
-            "--source-batch-id", "batch-123",
-            "--source-arm", "off",
-            "--name", "my-baseline",
-            "--idempotency-key", "test-key-001",
-            "--expected-report-revision", "42",
+            "baseline",
+            "create",
+            "--source-batch-id",
+            "batch-123",
+            "--source-arm",
+            "off",
+            "--name",
+            "my-baseline",
+            "--idempotency-key",
+            "test-key-001",
+            "--expected-report-revision",
+            "42",
         ],
     )
 
@@ -502,12 +508,18 @@ def test_baseline_create_handles_404(monkeypatch) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "baseline", "create",
-            "--source-batch-id", "missing-batch",
-            "--source-arm", "off",
-            "--name", "test",
-            "--idempotency-key", "err-key-001",
-            "--expected-report-revision", "0",
+            "baseline",
+            "create",
+            "--source-batch-id",
+            "missing-batch",
+            "--source-arm",
+            "off",
+            "--name",
+            "test",
+            "--idempotency-key",
+            "err-key-001",
+            "--expected-report-revision",
+            "0",
         ],
     )
 
@@ -527,12 +539,18 @@ def test_baseline_create_handles_409(monkeypatch) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "baseline", "create",
-            "--source-batch-id", "batch-123",
-            "--source-arm", "off",
-            "--name", "test",
-            "--idempotency-key", "err-key-002",
-            "--expected-report-revision", "0",
+            "baseline",
+            "create",
+            "--source-batch-id",
+            "batch-123",
+            "--source-arm",
+            "off",
+            "--name",
+            "test",
+            "--idempotency-key",
+            "err-key-002",
+            "--expected-report-revision",
+            "0",
         ],
     )
 
@@ -544,13 +562,20 @@ def test_baseline_create_rejects_invalid_console_url(monkeypatch) -> None:
     result = CliRunner().invoke(
         app,
         [
-            "baseline", "create",
-            "--console-url", "ftp://invalid",
-            "--source-batch-id", "batch-123",
-            "--source-arm", "off",
-            "--name", "test",
-            "--idempotency-key", "url-err-key-001",
-            "--expected-report-revision", "0",
+            "baseline",
+            "create",
+            "--console-url",
+            "ftp://invalid",
+            "--source-batch-id",
+            "batch-123",
+            "--source-arm",
+            "off",
+            "--name",
+            "test",
+            "--idempotency-key",
+            "url-err-key-001",
+            "--expected-report-revision",
+            "0",
         ],
     )
 
