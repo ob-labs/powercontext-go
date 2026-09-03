@@ -398,6 +398,10 @@ source / artifact / trigger / inference
   context while explicitly clearing the ambient trace parent before later
   stages begin. Verify an injected root-start failure leaves child spans
   unparented and on a different trace ID from the ambient operation.
+- When an integration middleware receives an optional or host-supplied runtime
+  object, treat missing runtime fields as a fail-open boundary. Access context
+  defensively and verify a partial runtime preserves the host operation result
+  without an adapter exception.
 - When transport middleware buffers a request body before routing, bound the
   read with `http.MaxBytesReader` and map `*http.MaxBytesError` to an
   explicit over-limit response before any downstream decoding. When an
