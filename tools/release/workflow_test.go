@@ -836,6 +836,109 @@ func TestGovernanceJobValidatesPullRequestTitleContract(t *testing.T) {
 	t.Fatal("governance-contract has no pull request title validation step")
 }
 
+func TestReleaseContractJobRunsFirstReleaseChecks(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateReleaseContractJob(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	mutations := []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "missing job", old: "  release-contract:\n", new: "  release-metadata:\n"},
+		{
+			name: "mutable runner",
+			old:  "  release-contract:\n    name: release-contract\n    runs-on: ubuntu-24.04\n",
+			new:  "  release-contract:\n    name: release-contract\n    runs-on: ubuntu-latest\n",
+		},
+		{
+			name: "writable modules",
+			old:  "  release-contract:\n    name: release-contract\n    runs-on: ubuntu-24.04\n    timeout-minutes: 10\n    env:\n      GOTOOLCHAIN: local\n      GOFLAGS: -mod=readonly\n",
+			new:  "  release-contract:\n    name: release-contract\n    runs-on: ubuntu-24.04\n    timeout-minutes: 10\n    env:\n      GOTOOLCHAIN: local\n      GOFLAGS: -mod=mod\n",
+		},
+		{name: "missing governance check", old: "          make governance-check\n", new: ""},
+		{name: "missing metadata check", old: "          make release-contract-check\n", new: ""},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			contents := string(payload)
+			if !strings.Contains(contents, mutation.old) {
+				t.Fatalf("test mutation source %q is missing", mutation.old)
+			}
+			mutant := strings.Replace(contents, mutation.old, mutation.new, 1)
+			if err := validateReleaseContractJob([]byte(mutant)); err == nil {
+				t.Fatal("invalid release-contract job was accepted")
+			}
+		})
+	}
+}
+
+func validateReleaseContractJob(payload []byte) error {
+	var workflow struct {
+		Jobs map[string]struct {
+			Name           string            `yaml:"name"`
+			RunsOn         string            `yaml:"runs-on"`
+			TimeoutMinutes int               `yaml:"timeout-minutes"`
+			Env            map[string]string `yaml:"env"`
+			Steps          []struct {
+				Name string            `yaml:"name"`
+				Uses string            `yaml:"uses"`
+				Env  map[string]string `yaml:"env"`
+				Run  string            `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		return err
+	}
+	job, ok := workflow.Jobs["release-contract"]
+	if !ok {
+		return fmt.Errorf("master.yml has no release-contract job")
+	}
+	if job.Name != "release-contract" || job.RunsOn != "ubuntu-24.04" || job.TimeoutMinutes != 10 {
+		return fmt.Errorf(
+			"release-contract identity = (%q, %q, %d), want (%q, %q, %d)",
+			job.Name, job.RunsOn, job.TimeoutMinutes, "release-contract", "ubuntu-24.04", 10,
+		)
+	}
+	if job.Env["GOTOOLCHAIN"] != "local" || job.Env["GOFLAGS"] != "-mod=readonly" {
+		return fmt.Errorf("release-contract Go environment = %#v", job.Env)
+	}
+	wantSteps := []struct {
+		name string
+		uses string
+		env  map[string]string
+		run  string
+	}{
+		{name: "Check out", uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
+		{name: "Set up the environment", uses: "./.github/actions/setup-go-env"},
+		{
+			name: "Check first-release governance and upstream metadata",
+			env:  map[string]string{"GITHUB_TOKEN": "${{ github.token }}"},
+			run:  "make governance-check\nmake release-contract-check",
+		},
+	}
+	if len(job.Steps) != len(wantSteps) {
+		return fmt.Errorf("release-contract step count = %d, want %d", len(job.Steps), len(wantSteps))
+	}
+	for index, want := range wantSteps {
+		got := job.Steps[index]
+		if got.Name != want.name || got.Uses != want.uses || !maps.Equal(got.Env, want.env) || strings.TrimSpace(got.Run) != want.run {
+			return fmt.Errorf(
+				"release-contract step %d = (%q, %q, %#v, %q), want (%q, %q, %#v, %q)",
+				index, got.Name, got.Uses, got.Env, strings.TrimSpace(got.Run), want.name, want.uses, want.env, want.run,
+			)
+		}
+	}
+	return nil
+}
+
 func runPullRequestTitleContract(t *testing.T, script, title string) error {
 	t.Helper()
 	command := exec.CommandContext(t.Context(), "bash", "-c", script)
