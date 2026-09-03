@@ -56,8 +56,11 @@ header:
     - '.github/**'
 
     # Generated Go files are reproducible and must not be edited after their
-    # generators run. Generators with checked-in non-Go output emit a header.
-    - '**/*_gen.go'
+    # generators run. Keep these owned generated roots explicit rather than
+    # ignoring every generated-looking Go file in the repository.
+    - 'api/v1/**'
+    - 'client/invoker_gen.go'
+    - 'internal/mcpapi/schemas_gen.go'
 
     # The sqlite-vec amalgamation is retained byte-for-byte under its upstream
     # Apache-2.0/MIT dual license. The Go wrapper remains in the checked set.

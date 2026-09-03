@@ -66,7 +66,14 @@ linters:
         - -ST1023
         - -QF*
   exclusions:
-    generated: strict
+    # All generated Go output is under these checked-in paths. Keep the
+    # exclusion path-scoped so a generated marker elsewhere cannot suppress
+    # lint for an owned package.
+    generated: disable
+    paths:
+      - ^api/v1/
+      - ^client/invoker_gen\.go$
+      - ^internal/mcpapi/schemas_gen\.go$
     warn-unused: true
     rules:
       # Scheduler: the pickle compatibility parser branches by supported opcode.
@@ -99,4 +106,8 @@ formatters:
       local-prefixes:
         - github.com/ob-labs/powercontext-go
   exclusions:
-    generated: strict
+    generated: disable
+    paths:
+      - ^api/v1/
+      - ^client/invoker_gen\.go$
+      - ^internal/mcpapi/schemas_gen\.go$

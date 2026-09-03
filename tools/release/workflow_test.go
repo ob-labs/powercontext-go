@@ -1367,9 +1367,10 @@ func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 			TimeoutMinutes int               `yaml:"timeout-minutes"`
 			Env            map[string]string `yaml:"env"`
 			Steps          []struct {
-				Name string `yaml:"name"`
-				Uses string `yaml:"uses"`
-				Run  string `yaml:"run"`
+				Name string            `yaml:"name"`
+				Uses string            `yaml:"uses"`
+				With map[string]string `yaml:"with"`
+				Run  string            `yaml:"run"`
 			} `yaml:"steps"`
 		} `yaml:"jobs"`
 	}
@@ -1410,6 +1411,60 @@ func TestMigrationAPICompatRunsThePinnedPublicBaseline(t *testing.T) {
 				"api-compat step %d = (%q, %q, %q), want (%q, %q, %q)",
 				index, got.Name, got.Uses, strings.TrimSpace(got.Run), want.name, want.uses, want.run,
 			)
+		}
+		if index == 0 && got.With["fetch-depth"] != "0" {
+			t.Fatalf("api-compat checkout fetch-depth = %q, want 0", got.With["fetch-depth"])
+		}
+	}
+}
+
+func TestLintExclusionsAreLimitedToOwnedGeneratedGoPaths(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".golangci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Linters struct {
+			Exclusions struct {
+				Generated string   `yaml:"generated"`
+				Paths     []string `yaml:"paths"`
+			} `yaml:"exclusions"`
+		} `yaml:"linters"`
+		Formatters struct {
+			Exclusions struct {
+				Generated string   `yaml:"generated"`
+				Paths     []string `yaml:"paths"`
+			} `yaml:"exclusions"`
+		} `yaml:"formatters"`
+	}
+	if err := yaml.Unmarshal(payload, &config); err != nil {
+		t.Fatal(err)
+	}
+	wantPaths := map[string]bool{
+		"^api/v1/":                           true,
+		"^client/invoker_gen\\.go$":          true,
+		"^internal/mcpapi/schemas_gen\\.go$": true,
+	}
+	for _, exclusions := range []struct {
+		name      string
+		generated string
+		paths     []string
+	}{
+		{name: "linters", generated: config.Linters.Exclusions.Generated, paths: config.Linters.Exclusions.Paths},
+		{name: "formatters", generated: config.Formatters.Exclusions.Generated, paths: config.Formatters.Exclusions.Paths},
+	} {
+		if exclusions.generated != "disable" {
+			t.Errorf("%s generated exclusion = %q, want disable so paths remain explicit", exclusions.name, exclusions.generated)
+		}
+		if len(exclusions.paths) != len(wantPaths) {
+			t.Errorf("%s exclusion paths = %v, want %v", exclusions.name, exclusions.paths, wantPaths)
+			continue
+		}
+		for _, path := range exclusions.paths {
+			if !wantPaths[path] {
+				t.Errorf("%s has broad or unowned generated exclusion %q", exclusions.name, path)
+			}
 		}
 	}
 }
@@ -1805,7 +1860,9 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 		},
 		".licenserc.yaml": {
 			"copyright-owner: OceanBase",
-			"- '**/*_gen.go'",
+			"- 'api/v1/**'",
+			"- 'client/invoker_gen.go'",
+			"- 'internal/mcpapi/schemas_gen.go'",
 			"internal/sqlstore/sqlitevec/sqlite-vec.c",
 			"comment: never",
 		},

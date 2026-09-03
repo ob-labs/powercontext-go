@@ -36,6 +36,7 @@ MODERN_GO_STAMP = $(TOOLS_BIN)/.go-modern-guidelines-$(MODERN_GO_VERSION)-$(PROJ
 COVERAGE_DIR ?= coverage
 COVERAGE_PROFILE ?= $(COVERAGE_DIR)/coverage.out
 COVERAGE_SUMMARY ?= $(COVERAGE_DIR)/summary.txt
+COVERAGE_TEST_OUTPUT ?= $(COVERAGE_DIR)/test-output.txt
 COVERAGE_MINIMUM ?= 16.0
 LICENSE_DEPENDENCY_OUTPUT ?= $(COVERAGE_DIR)/dependencies.json
 RACE_DEBT_BASELINE ?=
@@ -57,7 +58,13 @@ DOWNSTREAM_BINARY := $(CURDIR)/bin/powercontext-downstream$(shell $(GO) env GOEX
 MODULE_INVENTORY := test/module-inventory.json
 OWNED_MODULES := . $(DOWNSTREAM_DIR)
 MODULE_PATH := github.com/ob-labs/powercontext-go
-API_BASELINE := test/api-compat/pre-release.apidiff
+# The first published Go API baseline is v0.1.0.  The release committed the
+# same bundle under its historical pre-release filename; api-compat verifies
+# that source before comparing the current public packages.
+API_RELEASE_TAG := v0.1.0
+API_RELEASE_COMMIT := 17a6f000c58ec5801e7341013a42211af97f6d0a
+API_RELEASE_TAG_BASELINE := test/api-compat/pre-release.apidiff
+API_BASELINE := test/api-compat/v0.1.0.apidiff
 API_BASELINE_GENERATOR ?= $(GO) run ./tools/api-baseline
 API_COMPAT_GOFLAGS = $(strip $(GOFLAGS) -trimpath)
 PUBLIC_API_PACKAGES := \
@@ -121,6 +128,25 @@ api-compat: api-compat-tools ## Reject incompatible changes to deliberate public
 		printf 'missing public API baseline: %s\n' "$(API_BASELINE)" >&2; \
 		exit 1; \
 	fi
+	@set -eu; \
+		tag_commit=$$(git rev-parse "$(API_RELEASE_TAG)^{commit}" 2>/dev/null) || { \
+			printf 'missing public API release tag: %s\n' "$(API_RELEASE_TAG)" >&2; \
+			exit 2; \
+		}; \
+		if [ "$$tag_commit" != "$(API_RELEASE_COMMIT)" ]; then \
+			printf 'public API release tag %s resolves to %s, want %s\n' "$(API_RELEASE_TAG)" "$$tag_commit" "$(API_RELEASE_COMMIT)" >&2; \
+			exit 1; \
+		fi; \
+		release_bundle=$$(mktemp); \
+		trap 'rm -f "$$release_bundle"' EXIT; \
+		if ! git show "$(API_RELEASE_TAG):$(API_RELEASE_TAG_BASELINE)" > "$$release_bundle"; then \
+			printf 'missing public API baseline %s in release tag %s\n' "$(API_RELEASE_TAG_BASELINE)" "$(API_RELEASE_TAG)" >&2; \
+			exit 1; \
+		fi; \
+		if ! cmp -s "$$release_bundle" "$(API_BASELINE)"; then \
+			printf 'public API baseline %s does not match release tag %s\n' "$(API_BASELINE)" "$(API_RELEASE_TAG)" >&2; \
+			exit 1; \
+		fi
 	@GOFLAGS="$(API_COMPAT_GOFLAGS)" $(API_BASELINE_GENERATOR) \
 		-check "$(API_BASELINE)" -module "$(MODULE_PATH)" $(PUBLIC_API_PACKAGES)
 	@set -eu; \
@@ -284,7 +310,14 @@ test-race: ## Run all Go tests with the race detector.
 
 coverage: ## Generate race-enabled atomic coverage and enforce its baseline.
 	@mkdir -p "$(COVERAGE_DIR)"
-	CGO_ENABLED=1 $(GO) test -race -covermode=atomic -coverprofile="$(COVERAGE_PROFILE)" ./...
+	@set -eu; \
+		test_output="$(COVERAGE_TEST_OUTPUT)"; \
+		rm -f "$$test_output"; \
+		CGO_ENABLED=1 $(GO) test -v -race -covermode=atomic -coverprofile="$(COVERAGE_PROFILE)" ./... | tee "$$test_output"; \
+		if ! grep -q '^--- PASS:' "$$test_output"; then \
+			printf 'coverage gate ran no tests that passed; skipped-only or no-test output is not success\n' >&2; \
+			exit 1; \
+		fi
 	$(GO) tool cover -func="$(COVERAGE_PROFILE)" > "$(COVERAGE_SUMMARY)"
 	@tail -n 1 "$(COVERAGE_SUMMARY)"
 	@$(MAKE) coverage-check

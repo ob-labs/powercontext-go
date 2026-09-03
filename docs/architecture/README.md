@@ -183,3 +183,10 @@ artificial `common`, `models`, `services`, or `repositories` packages.
   transport dependency direction.
 - Compatibility changes to persistence, lifecycle, package direction, or host
   boundaries require an ADR.
+
+The [compatibility evidence matrix](compatibility-evidence.md) maps each
+independent compatibility surface to its source of truth and required gate.
+
+The [backend release audit ledger](backend-audit-ledger.md) classifies the
+pinned v0.1.0 persistence cases into current SQLite, shared, seekDB-specific,
+and OceanBase-specific evidence before the two final backend phases.
