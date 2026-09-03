@@ -339,3 +339,220 @@ def test_baseline_select_preserves_existing_selections_when_adding_one(monkeypat
         {"baseline_id": "baseline-existing", "current_arm": "off"},
         {"baseline_id": "baseline-new", "current_arm": "on"},
     ]
+
+
+# --- Additional baseline CLI test coverage ---
+
+
+def test_baseline_create_sends_post_and_echoes_result(monkeypatch) -> None:
+    baseline_response = {
+        "baseline_id": "baseline-20260902-001",
+        "name": "my-baseline",
+        "source_batch_id": "batch-123",
+        "source_arm": "off",
+    }
+    calls: list[tuple[str, str, bytes | None]] = []
+
+    def fake_urlopen(request, *, timeout=30):
+        calls.append((request.method, request.full_url, request.data))
+        return _JSONResponse(baseline_response)
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", fake_urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "baseline", "create",
+            "--source-batch-id", "batch-123",
+            "--source-arm", "off",
+            "--name", "my-baseline",
+            "--idempotency-key", "test-key-001",
+            "--expected-report-revision", "42",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert output["baseline_id"] == "baseline-20260902-001"
+    assert len(calls) == 1
+    assert calls[0][0] == "POST"
+    assert "/api/baselines" in calls[0][1]
+    body = json.loads(calls[0][2])
+    assert body["name"] == "my-baseline"
+    assert body["source_batch_id"] == "batch-123"
+    assert body["source_arm"] == "off"
+    assert body["expected_report_revision"] == 42
+    assert body["idempotency_key"] == "test-key-001"
+
+
+def test_baseline_list_echoes_json_array(monkeypatch) -> None:
+    baselines = [
+        {"baseline_id": "b-1", "name": "first"},
+        {"baseline_id": "b-2", "name": "second"},
+    ]
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", lambda req, **kw: _JSONResponse(baselines))
+
+    result = CliRunner().invoke(app, ["baseline", "list"])
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert len(output) == 2
+    assert output[0]["name"] == "first"
+
+
+def test_baseline_get_echoes_baseline_record(monkeypatch) -> None:
+    baseline = {"baseline_id": "baseline-get-001", "name": "get-test"}
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", lambda req, **kw: _JSONResponse(baseline))
+
+    result = CliRunner().invoke(app, ["baseline", "get", "baseline-get-001"])
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert output["baseline_id"] == "baseline-get-001"
+
+
+def test_baseline_items_echoes_item_list(monkeypatch) -> None:
+    items = [
+        {"baseline_id": "b-1", "instance_id": "inst-a", "status": "succeeded"},
+        {"baseline_id": "b-1", "instance_id": "inst-b", "status": "failed"},
+    ]
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", lambda req, **kw: _JSONResponse(items))
+
+    result = CliRunner().invoke(app, ["baseline", "items", "b-1"])
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert len(output) == 2
+
+
+def test_baseline_candidates_echoes_compatibility(monkeypatch) -> None:
+    candidates = [
+        {
+            "baseline": {"baseline_id": "b-1", "name": "test"},
+            "compatibility": {"status": "compatible", "reasons": []},
+        }
+    ]
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", lambda req, **kw: _JSONResponse(candidates))
+
+    result = CliRunner().invoke(app, ["baseline", "candidates", "batch-123", "off"])
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert output[0]["compatibility"]["status"] == "compatible"
+
+
+def test_baseline_select_deduplicates_by_baseline_id_and_arm(monkeypatch) -> None:
+    existing = [{"baseline_id": "b-1", "current_arm": "off"}]
+    put_payloads: list[dict] = []
+
+    def fake_urlopen(request, *, timeout=30):
+        if request.method == "GET":
+            return _JSONResponse(existing)
+        put_payloads.append(json.loads(request.data))
+        return _JSONResponse([{"baseline_id": "b-1", "current_arm": "off"}])
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", fake_urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        ["baseline", "select", "batch-123", "--baseline-id", "b-1", "--current-arm", "off"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(put_payloads) == 1
+    assert len(put_payloads[0]["selections"]) == 1
+
+
+def test_baseline_compare_echoes_comparison_result(monkeypatch) -> None:
+    comparison = {
+        "batch_id": "batch-123",
+        "report_revision": 5,
+        "comparisons": [
+            {
+                "baseline": {"baseline_id": "b-1"},
+                "current_arm": "off",
+                "compatibility": {"status": "compatible"},
+                "resolution": {"delta_points": 5.0},
+            }
+        ],
+    }
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", lambda req, **kw: _JSONResponse(comparison))
+
+    result = CliRunner().invoke(app, ["baseline", "compare", "batch-123"])
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.output)
+    assert output["batch_id"] == "batch-123"
+    assert len(output["comparisons"]) == 1
+
+
+def test_baseline_create_handles_404(monkeypatch) -> None:
+    from urllib.error import HTTPError
+
+    def fake_urlopen(request, *, timeout=30):
+        raise HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", fake_urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "baseline", "create",
+            "--source-batch-id", "missing-batch",
+            "--source-arm", "off",
+            "--name", "test",
+            "--idempotency-key", "err-key-001",
+            "--expected-report-revision", "0",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "not found" in result.output.casefold()
+
+
+def test_baseline_create_handles_409(monkeypatch) -> None:
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    def fake_urlopen(request, *, timeout=30):
+        raise HTTPError(request.full_url, 409, "Conflict", {}, BytesIO(b"report_revision_conflict"))
+
+    monkeypatch.setattr("powercontext_eval.cli.urlopen", fake_urlopen)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "baseline", "create",
+            "--source-batch-id", "batch-123",
+            "--source-arm", "off",
+            "--name", "test",
+            "--idempotency-key", "err-key-002",
+            "--expected-report-revision", "0",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "conflict" in result.output.casefold()
+
+
+def test_baseline_create_rejects_invalid_console_url(monkeypatch) -> None:
+    result = CliRunner().invoke(
+        app,
+        [
+            "baseline", "create",
+            "--console-url", "ftp://invalid",
+            "--source-batch-id", "batch-123",
+            "--source-arm", "off",
+            "--name", "test",
+            "--idempotency-key", "url-err-key-001",
+            "--expected-report-revision", "0",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "invalid" in result.output.casefold()
