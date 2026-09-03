@@ -138,6 +138,49 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			wantError: ".github/dependabot.yml is invalid",
 		},
 		{
+			name: "missing release-note category",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/release.yml", `    - title: Maintenance
+      labels:
+        - maintenance
+`, "")
+			},
+			wantError: ".github/release.yml must define 7 release-note categories",
+		},
+		{
+			name: "missing release policy",
+			mutate: func(t *testing.T, root string) {
+				if err := os.Remove(filepath.Join(root, "docs", "release", "POLICY.md")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantError: "read docs/release/POLICY.md",
+		},
+		{
+			name: "release workflow missing semantic tag trigger",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/workflows/release.yml", `      - "v[0-9]*"
+      - "powercontext-v[0-9]*"
+`, `      - "powercontext-v[0-9]*"
+`)
+			},
+			wantError: `release workflow must run for tag pattern "v[0-9]*"`,
+		},
+		{
+			name: "release workflow missing manual release tag input",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/workflows/release.yml", `  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag
+        required: true
+        type: string
+`, `  workflow_dispatch:
+`)
+			},
+			wantError: ".github/workflows/release.yml must support workflow_dispatch",
+		},
+		{
 			name: "valid reusable workflow caller",
 			mutate: func(t *testing.T, root string) {
 				writeFixtureFile(t, root, ".github/workflows/main.yml", reusableWorkflowCaller())
@@ -342,7 +385,10 @@ func writeGovernanceFixture(t *testing.T) string {
 	}))
 	writeFixtureFile(t, root, ".github/ISSUE_TEMPLATE/config.yml", "blank_issues_enabled: false\ncontact_links: []\n")
 	writeFixtureFile(t, root, ".github/dependabot.yml", validDependabotConfig())
+	writeFixtureFile(t, root, ".github/release.yml", validReleaseNotesConfig())
 	writeFixtureFile(t, root, ".github/workflows/main.yml", validWorkflow(true))
+	writeFixtureFile(t, root, ".github/workflows/release.yml", validReleaseWorkflow())
+	writeFixtureFile(t, root, "docs/release/POLICY.md", validReleasePolicy())
 	return root
 }
 
@@ -428,6 +474,88 @@ func validWorkflowWithoutPermissions() string {
 		"    timeout-minutes: 10",
 		"    steps: []",
 	}, "\n") + "\n"
+}
+
+func validReleaseWorkflow() string {
+	return `name: Release
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+      - "powercontext-v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps: []
+`
+}
+
+func validReleaseNotesConfig() string {
+	return `changelog:
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+    - title: Features
+      labels:
+        - enhancement
+    - title: Bug fixes
+      labels:
+        - bug
+    - title: Security
+      labels:
+        - security
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Maintenance
+      labels:
+        - maintenance
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - question
+      - wontfix
+`
+}
+
+func validReleasePolicy() string {
+	return strings.Join([]string{
+		"default branch receives features and fixes",
+		"supported release branches receive approved fixes and security backports only",
+		"release branch naming convention",
+		"backport PR",
+		"original Issue",
+		"target release line",
+		"compatibility impact",
+		"validation performed on that line",
+		"force-push and deletion",
+		"squash merge",
+		"breaking-change label",
+		"version decision",
+		"release draft",
+		"previous-tag comparison",
+		"contributor attribution",
+		"root-module",
+		"CLI",
+		"generator",
+		"adapter",
+		"binary versions",
+		"DCO sign-off is not required",
+	}, "\n")
 }
 
 func reusableWorkflowCaller(extraLines ...string) string {
