@@ -93,7 +93,8 @@ tests are split by observable responsibility:
 
 1. staging and exact file inventory;
 2. command-host setup from an extracted archive;
-3. Python package installation and public smoke from an extracted archive;
+3. Python package installation and public smoke from an actual packaged and
+   extracted archive in a release-only test lane;
 4. checksum, SPDX, license, and workflow evidence.
 
 Each responsibility owns separate files so independent workers can implement
@@ -127,6 +128,11 @@ After the inventory foundation lands, work proceeds in isolated worktrees:
 No worker may edit another lane's files. A discovered cross-lane requirement
 is reported to the coordinator and incorporated through an ordered follow-up,
 not by silently widening ownership.
+
+The Python consumer proof must not become an unconditional dependency of the
+ordinary Go test or race jobs because those jobs do not provision `uv`. It is
+selected explicitly by the release workflow, receives the actual archive path,
+and must fail rather than skip when its release-only prerequisites are absent.
 
 ## Acceptance
 

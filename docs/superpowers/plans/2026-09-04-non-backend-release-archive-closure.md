@@ -184,36 +184,38 @@ git commit -m "test(release): prove packaged host setup paths"
 ### Task 5: Prove Python Integrations Install From the Extracted Archive
 
 **Files:**
-- Create: `tools/release/python_integration_consumer_test.go`
+- Create: `tools/release/archive_python_consumer_test.go`
 
 **Interfaces:**
 - Consumes: Task 2 inventory and the current release archive builder.
-- Produces: locked install/import/public-smoke evidence for Bub, LangChain, LangGraph, and Pydantic AI.
+- Produces: release-only, locked install/import/public-smoke evidence for Bub, LangChain, LangGraph, and Pydantic AI from the actual packaged archive named by `POWERCONTEXT_ARCHIVE`.
 
 - [ ] **Step 1: Write failing extracted-archive package tests**
 
-For each package, copy no checkout files. Extract the release-shaped archive, locate the package from the inventory, create an isolated environment through the pinned `uv` path used by CI, install from its declared `uv.lock`, assert the installed source resolves below the extracted root, and run one existing public smoke selected from that package's own tests.
+Put the test behind the explicit `archive_consumer` build tag so ordinary Go and race jobs do not acquire an undeclared `uv` prerequisite. Require `POWERCONTEXT_ARCHIVE` and fail, rather than skip, when the tagged test is selected without it. For each package, copy no checkout files. Extract that actual package artifact, locate the package from the inventory, create an isolated environment through the pinned `uv` path used by CI, install from its declared `uv.lock`, assert the installed editable `direct_url.json` and imported module resolve below the extracted root, and run one public import smoke.
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `go test -count=1 ./tools/release -run '^TestReleaseArchiveProvidesConsumablePythonIntegrations$'`
+Run the test against a deliberately stripped copy of a real package archive:
 
-Expected: FAIL because the archive package-consumer proof does not exist and LangChain/Pydantic AI are not explicitly covered.
+`go test -count=1 -tags archive_consumer ./tools/release -run '^TestReleaseArchivePythonAdaptersConsumeExtractedArtifact$'`
+
+Expected: FAIL with the deliberately removed integration path named in the diagnostic. The test must not pass through a skip.
 
 - [ ] **Step 3: Implement the minimum test harness**
 
-Use real `uv` subprocesses and package manifests. Do not call an external AI provider. If a public smoke needs the Go Server, use the existing SQLite release-shaped binary only.
+Use real `uv` subprocesses and package manifests. Import exactly `PowerContextPlugin`, `PowerContextMiddleware`, `PowerContextRecall` plus `powercontext_tools`, and `PowerContext` plus `PowerContextToolset` from their archived projects. Do not call an external AI provider. If a public smoke needs the Go Server, use the existing SQLite release-shaped binary only.
 
 - [ ] **Step 4: Run the focused test and inspect every package result**
 
-Run: `go test -count=1 ./tools/release -run '^TestReleaseArchiveProvidesConsumablePythonIntegrations$' -v`
+Run: `go test -count=1 -tags archive_consumer ./tools/release -run '^TestReleaseArchivePythonAdaptersConsumeExtractedArtifact$' -v`
 
 Expected: PASS for exactly four packages with no checkout-local import path.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add tools/release/python_integration_consumer_test.go
+git add tools/release/archive_python_consumer_test.go
 git commit -m "test(release): consume packaged Python integrations"
 ```
 
@@ -244,7 +246,7 @@ Expected: FAIL because integration inventory is not yet part of the evidence bou
 
 - [ ] **Step 3: Implement minimum evidence/workflow changes**
 
-Preserve current native asset handling. Add no seekDB or OceanBase dependency, asset, license, job, documentation, or capability claim. Keep third-party Actions pinned and permissions least-privilege.
+Preserve current native asset handling. On the Linux amd64 release packaging path, provision Python 3.12 and the repository-pinned `uv 0.10.12`, set `POWERCONTEXT_ARCHIVE` to the actual Standard archive produced by `make package-standard`, and run Task 5's tagged test. Do not put this external resolver prerequisite in ordinary Go/race jobs and do not accept a skip. Add no seekDB or OceanBase dependency, asset, license, job, documentation, or capability claim. Keep third-party Actions pinned and permissions least-privilege.
 
 - [ ] **Step 4: Run focused tests and the release contract**
 
