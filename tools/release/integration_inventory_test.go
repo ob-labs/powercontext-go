@@ -15,11 +15,14 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 const reviewedReleaseIntegrations = `{
@@ -40,7 +43,22 @@ const reviewedReleaseIntegrations = `{
   ]
 }`
 
-func TestReleaseIntegrationInventoryReadsReviewedRoots(t *testing.T) {
+var reviewedReleaseIntegrationRecords = []releaseIntegration{
+	{ID: "bub", Class: "python-package", RequiredPaths: []string{"integrations/bub/pyproject.toml"}, LockPaths: []string{"integrations/bub/uv.lock"}, ConsumerMode: "python"},
+	{ID: "claude-code", Class: "command-host", RequiredPaths: []string{"integrations/claude-code/plugins/powercontext/.claude-plugin/plugin.json"}, LockPaths: []string{}, ConsumerMode: "command"},
+	{ID: "codex", Class: "command-host", RequiredPaths: []string{"integrations/codex/plugins/powercontext/.codex-plugin/plugin.json"}, LockPaths: []string{"integrations/codex/plugins/powercontext/uv.lock"}, ConsumerMode: "command"},
+	{ID: "dsh", Class: "command-host", RequiredPaths: []string{"integrations/dsh/plugins/powercontext/lib/index.js"}, LockPaths: []string{"integrations/dsh/plugins/powercontext/pnpm-lock.yaml"}, ConsumerMode: "command"},
+	{ID: "hermes", Class: "command-host", RequiredPaths: []string{"integrations/hermes/plugins/powercontext/plugin.yaml"}, LockPaths: []string{}, ConsumerMode: "command"},
+	{ID: "langchain", Class: "python-package", RequiredPaths: []string{"integrations/langchain/pyproject.toml"}, LockPaths: []string{"integrations/langchain/uv.lock"}, ConsumerMode: "python"},
+	{ID: "langgraph", Class: "python-package", RequiredPaths: []string{"integrations/langgraph/pyproject.toml"}, LockPaths: []string{"integrations/langgraph/uv.lock"}, ConsumerMode: "python"},
+	{ID: "openclaw", Class: "command-host", RequiredPaths: []string{"integrations/openclaw/plugins/memory-powercontext/dist/index.js"}, LockPaths: []string{"integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml"}, ConsumerMode: "command"},
+	{ID: "opencode", Class: "command-host", RequiredPaths: []string{"integrations/opencode/plugins/powercontext/lib/index.js"}, LockPaths: []string{"integrations/opencode/plugins/powercontext/pnpm-lock.yaml"}, ConsumerMode: "command"},
+	{ID: "pi", Class: "command-host", RequiredPaths: []string{"integrations/pi/plugins/powercontext/extensions/powercontext.ts"}, LockPaths: []string{"integrations/pi/plugins/powercontext/pnpm-lock.yaml"}, ConsumerMode: "command"},
+	{ID: "pydantic-ai", Class: "python-package", RequiredPaths: []string{"integrations/pydantic-ai/pyproject.toml"}, LockPaths: []string{"integrations/pydantic-ai/uv.lock"}, ConsumerMode: "python"},
+	{ID: "workbuddy", Class: "command-host", RequiredPaths: []string{"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json"}, LockPaths: []string{}, ConsumerMode: "command"},
+}
+
+func TestReleaseIntegrationInventoryCommittedInventoryMatchesReviewedReleaseContract(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	integrations, err := readReleaseIntegrations(repository)
 	if err != nil {
@@ -49,24 +67,8 @@ func TestReleaseIntegrationInventoryReadsReviewedRoots(t *testing.T) {
 	if err := validateReleaseIntegrations(repository, integrations); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := releaseIntegrationIDs(integrations), []string{
-		"bub", "claude-code", "codex", "dsh", "hermes", "langchain", "langgraph", "openclaw", "opencode", "pi", "pydantic-ai", "workbuddy",
-	}; !slices.Equal(got, want) {
-		t.Fatalf("integration IDs = %v, want %v", got, want)
-	}
-	if got, want := integrations[0], (releaseIntegration{
-		ID: "bub", Class: "python-package", RequiredPaths: []string{"integrations/bub/pyproject.toml"},
-		LockPaths: []string{"integrations/bub/uv.lock"}, ConsumerMode: "python",
-	}); got.ID != want.ID || got.Class != want.Class || got.ConsumerMode != want.ConsumerMode ||
-		!slices.Equal(got.RequiredPaths, want.RequiredPaths) || !slices.Equal(got.LockPaths, want.LockPaths) {
-		t.Fatalf("bub integration = %#v, want %#v", got, want)
-	}
-	if got, want := integrations[len(integrations)-1], (releaseIntegration{
-		ID: "workbuddy", Class: "command-host", RequiredPaths: []string{"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json"},
-		ConsumerMode: "command",
-	}); got.ID != want.ID || got.Class != want.Class || got.ConsumerMode != want.ConsumerMode ||
-		!slices.Equal(got.RequiredPaths, want.RequiredPaths) || !slices.Equal(got.LockPaths, want.LockPaths) {
-		t.Fatalf("workbuddy integration = %#v, want %#v", got, want)
+	if difference := cmp.Diff(reviewedReleaseIntegrationRecords, integrations); difference != "" {
+		t.Fatalf("committed release integration inventory differs from the reviewed contract (-want +got):\n%s", difference)
 	}
 }
 
@@ -144,6 +146,18 @@ func TestReleaseIntegrationInventoryRejectsRepositoryDrift(t *testing.T) {
 	}
 }
 
+func TestReleaseIntegrationInventoryMissingRepositoryRootPreservesNotExist(t *testing.T) {
+	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = validateReleaseIntegrations(filepath.Join(repository, "missing-root"), integrations)
+	if !errors.Is(err, fs.ErrNotExist) || !strings.Contains(err.Error(), "read release repository") {
+		t.Fatalf("missing repository root error = %v, want repository-root not-exist error", err)
+	}
+}
+
 type releaseIntegrationFixtureOptions struct {
 	manifest     string
 	omittedPath  string
@@ -211,12 +225,4 @@ var releaseIntegrationFixturePaths = []string{
 	"integrations/pydantic-ai/pyproject.toml",
 	"integrations/pydantic-ai/uv.lock",
 	"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json",
-}
-
-func releaseIntegrationIDs(integrations []releaseIntegration) []string {
-	ids := make([]string, len(integrations))
-	for index, integration := range integrations {
-		ids[index] = integration.ID
-	}
-	return ids
 }
