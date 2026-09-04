@@ -449,6 +449,13 @@ func stageRelease(repository, root string, options packageOptions, facts binaryF
 }
 
 func stageIntegrations(repository, root string) error {
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return err
+	}
+	if err := validateReleaseIntegrations(repository, integrations); err != nil {
+		return err
+	}
 	// Claude Code discovers a local marketplace from this repository-level
 	// manifest; copying only integrations/ leaves the plugin files present but
 	// makes `setup claude-code --source <archive>` unusable.

@@ -192,7 +192,8 @@ func skipReleaseEntry(entry fs.DirEntry) bool {
 	name := entry.Name()
 	if entry.IsDir() && slices.Contains([]string{
 		".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv",
-		"__pycache__", "coverage", "dist", "node_modules",
+		".omx", ".playwright-mcp", ".workbuddy", "__pycache__", "coverage",
+		"dist", "node_modules",
 	}, name) {
 		return true
 	}
