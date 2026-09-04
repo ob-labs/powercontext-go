@@ -8624,7 +8624,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_workbuddy_test.go",
-          "test": "TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+          "test": "TestSetupWorkBuddyMigratesOwnedPythonHookAndPreservesSharedScripts"
         }
       ]
     },
@@ -8692,7 +8692,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_workbuddy_test.go",
-          "test": "TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+          "test": "TestSetupWorkBuddyMigratesOwnedPythonHookAndPreservesSharedScripts"
         }
       ]
     },

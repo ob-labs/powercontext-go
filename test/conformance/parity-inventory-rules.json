@@ -754,7 +754,7 @@
         },
         "test_setup_workbuddy_preserves_other_hooks_shared_scripts": {
           "evidence": [
-            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyMigratesOwnedPythonHookAndPreservesSharedScripts"
           ]
         },
         "test_setup_workbuddy_refuses_an_unowned_skill": {
@@ -774,7 +774,7 @@
         },
         "test_setup_workbuddy_updates_an_existing_powercontext_hook": {
           "evidence": [
-            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts"
+            "go:internal/cli/integration_workbuddy_test.go#TestSetupWorkBuddyMigratesOwnedPythonHookAndPreservesSharedScripts"
           ]
         },
         "test_setup_workbuddy_rolls_back_json_changes_on_failure": {

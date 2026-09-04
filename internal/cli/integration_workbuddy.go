@@ -50,6 +50,9 @@ const (
 	workBuddyConfigSchema          = 1
 	workBuddyPythonPlaceholder     = "${POWERCONTEXT_PYTHON}"
 	workBuddyScopePlaceholder      = "${POWERCONTEXT_PROJECT_SCOPE_SCRIPT}"
+	workBuddyReleasePlaceholder    = "${POWERCONTEXT_RELEASE_BINARY}"
+	workBuddyScopeSectionStart     = "## Resolve scope\n"
+	workBuddyScopeSectionEnd       = "\n## Read\n"
 	workBuddyServerURLTemplate     = "${POWERCONTEXT_WORKBUDDY_SERVER_URL:-http://127.0.0.1:8000}/mcp"
 	workBuddyAuthorizationTemplate = "${POWERCONTEXT_WORKBUDDY_AUTHORIZATION:-}"
 	workBuddyLegacyMCPURL          = "http://127.0.0.1:8000/mcp"
@@ -67,6 +70,7 @@ const (
 
 var (
 	workBuddyAuthorizationEnvironmentPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	workBuddyExecutable                      = os.Executable
 	workBuddyHookModules                     = [...]string{
 		workBuddyHookDriver,
 		"workbuddy_settings.py",
@@ -226,6 +230,10 @@ func installWorkBuddyPlugin(
 	source, ref string,
 	configuration workBuddyConfiguration,
 ) (workBuddySetupResult, error) {
+	binary, err := resolveWorkBuddyReleaseBinary()
+	if err != nil {
+		return workBuddySetupResult{}, err
+	}
 	dataDir, err := prepareDataDirectory()
 	if err != nil {
 		return workBuddySetupResult{}, err
@@ -251,6 +259,9 @@ func installWorkBuddyPlugin(
 	}
 	if _, _, configErr := readWorkBuddyConfiguration(configFile); configErr != nil {
 		return workBuddySetupResult{}, errors.New("existing WorkBuddy configuration is not owned by PowerContext")
+	}
+	if hookErr := requireReplaceableWorkBuddyHook(settingsFile, binary); hookErr != nil {
+		return workBuddySetupResult{}, hookErr
 	}
 	settingsSnapshot, err := snapshotWorkBuddyFile(settingsFile)
 	if err != nil {
@@ -289,7 +300,7 @@ func installWorkBuddyPlugin(
 	if hooksErr := installWorkBuddyHooks(plugin, hooksDir); hooksErr != nil {
 		return workBuddySetupResult{}, hooksErr
 	}
-	if settingsErr := mergeWorkBuddySettings(settingsFile, hooksDir); settingsErr != nil {
+	if settingsErr := mergeWorkBuddySettings(settingsFile, binary); settingsErr != nil {
 		return workBuddySetupResult{}, settingsErr
 	}
 	if mcpErr := mergeWorkBuddyMCP(mcpFile, configuration); mcpErr != nil {
@@ -307,7 +318,7 @@ func installWorkBuddyPlugin(
 	}); configErr != nil {
 		return workBuddySetupResult{}, errors.New("cannot write WorkBuddy configuration")
 	}
-	if skillErr := installWorkBuddySkill(plugin, skillDir, hooksDir); skillErr != nil {
+	if skillErr := installWorkBuddySkill(plugin, skillDir, binary); skillErr != nil {
 		return workBuddySetupResult{}, skillErr
 	}
 	succeeded = true
@@ -396,24 +407,45 @@ func workBuddyHome() (string, error) {
 	return resolvePath(configured)
 }
 
-func installWorkBuddyHooks(plugin, hooksDir string) error {
-	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
-		return errors.New("cannot create WorkBuddy hooks directory")
+func resolveWorkBuddyReleaseBinary() (string, error) {
+	executable, err := workBuddyExecutable()
+	if err != nil {
+		return "", errors.New("PowerContext must run from a released archive to set up WorkBuddy")
 	}
-	for _, name := range workBuddyHookModules {
-		if err := copyWorkBuddyFile(filepath.Join(plugin, "hooks", name), filepath.Join(hooksDir, name)); err != nil {
-			return errors.New("cannot install WorkBuddy hooks")
+	return validateWorkBuddyReleaseBinary(executable)
+}
+
+func validateWorkBuddyReleaseBinary(executable string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return "", errors.New("PowerContext must run from a released archive to set up WorkBuddy")
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || !info.Mode().IsRegular() ||
+		(runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0) ||
+		filepath.Base(resolved) != "powercontext" || filepath.Base(filepath.Dir(resolved)) != "bin" {
+		return "", errors.New("PowerContext must run from a released archive to set up WorkBuddy")
+	}
+	root := filepath.Dir(filepath.Dir(resolved))
+	for _, path := range []string{"BUILD-INFO.json", ".env.example", filepath.Join("openapi", "powercontext.yaml")} {
+		artifact, artifactErr := os.Stat(filepath.Join(root, path))
+		if artifactErr != nil || !artifact.Mode().IsRegular() {
+			return "", errors.New("PowerContext must run from a released archive to set up WorkBuddy")
 		}
 	}
-	if err := copyWorkBuddyFile(
-		filepath.Join(plugin, "scripts", "project_scope.py"), filepath.Join(hooksDir, workBuddyScopeResolver),
-	); err != nil {
-		return errors.New("cannot install WorkBuddy scope resolver")
+	if _, ok := findWorkBuddyPlugin(root); !ok {
+		return "", errors.New("PowerContext must run from a released archive to set up WorkBuddy")
 	}
+	return resolved, nil
+}
+
+func installWorkBuddyHooks(plugin, hooksDir string) error {
+	_ = plugin
+	_ = hooksDir
 	return nil
 }
 
-func mergeWorkBuddySettings(settingsFile, hooksDir string) error {
+func mergeWorkBuddySettings(settingsFile, binary string) error {
 	settings, err := loadWorkBuddyJSON(settingsFile)
 	if err != nil {
 		return errors.New("cannot update WorkBuddy settings")
@@ -434,7 +466,7 @@ func mergeWorkBuddySettings(settingsFile, hooksDir string) error {
 		matchers = make([]any, 0, 1)
 	}
 	entry := map[string]any{
-		"type": "command", "command": workBuddyHookCommand(hooksDir), "timeout": 10, "statusMessage": "Syncing PowerContext",
+		"type": "command", "command": workBuddyHookCommand(binary), "timeout": 10, "statusMessage": "Syncing PowerContext",
 	}
 	updated := false
 	for _, matcher := range matchers {
@@ -451,8 +483,11 @@ func mergeWorkBuddySettings(settingsFile, hooksDir string) error {
 		}
 		for index, existing := range group {
 			value, ok := existing.(map[string]any)
-			if !ok || !isWorkBuddyHook(value) {
+			if !ok || !isWorkBuddyHookCandidate(value) {
 				continue
+			}
+			if !isOwnedWorkBuddyHook(value, binary, filepath.Dir(settingsFile)) {
+				return errors.New("existing WorkBuddy hook is not owned by PowerContext")
 			}
 			for name, item := range entry {
 				value[name] = item
@@ -504,7 +539,7 @@ func mergeWorkBuddyMCP(mcpFile string, configuration workBuddyConfiguration) err
 	return writeWorkBuddyJSON(mcpFile, config)
 }
 
-func installWorkBuddySkill(plugin, target, hooksDir string) error {
+func installWorkBuddySkill(plugin, target, binary string) error {
 	parent := filepath.Dir(target)
 	if mkdirErr := os.MkdirAll(parent, 0o755); mkdirErr != nil {
 		return errors.New("cannot create WorkBuddy Skill directory")
@@ -522,10 +557,10 @@ func installWorkBuddySkill(plugin, target, hooksDir string) error {
 	if err != nil {
 		return errors.New("cannot read WorkBuddy Skill")
 	}
-	content = []byte(strings.ReplaceAll(
-		strings.ReplaceAll(string(content), workBuddyPythonPlaceholder, workBuddyPythonCommand()),
-		workBuddyScopePlaceholder, shellQuoteWorkBuddy(filepath.Join(hooksDir, workBuddyScopeResolver)),
-	))
+	content, err = renderWorkBuddySkill(content, binary)
+	if err != nil {
+		return err
+	}
 	if writeErr := os.WriteFile(skillPath, content, 0o644); writeErr != nil {
 		return errors.New("cannot write WorkBuddy Skill")
 	}
@@ -572,23 +607,19 @@ func runWorkBuddyDiagnostics() map[string]diagnostic {
 			"skill":    {Status: "failed", Detail: "cannot resolve WorkBuddy home"},
 		}
 	}
-	hooksDir := filepath.Join(home, "hooks")
 	configuration, present, configErr := readWorkBuddyConfiguration(filepath.Join(home, workBuddyConfigFilename))
 	config := diagnostic{OK: true, Status: "ok", Detail: "credential-free WorkBuddy configuration is valid"}
 	if configErr != nil || !present {
 		config = diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy configuration is missing or invalid"}
 	}
-	hooks := diagnostic{OK: true, Status: "ok", Detail: "hooks installed in " + hooksDir}
-	for _, name := range workBuddyHookModules {
-		if !isRegularWorkBuddyFile(filepath.Join(hooksDir, name)) {
-			hooks = diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy hooks are not installed"}
-			break
-		}
+	settingsFile := filepath.Join(home, "settings.json")
+	binary, executableErr := resolveWorkBuddyReleaseBinary()
+	registered := executableErr == nil && settingsHaveWorkBuddyHookCommand(settingsFile, binary)
+	hooks := diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy Go hook is not registered from a released archive"}
+	if registered {
+		hooks = diagnostic{OK: true, Status: "ok", Detail: "released PowerContext Go hook is registered"}
 	}
-	if !isRegularWorkBuddyFile(filepath.Join(hooksDir, workBuddyScopeResolver)) {
-		hooks = diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy hooks are not installed"}
-	}
-	settings := workBuddySettingsDiagnostic(filepath.Join(home, "settings.json"))
+	settings := workBuddySettingsDiagnostic(settingsFile, registered)
 	mcp := diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy MCP server is not registered in mcp.json"}
 	if config.OK {
 		mcp = workBuddyMCPDiagnostic(filepath.Join(home, "mcp.json"), configuration)
@@ -597,12 +628,54 @@ func runWorkBuddyDiagnostics() map[string]diagnostic {
 	return map[string]diagnostic{"config": config, "hooks": hooks, "settings": settings, "mcp": mcp, "skill": skill}
 }
 
-func workBuddySettingsDiagnostic(path string) diagnostic {
-	settings, err := loadWorkBuddyJSON(path)
-	if err != nil || !settingsHaveWorkBuddyHook(settings) {
+func workBuddySettingsDiagnostic(path string, registered bool) diagnostic {
+	if !registered {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy hook is not registered in settings.json"}
 	}
 	return diagnostic{OK: true, Status: "ok", Detail: path}
+}
+
+func settingsHaveWorkBuddyHookCommand(path, binary string) bool {
+	settings, err := loadWorkBuddyJSON(path)
+	if err != nil {
+		return false
+	}
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		return false
+	}
+	matchers, ok := hooks["UserPromptSubmit"].([]any)
+	if !ok {
+		return false
+	}
+	want := workBuddyHookCommand(binary)
+	found := false
+	for _, matcher := range matchers {
+		matcherObject, ok := matcher.(map[string]any)
+		if !ok {
+			continue
+		}
+		entries, ok := matcherObject["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, entry := range entries {
+			value, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			if !isWorkBuddyHookCandidate(value) {
+				continue
+			}
+			command, commandOK := value["command"].(string)
+			kind, kindOK := value["type"].(string)
+			if found || !commandOK || !kindOK || kind != "command" || command != want {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 func workBuddyConfiguredServerURL() (string, bool) {
@@ -646,8 +719,8 @@ func workBuddySkillDiagnostic(path string) diagnostic {
 		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy skill is not installed"}
 	}
 	content, err := os.ReadFile(skill)
-	if err != nil || strings.Contains(string(content), workBuddyPythonPlaceholder) || strings.Contains(string(content), workBuddyScopePlaceholder) {
-		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy skill still contains an unresolved command placeholder"}
+	if err != nil || hasRetiredWorkBuddySkillMaterial(string(content)) {
+		return diagnostic{Status: "failed", Detail: "PowerContext WorkBuddy skill contains retired runtime material"}
 	}
 	return diagnostic{OK: true, Status: "ok", Detail: path}
 }
@@ -761,14 +834,18 @@ func writeWorkBuddyJSON(path string, value map[string]any) error {
 	return writeFileAtomically(path, append(payload, '\n'), 0o600)
 }
 
-func settingsHaveWorkBuddyHook(settings map[string]any) bool {
+func requireReplaceableWorkBuddyHook(path, binary string) error {
+	settings, err := loadWorkBuddyJSON(path)
+	if err != nil {
+		return errors.New("cannot update WorkBuddy settings")
+	}
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
-		return false
+		return nil
 	}
 	matchers, ok := hooks["UserPromptSubmit"].([]any)
 	if !ok {
-		return false
+		return nil
 	}
 	for _, matcher := range matchers {
 		matcherObject, ok := matcher.(map[string]any)
@@ -781,17 +858,64 @@ func settingsHaveWorkBuddyHook(settings map[string]any) bool {
 		}
 		for _, entry := range entries {
 			value, ok := entry.(map[string]any)
-			if ok && isWorkBuddyHook(value) {
-				return true
+			if ok && isWorkBuddyHookCandidate(value) && !isOwnedWorkBuddyHook(value, binary, filepath.Dir(path)) {
+				return errors.New("existing WorkBuddy hook is not owned by PowerContext")
 			}
 		}
 	}
-	return false
+	return nil
 }
 
-func isWorkBuddyHook(entry map[string]any) bool {
+func isWorkBuddyHookCandidate(entry map[string]any) bool {
 	command, _ := entry["command"].(string)
-	return strings.Contains(command, workBuddyHookDriver)
+	return strings.Contains(command, workBuddyHookDriver) ||
+		(strings.Contains(command, "powercontext") && strings.HasSuffix(strings.TrimSpace(command), " hook workbuddy"))
+}
+
+func isOwnedWorkBuddyHook(entry map[string]any, binary, home string) bool {
+	command, commandOK := entry["command"].(string)
+	kind, kindOK := entry["type"].(string)
+	if !commandOK || !kindOK || kind != "command" {
+		return false
+	}
+	if command == workBuddyHookCommand(binary) || command == workBuddyLegacyHookCommand(home) {
+		return true
+	}
+	previousBinary, ok := workBuddyHookCommandBinary(command)
+	if !ok {
+		return false
+	}
+	_, err := validateWorkBuddyReleaseBinary(previousBinary)
+	return err == nil
+}
+
+func workBuddyHookCommandBinary(command string) (string, bool) {
+	encoded, ok := strings.CutSuffix(command, " hook workbuddy")
+	if !ok || encoded == "" {
+		return "", false
+	}
+	var binary string
+	if runtime.GOOS == "windows" {
+		inner, quoted := strings.CutPrefix(encoded, `"`)
+		inner, ok = strings.CutSuffix(inner, `"`)
+		if !quoted || !ok {
+			return "", false
+		}
+		binary = strings.ReplaceAll(inner, `\"`, `"`)
+	} else if inner, quoted := strings.CutPrefix(encoded, "'"); quoted {
+		inner, ok = strings.CutSuffix(inner, "'")
+		if !ok {
+			return "", false
+		}
+		binary = strings.ReplaceAll(inner, `'"'"'`, `'`)
+	} else {
+		binary = encoded
+	}
+	return binary, workBuddyHookCommand(binary) == command
+}
+
+func workBuddyLegacyHookCommand(home string) string {
+	return workBuddyPythonCommand() + " " + shellQuoteWorkBuddy(filepath.Join(home, "hooks", workBuddyHookDriver))
 }
 
 func isLegacyWorkBuddyMCP(entry map[string]any) bool {
@@ -834,12 +958,46 @@ func isWorkBuddyAuthorizationTemplate(value string) bool {
 	return ok && workBuddyAuthorizationEnvironmentPattern.MatchString(name)
 }
 
-func workBuddyHookCommand(hooksDir string) string {
-	return workBuddyPythonCommand() + " " + shellQuoteWorkBuddy(filepath.Join(hooksDir, workBuddyHookDriver))
+func workBuddyHookCommand(binary string) string {
+	return shellQuoteWorkBuddy(binary) + " hook workbuddy"
 }
 
 func workBuddyPythonCommand() string {
 	return "python3"
+}
+
+func renderWorkBuddySkill(content []byte, binary string) ([]byte, error) {
+	rendered := string(content)
+	if start := strings.Index(rendered, "<!--\n  Installation note:"); start >= 0 {
+		if end := strings.Index(rendered[start:], "\n-->\n"); end >= 0 {
+			rendered = rendered[:start] + rendered[start+end+len("\n-->\n"):]
+		}
+	}
+	if start := strings.Index(rendered, workBuddyScopeSectionStart); start >= 0 {
+		if end := strings.Index(rendered[start:], workBuddyScopeSectionEnd); end >= 0 {
+			replacement := "## Scope\n\nThe installed UserPromptSubmit command `" + workBuddyHookCommand(binary) +
+				"` resolves scope automatically for each event. Do not run a separate scope resolver.\n"
+			rendered = rendered[:start] + replacement + rendered[start+end:]
+		}
+	}
+	rendered = strings.ReplaceAll(rendered, workBuddyPythonPlaceholder, "")
+	rendered = strings.ReplaceAll(rendered, workBuddyScopePlaceholder, "")
+	if !strings.Contains(rendered, workBuddyHookCommand(binary)) {
+		rendered += "\n## Scope\n\nThe installed UserPromptSubmit command `" + workBuddyHookCommand(binary) +
+			"` resolves scope automatically for each event. Do not run a separate scope resolver.\n"
+	}
+	if hasRetiredWorkBuddySkillMaterial(rendered) {
+		return nil, errors.New("WorkBuddy Skill contains retired runtime material")
+	}
+	return []byte(rendered), nil
+}
+
+func hasRetiredWorkBuddySkillMaterial(content string) bool {
+	return strings.Contains(content, workBuddyPythonCommand()) ||
+		strings.Contains(content, workBuddyScopeResolver) ||
+		strings.Contains(content, workBuddyPythonPlaceholder) ||
+		strings.Contains(content, workBuddyScopePlaceholder) ||
+		strings.Contains(content, workBuddyReleasePlaceholder)
 }
 
 func shellQuoteWorkBuddy(value string) string {
@@ -916,21 +1074,6 @@ func removeWorkBuddyPath(path string) {
 	if path != "" {
 		_ = os.RemoveAll(path)
 	}
-}
-
-func copyWorkBuddyFile(source, target string) error {
-	info, err := os.Stat(source)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("WorkBuddy source file is invalid")
-	}
-	content, err := os.ReadFile(source)
-	if err != nil {
-		return err
-	}
-	if mkdirErr := os.MkdirAll(filepath.Dir(target), 0o755); mkdirErr != nil {
-		return mkdirErr
-	}
-	return os.WriteFile(target, content, info.Mode().Perm()&0o755)
 }
 
 func isRegularWorkBuddyFile(path string) bool {

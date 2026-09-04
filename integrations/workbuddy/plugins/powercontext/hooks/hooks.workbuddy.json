@@ -1,17 +1,6 @@
 {
-  "description": "Recall bounded PowerContext context and capture a WorkBuddy prompt.",
+  "description": "Run powercontext setup workbuddy to register the released PowerContext binary for this hook.",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${POWERCONTEXT_PYTHON}\" \"${WORKBUDDY_HOOKS_DIR}/workbuddy_powercontext_hook.py\"",
-            "timeout": 10,
-            "statusMessage": "Syncing PowerContext"
-          }
-        ]
-      }
-    ]
+    "UserPromptSubmit": []
   }
 }

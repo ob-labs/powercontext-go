@@ -164,7 +164,7 @@ func newCommandWithAllDependencies(
 	root.AddCommand(
 		newCapabilitiesCommand(state), newStatsCommand(state), newLiveCommand(state), newReadyCommand(state),
 		newCandidateCommand(state), newConfigCommand(state), newExperienceCommand(state), newSkillCommand(state), newExternalSkillCommand(state),
-		newServerCommand(state), newSetupCommand(state), newDoctorCommand(state),
+		newServerCommand(state), newSetupCommand(state), newDoctorCommand(state), newHookCommand(state),
 	)
 	return root
 }
@@ -205,7 +205,7 @@ func ErrorAlreadyReported(err error) bool {
 func needsRemoteClient(command *cobra.Command) bool {
 	for current := command; current != nil; current = current.Parent() {
 		switch current.Name() {
-		case "server", "setup", "doctor":
+		case "server", "setup", "doctor", "hook":
 			return false
 		}
 	}
