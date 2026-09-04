@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "integrations": [
+    {
+      "id": "bub",
+      "class": "python-package",
+      "required_paths": [
+        "integrations/bub/pyproject.toml"
+      ],
+      "lock_paths": [
+        "integrations/bub/uv.lock"
+      ],
+      "consumer_mode": "python"
+    },
+    {
+      "id": "claude-code",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/claude-code/plugins/powercontext/.claude-plugin/plugin.json"
+      ],
+      "lock_paths": [],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "codex",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/codex/plugins/powercontext/.codex-plugin/plugin.json"
+      ],
+      "lock_paths": [
+        "integrations/codex/plugins/powercontext/uv.lock"
+      ],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "dsh",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/dsh/plugins/powercontext/lib/index.js"
+      ],
+      "lock_paths": [
+        "integrations/dsh/plugins/powercontext/pnpm-lock.yaml"
+      ],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "hermes",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/hermes/plugins/powercontext/plugin.yaml"
+      ],
+      "lock_paths": [],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "langchain",
+      "class": "python-package",
+      "required_paths": [
+        "integrations/langchain/pyproject.toml"
+      ],
+      "lock_paths": [
+        "integrations/langchain/uv.lock"
+      ],
+      "consumer_mode": "python"
+    },
+    {
+      "id": "langgraph",
+      "class": "python-package",
+      "required_paths": [
+        "integrations/langgraph/pyproject.toml"
+      ],
+      "lock_paths": [
+        "integrations/langgraph/uv.lock"
+      ],
+      "consumer_mode": "python"
+    },
+    {
+      "id": "openclaw",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/openclaw/plugins/memory-powercontext/dist/index.js"
+      ],
+      "lock_paths": [
+        "integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml"
+      ],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "opencode",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/opencode/plugins/powercontext/lib/index.js"
+      ],
+      "lock_paths": [
+        "integrations/opencode/plugins/powercontext/pnpm-lock.yaml"
+      ],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "pi",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/pi/plugins/powercontext/extensions/powercontext.ts"
+      ],
+      "lock_paths": [
+        "integrations/pi/plugins/powercontext/pnpm-lock.yaml"
+      ],
+      "consumer_mode": "command"
+    },
+    {
+      "id": "pydantic-ai",
+      "class": "python-package",
+      "required_paths": [
+        "integrations/pydantic-ai/pyproject.toml"
+      ],
+      "lock_paths": [
+        "integrations/pydantic-ai/uv.lock"
+      ],
+      "consumer_mode": "python"
+    },
+    {
+      "id": "workbuddy",
+      "class": "command-host",
+      "required_paths": [
+        "integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json"
+      ],
+      "lock_paths": [],
+      "consumer_mode": "command"
+    }
+  ]
+}
