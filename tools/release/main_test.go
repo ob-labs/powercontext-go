@@ -640,7 +640,13 @@ func writeAdapterConsumerHosts(t *testing.T) (string, string) {
 	script := `#!/usr/bin/env sh
 set -eu
 name="$(basename "$0")"
-printf '%s|%s\n' "$name" "$*" >> "$FAKE_HOST_LOG"
+{
+  printf '%s' "$name"
+  for argument in "$@"; do
+    printf '\t%s' "$argument"
+  done
+  printf '\n'
+} >> "$FAKE_HOST_LOG"
 first="${1-}"
 second="${2-}"
 third="${3-}"
