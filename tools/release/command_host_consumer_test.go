@@ -81,10 +81,11 @@ func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 	t.Run("hermes", func(t *testing.T) {
 		home := filepath.Join(t.TempDir(), "hermes")
 		commands := setupReleaseCommandHost(t, releaseRoot, sourceRoot, "hermes", "HERMES_HOME", home)
+		assertHermesStagingPaths(t, commands, home)
 		assertReleaseCommandLog(t, normalizeHermesCommandLog(commands, home), [][]string{
 			{"hermes", "--version"},
-			{"hermes", "plugins", "doctor", "--ci", "<staging>"},
-			{"hermes", "plugins", "doctor", "--ci", "<staging>"},
+			{"hermes", "plugins", "doctor", "--ci", filepath.Join(home, "plugins", ".powercontext-") + "<random>"},
+			{"hermes", "plugins", "doctor", "--ci", filepath.Join(home, "plugins", ".powercontext-") + "<random>"},
 			{"hermes", "plugins", "enable", "powercontext-command"},
 			{"hermes", "--version"},
 			{"hermes", "plugins", "doctor", "--ci", filepath.Join(home, "plugins", "powercontext")},
@@ -199,17 +200,28 @@ func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 
 func assertCheckoutSubstitutionFails(t *testing.T) {
 	t.Helper()
-	command := exec.CommandContext(
-		t.Context(), os.Args[0], "-test.count=1",
-		"-test.run=^TestReleaseArchiveProvidesConsumableCommandHosts/(hermes|opencode|workbuddy)$",
-	)
-	command.Env = append(os.Environ(), releaseCommandHostCheckoutMutation+"=1")
-	output, runErr := command.CombinedOutput()
-	if runErr == nil {
-		t.Fatalf("checkout substitution mutant unexpectedly passed:\n%s", output)
-	}
-	if !strings.Contains(string(output), "archive consumer marker") {
-		t.Fatalf("checkout substitution mutant did not fail archive-consumer evidence:\n%s", output)
+	for _, mutation := range []struct {
+		host   string
+		marker string
+	}{
+		{host: "hermes", marker: "release-archive-marker-hermes"},
+		{host: "opencode", marker: "release-archive-marker-opencode"},
+		{host: "workbuddy", marker: "release-archive-marker-workbuddy"},
+	} {
+		t.Run(mutation.host, func(t *testing.T) {
+			command := exec.CommandContext(
+				t.Context(), os.Args[0], "-test.count=1",
+				"-test.run=^TestReleaseArchiveProvidesConsumableCommandHosts/"+mutation.host+"$",
+			)
+			command.Env = append(os.Environ(), releaseCommandHostCheckoutMutation+"=1")
+			output, runErr := command.CombinedOutput()
+			if runErr == nil {
+				t.Fatalf("%s checkout substitution mutant unexpectedly passed:\n%s", mutation.host, output)
+			}
+			if !strings.Contains(string(output), mutation.marker) {
+				t.Fatalf("%s checkout substitution mutant did not fail marker %q:\n%s", mutation.host, mutation.marker, output)
+			}
+		})
 	}
 }
 
@@ -302,12 +314,35 @@ func normalizeHermesCommandLog(commands [][]string, home string) [][]string {
 		copy := append([]string(nil), command...)
 		for index, argument := range copy {
 			if strings.HasPrefix(argument, stagingPrefix) {
-				copy[index] = "<staging>"
+				copy[index] = stagingPrefix + "<random>"
 			}
 		}
 		normalized = append(normalized, copy)
 	}
 	return normalized
+}
+
+func assertHermesStagingPaths(t *testing.T, commands [][]string, home string) {
+	t.Helper()
+	if len(commands) < 3 {
+		t.Fatalf("Hermes commands = %#v, want staging doctors at positions 1 and 2", commands)
+	}
+	stagingPrefix := filepath.Join(home, "plugins", ".powercontext-")
+	paths := make([]string, 0, 2)
+	for _, index := range []int{1, 2} {
+		command := commands[index]
+		if len(command) != 5 || !reflect.DeepEqual(command[:4], []string{"hermes", "plugins", "doctor", "--ci"}) {
+			t.Fatalf("Hermes staging command %d = %#v", index, command)
+		}
+		suffix, hasPrefix := strings.CutPrefix(command[4], stagingPrefix)
+		if !hasPrefix || suffix == "" {
+			t.Fatalf("Hermes staging path %q must have nonempty random suffix after %q", command[4], stagingPrefix)
+		}
+		paths = append(paths, command[4])
+	}
+	if paths[0] == paths[1] {
+		t.Fatalf("Hermes provider and command plugin staging paths must differ: %q", paths[0])
+	}
 }
 
 func assertOpenClawCommandLog(t *testing.T, commands [][]string, plugin string) {
