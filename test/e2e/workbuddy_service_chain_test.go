@@ -26,25 +26,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/ob-labs/powercontext-go/internal/cli"
 	"github.com/ob-labs/powercontext-go/server"
 )
 
 const workBuddyServiceChainScope = "project:workbuddy-service-chain"
 
 func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
-	python := workBuddyPython(t)
-	root, err := filepath.Abs(filepath.Join("..", ".."))
+	checkoutRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)
 	}
+	releaseRoot, binary := buildWorkBuddyReleaseRoot(t, checkoutRoot)
 
 	for _, test := range []struct {
 		name          string
@@ -98,15 +96,15 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			t.Cleanup(service.Close)
 			assertWorkBuddyServiceReady(t, service)
 
-			setupWorkBuddy(t, service.URL, root)
+			setupWorkBuddy(t, service.URL, binary, releaseRoot)
 			assertWorkBuddyServerConfiguration(t, service.URL)
+			assertWorkBuddyHookRegistration(t, binary, checkoutRoot, config.Auth.Token)
 			assertWorkBuddyServiceReady(t, service)
-			hook := filepath.Join(os.Getenv("WORKBUDDY_HOME"), "hooks", "workbuddy_powercontext_hook.py")
-			first := runWorkBuddyHook(t, python, root, hook, "Remember this WorkBuddy service chain.", "prompt-1")
+			first := runWorkBuddyHook(t, binary, releaseRoot, "Remember this WorkBuddy service chain.", "prompt-1")
 			if first != "" {
 				t.Fatalf("first hook context = %q, want empty before capture", first)
 			}
-			second := runWorkBuddyHook(t, python, root, hook, "Which WorkBuddy service chain should I use?", "prompt-2")
+			second := runWorkBuddyHook(t, binary, releaseRoot, "Which WorkBuddy service chain should I use?", "prompt-2")
 			if !strings.Contains(second, "Remember this WorkBuddy service chain.") {
 				t.Fatalf("recalled context = %q, want captured WorkBuddy content", second)
 			}
@@ -174,19 +172,90 @@ func assertWorkBuddyServiceReady(t *testing.T, service *httptest.Server) {
 	t.Fatalf("reach Go Server readiness before deadline: %v", lastErr)
 }
 
-func setupWorkBuddy(t *testing.T, serverURL, root string) {
+func buildWorkBuddyReleaseRoot(t *testing.T, source string) (string, string) {
 	t.Helper()
-	command := cli.New(cli.VersionInfo{Version: "test"})
-	command.SetArgs([]string{
-		"setup", "workbuddy", "--source", root, "--server-url", serverURL,
-		"--authorization-environment", "WORKBUDDY_SERVICE_TOKEN",
-	})
-	if err := command.ExecuteContext(t.Context()); err != nil {
-		t.Fatalf("setup workbuddy: %v", err)
+	releaseRoot := filepath.Join(t.TempDir(), "powercontext-release")
+	binary := filepath.Join(releaseRoot, "bin", "powercontext")
+	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), "go", "build", "-tags", "sqlite_fts5", "-o", binary, "./cmd/powercontext")
+	command.Dir = source
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build WorkBuddy release binary: %v\n%s", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(releaseRoot, "BUILD-INFO.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{".env.example", filepath.Join("openapi", "powercontext.yaml")} {
+		copyWorkBuddyReleaseFile(t, filepath.Join(source, path), filepath.Join(releaseRoot, path))
+	}
+	copyWorkBuddyReleaseTree(t, filepath.Join(source, "integrations", "workbuddy"), filepath.Join(releaseRoot, "integrations", "workbuddy"))
+	return releaseRoot, binary
+}
+
+func copyWorkBuddyReleaseFile(t *testing.T, source, destination string) {
+	t.Helper()
+	payload, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, payload, info.Mode()); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func runWorkBuddyHook(t *testing.T, python workBuddyPythonCommand, root, hook, prompt, promptID string) string {
+func copyWorkBuddyReleaseTree(t *testing.T, source, destination string) {
+	t.Helper()
+	if err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, relative)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("WorkBuddy release entry %q is not a regular file", path)
+		}
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, payload, info.Mode())
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setupWorkBuddy(t *testing.T, serverURL, binary, releaseRoot string) {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), binary,
+		"setup", "workbuddy", "--source", releaseRoot, "--server-url", serverURL,
+		"--authorization-environment", "WORKBUDDY_SERVICE_TOKEN",
+	)
+	command.Dir = releaseRoot
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("setup WorkBuddy from release archive: %v\n%s", err, output)
+	}
+}
+
+func runWorkBuddyHook(t *testing.T, binary, root, prompt, promptID string) string {
 	t.Helper()
 	context, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -200,8 +269,9 @@ func runWorkBuddyHook(t *testing.T, python workBuddyPythonCommand, root, hook, p
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := exec.CommandContext(context, python.path, append(python.arguments, hook)...)
-	command.Dir = root
+	command := exec.CommandContext(context, binary, "hook", "workbuddy")
+	command.Dir = filepath.Dir(filepath.Dir(binary))
+	command.Env = workBuddyHookSubprocessEnv(t)
 	command.Stdin = bytes.NewReader(payload)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -221,6 +291,25 @@ func runWorkBuddyHook(t *testing.T, python workBuddyPythonCommand, root, hook, p
 	return result.HookSpecificOutput.AdditionalContext
 }
 
+func workBuddyHookSubprocessEnv(t *testing.T) []string {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(os.Getenv("WORKBUDDY_HOME"), "powercontext.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configuration struct {
+		AuthorizationEnvironment string `json:"authorization_environment"`
+	}
+	if err := json.Unmarshal(payload, &configuration); err != nil {
+		t.Fatal(err)
+	}
+	authorization, ok := os.LookupEnv(configuration.AuthorizationEnvironment)
+	if !ok {
+		t.Fatalf("WorkBuddy authorization environment %q is not set", configuration.AuthorizationEnvironment)
+	}
+	return append(os.Environ(), configuration.AuthorizationEnvironment+"="+authorization)
+}
+
 func assertWorkBuddyServerConfiguration(t *testing.T, serverURL string) {
 	t.Helper()
 	configuration, err := os.ReadFile(filepath.Join(os.Getenv("WORKBUDDY_HOME"), "powercontext.json"))
@@ -236,6 +325,42 @@ func assertWorkBuddyServerConfiguration(t *testing.T, serverURL string) {
 	if value.ServerURL != serverURL {
 		t.Fatalf("WorkBuddy Hook Server URL = %q, want %q", value.ServerURL, serverURL)
 	}
+}
+
+func assertWorkBuddyHookRegistration(t *testing.T, binary, checkoutRoot, bearerToken string) {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(os.Getenv("WORKBUDDY_HOME"), "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Type    string `json:"type"`
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(payload, &settings); err != nil {
+		t.Fatal(err)
+	}
+	for _, matcher := range settings.Hooks["UserPromptSubmit"] {
+		for _, hook := range matcher.Hooks {
+			if hook.Type != "command" || !strings.HasSuffix(hook.Command, " hook workbuddy") {
+				continue
+			}
+			if !strings.Contains(hook.Command, binary) {
+				t.Fatalf("installed WorkBuddy command = %q, want released binary %q", hook.Command, binary)
+			}
+			for _, forbidden := range []string{"python", ".py", checkoutRoot, bearerToken} {
+				if forbidden != "" && strings.Contains(hook.Command, forbidden) {
+					t.Fatalf("installed WorkBuddy command contains forbidden value %q: %q", forbidden, hook.Command)
+				}
+			}
+			return
+		}
+	}
+	t.Fatalf("settings has no released WorkBuddy hook command: %s", payload)
 }
 
 func workBuddyMCPConnection(t *testing.T, serverURL string) (string, string) {
@@ -265,47 +390,6 @@ func workBuddyMCPConnection(t *testing.T, serverURL string) (string, string) {
 		authorization = os.Getenv("WORKBUDDY_SERVICE_TOKEN")
 	}
 	return entry.URL + "/", authorization
-}
-
-type workBuddyPythonCommand struct {
-	path      string
-	arguments []string
-}
-
-func workBuddyPython(t *testing.T) workBuddyPythonCommand {
-	t.Helper()
-	for _, candidate := range []workBuddyPythonCommand{
-		{path: "python3"},
-		{path: "python"},
-		{path: "py", arguments: []string{"-3"}},
-	} {
-		path, err := exec.LookPath(candidate.path)
-		if err != nil {
-			continue
-		}
-		output, versionErr := exec.CommandContext(t.Context(), path, append(candidate.arguments, "--version")...).CombinedOutput()
-		if versionErr != nil || !workBuddyPythonSupported(string(output)) {
-			continue
-		}
-		candidate.path = path
-		return candidate
-	}
-	t.Fatal("WorkBuddy service-chain test requires Python 3.10 or newer on PATH")
-	return workBuddyPythonCommand{}
-}
-
-func workBuddyPythonSupported(output string) bool {
-	fields := strings.Fields(output)
-	if len(fields) != 2 || fields[0] != "Python" {
-		return false
-	}
-	parts := strings.Split(fields[1], ".")
-	if len(parts) < 2 {
-		return false
-	}
-	major, majorErr := strconv.Atoi(parts[0])
-	minor, minorErr := strconv.Atoi(parts[1])
-	return majorErr == nil && minorErr == nil && (major > 3 || major == 3 && minor >= 10)
 }
 
 type workBuddyAuthorizationTransport struct {

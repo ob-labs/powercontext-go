@@ -466,6 +466,10 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 	}
 
 	repository := filepath.Clean(filepath.Join("..", ".."))
+	checkoutRoot, checkoutErr := filepath.Abs(repository)
+	if checkoutErr != nil {
+		t.Fatal(checkoutErr)
+	}
 	archive := buildAdapterConsumerArchive(t, repository)
 	releaseRoot := unpackReleaseArchive(t, archive)
 
@@ -480,10 +484,12 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
 		"integrations/opencode/plugins/powercontext/lib/index.js",
 		"integrations/pi/plugins/powercontext/extensions/powercontext.ts",
+		"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json",
+		"integrations/workbuddy/plugins/powercontext/powercontext.json.example",
 	} {
-		info, err := os.Stat(filepath.Join(releaseRoot, filepath.FromSlash(required)))
-		if err != nil || !info.Mode().IsRegular() {
-			t.Errorf("release artifact adapter entrypoint %q is unavailable: %v", required, err)
+		info, statErr := os.Stat(filepath.Join(releaseRoot, filepath.FromSlash(required)))
+		if statErr != nil || !info.Mode().IsRegular() {
+			t.Errorf("release artifact adapter entrypoint %q is unavailable: %v", required, statErr)
 		}
 	}
 
@@ -511,10 +517,69 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 			}
 		})
 	}
+	t.Run("workbuddy", func(t *testing.T) {
+		home := filepath.Join(t.TempDir(), "workbuddy")
+		t.Setenv("WORKBUDDY_HOME", home)
+		t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "powercontext-home"))
+		binary := filepath.Join(releaseRoot, "bin", "powercontext")
+		setup := exec.CommandContext(t.Context(), binary, "setup", "workbuddy", "--source", releaseRoot)
+		setup.Dir = releaseRoot
+		if output, setupErr := setup.CombinedOutput(); setupErr != nil {
+			t.Fatalf("packaged WorkBuddy setup failed: %v\n%s", setupErr, output)
+		}
 
-	commands, err := os.ReadFile(commandLog)
-	if err != nil {
-		t.Fatal(err)
+		settingsPath := filepath.Join(home, "settings.json")
+		settings, settingsErr := os.ReadFile(settingsPath)
+		if settingsErr != nil {
+			t.Fatal(settingsErr)
+		}
+		command := releaseWorkBuddyHookCommand(t, settings)
+		if !strings.Contains(command, binary) || strings.Contains(command, "python") || strings.Contains(command, ".py") || strings.Contains(command, checkoutRoot) || strings.Contains(command, "token") {
+			t.Fatalf("packaged WorkBuddy command = %q, want only the extracted release binary", command)
+		}
+
+		hook := exec.CommandContext(t.Context(), binary, "hook", "workbuddy")
+		hook.Dir = releaseRoot
+		hook.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","cwd":"` + releaseRoot + `","prompt":"release WorkBuddy hook","session_id":"release-consumer","prompt_id":"prompt-1"}`)
+		hookOutput, hookErr := hook.CombinedOutput()
+		if hookErr != nil {
+			t.Fatalf("packaged WorkBuddy hook failed: %v\n%s", hookErr, hookOutput)
+		}
+		var hookResponse struct {
+			HookSpecificOutput struct {
+				HookEventName string `json:"hookEventName"`
+			} `json:"hookSpecificOutput"`
+		}
+		if decodeErr := json.Unmarshal(hookOutput, &hookResponse); decodeErr != nil || hookResponse.HookSpecificOutput.HookEventName != "UserPromptSubmit" {
+			t.Fatalf("packaged WorkBuddy hook response = %q, error = %v", hookOutput, decodeErr)
+		}
+
+		outside := filepath.Join(t.TempDir(), "powercontext")
+		tampered := replaceReleaseWorkBuddyHookCommand(t, settings, "'"+strings.ReplaceAll(outside, "'", "'\\''")+"' hook workbuddy")
+		if writeErr := os.WriteFile(settingsPath, tampered, 0o600); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+		doctor := exec.CommandContext(t.Context(), binary, "doctor", "workbuddy", "--json")
+		doctor.Dir = releaseRoot
+		diagnostics, doctorErr := doctor.CombinedOutput()
+		if doctorErr == nil {
+			t.Fatalf("packaged WorkBuddy doctor accepted an outside release command: %s", diagnostics)
+		}
+		if !strings.Contains(string(diagnostics), `"hooks"`) || !strings.Contains(string(diagnostics), `"failed"`) {
+			t.Fatalf("packaged WorkBuddy rejection diagnostics = %q", diagnostics)
+		}
+		after, afterErr := os.ReadFile(settingsPath)
+		if afterErr != nil {
+			t.Fatal(afterErr)
+		}
+		if !bytes.Equal(after, tampered) {
+			t.Fatalf("outside WorkBuddy registration mutated settings:\n got %q\nwant %q", after, tampered)
+		}
+	})
+
+	commands, commandLogErr := os.ReadFile(commandLog)
+	if commandLogErr != nil {
+		t.Fatal(commandLogErr)
 	}
 	for _, expected := range []string{
 		"codex|plugin marketplace add " + releaseRoot,
@@ -550,6 +615,58 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 	}
 }
 
+func releaseWorkBuddyHookCommand(t *testing.T, settings []byte) string {
+	t.Helper()
+	var value map[string]any
+	if err := json.Unmarshal(settings, &value); err != nil {
+		t.Fatal(err)
+	}
+	hooks, ok := value["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("WorkBuddy settings hooks = %#v", value["hooks"])
+	}
+	matchers, ok := hooks["UserPromptSubmit"].([]any)
+	if !ok || len(matchers) == 0 {
+		t.Fatalf("WorkBuddy UserPromptSubmit hooks = %#v", hooks["UserPromptSubmit"])
+	}
+	matcher, ok := matchers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("WorkBuddy matcher = %#v", matchers[0])
+	}
+	entries, ok := matcher["hooks"].([]any)
+	if !ok || len(entries) == 0 {
+		t.Fatalf("WorkBuddy hook entries = %#v", matcher["hooks"])
+	}
+	entry, ok := entries[0].(map[string]any)
+	if !ok {
+		t.Fatalf("WorkBuddy hook entry = %#v", entries[0])
+	}
+	command, ok := entry["command"].(string)
+	if !ok {
+		t.Fatalf("WorkBuddy hook command = %#v", entry["command"])
+	}
+	return command
+}
+
+func replaceReleaseWorkBuddyHookCommand(t *testing.T, settings []byte, command string) []byte {
+	t.Helper()
+	var value map[string]any
+	if err := json.Unmarshal(settings, &value); err != nil {
+		t.Fatal(err)
+	}
+	hooks := value["hooks"].(map[string]any)
+	matchers := hooks["UserPromptSubmit"].([]any)
+	matcher := matchers[0].(map[string]any)
+	entries := matcher["hooks"].([]any)
+	entry := entries[0].(map[string]any)
+	entry["command"] = command
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(payload, '\n')
+}
+
 func buildAdapterConsumerArchive(t *testing.T, repository string) string {
 	t.Helper()
 	binary := filepath.Join(t.TempDir(), "powercontext")
@@ -560,6 +677,9 @@ func buildAdapterConsumerArchive(t *testing.T, repository string) string {
 	}
 	root := filepath.Join(t.TempDir(), "powercontext-0.0.0-linux-amd64")
 	if err := stageRelease(repository, root, packageOptions{Binary: binary}, binaryFacts{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "BUILD-INFO.json"), []byte("{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	archive := filepath.Join(t.TempDir(), "powercontext.tar.gz")

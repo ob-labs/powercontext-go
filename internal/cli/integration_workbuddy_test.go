@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,7 @@ func (t *workBuddyDiagnosticTransport) RoundTrip(request *http.Request) (*http.R
 }
 
 func TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK(t *testing.T) {
+	binary := useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	plugin := writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -75,12 +77,27 @@ func TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK(t *testing.T) {
 	for _, name := range []string{
 		"workbuddy_powercontext_hook.py", "workbuddy_settings.py", "prepared_context.py", "powercontext_project_scope.py",
 	} {
-		if info, statErr := os.Stat(filepath.Join(home, "hooks", name)); statErr != nil || !info.Mode().IsRegular() {
-			t.Fatalf("installed hook %q error = %v", name, statErr)
+		if _, statErr := os.Stat(filepath.Join(home, "hooks", name)); !os.IsNotExist(statErr) {
+			t.Fatalf("installed Python runtime file %q error = %v", name, statErr)
 		}
 	}
-	if info, statErr := os.Stat(filepath.Join(home, "skills", "project-context", "SKILL.md")); statErr != nil || !info.Mode().IsRegular() {
+	skillPath := filepath.Join(home, "skills", "project-context", "SKILL.md")
+	if info, statErr := os.Stat(skillPath); statErr != nil || !info.Mode().IsRegular() {
 		t.Fatalf("installed Skill error = %v", statErr)
+	}
+	skill, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{
+		"python3", workBuddyScopeResolver, workBuddyPythonPlaceholder, workBuddyScopePlaceholder, "${POWERCONTEXT_RELEASE_BINARY}",
+	} {
+		if strings.Contains(string(skill), forbidden) {
+			t.Fatalf("installed Skill contains retired material %q: %q", forbidden, skill)
+		}
+	}
+	if !strings.Contains(string(skill), workBuddyHookCommand(binary)) {
+		t.Fatalf("installed Skill does not document its released Go Hook command: %q", skill)
 	}
 
 	var doctorOutput, doctorStderr bytes.Buffer
@@ -105,9 +122,11 @@ func TestSetupWorkBuddyInstallsLocalPluginAndDoctorReportsOK(t *testing.T) {
 }
 
 func TestSetupWorkBuddyPreservesExistingSettingsAndMCP(t *testing.T) {
+	binary := useWorkBuddyReleaseBinary(t)
+	binary = resolveWorkBuddyTestPath(t, binary)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
-	home := filepath.Join(t.TempDir(), "workbuddy")
+	home := resolveWorkBuddyTestPath(t, filepath.Join(t.TempDir(), "workbuddy"))
 	t.Setenv("WORKBUDDY_HOME", home)
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 	writeWorkBuddyTestJSON(t, filepath.Join(home, "settings.json"), map[string]any{
@@ -127,7 +146,7 @@ func TestSetupWorkBuddyPreservesExistingSettingsAndMCP(t *testing.T) {
 	settings := readWorkBuddyJSON(t, filepath.Join(home, "settings.json"))
 	if settings["enabledPlugins"].(map[string]any)["other-plugin"] != true ||
 		settings["sandbox"].(map[string]any)["enabled"] != true ||
-		!settingsHaveWorkBuddyHook(settings) {
+		!settingsHaveWorkBuddyHookCommand(filepath.Join(home, "settings.json"), binary) {
 		t.Fatalf("settings = %#v", settings)
 	}
 	mcp := readWorkBuddyJSON(t, filepath.Join(home, "mcp.json"))
@@ -139,6 +158,7 @@ func TestSetupWorkBuddyPreservesExistingSettingsAndMCP(t *testing.T) {
 }
 
 func TestSetupWorkBuddyWritesCredentialFreeConfiguration(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -181,6 +201,7 @@ func TestSetupWorkBuddyWritesCredentialFreeConfiguration(t *testing.T) {
 }
 
 func TestSetupWorkBuddyRefreshesOwnedCustomAuthorizationEnvironment(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -209,6 +230,7 @@ func TestSetupWorkBuddyRejectsRemotePlaintextBeforePythonLookup(t *testing.T) {
 }
 
 func TestSetupWorkBuddyPreservesRemoteAuthenticatedMCPConfiguration(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -238,6 +260,7 @@ func TestSetupWorkBuddyPreservesRemoteAuthenticatedMCPConfiguration(t *testing.T
 }
 
 func TestSetupWorkBuddyMigratesLegacyMCPEntry(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -262,6 +285,7 @@ func TestSetupWorkBuddyMigratesLegacyMCPEntry(t *testing.T) {
 }
 
 func TestSetupWorkBuddyRefusesUnownedSkillBeforeWriting(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -298,16 +322,18 @@ func TestDoctorWorkBuddyReportsFailuresBeforeInstall(t *testing.T) {
 	}
 }
 
-func TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts(t *testing.T) {
+func TestSetupWorkBuddyMigratesOwnedPythonHookAndPreservesSharedScripts(t *testing.T) {
+	binary := useWorkBuddyReleaseBinary(t)
+	binary = resolveWorkBuddyTestPath(t, binary)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
-	home := filepath.Join(t.TempDir(), "workbuddy")
+	home := resolveWorkBuddyTestPath(t, filepath.Join(t.TempDir(), "workbuddy"))
 	t.Setenv("WORKBUDDY_HOME", home)
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 	writeWorkBuddyTestJSON(t, filepath.Join(home, "settings.json"), map[string]any{
 		"hooks": map[string]any{"UserPromptSubmit": []any{map[string]any{
 			"hooks": []any{map[string]any{
-				"type": "command", "command": "python3 /old/workbuddy_powercontext_hook.py", "timeout": float64(3), "custom": "preserved",
+				"type": "command", "command": workBuddyLegacyHookCommand(home), "timeout": float64(3), "custom": "preserved",
 			}},
 		}}},
 	})
@@ -320,7 +346,7 @@ func TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts(t *testing.T
 	settings := readWorkBuddyJSON(t, filepath.Join(home, "settings.json"))
 	matchers := settings["hooks"].(map[string]any)["UserPromptSubmit"].([]any)
 	entry := matchers[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
-	if !strings.Contains(entry["command"].(string), "workbuddy_powercontext_hook.py") ||
+	if entry["command"] != workBuddyHookCommand(binary) ||
 		entry["timeout"] != float64(10) || entry["statusMessage"] != "Syncing PowerContext" || entry["custom"] != "preserved" {
 		t.Fatalf("updated hook = %#v", entry)
 	}
@@ -330,7 +356,194 @@ func TestSetupWorkBuddyUpdatesExistingHookAndPreservesSharedScripts(t *testing.T
 	}
 }
 
+func TestSetupWorkBuddyMigratesPreviousReleaseHookWithRollbackAndSiblingPreservation(t *testing.T) {
+	currentBinary := useWorkBuddyReleaseBinary(t)
+	currentBinary = resolveWorkBuddyTestPath(t, currentBinary)
+	previousBinary := writeWorkBuddyReleaseBinary(t, 0o755)
+	previousBinary = resolveWorkBuddyTestPath(t, previousBinary)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	plugin := writeWorkBuddyPlugin(t, checkout)
+	writeTestFile(t, filepath.Join(plugin, "skills", workBuddySkillName, "oversized.bin"), strings.Repeat("x", maximumCommandOutput+1))
+	home := resolveWorkBuddyTestPath(t, filepath.Join(t.TempDir(), "workbuddy"))
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	settingsPath := filepath.Join(home, "settings.json")
+	previousSettings := map[string]any{
+		"hooks": map[string]any{"UserPromptSubmit": []any{map[string]any{
+			"hooks": []any{
+				map[string]any{"type": "command", "command": workBuddyHookCommand(previousBinary), "timeout": float64(10), "custom": "preserved"},
+				map[string]any{"type": "command", "command": "echo sibling", "timeout": float64(5)},
+			},
+		}}},
+	}
+	writeWorkBuddyTestJSON(t, settingsPath, previousSettings)
+
+	_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
+	if err == nil || !strings.Contains(err.Error(), "cannot copy WorkBuddy Skill") {
+		t.Fatalf("setup error = %v", err)
+	}
+	if got := readWorkBuddyJSON(t, settingsPath); fmt.Sprint(got) != fmt.Sprint(previousSettings) {
+		t.Fatalf("settings after rollback = %#v, want %#v", got, previousSettings)
+	}
+
+	if err := os.Remove(filepath.Join(plugin, "skills", workBuddySkillName, "oversized.bin")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
+	}
+	settings := readWorkBuddyJSON(t, settingsPath)
+	entries := settings["hooks"].(map[string]any)["UserPromptSubmit"].([]any)[0].(map[string]any)["hooks"].([]any)
+	owned := entries[0].(map[string]any)
+	sibling := entries[1].(map[string]any)
+	if owned["command"] != workBuddyHookCommand(currentBinary) || owned["custom"] != "preserved" || sibling["command"] != "echo sibling" {
+		t.Fatalf("migrated hooks = %#v", entries)
+	}
+}
+
+func TestSetupWorkBuddyRejectsUnreleasedBinaryBeforeWrites(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	settingsPath := filepath.Join(home, "settings.json")
+	mcpPath := filepath.Join(home, "mcp.json")
+	settings := []byte(`{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"python3 /old/workbuddy_powercontext_hook.py"}]}]}}`)
+	mcp := []byte(`{"mcpServers":{"other":{"type":"stdio","command":"other"}}}`)
+	writeTestFile(t, settingsPath, string(settings))
+	writeTestFile(t, mcpPath, string(mcp))
+
+	outside := filepath.Join(t.TempDir(), "powercontext")
+	writeTestFile(t, outside, "binary\n")
+	nonregular := filepath.Join(t.TempDir(), "bin", "powercontext")
+	if err := os.MkdirAll(nonregular, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, executable := range map[string]string{
+		"outside-release-root": outside,
+		"missing":              filepath.Join(t.TempDir(), "bin", "powercontext"),
+		"nonregular":           nonregular,
+		"go-build-temporary":   filepath.Join(t.TempDir(), "go-build123", "b001", "exe", "powercontext"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if name == "go-build-temporary" {
+				writeTestFile(t, executable, "binary\n")
+			}
+			previous := workBuddyExecutable
+			workBuddyExecutable = func() (string, error) { return executable, nil }
+			t.Cleanup(func() { workBuddyExecutable = previous })
+
+			_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
+			if err == nil || !strings.Contains(err.Error(), "released archive") || strings.Contains(err.Error(), executable) {
+				t.Fatalf("setup error = %v", err)
+			}
+			for path, want := range map[string][]byte{settingsPath: settings, mcpPath: mcp} {
+				got, readErr := os.ReadFile(path)
+				if readErr != nil || !bytes.Equal(got, want) {
+					t.Fatalf("preserved %q = %q, %v; want %q", path, got, readErr, want)
+				}
+			}
+			for _, path := range []string{filepath.Join(home, workBuddyConfigFilename), filepath.Join(home, "hooks"), filepath.Join(home, "skills", workBuddySkillName)} {
+				if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+					t.Fatalf("setup wrote %q: %v", path, statErr)
+				}
+			}
+		})
+	}
+}
+
+func TestSetupWorkBuddyRejectsNonExecutableReleaseBinaryBeforeWritesOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use Unix executable mode bits")
+	}
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	settingsPath := filepath.Join(home, "settings.json")
+	mcpPath := filepath.Join(home, "mcp.json")
+	settings := []byte(`{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"python3 /old/workbuddy_powercontext_hook.py"}]}]}}`)
+	mcp := []byte(`{"mcpServers":{"other":{"type":"stdio","command":"other"}}}`)
+	writeTestFile(t, settingsPath, string(settings))
+	writeTestFile(t, mcpPath, string(mcp))
+	useWorkBuddyReleaseBinaryWithMode(t, 0o644)
+
+	_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
+	if err == nil || !strings.Contains(err.Error(), "released archive") {
+		t.Fatalf("setup error = %v", err)
+	}
+	for path, want := range map[string][]byte{settingsPath: settings, mcpPath: mcp} {
+		got, readErr := os.ReadFile(path)
+		if readErr != nil || !bytes.Equal(got, want) {
+			t.Fatalf("preserved %q = %q, %v; want %q", path, got, readErr, want)
+		}
+	}
+	for _, path := range []string{filepath.Join(home, workBuddyConfigFilename), filepath.Join(home, "hooks"), filepath.Join(home, "skills", workBuddySkillName)} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("setup wrote %q: %v", path, statErr)
+		}
+	}
+}
+
+func TestSetupWorkBuddyRefusesForeignGoHookBeforeWriting(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	settingsPath := filepath.Join(home, "settings.json")
+	mcpPath := filepath.Join(home, "mcp.json")
+	configPath := filepath.Join(home, workBuddyConfigFilename)
+	skillPath := filepath.Join(home, "skills", workBuddySkillName, "SKILL.md")
+	hookPath := filepath.Join(home, "hooks", "foreign-hook")
+	foreign := shellQuoteWorkBuddy(filepath.Join(t.TempDir(), "other-powercontext")) + " hook workbuddy"
+	writeWorkBuddyTestJSON(t, settingsPath, map[string]any{
+		"hooks": map[string]any{"UserPromptSubmit": []any{map[string]any{
+			"hooks": []any{map[string]any{"type": "command", "command": foreign}},
+		}}},
+	})
+	writeWorkBuddyTestJSON(t, mcpPath, map[string]any{"mcpServers": map[string]any{"other": map[string]any{"type": "stdio", "command": "other"}}})
+	configuration, err := newWorkBuddyConfiguration("http://127.0.0.1:8000", "project", workBuddyDefaultAuthorizationEnvironment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeWorkBuddyTestJSON(t, configPath, map[string]any{
+		"schema": configuration.Schema, "server_url": configuration.ServerURL, "scope_mode": configuration.ScopeMode,
+		"authorization_environment": configuration.AuthorizationEnvironment, "request_timeout_seconds": configuration.RequestTimeoutSeconds,
+		"request_budget_seconds": configuration.RequestBudgetSeconds, "prepare_max_bytes": configuration.PrepareMaxBytes,
+		"source_max_bytes": configuration.SourceMaxBytes,
+	})
+	writeTestFile(t, skillPath, "owned Skill\n")
+	writeWorkBuddyTestJSON(t, filepath.Join(filepath.Dir(skillPath), workBuddySkillOwner), map[string]any{
+		"schema": 1, "owner": "powercontext", "integration": "workbuddy",
+	})
+	writeTestFile(t, hookPath, "foreign hook\n")
+
+	before := make(map[string][]byte)
+	for _, path := range []string{settingsPath, mcpPath, configPath, skillPath, filepath.Join(filepath.Dir(skillPath), workBuddySkillOwner), hookPath} {
+		payload, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		before[path] = payload
+	}
+	_, _, setupErr := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
+	if setupErr == nil || !strings.Contains(setupErr.Error(), "hook is not owned") {
+		t.Fatalf("setup error = %v", setupErr)
+	}
+	for path, want := range before {
+		got, readErr := os.ReadFile(path)
+		if readErr != nil || !bytes.Equal(got, want) {
+			t.Fatalf("preserved %q = %q, %v; want %q", path, got, readErr, want)
+		}
+	}
+}
+
 func TestSetupWorkBuddyRefreshesOwnedSkill(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	plugin := writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -351,6 +564,7 @@ func TestSetupWorkBuddyRefreshesOwnedSkill(t *testing.T) {
 }
 
 func TestSetupWorkBuddyStopsBeforeWritesWhenSettingsSnapshotIsUnreadable(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -361,7 +575,7 @@ func TestSetupWorkBuddyStopsBeforeWritesWhenSettingsSnapshotIsUnreadable(t *test
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 
 	_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout)
-	if err == nil || !strings.Contains(err.Error(), "Cannot update WorkBuddy settings") {
+	if err == nil || !strings.Contains(err.Error(), "cannot update WorkBuddy settings") {
 		t.Fatalf("setup error = %v", err)
 	}
 	for _, path := range []string{filepath.Join(home, "hooks"), filepath.Join(home, "mcp.json")} {
@@ -372,6 +586,7 @@ func TestSetupWorkBuddyStopsBeforeWritesWhenSettingsSnapshotIsUnreadable(t *test
 }
 
 func TestSetupWorkBuddyRollsBackJSONChangesWhenSkillCopyFails(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	plugin := writeWorkBuddyPlugin(t, checkout)
 	writeTestFile(t, filepath.Join(plugin, "skills", workBuddySkillName, "oversized.bin"), strings.Repeat("x", maximumCommandOutput+1))
@@ -399,6 +614,7 @@ func TestSetupWorkBuddyRollsBackJSONChangesWhenSkillCopyFails(t *testing.T) {
 }
 
 func TestSetupWorkBuddyRejectsMissingPlugin(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	home := filepath.Join(t.TempDir(), "workbuddy")
 	t.Setenv("WORKBUDDY_HOME", home)
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
@@ -474,9 +690,18 @@ func TestBundledWorkBuddyPluginCarriesInstallableHooksSkillAndMCP(t *testing.T) 
 		entry["disabled"] != false {
 		t.Fatalf("bundled WorkBuddy MCP entry = %#v", entry)
 	}
+	hookTemplate, readErr := os.ReadFile(filepath.Join(plugin, "hooks", "hooks.workbuddy.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(hookTemplate), "${POWERCONTEXT_RELEASE_BINARY}") ||
+		strings.Contains(string(hookTemplate), "${POWERCONTEXT_PYTHON}") {
+		t.Fatalf("bundled WorkBuddy Hook template carries an unowned runtime placeholder: %q", hookTemplate)
+	}
 }
 
 func TestDoctorWorkBuddyChecksTheConfiguredServerReadiness(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
 	checkout := filepath.Join(t.TempDir(), "powercontext")
 	writeWorkBuddyPlugin(t, checkout)
 	home := filepath.Join(t.TempDir(), "workbuddy")
@@ -507,6 +732,118 @@ func TestDoctorWorkBuddyChecksTheConfiguredServerReadiness(t *testing.T) {
 	}
 }
 
+func TestDoctorWorkBuddyRejectsForeignGoHookInBothRegistrationChecks(t *testing.T) {
+	binary := useWorkBuddyReleaseBinary(t)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(home, "settings.json")
+	settings := readWorkBuddyJSON(t, settingsPath)
+	matchers := settings["hooks"].(map[string]any)["UserPromptSubmit"].([]any)
+	entry := matchers[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	entry["command"] = shellQuoteWorkBuddy(filepath.Join(filepath.Dir(binary), "other-powercontext")) + " hook workbuddy"
+	writeWorkBuddyTestJSON(t, settingsPath, settings)
+
+	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "workbuddy", "--json")
+	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
+		t.Fatalf("doctor error = %v, exit = %d", err, ExitCode(err))
+	}
+	checks := decodeSystemOutput(t, stdout)["checks"].(map[string]any)
+	for _, name := range []string{"hooks", "settings"} {
+		if checks[name].(map[string]any)["status"] != "failed" {
+			t.Fatalf("doctor %s check = %#v", name, checks[name])
+		}
+	}
+}
+
+func TestDoctorWorkBuddyRejectsAdditionalForeignGoHookInBothRegistrationChecks(t *testing.T) {
+	binary := useWorkBuddyReleaseBinary(t)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(home, "settings.json")
+	settings := readWorkBuddyJSON(t, settingsPath)
+	matchers := settings["hooks"].(map[string]any)["UserPromptSubmit"].([]any)
+	entries := matchers[0].(map[string]any)["hooks"].([]any)
+	entries = append(entries, map[string]any{
+		"type": "command", "command": shellQuoteWorkBuddy(filepath.Join(filepath.Dir(binary), "other-powercontext")) + " hook workbuddy",
+	})
+	matchers[0].(map[string]any)["hooks"] = entries
+	writeWorkBuddyTestJSON(t, settingsPath, settings)
+
+	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "workbuddy", "--json")
+	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
+		t.Fatalf("doctor error = %v, exit = %d", err, ExitCode(err))
+	}
+	checks := decodeSystemOutput(t, stdout)["checks"].(map[string]any)
+	for _, name := range []string{"hooks", "settings"} {
+		if checks[name].(map[string]any)["status"] != "failed" {
+			t.Fatalf("doctor %s check = %#v", name, checks[name])
+		}
+	}
+}
+
+func TestDoctorWorkBuddyRejectsNonCommandExactGoHookInBothRegistrationChecks(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(home, "settings.json")
+	settings := readWorkBuddyJSON(t, settingsPath)
+	matchers := settings["hooks"].(map[string]any)["UserPromptSubmit"].([]any)
+	entry := matchers[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
+	entry["type"] = "script"
+	writeWorkBuddyTestJSON(t, settingsPath, settings)
+
+	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "workbuddy", "--json")
+	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
+		t.Fatalf("doctor error = %v, exit = %d", err, ExitCode(err))
+	}
+	checks := decodeSystemOutput(t, stdout)["checks"].(map[string]any)
+	for _, name := range []string{"hooks", "settings"} {
+		if checks[name].(map[string]any)["status"] != "failed" {
+			t.Fatalf("doctor %s check = %#v", name, checks[name])
+		}
+	}
+}
+
+func TestDoctorWorkBuddyRejectsInstalledSkillWithRetiredPythonMaterial(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
+	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
+	if _, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "setup", "workbuddy", "--source", checkout); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(home, "skills", workBuddySkillName, "SKILL.md"), "python3 /old/powercontext_project_scope.py\n")
+
+	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "workbuddy", "--json")
+	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
+		t.Fatalf("doctor error = %v, exit = %d", err, ExitCode(err))
+	}
+	checks := decodeSystemOutput(t, stdout)["checks"].(map[string]any)
+	if checks["skill"].(map[string]any)["status"] != "failed" {
+		t.Fatalf("doctor skill check = %#v", checks["skill"])
+	}
+}
+
 func TestDoctorWorkBuddyRedactsInvalidCredentialConfiguration(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "workbuddy")
 	secret := "workbuddy-should-not-appear"
@@ -532,6 +869,59 @@ func writeWorkBuddyPlugin(t *testing.T, root string) string {
 	writeTestFile(t, filepath.Join(plugin, "scripts", "project_scope.py"), "def resolve_scope_id(*_args): return 'scope'\n")
 	writeTestFile(t, filepath.Join(plugin, "skills", "project-context", "SKILL.md"), "${POWERCONTEXT_PYTHON} ${POWERCONTEXT_PROJECT_SCOPE_SCRIPT}\n")
 	resolved, err := resolvePath(plugin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
+}
+
+func useWorkBuddyReleaseBinary(t *testing.T) string {
+	t.Helper()
+	return useWorkBuddyReleaseBinaryWithMode(t, 0o755)
+}
+
+func useWorkBuddyReleaseBinaryWithMode(t *testing.T, mode os.FileMode) string {
+	t.Helper()
+	binary := writeWorkBuddyReleaseBinary(t, mode)
+	previous := workBuddyExecutable
+	workBuddyExecutable = func() (string, error) { return binary, nil }
+	t.Cleanup(func() { workBuddyExecutable = previous })
+	return binary
+}
+
+func writeWorkBuddyReleaseBinary(t *testing.T, mode os.FileMode) string {
+	t.Helper()
+	root := t.TempDir()
+	binary := filepath.Join(root, "bin", "powercontext")
+	for _, path := range []string{
+		binary,
+		filepath.Join(root, "BUILD-INFO.json"),
+		filepath.Join(root, ".env.example"),
+		filepath.Join(root, "openapi", "powercontext.yaml"),
+		filepath.Join(root, workBuddyRelative, "hooks", "workbuddy_powercontext_hook.py"),
+		filepath.Join(root, workBuddyRelative, "hooks", "workbuddy_settings.py"),
+		filepath.Join(root, workBuddyRelative, "hooks", "prepared_context.py"),
+		filepath.Join(root, workBuddyRelative, "powercontext.json.example"),
+		filepath.Join(root, workBuddyRelative, "scripts", "project_scope.py"),
+		filepath.Join(root, workBuddyRelative, "skills", workBuddySkillName, "SKILL.md"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		fileMode := os.FileMode(0o644)
+		if path == binary {
+			fileMode = mode
+		}
+		if err := os.WriteFile(path, []byte("test\n"), fileMode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return binary
+}
+
+func resolveWorkBuddyTestPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := resolvePath(path)
 	if err != nil {
 		t.Fatal(err)
 	}

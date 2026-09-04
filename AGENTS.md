@@ -427,3 +427,12 @@ source / artifact / trigger / inference
   the router would reject only after the bypass. Verify with a regression test
   that an oversized body is rejected before the handler runs and that a
   state-changing verb on an exempted public path still requires credentials.
+- When a host hook captures content and emits a size-bounded JSON protocol,
+  preserve its provenance and nonblank correlation metadata, and enforce the
+  output limit after encoding. Verify identifier fallbacks and that escaping
+  expansion produces the exact required empty-context response.
+- When setup migrates an owned release-binary hook, parse only the exact command
+  shape setup emits and revalidate a prior binary against the release-root
+  invariants without executing it. Scan every matching hook entry in setup and
+  diagnostics; verify prior-release rollback and upgrade, sibling preservation,
+  external-command rejection before mutation, and duplicate-candidate failure.

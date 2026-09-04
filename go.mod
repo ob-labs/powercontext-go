@@ -14,6 +14,7 @@ require (
 	github.com/go-faster/errors v0.7.1
 	github.com/go-faster/jx v1.2.0
 	github.com/go-sql-driver/mysql v1.10.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/knights-analytics/hugot v0.7.0
@@ -74,7 +75,6 @@ require (
 	github.com/gomlx/go-xla v0.2.2 // indirect
 	github.com/gomlx/gomlx v0.27.2 // indirect
 	github.com/gomlx/onnx-gomlx v0.4.2-0.20260327164137-4e2832549fc1 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/s2a-go v0.1.8 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
