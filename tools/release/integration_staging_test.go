@@ -83,8 +83,17 @@ func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) 
 			if err == nil || !strings.Contains(err.Error(), test.message) {
 				t.Fatalf("stageIntegrations error = %v, want %q", err, test.message)
 			}
-			if _, statErr := os.Stat(filepath.Join(destination, "integrations")); !errors.Is(statErr, fs.ErrNotExist) {
-				t.Fatalf("integration destination exists after rejected staging: %v", statErr)
+			entries, readErr := os.ReadDir(destination)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("staging destination has entries after rejected staging: %v", entries)
+			}
+			for _, path := range []string{".claude-plugin", "integrations"} {
+				if _, statErr := os.Stat(filepath.Join(destination, path)); !errors.Is(statErr, fs.ErrNotExist) {
+					t.Fatalf("staging destination %q exists after rejected staging: %v", path, statErr)
+				}
 			}
 		})
 	}
