@@ -31,6 +31,7 @@ import (
 
 const (
 	releaseCommandHostCheckoutMutation = "POWERCONTEXT_RELEASE_COMMAND_HOST_CHECKOUT_MUTATION"
+	releaseCommandHostArchive          = "POWERCONTEXT_RELEASE_COMMAND_HOST_ARCHIVE"
 	releaseCommandHostMutationTimeout  = 4 * time.Minute
 )
 
@@ -44,7 +45,11 @@ func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	releaseRoot := unpackReleaseArchive(t, buildAdapterConsumerArchive(t, repository))
+	archive := os.Getenv(releaseCommandHostArchive)
+	if archive == "" {
+		archive = buildAdapterConsumerArchive(t, repository)
+	}
+	releaseRoot := unpackReleaseArchive(t, archive)
 	markers := markReleaseCommandHostArchive(t, releaseRoot)
 	sourceRoot := releaseRoot
 	if os.Getenv(releaseCommandHostCheckoutMutation) == "1" {
@@ -200,12 +205,12 @@ func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 
 	if sourceRoot == releaseRoot {
 		t.Run("checkout-substitution-mutant", func(t *testing.T) {
-			assertCheckoutSubstitutionFails(t)
+			assertCheckoutSubstitutionFails(t, archive)
 		})
 	}
 }
 
-func assertCheckoutSubstitutionFails(t *testing.T) {
+func assertCheckoutSubstitutionFails(t *testing.T, archive string) {
 	t.Helper()
 	deadlineCause := errors.New("checkout substitution mutant exceeded its test deadline")
 	deadlineContext, cancel := context.WithTimeoutCause(t.Context(), releaseCommandHostMutationTimeout, deadlineCause)
@@ -214,7 +219,11 @@ func assertCheckoutSubstitutionFails(t *testing.T) {
 		deadlineContext, os.Args[0], "-test.count=1",
 		"-test.run=^TestReleaseArchiveProvidesConsumableCommandHosts/(hermes|opencode|workbuddy)$",
 	)
-	command.Env = append(os.Environ(), releaseCommandHostCheckoutMutation+"=1")
+	command.Env = append(
+		os.Environ(),
+		releaseCommandHostCheckoutMutation+"=1",
+		releaseCommandHostArchive+"="+archive,
+	)
 	output, runErr := command.CombinedOutput()
 	if errors.Is(context.Cause(deadlineContext), deadlineCause) {
 		t.Fatalf("checkout substitution mutant timed out after %s:\n%s", releaseCommandHostMutationTimeout, output)

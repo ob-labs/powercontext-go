@@ -18,8 +18,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -27,9 +29,49 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+const adapterConsumerBuildTimeout = 4 * time.Minute
+
+type adapterConsumerBuildResult struct {
+	binary string
+}
+
+var adapterConsumerBuildDirectory string
+
+var sharedAdapterConsumerBuild = sync.OnceValues(func() (adapterConsumerBuildResult, error) {
+	directory, err := os.MkdirTemp("", "powercontext-release-consumer-")
+	if err != nil {
+		return adapterConsumerBuildResult{}, fmt.Errorf("create release CLI build directory: %w", err)
+	}
+	adapterConsumerBuildDirectory = directory
+	deadlineCause := errors.New("release CLI build exceeded its test deadline")
+	buildContext, cancel := context.WithTimeoutCause(context.Background(), adapterConsumerBuildTimeout, deadlineCause)
+	defer cancel()
+	binary := filepath.Join(directory, "powercontext")
+	build := exec.CommandContext(buildContext, "go", "build", "-tags", "sqlite_fts5", "-o", binary, "./cmd/powercontext")
+	build.Dir = filepath.Clean(filepath.Join("..", ".."))
+	output, buildErr := build.CombinedOutput()
+	if buildErr != nil {
+		_ = os.RemoveAll(directory)
+		if errors.Is(context.Cause(buildContext), deadlineCause) {
+			return adapterConsumerBuildResult{}, fmt.Errorf("build release CLI timed out after %s:\n%s", adapterConsumerBuildTimeout, output)
+		}
+		return adapterConsumerBuildResult{}, fmt.Errorf("build release CLI: %w\n%s", buildErr, output)
+	}
+	return adapterConsumerBuildResult{binary: binary}, nil
+})
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if adapterConsumerBuildDirectory != "" {
+		_ = os.RemoveAll(adapterConsumerBuildDirectory)
+	}
+	os.Exit(code)
+}
 
 func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
 	t.Parallel()
@@ -511,14 +553,12 @@ func replaceReleaseWorkBuddyHookCommand(t *testing.T, settings []byte, command s
 
 func buildAdapterConsumerArchive(t *testing.T, repository string) string {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "powercontext")
-	build := exec.CommandContext(t.Context(), "go", "build", "-tags", "sqlite_fts5", "-o", binary, "./cmd/powercontext")
-	build.Dir = repository
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build release CLI: %v\n%s", err, output)
+	build, err := sharedAdapterConsumerBuild()
+	if err != nil {
+		t.Fatal(err)
 	}
 	root := filepath.Join(t.TempDir(), "powercontext-0.0.0-linux-amd64")
-	if err := stageRelease(repository, root, packageOptions{Binary: binary}, binaryFacts{}); err != nil {
+	if err := stageRelease(repository, root, packageOptions{Binary: build.binary}, binaryFacts{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "BUILD-INFO.json"), []byte("{}\n"), 0o644); err != nil {
