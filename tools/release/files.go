@@ -41,16 +41,16 @@ func releaseIntegrationFiles(repository string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	integrations, err := readReleaseIntegrations(repository)
-	if err != nil {
-		return nil, err
+	integrations, integrationsErr := readReleaseIntegrations(repository)
+	if integrationsErr != nil {
+		return nil, integrationsErr
 	}
 	pathspecs := make([]string, 0, len(integrations))
 	for _, integration := range integrations {
 		pathspecs = append(pathspecs, "integrations/"+integration.ID)
 	}
-	if err := validateReleaseIntegrationFileScope(reviewed, pathspecs); err != nil {
-		return nil, err
+	if scopeErr := validateReleaseIntegrationFileScope(reviewed, pathspecs); scopeErr != nil {
+		return nil, scopeErr
 	}
 	if _, metadataErr := os.Lstat(filepath.Join(repository, ".git")); metadataErr != nil {
 		if errors.Is(metadataErr, fs.ErrNotExist) {

@@ -736,19 +736,6 @@ func TestOpenClawServerURLNormalizationAndRemoteRefValidationMatchPython(t *test
 	}
 }
 
-func writePiPackage(t *testing.T, root string) string {
-	t.Helper()
-	path := filepath.Join(root, filepath.FromSlash(piRelative))
-	writeTestFile(t, filepath.Join(path, "package.json"), `{"name":"powercontext-pi"}`)
-	writeTestFile(t, filepath.Join(path, "extensions", "powercontext.ts"), "export default () => {}\n")
-	writeTestFile(t, filepath.Join(path, "skills", "project-context", "SKILL.md"), "project context\n")
-	resolved, err := resolvePath(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resolved
-}
-
 func writeOpenCodePlugin(t *testing.T, root string) string {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(openCodeRelative))
@@ -770,17 +757,6 @@ func writeHermesPlugin(t *testing.T, root string) string {
 	command := filepath.Join(root, filepath.FromSlash(hermesCommandRelative))
 	writeTestFile(t, filepath.Join(command, "__init__.py"), "def register(context): pass\n")
 	writeTestFile(t, filepath.Join(command, "plugin.yaml"), "name: powercontext-command\nkind: standalone\n")
-	resolved, err := resolvePath(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resolved
-}
-
-func writeOpenClawPlugin(t *testing.T, root string) string {
-	t.Helper()
-	path := filepath.Join(root, filepath.FromSlash(openClawRelative))
-	writeTestFile(t, filepath.Join(path, "package.json"), `{"name":"@oceanbase/openclaw-memory-powercontext"}`)
 	resolved, err := resolvePath(path)
 	if err != nil {
 		t.Fatal(err)
