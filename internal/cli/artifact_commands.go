@@ -125,8 +125,8 @@ func newExportSkillCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{
 		Use: "export ARTIFACT_ID", Short: "Export one exact approved Revision for an Agent integration target.", Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			if target != string(artifactskill.CodexAgent) && target != string(artifactskill.ClaudeCodeAgent) {
-				return usageError(errors.New("--target must be codex or claude_code"))
+			if target != string(artifactskill.CodexAgent) && target != string(artifactskill.WorkBuddyAgent) {
+				return usageError(&artifactskill.UnsupportedAgentKindError{})
 			}
 			if revision < 1 {
 				return usageError(errors.New("--revision must be at least 1"))
@@ -153,7 +153,7 @@ func newExportSkillCommand(state *commandState) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&scopeID, "scope-id", "", "Application scope containing the managed Skill.")
-	command.Flags().StringVar(&target, "target", "", "Agent integration target: codex or claude_code.")
+	command.Flags().StringVar(&target, "target", "", "Agent integration target: codex or workbuddy.")
 	command.Flags().StringVar(&destination, "destination", "", "New target Skill directory; existing paths are never replaced.")
 	command.Flags().IntVar(&revision, "revision", 0, "Exact managed Skill Revision.")
 	for _, name := range []string{"scope-id", "target", "destination", "revision"} {

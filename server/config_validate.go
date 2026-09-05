@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/ob-labs/powercontext-go/artifact/memory"
-	"github.com/ob-labs/powercontext-go/internal/sqlstore"
+	artifactskill "github.com/ob-labs/powercontext-go/artifact/skill"
 	"github.com/ob-labs/powercontext-go/internal/transportpolicy"
 )
 
@@ -47,6 +47,15 @@ type AuthenticationTokenRequiredError struct{}
 
 func (*AuthenticationTokenRequiredError) Error() string {
 	return "server: bearer token is required when authentication is enabled"
+}
+
+// UnsupportedDatabaseError reports a database backend outside the supported
+// SQLite product boundary without rendering the configured kind or connection
+// values.
+type UnsupportedDatabaseError struct{}
+
+func (*UnsupportedDatabaseError) Error() string {
+	return "server: database backend is unsupported; only SQLite is supported"
 }
 
 func (c ProcessConfig) Validate() error {
@@ -80,36 +89,19 @@ func (c ProcessConfig) Validate() error {
 	if _, err := memory.ExtractionInstructions(c.Runtime.MemoryExtractionProfile); err != nil {
 		return fmt.Errorf("server: %w", err)
 	}
-	if c.Database.Kind != "sqlite" && c.Database.Kind != "oceanbase" && c.Database.Kind != "seekdb" {
-		return errors.New("server: database kind must be sqlite, oceanbase, or seekdb")
+	if c.Database.Kind != "sqlite" {
+		return &UnsupportedDatabaseError{}
 	}
-	if c.Database.Kind == "sqlite" {
-		if _, err := SQLiteDSN(c.Database.SQLite.URL); err != nil {
-			return err
-		}
-		if c.Database.SQLite.BusyTimeout < 0 || c.Database.SQLite.MaxOpenConns < 1 || c.Database.SQLite.MaxIdleConns < 0 {
-			return errors.New("server: SQLite connection settings are invalid")
-		}
-		switch c.Database.SQLite.JournalMode {
-		case "WAL", "DELETE", "MEMORY":
-		default:
-			return errors.New("server: SQLite journal mode is invalid")
-		}
-	} else if c.Database.Kind == "oceanbase" {
-		if err := sqlstore.ValidateOceanBaseURL(c.Database.OceanBase.URL); err != nil {
-			return fmt.Errorf("server: %w", err)
-		}
-	} else {
-		if strings.TrimSpace(c.Database.SeekDB.Path) == "" || c.Database.SeekDB.Path != strings.TrimSpace(c.Database.SeekDB.Path) {
-			return errors.New("server: embedded seekDB path must be a non-empty trimmed path")
-		}
-		if c.Database.SeekDB.Database != "test" {
-			return errors.New("server: embedded seekDB database must be test")
-		}
-		if c.Database.SeekDB.MaxOpenConns < 1 || c.Database.SeekDB.MaxIdleConns < 0 ||
-			c.Database.SeekDB.MaxIdleConns > c.Database.SeekDB.MaxOpenConns || c.Database.SeekDB.MaxLifetime < 0 {
-			return errors.New("server: embedded seekDB connection pool limits are invalid")
-		}
+	if _, err := SQLiteDSN(c.Database.SQLite.URL); err != nil {
+		return err
+	}
+	if c.Database.SQLite.BusyTimeout < 0 || c.Database.SQLite.MaxOpenConns < 1 || c.Database.SQLite.MaxIdleConns < 0 {
+		return errors.New("server: SQLite connection settings are invalid")
+	}
+	switch c.Database.SQLite.JournalMode {
+	case "WAL", "DELETE", "MEMORY":
+	default:
+		return errors.New("server: SQLite journal mode is invalid")
 	}
 	if c.Inference.GenerationTimeout <= 0 || c.Inference.GenerationMaxRequests < 1 || c.Inference.EmbeddingTimeout <= 0 || c.Inference.EmbeddingBatchSize < 1 {
 		return errors.New("server: inference limits are invalid")
@@ -178,9 +170,9 @@ func validateExternalSkills(config ExternalSkillsConfig) error {
 		}
 		seen[id] = struct{}{}
 		switch agentKind {
-		case "codex", "claude_code":
+		case string(artifactskill.CodexAgent), string(artifactskill.WorkBuddyAgent):
 		default:
-			return errors.New("server: external Skill Agent kind is invalid")
+			return &artifactskill.UnsupportedAgentKindError{}
 		}
 		switch installationScope {
 		case "user", "project", "plugin":

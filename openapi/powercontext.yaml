@@ -1911,7 +1911,7 @@ components:
       type: object
       additionalProperties: false
       required:
-        [source_types, artifact_families, memory_extraction, handoff_generation, search_modes, context_versions]
+        [source_types, artifact_families, memory_extraction, handoff_generation, search_modes, context_versions, supported_databases, supported_external_agents]
       properties:
         source_types:
           type: array
@@ -1947,6 +1947,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PreparedContextSchema"
+        supported_databases:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [sqlite]
+        supported_external_agents:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [codex, workbuddy]
     FamilyCount:
       type: object
       additionalProperties: false

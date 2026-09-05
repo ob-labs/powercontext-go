@@ -296,19 +296,6 @@ jobs:
             exit 1
           fi
 
-  pi-package:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Set up project tools
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
-
-      - name: Test Pi package
-        run: make pi-test
-
   check-docs:
     runs-on: ubuntu-latest
     timeout-minutes: 15

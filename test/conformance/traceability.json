@@ -1156,7 +1156,7 @@
         {
           "kind": "go",
           "file": "artifact/skill/external_test.go",
-          "test": "TestAgentProviderDiscoversCodexAndClaudeCodeTargets"
+          "test": "TestAgentProviderDiscoversCodexAndWorkBuddyTargets"
         }
       ]
     },
@@ -1867,7 +1867,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestProcessConfigValidatesOceanBaseURLWithoutLeakingPassword"
+          "test": "TestProcessConfigRejectsUnsupportedDatabasesBeforeProfileValidation"
         }
       ]
     },
@@ -1904,7 +1904,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestProcessConfigValidatesOceanBaseURLWithoutLeakingPassword"
+          "test": "TestProcessConfigRejectsUnsupportedDatabasesBeforeProfileValidation"
         }
       ]
     },
@@ -4189,7 +4189,7 @@
         {
           "kind": "go",
           "file": "internal/cli/artifact_commands_test.go",
-          "test": "TestClaudeCodeProjectionUsesSharedAgentProjection"
+          "test": "TestWorkBuddyProjectionUsesSharedAgentProjection"
         }
       ]
     },
@@ -6879,7 +6879,7 @@
         {
           "kind": "go",
           "file": "internal/cli/python_contract_test.go",
-          "test": "TestCLISkillExportUsesConfiguredAuthentication"
+          "test": "TestCLISkillExportSupportsProductAgentsWithConfiguredAuthentication"
         }
       ]
     },
@@ -7223,8 +7223,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestSetupDSHRejectsMissingBundleBeforeCommand"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -7287,8 +7287,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestDoctorDSHRequiresPluginID"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -7303,8 +7303,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestDoctorDSHReportsInstalledPlugin"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8104,7 +8104,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupHermesStagesDoctorAndAtomicallyReplacesPlugin"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8120,7 +8120,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupHermesReportsMissingCLIWithoutMutation"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8466,7 +8466,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8498,7 +8498,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8514,7 +8514,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8530,7 +8530,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8551,7 +8551,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8663,7 +8663,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestDoctorOpenClawRequiresActiveSelectedMemoryPlugin"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8679,7 +8679,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8695,7 +8695,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8743,7 +8743,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8807,7 +8807,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenCodeRefusesUnownedSkillBeforePluginMutation"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8823,7 +8823,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenCodeRejectsUnsupportedVersionAndUnbuiltBundle"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8839,7 +8839,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupOpenCodeRejectsUnsupportedVersionAndUnbuiltBundle"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8887,7 +8887,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupPiInstallsBeforeRemovingSupersededPackages"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8903,7 +8903,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupPiRefreshesRemoteCheckoutAndRemovesOnlySupersededUserPackage"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8919,7 +8919,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupPiInstallationFailurePreservesExistingPackage"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -8983,7 +8983,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestPiDiagnosticsReportInstalledPackageAsJSON"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -9031,7 +9031,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestLoadConfigSelectsOceanBase"
+          "test": "TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         }
       ]
     },
@@ -9047,7 +9047,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestLoadConfigSelectsEmbeddedSeekDB"
+          "test": "TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         }
       ]
     },
@@ -9063,7 +9063,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestLoadConfigDefaultsBlankAndAcceptsExplicitSeekDBPath"
+          "test": "TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         }
       ]
     },
@@ -9079,7 +9079,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestLoadConfigDefaultsBlankAndAcceptsExplicitSeekDBPath"
+          "test": "TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         }
       ]
     },
@@ -9095,7 +9095,7 @@
         {
           "kind": "go",
           "file": "server/config_test.go",
-          "test": "TestLoadConfigRejectsCustomSeekDBDatabase"
+          "test": "TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         }
       ]
     },
@@ -10062,7 +10062,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10078,7 +10078,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupClaudeCodeRollsBackNewObjectsAfterVerificationFailure"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10094,7 +10094,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestClaudeCodeFailureRestoresPreexistingDisabledSettings"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10110,7 +10110,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestClaudeCodeFailureRestoresPreexistingDisabledSettings"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10126,7 +10126,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestClaudeCodeRejectsConflictingMarketplaceBeforeMutation"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10174,7 +10174,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10190,7 +10190,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10366,7 +10366,7 @@
         {
           "kind": "go",
           "file": "internal/cli/integration_hosts_test.go",
-          "test": "TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10381,8 +10381,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestSetupDSHLocalCheckoutAndVerifiesPlugin"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10397,8 +10397,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestSetupDSHReportsMissingCLI"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10413,8 +10413,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestDoctorDSHReportsMissingCLI"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     },
@@ -10429,8 +10429,8 @@
       "evidence": [
         {
           "kind": "go",
-          "file": "internal/cli/system_contract_test.go",
-          "test": "TestDoctorDSHRequiresInstalledPlugin"
+          "file": "internal/cli/integration_hosts_test.go",
+          "test": "TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         }
       ]
     }

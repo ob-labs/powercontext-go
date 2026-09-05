@@ -46,11 +46,20 @@ type AgentKind string
 
 const (
 	CodexAgent      AgentKind = "codex"
+	WorkBuddyAgent  AgentKind = "workbuddy"
 	ClaudeCodeAgent AgentKind = "claude_code"
 )
 
 func validAgentKind(value string) bool {
-	return value == string(CodexAgent) || value == string(ClaudeCodeAgent)
+	return value == string(CodexAgent) || value == string(WorkBuddyAgent)
+}
+
+// UnsupportedAgentKindError reports an Agent Skill kind outside the supported
+// Codex and WorkBuddy product boundary without rendering the configured value.
+type UnsupportedAgentKindError struct{}
+
+func (*UnsupportedAgentKindError) Error() string {
+	return "Agent Skill kind is unsupported; only Codex and WorkBuddy are supported"
 }
 
 type ResolutionStatus string
@@ -114,10 +123,10 @@ func NewRegistration(
 		return Registration{}, fmt.Errorf("invalid external Skill installation scope %q", installationScope)
 	}
 	if !validAgentKind(provider) {
-		return Registration{}, fmt.Errorf("invalid external Skill provider %q", provider)
+		return Registration{}, &UnsupportedAgentKindError{}
 	}
 	if !validAgentKind(agentKind) {
-		return Registration{}, fmt.Errorf("invalid external Skill agent kind %q", agentKind)
+		return Registration{}, &UnsupportedAgentKindError{}
 	}
 	if !lowerHexFingerprint.MatchString(fingerprint) {
 		return Registration{}, fmt.Errorf("external Skill fingerprint must be 64 lowercase hexadecimal characters")

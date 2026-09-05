@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        database: [sqlite, oceanbase]
+        database: [sqlite]
     name: Acceptance (${{ matrix.database }})
     steps:
       - name: Check out

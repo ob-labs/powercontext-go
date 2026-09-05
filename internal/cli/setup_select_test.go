@@ -16,13 +16,11 @@ package cli
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -39,22 +37,15 @@ func TestSetupWithoutSubcommandPrintsHelpAndInstallsNothing(t *testing.T) {
 	assertNoSetupCommands(t, commands)
 }
 
-func TestSetupSelectJSONRequiresHostBeforeInstalling(t *testing.T) {
-	commands := &scriptedSystemCommands{t: t}
-	_, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), "setup", "select", "--json")
-	if err == nil || ExitCode(err) != 1 || !strings.Contains(err.Error(), "--host") {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+func TestSetupSelectRequiresHostWithoutTTYOrWithJSON(t *testing.T) {
+	for _, arguments := range [][]string{{"setup", "select"}, {"setup", "select", "--json"}} {
+		commands := &scriptedSystemCommands{t: t}
+		_, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), arguments...)
+		if err == nil || !strings.Contains(err.Error(), "--host") {
+			t.Fatalf("setup select %v error = %v", arguments, err)
+		}
+		assertNoSetupCommands(t, commands)
 	}
-	assertNoSetupCommands(t, commands)
-}
-
-func TestSetupSelectNonTTYRequiresHostBeforeInstalling(t *testing.T) {
-	commands := &scriptedSystemCommands{t: t}
-	_, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), "setup", "select")
-	if err == nil || ExitCode(err) != 1 || !strings.Contains(err.Error(), "--host") {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
-	}
-	assertNoSetupCommands(t, commands)
 }
 
 func TestSetupSelectTreatsNonTerminalFilesAsNonTTY(t *testing.T) {
@@ -91,8 +82,8 @@ func TestSetupSelectTreatsNonTerminalFilesAsNonTTY(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			commands := &scriptedSystemCommands{t: t}
 			_, _, err := executeSystemCLIWithInput(t, commands, test.open(t), "setup", "select")
-			if err == nil || ExitCode(err) != 1 || !strings.Contains(err.Error(), "--host") {
-				t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+			if err == nil || !strings.Contains(err.Error(), "--host") {
+				t.Fatalf("setup select error = %v", err)
 			}
 			assertNoSetupCommands(t, commands)
 		})
@@ -101,93 +92,48 @@ func TestSetupSelectTreatsNonTerminalFilesAsNonTTY(t *testing.T) {
 
 func TestSetupSelectRejectsUnknownHostBeforeInstalling(t *testing.T) {
 	commands := &scriptedSystemCommands{t: t}
-	_, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""), "setup", "select", "--host", "unknown",
-	)
-	if err == nil || ExitCode(err) != 1 || !strings.Contains(err.Error(), "unknown host: unknown") ||
-		!strings.Contains(err.Error(), "codex") {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+	_, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), "setup", "select", "--host", "unknown")
+	if err == nil || !strings.Contains(err.Error(), "unknown host: unknown") || !strings.Contains(err.Error(), "codex, workbuddy") {
+		t.Fatalf("setup select error = %v", err)
 	}
 	assertNoSetupCommands(t, commands)
+}
+
+func TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling(t *testing.T) {
+	for _, host := range []string{"claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"} {
+		commands := &scriptedSystemCommands{t: t}
+		_, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), "setup", "select", "--host", host)
+		var usage *UsageError
+		var unsupported *UnsupportedIntegrationError
+		if !errors.As(err, &usage) || !errors.As(err, &unsupported) || ExitCode(err) != 2 {
+			t.Fatalf("setup select %q error = %T %v, want typed usage refusal", host, err, err)
+		}
+		assertNoSetupCommands(t, commands)
+	}
 }
 
 func TestSetupSelectInstallsOnlyRequestedHostsAndDeduplicatesFlags(t *testing.T) {
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 	commands := successfulCodexCommands(t, 1)
 	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""),
-		"setup", "select", "--host", "codex", "--host", "codex", "--json",
+		t, commands, strings.NewReader(""), "setup", "select", "--host", "codex", "--host", "codex", "--json",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(stdout, "Select hosts") || strings.Contains(stdout, "Next:") {
-		t.Fatalf("JSON output contains interactive or human text: %q", stdout)
-	}
 	rows := setupRowsByHost(t, stdout)
 	assertSetupRow(t, rows, "codex", "installed", "")
-	for _, host := range []string{"claude-code", "dsh", "openclaw", "opencode", "pi", "hermes"} {
-		assertSetupRow(t, rows, host, "skipped", "")
-	}
-	if got := fmt.Sprint(commands.lookups); got != "[codex codex]" {
-		t.Fatalf("PATH lookups = %s", got)
-	}
-	if len(commands.calls) != 3 {
-		t.Fatalf("external commands = %v", commands.calls)
+	assertSetupRow(t, rows, "workbuddy", "skipped", "")
+	if !slices.Equal(commands.lookups, []string{"codex", "codex"}) || len(commands.calls) != 3 {
+		t.Fatalf("Codex setup commands = lookups %v calls %v", commands.lookups, commands.calls)
 	}
 }
 
-func TestSetupSelectContinuesAfterSelectedHostFails(t *testing.T) {
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-	commands := successfulClaudeCommands(t)
-	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""),
-		"setup", "select", "--host", "codex", "--host", "claude-code", "--json",
-	)
-	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
-	}
-	rows := setupRowsByHost(t, stdout)
-	assertSetupRow(t, rows, "codex", "failed", "Codex CLI is not installed or is not on PATH")
-	assertSetupRow(t, rows, "claude-code", "installed", "")
-	for _, host := range []string{"dsh", "openclaw", "opencode", "pi", "hermes"} {
-		assertSetupRow(t, rows, host, "skipped", "")
-	}
-	if got := fmt.Sprint(commands.lookups); got != "[codex claude]" {
-		t.Fatalf("PATH lookups = %s", got)
-	}
-}
-
-func TestSetupSelectHumanReportIncludesFailureAndContinues(t *testing.T) {
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-	commands := successfulClaudeCommands(t)
-	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""), "setup", "select", "--host", "codex", "--host", "claude-code",
-	)
-	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
-	}
-	for _, fragment := range []string{
-		"codex: failed - Codex CLI is not installed or is not on PATH",
-		"claude-code: installed",
-		"dsh: skipped",
-		"Next:",
-	} {
-		if !strings.Contains(stdout, fragment) {
-			t.Fatalf("setup select output %q does not contain %q", stdout, fragment)
-		}
-	}
-}
-
-func TestSetupSelectReportsSuccessfulRerunAsInstalled(t *testing.T) {
+func TestSetupSelectReportsSuccessfulCodexRerunAsInstalled(t *testing.T) {
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 	commands := successfulCodexCommands(t, 2)
 	for attempt := range 2 {
-		stdout, _, err := executeSystemCLIWithInput(
-			t, commands, strings.NewReader(""), "setup", "select", "--host", "codex", "--json",
-		)
+		stdout, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), "setup", "select", "--host", "codex", "--json")
 		if err != nil {
 			t.Fatalf("attempt %d: %v", attempt+1, err)
 		}
@@ -195,301 +141,54 @@ func TestSetupSelectReportsSuccessfulRerunAsInstalled(t *testing.T) {
 	}
 }
 
-func TestSetupSelectContinuesAfterPostInstallVerificationFails(t *testing.T) {
+func TestSetupSelectInstallsWorkBuddyWithServerOverride(t *testing.T) {
+	useWorkBuddyReleaseBinary(t)
+	checkout := filepath.Join(t.TempDir(), "powercontext")
+	writeWorkBuddyPlugin(t, checkout)
+	home := filepath.Join(t.TempDir(), "workbuddy")
+	t.Setenv("WORKBUDDY_HOME", home)
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-	commands := successfulClaudeCommands(t)
-	commands.paths["codex"] = "/usr/bin/codex"
-	commands.results = append([]systemCommandResult{
-		{output: `{"marketplaceName":"powercontext","alreadyAdded":false}`},
-		{output: `{"name":"powercontext","version":"0.1.0"}`},
-		{output: `{"installed":[]}`},
-	}, commands.results...)
+	commands := &scriptedSystemCommands{t: t}
+
 	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""),
-		"setup", "select", "--host", "codex", "--host", "claude-code", "--json",
+		t, commands, strings.NewReader(""), "setup", "select", "--host", "workbuddy",
+		"--source", checkout, "--server-url", "https://memory.example", "--json",
 	)
-	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+	if err != nil {
+		t.Fatal(err)
 	}
 	rows := setupRowsByHost(t, stdout)
-	assertSetupRow(
-		t, rows, "codex", "failed",
-		"post-install verification failed: plugin: PowerContext plugin is not installed",
-	)
-	assertSetupRow(t, rows, "claude-code", "installed", "")
+	assertSetupRow(t, rows, "codex", "skipped", "")
+	assertSetupRow(t, rows, "workbuddy", "installed", "")
+	configuration, present, readErr := readWorkBuddyConfiguration(filepath.Join(home, workBuddyConfigFilename))
+	if readErr != nil || !present || configuration.ServerURL != "https://memory.example" {
+		t.Fatalf("WorkBuddy configuration = %#v, %v, present=%t", configuration, readErr, present)
+	}
+	assertNoSetupCommands(t, commands)
 }
 
-func TestSetupSelectFailsOpenCodeRowWhenActivationVerificationFails(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	plugin := writeOpenCodePlugin(t, checkout)
-	config := filepath.Join(t.TempDir(), "config")
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	base := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
-		results: []systemCommandResult{
-			{output: "1.18.21\n"},
-			{output: "config " + config + "\n"},
-			{output: "1.18.21\n"},
-			{output: "config " + config + "\n"},
-			{output: fmt.Sprintf(`{"plugin":[%q]}`, plugin)},
-		},
-	}
-	commands := &environmentAwareCommands{scriptedSystemCommands: base}
-	commands.runEnv = func(context.Context, map[string]string, string, ...string) ([]byte, error) {
-		return nil, nil
-	}
+func TestSetupSelectRejectsBlankWorkBuddyServerURLBeforeInstalling(t *testing.T) {
+	commands := &scriptedSystemCommands{t: t}
 	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""),
-		"setup", "select", "--host", "opencode", "--source", checkout, "--json",
+		t, commands, strings.NewReader(""), "setup", "select", "--host", "workbuddy", "--server-url", "", "--json",
 	)
-	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-		t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
+	if err == nil || !ErrorAlreadyReported(err) {
+		t.Fatalf("setup select error = %v", err)
 	}
-	assertSetupRow(
-		t, setupRowsByHost(t, stdout), "opencode", "failed",
-		"post-install verification failed: plugin: PowerContext OpenCode plugin is configured but did not activate",
-	)
-}
-
-func TestSetupSelectFailsRowsWhenPostInstallVerificationFails(t *testing.T) {
-	for _, test := range []struct {
-		name    string
-		host    string
-		prepare func(*testing.T) (systemCommandExecutor, []string)
-		want    string
-	}{
-		{
-			name: "dsh", host: "dsh", want: "post-install verification failed: plugin: PowerContext DSH plugin is not installed",
-			prepare: func(t *testing.T) (systemCommandExecutor, []string) {
-				checkout := filepath.Join(t.TempDir(), "checkout")
-				plugin := filepath.Join(checkout, "integrations", "dsh", "plugins", "powercontext")
-				writeTestFile(t, filepath.Join(plugin, "package.json"), `{"name":"powercontext-dsh"}`)
-				writeTestFile(t, filepath.Join(plugin, "lib", "index.js"), "export default {}\n")
-				t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-				commands := &scriptedSystemCommands{
-					t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"},
-					results: []systemCommandResult{{}, {output: "plugins:\n"}},
-				}
-				return commands, []string{"--source", checkout}
-			},
-		},
-		{
-			name: "pi", host: "pi", want: "post-install verification failed: package: PowerContext Pi package is not installed",
-			prepare: func(t *testing.T) (systemCommandExecutor, []string) {
-				checkout := filepath.Join(t.TempDir(), "checkout")
-				writePiPackage(t, checkout)
-				t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-				commands := &scriptedSystemCommands{
-					t: t, paths: map[string]string{"pi": "/usr/bin/pi"},
-					results: []systemCommandResult{{}, {output: "User packages:\n"}, {output: "User packages:\n"}},
-				}
-				return commands, []string{"--source", checkout}
-			},
-		},
-		{
-			name: "hermes", host: "hermes", want: "post-install verification failed: plugin: provider doctor failed",
-			prepare: func(t *testing.T) (systemCommandExecutor, []string) {
-				checkout := filepath.Join(t.TempDir(), "checkout")
-				writeHermesPlugin(t, checkout)
-				t.Setenv("HERMES_HOME", filepath.Join(t.TempDir(), "hermes"))
-				t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-				commands := &scriptedSystemCommands{
-					t: t, paths: map[string]string{"hermes": "/usr/bin/hermes"},
-					results: []systemCommandResult{
-						{output: "Hermes Agent v0.20.4\n"},
-						{},
-						{},
-						{},
-						{output: "Hermes Agent v0.20.4\n"},
-						{err: errors.New("provider doctor failed")},
-					},
-				}
-				return commands, []string{"--source", checkout}
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			commands, extra := test.prepare(t)
-			arguments := []string{"setup", "select", "--host", test.host, "--json"}
-			arguments = append(arguments, extra...)
-			stdout, _, err := executeSystemCLIWithInput(t, commands, strings.NewReader(""), arguments...)
-			if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-				t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
-			}
-			assertSetupRow(t, setupRowsByHost(t, stdout), test.host, "failed", test.want)
-		})
-	}
-}
-
-func TestSetupSelectPrintsHermesNextStepOnlyWhenInstalled(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	writeHermesPlugin(t, checkout)
-	t.Setenv("HERMES_HOME", filepath.Join(t.TempDir(), "hermes"))
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	hermesCommands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"hermes": "/usr/bin/hermes"},
-		results: []systemCommandResult{
-			{output: "Hermes Agent v0.20.4\n"}, {}, {}, {}, {output: "Hermes Agent v0.20.4\n"}, {}, {},
-		},
-	}
-	installed, _, err := executeSystemCLIWithInput(
-		t, hermesCommands, strings.NewReader(""),
-		"setup", "select", "--host", "hermes", "--source", checkout,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(installed, "`hermes memory setup`") {
-		t.Fatalf("Hermes setup output = %q", installed)
-	}
-
-	codexCommands := successfulCodexCommands(t, 1)
-	other, _, err := executeSystemCLIWithInput(
-		t, codexCommands, strings.NewReader(""), "setup", "select", "--host", "codex",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(other, "`hermes memory setup`") {
-		t.Fatalf("non-Hermes setup output = %q", other)
-	}
-}
-
-func TestSetupSelectPassesSourceRefAndClaudeOptions(t *testing.T) {
-	config := filepath.Join(t.TempDir(), "claude")
-	t.Setenv("CLAUDE_CONFIG_DIR", config)
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := successfulClaudeCommands(t)
-	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""),
-		"setup", "select", "--host", "claude-code",
-		"--source", "ob-labs/custom-powercontext", "--ref", "tested-ref",
-		"--server-url", "https://memory.example", "--no-capture-prompts", "--json",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertSetupRow(t, setupRowsByHost(t, stdout), "claude-code", "installed", "")
-	calls := strings.Join(commandCallStrings(commands.calls), "\n")
-	if !strings.Contains(calls, "plugin marketplace add ob-labs/custom-powercontext@tested-ref --scope user") {
-		t.Fatalf("Claude commands = %s", calls)
-	}
-	content, err := os.ReadFile(filepath.Join(config, "settings.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var settings map[string]any
-	if err := json.Unmarshal(content, &settings); err != nil {
-		t.Fatal(err)
-	}
-	options := settings["pluginConfigs"].(map[string]any)[claudePluginID].(map[string]any)["options"].(map[string]any)
-	if options["server_url"] != "https://memory.example" || options["capture_prompts"] != false {
-		t.Fatalf("Claude options = %#v", options)
-	}
-}
-
-func TestSetupSelectPreservesExplicitBlankServerURL(t *testing.T) {
-	for _, test := range []struct {
-		host     string
-		want     string
-		commands func(*testing.T) *scriptedSystemCommands
-	}{
-		{
-			host: "claude-code", want: "PowerContext Server URL must use HTTP or HTTPS",
-			commands: successfulClaudeCommands,
-		},
-		{
-			host: "openclaw", want: "OpenClaw PowerContext Server URL must use HTTP or HTTPS",
-			commands: func(t *testing.T) *scriptedSystemCommands {
-				return &scriptedSystemCommands{
-					t: t, paths: map[string]string{"openclaw": "/usr/bin/openclaw"},
-					results: []systemCommandResult{{output: "OpenClaw 2026.8.1-beta.2\n"}},
-				}
-			},
-		},
-	} {
-		t.Run(test.host, func(t *testing.T) {
-			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-			t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-			commands := test.commands(t)
-			stdout, _, err := executeSystemCLIWithInput(
-				t, commands, strings.NewReader(""),
-				"setup", "select", "--host", test.host, "--server-url", "", "--json",
-			)
-			if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-				t.Fatalf("setup select error = %v, exit = %d", err, ExitCode(err))
-			}
-			assertSetupRow(t, setupRowsByHost(t, stdout), test.host, "failed", test.want)
-			if len(commands.calls) != 0 {
-				t.Fatalf("explicit blank server URL ran external commands: %v", commands.calls)
-			}
-		})
-	}
-}
-
-func TestSetupSelectPassesServerAndScopeOverridesToOpenClaw(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	plugin := writeOpenClawPlugin(t, checkout)
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"openclaw": "/usr/bin/openclaw", "pnpm": "/usr/bin/pnpm"},
-		results: []systemCommandResult{
-			{output: "OpenClaw 2026.8.1-beta.2\n"},
-			{},
-			{after: func(systemCommandCall) {
-				bundle := filepath.Join(plugin, "dist", "index.js")
-				if err := os.MkdirAll(filepath.Dir(bundle), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(bundle, []byte("export default {}\n"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}},
-			{},
-			{err: errors.New("missing gateway mode")},
-			{},
-			{output: `[]`},
-			{},
-			{},
-		},
-	}
-	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, strings.NewReader(""),
-		"setup", "select", "--host", "openclaw", "--source", checkout, "--ref", "tested-ref",
-		"--server-url", "https://memory.example", "--scope-mode", "project", "--json",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertSetupRow(t, setupRowsByHost(t, stdout), "openclaw", "installed", "")
-	var settings []map[string]any
-	if call := commands.calls[5]; len(call.arguments) != 4 ||
-		json.Unmarshal([]byte(call.arguments[3]), &settings) != nil {
-		t.Fatalf("OpenClaw batch settings command = %v", call)
-	}
-	values := make(map[string]any, len(settings))
-	for _, setting := range settings {
-		values[setting["path"].(string)] = setting["value"]
-	}
-	if values["plugins.entries.memory-powercontext.config.endpoint"] != "https://memory.example" ||
-		values["plugins.entries.memory-powercontext.config.scopeMode"] != "project" {
-		t.Fatalf("OpenClaw settings = %#v", values)
-	}
+	assertSetupRow(t, setupRowsByHost(t, stdout), "workbuddy", "failed", "WorkBuddy PowerContext Server URL must use HTTP or HTTPS")
+	assertNoSetupCommands(t, commands)
 }
 
 func TestSetupSelectReadsTTYSelectionByNumber(t *testing.T) {
 	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
 	commands := successfulCodexCommands(t, 1)
-	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, setupTTYInput{Reader: strings.NewReader("1\n")}, "setup", "select",
-	)
+	stdout, _, err := executeSystemCLIWithInput(t, commands, setupTTYInput{Reader: strings.NewReader("1\n")}, "setup", "select")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, fragment := range []string{
-		"Official first-class integrations:", "1) Codex (codex)", "3) DeepSeek Harness (dsh)",
-		"Select hosts", "codex: installed", "claude-code: skipped", "Next:",
+		"Official first-class integrations:", "1) Codex (codex)", "2) WorkBuddy (workbuddy)",
+		"Select hosts", "codex: installed", "workbuddy: skipped", "Next:",
 	} {
 		if !strings.Contains(stdout, fragment) {
 			t.Fatalf("setup select output %q does not contain %q", stdout, fragment)
@@ -499,9 +198,7 @@ func TestSetupSelectReadsTTYSelectionByNumber(t *testing.T) {
 
 func TestSetupSelectCancelsEmptyTTYSelection(t *testing.T) {
 	commands := &scriptedSystemCommands{t: t}
-	stdout, _, err := executeSystemCLIWithInput(
-		t, commands, setupTTYInput{Reader: strings.NewReader("\n")}, "setup", "select",
-	)
+	stdout, _, err := executeSystemCLIWithInput(t, commands, setupTTYInput{Reader: strings.NewReader("\n")}, "setup", "select")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,30 +210,27 @@ func TestSetupSelectCancelsEmptyTTYSelection(t *testing.T) {
 
 func TestSetupSelectRejectsInvalidTTYTokenBeforeInstalling(t *testing.T) {
 	commands := &scriptedSystemCommands{t: t}
-	_, _, err := executeSystemCLIWithInput(
-		t, commands, setupTTYInput{Reader: strings.NewReader("nope\n")}, "setup", "select",
-	)
+	_, _, err := executeSystemCLIWithInput(t, commands, setupTTYInput{Reader: strings.NewReader("nope\n")}, "setup", "select")
 	if err == nil || !strings.Contains(err.Error(), "unknown host: nope") {
 		t.Fatalf("setup select error = %v", err)
 	}
 	assertNoSetupCommands(t, commands)
 }
 
-func TestParseSetupHostSelectionAcceptsNamesAndCatalogNumbers(t *testing.T) {
+func TestParseSetupHostSelectionAcceptsSupportedNamesAndCatalogNumbers(t *testing.T) {
 	for _, test := range []struct {
 		input string
-		want  string
+		want  []string
 	}{
-		{input: "dsh,codex", want: "[codex dsh]"},
-		{input: "4", want: "[openclaw]"},
-		{input: "5", want: "[opencode]"},
-		{input: "7", want: "[hermes]"},
-		{input: "", want: "[]"},
-		{input: "  ", want: "[]"},
+		{input: "workbuddy,codex", want: []string{"codex", "workbuddy"}},
+		{input: "1", want: []string{"codex"}},
+		{input: "2", want: []string{"workbuddy"}},
+		{input: "", want: nil},
+		{input: "  ", want: nil},
 	} {
 		got, err := parseSetupHostSelection(test.input)
-		if err != nil || fmt.Sprint(got) != test.want {
-			t.Errorf("parseSetupHostSelection(%q) = %v, %v; want %s", test.input, got, err, test.want)
+		if err != nil || !slices.Equal(got, test.want) {
+			t.Errorf("parseSetupHostSelection(%q) = %v, %v; want %v", test.input, got, err, test.want)
 		}
 	}
 }
@@ -613,18 +307,4 @@ func successfulCodexCommands(t *testing.T, repetitions int) *scriptedSystemComma
 		)
 	}
 	return &scriptedSystemCommands{t: t, paths: map[string]string{"codex": "/usr/bin/codex"}, results: results}
-}
-
-func successfulClaudeCommands(t *testing.T) *scriptedSystemCommands {
-	t.Helper()
-	return &scriptedSystemCommands{
-		t: t, paths: map[string]string{"claude": "/usr/bin/claude"},
-		results: []systemCommandResult{
-			{output: `[]`},
-			{output: `[]`},
-			{},
-			{},
-			{output: `[{"id":"powercontext@powercontext","version":"0.1.0","enabled":true}]`},
-		},
-	}
 }

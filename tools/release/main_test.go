@@ -462,25 +462,16 @@ func TestCopyTreeRejectsAbsoluteSymlink(t *testing.T) {
 	}
 }
 
-func TestStageIntegrationsIncludesEveryRuntimeAdapterAndExcludesWorkspaceState(t *testing.T) {
+func TestStageIntegrationsIncludesSupportedAgentsAndExcludesWorkspaceState(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	root := t.TempDir()
 	if err := stageIntegrations(repository, root); err != nil {
 		t.Fatal(err)
 	}
-	if info, err := os.Stat(filepath.Join(root, ".claude-plugin", "marketplace.json")); err != nil || !info.Mode().IsRegular() {
-		t.Errorf("Claude Code marketplace manifest was not staged: %v", err)
-	}
+	assertSupportedIntegrationRoots(t, root)
 	for _, required := range []string{
-		"bub/src/powercontext_bub/client.py",
-		"claude-code/plugins/powercontext/.claude-plugin/plugin.json",
 		"codex/plugins/powercontext/.codex-plugin/plugin.json",
-		"dsh/plugins/powercontext/lib/index.js",
-		"hermes/plugins/powercontext/plugin.yaml",
-		"langgraph/src/powercontext_langgraph/client.py",
-		"openclaw/plugins/memory-powercontext/dist/index.js",
-		"opencode/plugins/powercontext/lib/index.js",
-		"pi/plugins/powercontext/extensions/powercontext.ts",
+		"workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json",
 	} {
 		path := filepath.Join(root, "integrations", filepath.FromSlash(required))
 		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
@@ -511,16 +502,7 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 	releaseRoot := unpackReleaseArchive(t, archive)
 
 	for _, required := range []string{
-		".claude-plugin/marketplace.json",
-		"integrations/bub/pyproject.toml",
-		"integrations/claude-code/plugins/powercontext/.claude-plugin/plugin.json",
 		"integrations/codex/plugins/powercontext/.codex-plugin/plugin.json",
-		"integrations/dsh/plugins/powercontext/lib/index.js",
-		"integrations/hermes/plugins/powercontext/plugin.yaml",
-		"integrations/langgraph/pyproject.toml",
-		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
-		"integrations/opencode/plugins/powercontext/lib/index.js",
-		"integrations/pi/plugins/powercontext/extensions/powercontext.ts",
 		"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json",
 		"integrations/workbuddy/plugins/powercontext/powercontext.json.example",
 	} {

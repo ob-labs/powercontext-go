@@ -23,16 +23,9 @@ powercontext-go/
 ├── evaluation/                deployment-neutral Codex/SQLite evaluation control plane
 ├── inference/                 provider-neutral generation and embeddings
 ├── integrations/
-│   ├── bub/                   retained Python host adapter
-│   ├── claude-code/           retained Python Claude Code plugin
-│   ├── codex/                 retained Python Codex plugin
-│   ├── dsh/                   retained TypeScript DSH plugin
-│   ├── hermes/                retained Python Hermes provider
-│   ├── langgraph/             retained Python LangGraph package
-│   ├── openclaw/              retained TypeScript OpenClaw memory plugin
-│   ├── opencode/              retained TypeScript OpenCode plugin
-│   ├── pi/                    retained TypeScript Pi extension
-│   └── workbuddy/             retained Python WorkBuddy plugin
+│   ├── codex/                 supported Codex plugin
+│   ├── workbuddy/             supported WorkBuddy plugin
+│   └── other roots            historical adapter source, not shipped or active in CI
 ├── internal/
 │   ├── benchmark/             bounded benchmark adapters and fixtures
 │   ├── cli/                   Cobra command implementation
@@ -48,9 +41,9 @@ powercontext-go/
 │   ├── runtime/               lifecycle, Scope gates, application orchestration
 │   ├── scheduler/             interval scheduler and bounded APScheduler Pickle
 │   ├── sqlstore/              relational stores, projections, and native DB adapters
-│   │   ├── oceanbase/         OceanBase FTS/vector indexes
+│   │   ├── oceanbase/         historical unsupported backend source
 │   │   ├── schema/            embedded Python-compatible relational DDL
-│   │   ├── seekdb/            embedded seekDB native loader
+│   │   ├── seekdb/            historical unsupported backend source
 │   │   └── sqlitevec/         embedded sqlite-vec extension
 │   ├── stats/                 statistics domain assembly
 │   ├── webui/                 embedded Dashboard templates and assets
@@ -75,15 +68,15 @@ catch-all infrastructure package.
 
 The Go Server, SDK, CLI, OpenAPI contract, and SQLite path are this
 repository's primary product surface. `evaluation/` and `integrations/` remain
-maintained, licensed, and tested auxiliary monorepo assets: the former is a
+maintained and licensed auxiliary monorepo assets: the former is a
 deployment-neutral Codex/SQLite evaluation control plane, while the latter
-contains host-native assets that call the Go Server over HTTP or MCP. They are
-not Go binary runtime dependencies or primary implementation languages.
+contains supported Codex/WorkBuddy assets plus historical source. Only Codex
+and WorkBuddy are active, packaged host integrations. These assets are not Go
+binary runtime dependencies or primary implementation languages.
 
-Before WP6 acceptance, Codex, WorkBuddy, and SQLite are the only host/database
-scope. The other retained adapters remain P3 assets with their own executable
-CI job; they are not removed or treated as WP6 evidence. seekDB and OceanBase
-remain the final P4 backend-alignment scope.
+Codex, WorkBuddy, and SQLite are the only supported host/database scope. Other
+adapter and backend source is retained only for history and comparison; it has
+no active CI, release, installation, or runtime support contract.
 
 ## Dependency direction
 
@@ -133,9 +126,8 @@ CAS, associated cursor CAS, and projection updates commit together. Stores
 accept the narrow `DBTX` surface required by the use case; there is no generic
 repository abstraction.
 
-SQLite and embedded seekDB retain the Python `pc_*` schema and APScheduler
-sidecar format. OceanBase uses explicit capability probing and backend-specific
-FTS/vector implementations while preserving the same domain behavior.
+SQLite retains the Python `pc_*` schema and APScheduler sidecar format. Legacy
+seekDB and OceanBase code is outside the supported runtime and release matrix.
 
 ## File organization
 
@@ -176,8 +168,8 @@ artificial `common`, `models`, `services`, or `repositories` packages.
 - `tools/locomo` runs or resumes the real LoCoMo pipeline while benchmark
   schemas, metrics, prompts, and the frozen dataset remain under
   `internal/benchmark/locomo`.
-- Generated-contract checks fail on OpenAPI, MCP schema, client invocation, DSH
-  operation, or traceability drift.
+- Generated-contract checks fail on OpenAPI, MCP schema, client invocation, or
+  traceability drift.
 - Repository conformance checks reject accidental public packages and imports
   that reverse the documented domain, runtime, persistence, endpoint, or
   transport dependency direction.
@@ -187,6 +179,6 @@ artificial `common`, `models`, `services`, or `repositories` packages.
 The [compatibility evidence matrix](compatibility-evidence.md) maps each
 independent compatibility surface to its source of truth and required gate.
 
-The [backend release audit ledger](backend-audit-ledger.md) classifies the
-pinned v0.1.0 persistence cases into current SQLite, shared, seekDB-specific,
-and OceanBase-specific evidence before the two final backend phases.
+The [backend release audit ledger](backend-audit-ledger.md) remains historical
+analysis of the pinned v0.1.0 persistence cases; only its SQLite evidence is in
+the supported product matrix.

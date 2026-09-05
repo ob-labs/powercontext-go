@@ -307,10 +307,10 @@ func validateAgentProjection(content Content, destination string, agentKind Agen
 	if filepath.Base(destination) != content.Name() {
 		return fmt.Errorf("%s Skill directory name must match the managed Skill name", agentLabel(agentKind))
 	}
-	invalidCodexDescription := agentKind == CodexAgent && strings.ContainsAny(content.Description(), "<>")
-	if utf8.RuneCountInString(content.Description()) > maximumDescriptionLength || invalidCodexDescription {
+	invalidStandardDescription := standardSkillAgent(agentKind) && strings.ContainsAny(content.Description(), "<>")
+	if utf8.RuneCountInString(content.Description()) > maximumDescriptionLength || invalidStandardDescription {
 		suffix := ""
-		if agentKind == CodexAgent {
+		if standardSkillAgent(agentKind) {
 			suffix = " and contain no angle brackets"
 		}
 		return fmt.Errorf(
@@ -322,10 +322,18 @@ func validateAgentProjection(content Content, destination string, agentKind Agen
 }
 
 func agentLabel(agentKind AgentKind) string {
-	if agentKind == CodexAgent {
+	switch agentKind {
+	case CodexAgent:
 		return "Codex"
+	case WorkBuddyAgent:
+		return "WorkBuddy"
+	default:
+		return "unsupported Agent"
 	}
-	return "Claude Code"
+}
+
+func standardSkillAgent(agentKind AgentKind) bool {
+	return agentKind == CodexAgent || agentKind == WorkBuddyAgent
 }
 
 func projectionMarkdown(ref artifact.Ref, content Content) (string, error) {

@@ -467,9 +467,6 @@ func stageIntegrations(repository, root string) error {
 	for _, path := range files {
 		reviewedSet[path] = struct{}{}
 	}
-	if _, ok := reviewedSet[".claude-plugin/marketplace.json"]; !ok {
-		return errors.New("Claude Code marketplace manifest is absent from the release integration file manifest")
-	}
 	for _, integration := range integrations {
 		for _, path := range append(slices.Clone(integration.RequiredPaths), integration.LockPaths...) {
 			if _, ok := reviewedSet[path]; !ok {

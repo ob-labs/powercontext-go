@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -109,7 +110,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"name: Main", "go-compat:", "quality:", "run: make check", "run: make contract-test",
 			"license-dependencies:", "run: make license-dependencies",
 			"dependency-security:", "run: make dependency-security",
-			"tests:", "run: make unit-test", "run: make e2e-test", "Write bounded process diagnostics", "Upload process diagnostics", "pi-package:", "check-docs:",
+			"tests:", "run: make unit-test", "run: make e2e-test", "Write bounded process diagnostics", "Upload process diagnostics", "check-docs:",
 			"migration-assurance:", "uses: ./.github/workflows/migration-gates.yml",
 		},
 		"migration-gates.yml": {
@@ -117,8 +118,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"docker build --pull --target powercontext -t powercontext:ci .",
 			"FuzzRestrictedPickleJobDecoder", "Frozen Python Oracle and differential fixtures",
 			"Run Python to Go to Python compatibility tests", "Run the frozen Python versus Go HTTP differential",
-			"OceanBase live compatibility", "Standard (", "Full build tags (",
-			"Pre-WP6 host adapters", "Post-WP6 retained host adapters", "Codex/SQLite evaluation control plane",
+			"Standard (", "Full build tags (", "Pre-WP6 host adapters", "Codex/SQLite evaluation control plane",
 		},
 		"codeql.yml": {
 			"name: CodeQL", "pull_request:", "push:", "branches: [main]", "schedule:", "workflow_dispatch:",
@@ -137,7 +137,7 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"git check-attr eol", "git diff --exit-code",
 		},
 		"e2e-harness.yml": {
-			"name: E2E harness", "validate:", "acceptance:", "database: [sqlite, oceanbase]",
+			"name: E2E harness", "validate:", "acceptance:", "database: [sqlite]",
 			"make harness-compose-acceptance", "Scan acceptance evidence",
 			"Upload sanitized acceptance diagnostics", "Enforce acceptance evidence policy",
 			"scenario_outcome=", "--network none",
@@ -171,6 +171,28 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 	}
 	if strings.Contains(string(e2eHarness), "continue-on-error:") {
 		t.Error("e2e-harness.yml must not suppress acceptance or evidence failures")
+	}
+}
+
+func TestActiveWorkflowsExcludeUnsupportedProductMatrix(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	tests := map[string][]string{
+		"master.yml":           {"pi-package:", "make pi-test"},
+		"migration-gates.yml":  {"oceanbase-live:", "retained-host-adapters:", "make test-oceanbase-live"},
+		"e2e-harness.yml":      {"oceanbase"},
+		"build-artifacts.yml":  {"integrations/dsh", "pnpm/action-setup@", "actions/setup-node@"},
+		"windows-contract.yml": {"seekdb", "integrations/dsh", "integrations/opencode", "integrations/pi"},
+	}
+	for workflow, forbidden := range tests {
+		payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", workflow))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range forbidden {
+			if strings.Contains(strings.ToLower(string(payload)), strings.ToLower(value)) {
+				t.Errorf("%s still contains unsupported product evidence %q", workflow, value)
+			}
+		}
 	}
 }
 
@@ -1167,190 +1189,37 @@ func TestPreWP6HostAdapterWorkflowContract(t *testing.T) {
 	}
 }
 
-func TestRetainedHostAdapterWorkflowContract(t *testing.T) {
+func TestRetainedHostAdapterWorkflowIsNotActive(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var workflow struct {
-		Jobs map[string]struct {
-			Name  string `yaml:"name"`
-			Steps []struct {
-				ID   string            `yaml:"id"`
-				Name string            `yaml:"name"`
-				If   string            `yaml:"if"`
-				Uses string            `yaml:"uses"`
-				With map[string]string `yaml:"with"`
-				Env  map[string]string `yaml:"env"`
-				Run  string            `yaml:"run"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
+		Jobs map[string]any `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(payload, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	job, ok := workflow.Jobs["retained-host-adapters"]
-	if !ok {
-		t.Fatal("migration-gates.yml has no retained-host-adapters job")
-	}
-	if job.Name != "Post-WP6 retained host adapters" {
-		t.Fatalf("retained-host-adapters name = %q, want Post-WP6 retained host adapters", job.Name)
-	}
-	steps := map[string]struct {
-		Name string
-		If   string
-		Uses string
-		With map[string]string
-		Env  map[string]string
-		Run  string
-	}{}
-	for _, step := range job.Steps {
-		if step.ID != "" {
-			steps[step.ID] = struct {
-				Name string
-				If   string
-				Uses string
-				With map[string]string
-				Env  map[string]string
-				Run  string
-			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
-		}
-	}
-	python, ok := steps["python_adapters"]
-	if !ok {
-		t.Fatal("retained-host-adapters has no python_adapters step")
-	}
-	for _, required := range []string{"integrations/bub", "integrations/claude-code", "integrations/hermes", "integrations/langgraph"} {
-		if !strings.Contains(python.Run, required) {
-			t.Errorf("retained adapter command is missing %q: %s", required, python.Run)
-		}
-	}
-	for _, requiredID := range []string{"dsh_server", "dsh_adapter", "pi_adapter", "opencode_adapter", "openclaw_adapter"} {
-		if _, found := steps[requiredID]; !found {
-			t.Errorf("retained-host-adapters is missing step %q", requiredID)
-		}
-	}
-	summary, ok := steps["retained_adapter_diagnostics"]
-	if !ok {
-		t.Fatal("retained-host-adapters has no retained_adapter_diagnostics step")
-	}
-	if summary.If != "always()" || summary.Env["PYTHON_ADAPTERS_OUTCOME"] != "${{ steps.python_adapters.outcome }}" ||
-		summary.Env["DSH_SERVER_OUTCOME"] != "${{ steps.dsh_server.outcome }}" ||
-		summary.Env["DSH_ADAPTER_OUTCOME"] != "${{ steps.dsh_adapter.outcome }}" ||
-		summary.Env["PI_ADAPTER_OUTCOME"] != "${{ steps.pi_adapter.outcome }}" ||
-		summary.Env["OPENCODE_ADAPTER_OUTCOME"] != "${{ steps.opencode_adapter.outcome }}" ||
-		summary.Env["OPENCLAW_ADAPTER_OUTCOME"] != "${{ steps.openclaw_adapter.outcome }}" ||
-		!strings.Contains(summary.Run, "powercontext-retained-host-adapter-diagnostics") {
-		t.Errorf("retained diagnostics contract = %#v", summary)
-	}
-	for _, forbidden := range []string{"cat ", "find ", "GITHUB_TOKEN", "POWERCONTEXT_GO_BINARY", "git diff"} {
-		if strings.Contains(summary.Run, forbidden) {
-			t.Errorf("retained diagnostics expose %q: %s", forbidden, summary.Run)
-		}
-	}
-	for _, lockfile := range []string{
-		"integrations/bub/uv.lock",
-		"integrations/langgraph/uv.lock",
-		"integrations/dsh/plugins/powercontext/pnpm-lock.yaml",
-		"integrations/pi/plugins/powercontext/pnpm-lock.yaml",
-		"integrations/opencode/plugins/powercontext/pnpm-lock.yaml",
-		"integrations/openclaw/plugins/memory-powercontext/pnpm-lock.yaml",
-	} {
-		if !strings.Contains(summary.Run, lockfile) {
-			t.Errorf("retained diagnostics omit lockfile %q: %s", lockfile, summary.Run)
-		}
-	}
-	upload, ok := steps["retained_adapter_upload"]
-	if !ok {
-		t.Fatal("retained-host-adapters has no retained_adapter_upload step")
-	}
-	if upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" ||
-		upload.With["path"] != "${{ runner.temp }}/powercontext-retained-host-adapter-diagnostics/summary.txt" ||
-		upload.With["if-no-files-found"] != "error" || upload.With["retention-days"] != "14" {
-		t.Errorf("retained upload contract = %#v", upload)
+	if _, ok := workflow.Jobs["retained-host-adapters"]; ok {
+		t.Fatal("migration-gates.yml must not activate retained host adapters")
 	}
 }
 
-func TestOceanBaseFailureDiagnosticsAreBoundedAndSanitized(t *testing.T) {
+func TestOceanBaseWorkflowIsNotActive(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "migration-gates.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var workflow struct {
-		Jobs map[string]struct {
-			Steps []struct {
-				ID   string            `yaml:"id"`
-				Name string            `yaml:"name"`
-				If   string            `yaml:"if"`
-				Uses string            `yaml:"uses"`
-				With map[string]string `yaml:"with"`
-				Env  map[string]string `yaml:"env"`
-				Run  string            `yaml:"run"`
-			} `yaml:"steps"`
-		} `yaml:"jobs"`
+		Jobs map[string]any `yaml:"jobs"`
 	}
 	if err := yaml.Unmarshal(payload, &workflow); err != nil {
 		t.Fatal(err)
 	}
-	oceanBase, ok := workflow.Jobs["oceanbase-live"]
-	if !ok {
-		t.Fatal("migration-gates.yml has no oceanbase-live job")
-	}
-	var summary, upload *struct {
-		Name string
-		If   string
-		Uses string
-		With map[string]string
-		Env  map[string]string
-		Run  string
-	}
-	testStepFound := false
-	for index := range oceanBase.Steps {
-		step := oceanBase.Steps[index]
-		if step.ID == "oceanbase_tests" {
-			testStepFound = true
-		}
-		if step.Name == "Write bounded OceanBase diagnostics" {
-			summary = &struct {
-				Name string
-				If   string
-				Uses string
-				With map[string]string
-				Env  map[string]string
-				Run  string
-			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
-		}
-		if step.Name == "Upload OceanBase diagnostics" {
-			upload = &struct {
-				Name string
-				If   string
-				Uses string
-				With map[string]string
-				Env  map[string]string
-				Run  string
-			}{step.Name, step.If, step.Uses, step.With, step.Env, step.Run}
-		}
-	}
-	if !testStepFound || summary == nil || summary.If != "always()" ||
-		summary.Env["OCEANBASE_TESTS_OUTCOME"] != "${{ steps.oceanbase_tests.outcome }}" ||
-		!strings.Contains(summary.Run, "powercontext-oceanbase-diagnostics") ||
-		!strings.Contains(summary.Run, "go.mod") || !strings.Contains(summary.Run, "go.sum") ||
-		!strings.Contains(summary.Run, "ghcr.io/oceanbase/oceanbase-ce@sha256:31086a6900c21c479c2bcd942b6a28c53b17a51f4e9b9eb8eafcc596adfcd2e3") {
-		t.Fatalf("OceanBase summary step = %#v", summary)
-	}
-	for _, forbidden := range []string{"POWERCONTEXT_TEST_OCEANBASE_URL", "OB_TENANT_PASSWORD", "docker ", "cat "} {
-		if strings.Contains(summary.Run, forbidden) {
-			t.Fatalf("OceanBase summary exposes %q: %s", forbidden, summary.Run)
-		}
-	}
-	if upload == nil || upload.If != "failure()" || upload.Uses != "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" {
-		t.Fatalf("OceanBase upload step = %#v", upload)
-	}
-	if upload.With["path"] != "${{ runner.temp }}/powercontext-oceanbase-diagnostics/summary.txt" ||
-		upload.With["if-no-files-found"] != "error" || upload.With["retention-days"] != "14" {
-		t.Fatalf("OceanBase upload contract = %#v", upload.With)
+	if _, ok := workflow.Jobs["oceanbase-live"]; ok {
+		t.Fatal("migration-gates.yml must not activate OceanBase")
 	}
 }
 
@@ -1491,7 +1360,7 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-contract.yml has no windows-contract job")
 	}
-	setupIndex, apiTestIndex, seekDBTestIndex := -1, -1, -1
+	setupIndex, apiTestIndex := -1, -1
 	for index, step := range job.Steps {
 		switch step.Name {
 		case "Set up the Go environment":
@@ -1502,18 +1371,13 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'" {
 				apiTestIndex = index
 			}
-		case "Verify seekDB build selection on Windows":
-			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/release -run '^TestSeekDBBuildConstraintsSelectImplementationAndNativeSourcesTogether$'" {
-				seekDBTestIndex = index
-			}
 		}
 	}
-	if setupIndex < 0 || apiTestIndex <= setupIndex || seekDBTestIndex <= apiTestIndex {
+	if setupIndex < 0 || apiTestIndex <= setupIndex {
 		t.Fatalf(
-			"Windows targeted Go steps = setup %d, API %d, seekDB %d, want ordered setup and regression tests",
+			"Windows targeted Go steps = setup %d, API %d, want ordered setup and regression tests",
 			setupIndex,
 			apiTestIndex,
-			seekDBTestIndex,
 		)
 	}
 }
@@ -1821,7 +1685,7 @@ func TestReleaseVerificationRechecksPublishedSurfaces(t *testing.T) {
 	}
 }
 
-func TestReleaseWorkflowPackagesAndVerifiesPythonIntegrations(t *testing.T) {
+func TestReleaseWorkflowsExcludeUnsupportedConsumers(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	releasePayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
 	if err != nil {
@@ -1843,44 +1707,19 @@ func TestReleaseWorkflowPackagesAndVerifiesPythonIntegrations(t *testing.T) {
 		verificationNew string
 	}{
 		{
-			name:       "checkout-local archive input",
-			releaseOld: "${{ github.workspace }}/dist/powercontext-${{ needs.prepare.outputs.version }}-linux-amd64.tar.gz",
-			releaseNew: "${{ github.workspace }}/integrations/bub",
+			name:       "unsupported DSH build",
+			releaseOld: "      - name: Acquire verified native release assets\n",
+			releaseNew: "      - name: Build unsupported DSH adapter\n        run: pnpm --dir integrations/dsh/plugins/powercontext build\n\n      - name: Acquire verified native release assets\n",
 		},
 		{
-			name:       "skipped-success consumer execution",
-			releaseOld: "-v\n",
-			releaseNew: "-v || true\n",
-		},
-		{
-			name:       "packaged consumer step tolerates failure",
-			releaseOld: "      - name: Consume Python integrations from the packaged Standard archive\n",
-			releaseNew: "      - name: Consume Python integrations from the packaged Standard archive\n        continue-on-error: true\n",
-		},
-		{
-			name:       "packaged consumer job tolerates failure",
-			releaseOld: "  binaries:\n    name: Binary archives",
-			releaseNew: "  binaries:\n    continue-on-error: true\n    name: Binary archives",
+			name:            "unsupported archive consumer",
+			verificationOld: "      - name: Set up Buildx\n",
+			verificationNew: "      - name: Consume unsupported Python adapters\n        run: go test -tags archive_consumer ./tools/release\n\n      - name: Set up Buildx\n",
 		},
 		{
 			name:            "missing edition inventory comparison",
-			verificationOld: "cmp --silent <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json\") <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json\")\n",
-			verificationNew: "",
-		},
-		{
-			name:            "missing published asset consumer",
-			verificationOld: "      - name: Consume Python integrations from the published Standard archive\n",
-			verificationNew: "      - name: Retired published consumer\n",
-		},
-		{
-			name:            "published consumer step tolerates failure",
-			verificationOld: "      - name: Consume Python integrations from the published Standard archive\n",
-			verificationNew: "      - name: Consume Python integrations from the published Standard archive\n        continue-on-error: true\n",
-		},
-		{
-			name:            "published consumer job tolerates failure expression",
-			verificationOld: "  verify:\n    name: GitHub Release and GHCR",
-			verificationNew: "  verify:\n    continue-on-error: ${{ always() }}\n    name: GitHub Release and GHCR",
+			verificationOld: "cmp --silent <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json\") <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json\")",
+			verificationNew: "true",
 		},
 	}
 	for _, mutation := range mutations {
@@ -1888,19 +1727,13 @@ func TestReleaseWorkflowPackagesAndVerifiesPythonIntegrations(t *testing.T) {
 			release := string(releasePayload)
 			verification := string(verificationPayload)
 			if mutation.releaseOld != "" {
-				if !strings.Contains(release, mutation.releaseOld) {
-					t.Fatalf("release workflow mutation source %q is missing", mutation.releaseOld)
-				}
 				release = strings.Replace(release, mutation.releaseOld, mutation.releaseNew, 1)
 			}
 			if mutation.verificationOld != "" {
-				if !strings.Contains(verification, mutation.verificationOld) {
-					t.Fatalf("verification workflow mutation source %q is missing", mutation.verificationOld)
-				}
 				verification = strings.Replace(verification, mutation.verificationOld, mutation.verificationNew, 1)
 			}
 			if err := validateReleaseIntegrationWorkflows([]byte(release), []byte(verification)); err == nil {
-				t.Fatal("invalid release integration workflow contract was accepted")
+				t.Fatal("unsupported release workflow mutation was accepted")
 			}
 		})
 	}
@@ -1914,71 +1747,45 @@ func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []b
 	if err := yaml.Unmarshal(verificationPayload, &verificationWorkflow); err != nil {
 		return err
 	}
-	setupPython := "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
-	setupUV := "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
-	consumerCommand := "go test -count=1 -tags archive_consumer ./tools/release -run '^TestReleaseArchivePythonAdaptersConsumeExtractedArtifact$' -v"
-	releaseArchive := "${{ github.workspace }}/dist/powercontext-${{ needs.prepare.outputs.version }}-linux-amd64.tar.gz"
-	publishedArchive := "${{ runner.temp }}/powercontext-release-assets/powercontext-${{ steps.release.outputs.version }}-linux-amd64.tar.gz"
-	condition := "matrix.target == 'linux-amd64'"
-
-	for jobName, job := range releaseWorkflow.Jobs {
-		for _, step := range job.Steps {
-			if (step.Uses == setupPython || step.Uses == setupUV) && jobName != "binaries" {
-				return fmt.Errorf("release.yml provisions archive consumer prerequisites in job %q", jobName)
+	for name, workflow := range map[string]releaseIntegrationWorkflow{
+		"release.yml":        releaseWorkflow,
+		"release-verify.yml": verificationWorkflow,
+	} {
+		for jobName, job := range workflow.Jobs {
+			if continueOnErrorEnabled(job.ContinueOnError) {
+				return fmt.Errorf("%s job %q tolerates failure", name, jobName)
+			}
+			for _, step := range job.Steps {
+				value := step.Name + "\n" + step.Uses + "\n" + step.Run
+				for _, forbidden := range []string{
+					"actions/setup-python@", "astral-sh/setup-uv@", "pnpm/action-setup@", "actions/setup-node@",
+					"archive_consumer", "integrations/dsh", "integrations/bub", "integrations/claude-code",
+					"integrations/hermes", "integrations/langchain", "integrations/langgraph",
+					"integrations/openclaw", "integrations/opencode", "integrations/pi", "integrations/pydantic-ai",
+				} {
+					if strings.Contains(value, forbidden) {
+						return fmt.Errorf("%s job %q contains unsupported release consumer %q", name, jobName, forbidden)
+					}
+				}
 			}
 		}
 	}
+
 	binaries, ok := releaseWorkflow.Jobs["binaries"]
 	if !ok {
-		return fmt.Errorf("release.yml has no binaries job")
+		return errors.New("release.yml has no binaries job")
 	}
-	pythonIndex, python := findReleaseIntegrationWorkflowStep(binaries.Steps, "Set up Python for the release integration consumer")
-	uvIndex, uv := findReleaseIntegrationWorkflowStep(binaries.Steps, "Set up uv for the release integration consumer")
-	packageIndex, packaging := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build and package both editions")
-	consumerIndex, consumer := findReleaseIntegrationWorkflowStep(binaries.Steps, "Consume Python integrations from the packaged Standard archive")
-	if python == nil || python.If != condition || python.Uses != setupPython || python.With["python-version"] != "3.12" {
-		return fmt.Errorf("release.yml Python integration setup = %#v", python)
-	}
-	if uv == nil || uv.If != condition || uv.Uses != setupUV || uv.With["version"] != "0.10.12" {
-		return fmt.Errorf("release.yml uv integration setup = %#v", uv)
-	}
+	_, packaging := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build and package both editions")
 	if packaging == nil || !strings.Contains(packaging.Run, "make package-standard") || !strings.Contains(packaging.Run, "make package-full") {
 		return fmt.Errorf("release.yml packaging step = %#v", packaging)
-	}
-	if consumer == nil || consumer.If != condition || consumer.Env["POWERCONTEXT_ARCHIVE"] != releaseArchive ||
-		strings.TrimSpace(consumer.Run) != consumerCommand || continueOnErrorEnabled(consumer.ContinueOnError) ||
-		!(pythonIndex < uvIndex && uvIndex < packageIndex && packageIndex < consumerIndex) {
-		return fmt.Errorf("release.yml packaged integration consumer = %#v at step %d", consumer, consumerIndex)
-	}
-	if continueOnErrorEnabled(binaries.ContinueOnError) {
-		return fmt.Errorf("release.yml binaries job tolerates archive consumer failure")
 	}
 
 	verification, ok := verificationWorkflow.Jobs["verify"]
 	if !ok {
-		return fmt.Errorf("release-verify.yml has no verify job")
+		return errors.New("release-verify.yml has no verify job")
 	}
-	_, publishedPython := findReleaseIntegrationWorkflowStep(verification.Steps, "Set up Python for the published integration consumer")
-	_, publishedUV := findReleaseIntegrationWorkflowStep(verification.Steps, "Set up uv for the published integration consumer")
-	downloadIndex, _ := findReleaseIntegrationWorkflowStep(verification.Steps, "Download and verify the complete GitHub Release")
-	publishedIndex, published := findReleaseIntegrationWorkflowStep(verification.Steps, "Consume Python integrations from the published Standard archive")
 	_, archives := findReleaseIntegrationWorkflowStep(verification.Steps, "Verify extracted Linux release contracts")
 	_, parity := findReleaseIntegrationWorkflowStep(verification.Steps, "Verify Standard and Full integration inventory parity")
-	if publishedPython == nil || publishedPython.If != "" || publishedPython.Uses != setupPython ||
-		publishedPython.With["python-version"] != "3.12" {
-		return fmt.Errorf("release-verify.yml Python integration setup = %#v", publishedPython)
-	}
-	if publishedUV == nil || publishedUV.If != "" || publishedUV.Uses != setupUV || publishedUV.With["version"] != "0.10.12" {
-		return fmt.Errorf("release-verify.yml uv integration setup = %#v", publishedUV)
-	}
-	if published == nil || published.Env["POWERCONTEXT_ARCHIVE"] != publishedArchive ||
-		strings.TrimSpace(published.Run) != consumerCommand || continueOnErrorEnabled(published.ContinueOnError) ||
-		publishedIndex <= downloadIndex {
-		return fmt.Errorf("release-verify.yml published integration consumer = %#v at step %d", published, publishedIndex)
-	}
-	if continueOnErrorEnabled(verification.ContinueOnError) {
-		return fmt.Errorf("release-verify.yml verify job tolerates archive consumer failure")
-	}
 	if archives == nil || !strings.Contains(archives.Run, `go run ./tools/release verify-evidence -root "$root" -repository "$GITHUB_WORKSPACE" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"`) {
 		return fmt.Errorf("release-verify.yml archive evidence step = %#v", archives)
 	}

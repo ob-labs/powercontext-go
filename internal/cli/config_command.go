@@ -390,14 +390,8 @@ func redactedConfigValue(name, value string, credentials map[string]bool) string
 
 func validateConfigPersistence(values map[string]string) error {
 	kind := strings.TrimSpace(values["POWERCONTEXT_SERVER_DATABASE_KIND"])
-	if kind == "seekdb" {
-		if path := strings.TrimSpace(values["POWERCONTEXT_SERVER_DATABASE_PATH"]); path != "" && !filepath.IsAbs(filepath.FromSlash(path)) {
-			return errors.New("seekDB path must be absolute")
-		}
-		return nil
-	}
 	if kind != "" && kind != "sqlite" {
-		return nil
+		return &server.UnsupportedDatabaseError{}
 	}
 	url := strings.TrimSpace(values["POWERCONTEXT_SERVER_DATABASE_URL"])
 	if url == "" {
@@ -441,7 +435,7 @@ func validateServerEnvironment(values map[string]string) error {
 		}
 	}
 	if _, err := server.LoadConfig(); err != nil {
-		return errors.New("Server configuration is invalid")
+		return err
 	}
 	return nil
 }

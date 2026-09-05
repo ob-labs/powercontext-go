@@ -44,12 +44,12 @@ func newSetupCommand(state *commandState) *cobra.Command {
 		newSetupSelectCommand(state),
 		newSetupWorkBuddyCommand(state),
 		newSetupCodexCommand(state),
-		newSetupClaudeCodeCommand(state),
-		newSetupDSHCommand(state),
-		newSetupPiCommand(state),
-		newSetupOpenCodeCommand(state),
-		newSetupHermesCommand(state),
-		newSetupOpenClawCommand(state),
+		unsupportedIntegrationCommand(newSetupClaudeCodeCommand(state)),
+		unsupportedIntegrationCommand(newSetupDSHCommand(state)),
+		unsupportedIntegrationCommand(newSetupPiCommand(state)),
+		unsupportedIntegrationCommand(newSetupOpenCodeCommand(state)),
+		unsupportedIntegrationCommand(newSetupHermesCommand(state)),
+		unsupportedIntegrationCommand(newSetupOpenClawCommand(state)),
 	)
 	return command
 }

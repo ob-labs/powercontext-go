@@ -872,7 +872,7 @@
         },
         "test_doctor_integrations_fails_when_a_present_opencode_skill_is_broken": {
           "evidence": [
-            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsFailsWhenPresentOpenCodeSkillIsBroken"
+            "go:internal/cli/doctor_integrations_test.go#TestDoctorIntegrationsFailsWhenPresentPluginIsBroken"
           ]
         },
         "test_doctor_integrations_succeeds_when_every_host_is_missing": {
@@ -946,12 +946,12 @@
         },
         "test_setup_select_json_without_host_does_not_install": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectJSONRequiresHostBeforeInstalling"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_without_host_requires_host_on_a_non_tty": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectNonTTYRequiresHostBeforeInstalling"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_rejects_an_unknown_host_before_installing": {
@@ -966,17 +966,17 @@
         },
         "test_setup_select_continues_after_a_selected_host_fails": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectContinuesAfterSelectedHostFails"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_reports_an_unavailable_selected_host_and_continues": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectHumanReportIncludesFailureAndContinues"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_reports_a_successful_rerun_as_installed": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectReportsSuccessfulRerunAsInstalled"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_reads_a_tty_selection_by_number": {
@@ -1006,40 +1006,40 @@
         },
         "test_setup_select_passes_source_ref_and_host_specific_defaults": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectPassesSourceRefAndClaudeOptions",
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling",
             "go:internal/cli/integration_hosts_test.go#TestOpenClawSetupFlagsPreservePythonDefaults"
           ]
         },
         "test_setup_select_passes_server_and_scope_overrides_to_openclaw": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectPassesServerAndScopeOverridesToOpenClaw"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_fails_a_row_when_post_install_verification_fails": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectContinuesAfterPostInstallVerificationFails",
-            "go:internal/cli/setup_select_test.go#TestSetupSelectFailsRowsWhenPostInstallVerificationFails",
-            "go:internal/cli/setup_select_test.go#TestSetupSelectFailsOpenCodeRowWhenActivationVerificationFails"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling",
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling",
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_continues_after_post_install_verification_fails": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectContinuesAfterPostInstallVerificationFails"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_select_prints_hermes_specific_next_step_only_when_installed": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestSetupSelectPrintsHermesNextStepOnlyWhenInstalled"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_setup_dsh_still_fails_closed_when_the_cli_is_missing": {
           "evidence": [
-            "go:internal/cli/system_contract_test.go#TestSetupDSHReportsMissingCLI"
+            "go:internal/cli/setup_select_test.go#TestSetupSelectRejectsUnsupportedPublishedHostsBeforeInstalling"
           ]
         },
         "test_parse_host_selection_accepts_names_and_reorders_to_the_catalog": {
           "evidence": [
-            "go:internal/cli/setup_select_test.go#TestParseSetupHostSelectionAcceptsNamesAndCatalogNumbers"
+            "go:internal/cli/setup_select_test.go#TestParseSetupHostSelectionAcceptsSupportedNamesAndCatalogNumbers"
           ]
         }
       }

@@ -57,3 +57,18 @@ func TestCapabilitiesRejectDuplicatesAndUnknownValues(t *testing.T) {
 		}
 	}
 }
+
+func TestSupportedProductMatrixIsExactAndImmutable(t *testing.T) {
+	t.Parallel()
+	databases := SupportedDatabases()
+	agents := SupportedExternalAgents()
+	if !slices.Equal(databases, []string{"sqlite"}) || !slices.Equal(agents, []string{"codex", "workbuddy"}) {
+		t.Fatalf("supported product matrix = (%v, %v)", databases, agents)
+	}
+	databases[0] = "mutated"
+	agents[0] = "mutated"
+	if !slices.Equal(SupportedDatabases(), []string{"sqlite"}) ||
+		!slices.Equal(SupportedExternalAgents(), []string{"codex", "workbuddy"}) {
+		t.Fatal("supported product matrix is mutable")
+	}
+}

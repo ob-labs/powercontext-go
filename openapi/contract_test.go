@@ -27,7 +27,7 @@ import (
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
-const activeOpenAPISHA256 = "08b9c71cf286307b4e4573fad7198fec37f963192bfa70f15bac33b228283798"
+const activeOpenAPISHA256 = "ab78caf229a61568675dbc9176ad0e1a48d6d48aa860fc7f3b5993ea69268ccb"
 
 func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	t.Parallel()
@@ -67,20 +67,5 @@ func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	handler := reflect.TypeOf((*v1.Handler)(nil)).Elem()
 	if got := handler.NumMethod(); got != len(operationIDs) {
 		t.Fatalf("generated Handler methods = %d, OpenAPI operations = %d", got, len(operationIDs))
-	}
-}
-
-func TestBundledDSHOpenAPIMatchesAuthority(t *testing.T) {
-	t.Parallel()
-	authority, err := os.ReadFile("powercontext.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bundled, err := os.ReadFile("../integrations/dsh/plugins/powercontext/openapi/powercontext.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(bundled, authority) {
-		t.Fatal("DSH bundled OpenAPI drifted from openapi/powercontext.yaml")
 	}
 }

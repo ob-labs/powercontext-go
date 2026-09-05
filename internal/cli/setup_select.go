@@ -28,14 +28,11 @@ import (
 )
 
 type setupSelectOptions struct {
-	hosts            []string
-	source           string
-	ref              string
-	serverURL        string
-	serverURLSet     bool
-	scopeMode        string
-	capturePrompts   bool
-	noCapturePrompts bool
+	hosts        []string
+	source       string
+	ref          string
+	serverURL    string
+	serverURLSet bool
 }
 
 type setupHostRow struct {
@@ -58,7 +55,7 @@ func (r setupSelectReport) failed() bool {
 }
 
 func newSetupSelectCommand(state *commandState) *cobra.Command {
-	options := setupSelectOptions{capturePrompts: true}
+	options := setupSelectOptions{}
 	command := &cobra.Command{
 		Use: "select", Short: "Install selected first-class host integrations.", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
@@ -66,9 +63,6 @@ func newSetupSelectCommand(state *commandState) *cobra.Command {
 			selected, err := resolveSetupSelection(command, state.json, options.hosts)
 			if err != nil || selected == nil {
 				return err
-			}
-			if options.noCapturePrompts {
-				options.capturePrompts = false
 			}
 			report := runSetupSelection(command.Context(), state, selected, options)
 			if err := writeSetupSelectReport(state, report); err != nil {
@@ -83,11 +77,7 @@ func newSetupSelectCommand(state *commandState) *cobra.Command {
 	command.Flags().StringArrayVar(&options.hosts, "host", nil, "First-class host to install. Repeatable. Required with --json or a non-TTY.")
 	command.Flags().StringVar(&options.source, "source", defaultMarketplaceSource, "Git source or local path passed to each selected installer.")
 	command.Flags().StringVar(&options.ref, "ref", defaultMarketplaceRef, "Git ref used for a remote source.")
-	command.Flags().StringVar(&options.serverURL, "server-url", "", "PowerContext Server base URL override for Claude Code and OpenClaw.")
-	command.Flags().StringVar(&options.scopeMode, "scope-mode", "agent", "OpenClaw memory scope mode: agent or project.")
-	command.Flags().BoolVar(&options.capturePrompts, "capture-prompts", true, "Capture Claude Code user prompts as ordinary Source evidence.")
-	command.Flags().BoolVar(&options.noCapturePrompts, "no-capture-prompts", false, "Do not capture Claude Code user prompts.")
-	command.MarkFlagsMutuallyExclusive("capture-prompts", "no-capture-prompts")
+	command.Flags().StringVar(&options.serverURL, "server-url", "", "PowerContext Server base URL override for WorkBuddy.")
 	return command
 }
 
@@ -131,35 +121,16 @@ func runSelectedSetupHost(
 	switch host {
 	case "codex":
 		command = newSetupCodexCommand(&isolated)
-	case "claude-code":
-		command = newSetupClaudeCodeCommand(&isolated)
-	case "dsh":
-		command = newSetupDSHCommand(&isolated)
-	case "openclaw":
-		command = newSetupOpenClawCommand(&isolated)
-	case "opencode":
-		command = newSetupOpenCodeCommand(&isolated)
-	case "pi":
-		command = newSetupPiCommand(&isolated)
-	case "hermes":
-		command = newSetupHermesCommand(&isolated)
+	case "workbuddy":
+		command = newSetupWorkBuddyCommand(&isolated)
 	default:
 		return fmt.Errorf("unknown host: %s", host)
 	}
 	arguments := []string{"--source", options.source, "--ref", options.ref}
-	if host == "claude-code" {
+	if host == "workbuddy" {
 		if options.serverURLSet {
 			arguments = append(arguments, "--server-url", options.serverURL)
 		}
-		if !options.capturePrompts {
-			arguments = append(arguments, "--no-capture-prompts")
-		}
-	}
-	if host == "openclaw" {
-		if options.serverURLSet {
-			arguments = append(arguments, "--server-url", options.serverURL)
-		}
-		arguments = append(arguments, "--scope-mode", options.scopeMode)
 	}
 	command.SetOut(io.Discard)
 	command.SetErr(io.Discard)
@@ -167,18 +138,12 @@ func runSelectedSetupHost(
 	if err := command.ExecuteContext(ctx); err != nil {
 		return err
 	}
-	if host == "opencode" {
-		checks := runOpenCodeDiagnostics(ctx, state.system)
-		if diagnosticsStatus(checks) != "ok" {
-			return setupVerificationError(checks)
-		}
-	}
 	return nil
 }
 
 func setupVerificationError(checks map[string]diagnostic) error {
 	failures := make([]string, 0, len(checks))
-	for _, name := range []string{"codex", "claude_code", "dsh", "openclaw", "opencode", "pi", "hermes", "plugin", "package", "skill"} {
+	for _, name := range []string{"codex", "workbuddy", "config", "hooks", "settings", "mcp", "plugin", "skill"} {
 		check, ok := checks[name]
 		if ok && !check.OK {
 			failures = append(failures, name+": "+check.Detail)
@@ -195,7 +160,6 @@ func writeSetupSelectReport(state *commandState, report setupSelectReport) error
 		return writeJSON(state.stdout, report)
 	}
 	installed := false
-	hermesInstalled := false
 	for _, row := range report.Hosts {
 		if row.Status == "failed" {
 			if _, err := fmt.Fprintf(state.stdout, "%s: failed - %s\n", row.Host, row.Error); err != nil {
@@ -207,16 +171,11 @@ func writeSetupSelectReport(state *commandState, report setupSelectReport) error
 			return err
 		}
 		installed = installed || row.Status == "installed"
-		hermesInstalled = hermesInstalled || row.Host == "hermes" && row.Status == "installed"
 	}
 	if installed {
 		if _, err := fmt.Fprintln(state.stdout, "Next: run `powercontext server run`, then start a new host session."); err != nil {
 			return err
 		}
-	}
-	if hermesInstalled {
-		_, err := fmt.Fprintln(state.stdout, "Hermes: run `hermes memory setup` and select PowerContext before starting Hermes.")
-		return err
 	}
 	return nil
 }
@@ -272,6 +231,10 @@ func resolveSetupHostToken(token string) (string, error) {
 		if token == host.name || token == fmt.Sprint(index+1) {
 			return host.name, nil
 		}
+	}
+	switch token {
+	case "claude-code", "dsh", "hermes", "openclaw", "opencode", "pi":
+		return "", usageError(&UnsupportedIntegrationError{})
 	}
 	names := make([]string, 0, len(firstClassIntegrationHosts))
 	for _, host := range firstClassIntegrationHosts {

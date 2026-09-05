@@ -186,6 +186,27 @@ printf '%s|%s|%s\n' "$(basename "$0")" "${CGO_ENABLED:-}" "$*" >> "$CALL_LOG"
 	}
 }
 
+func TestE2ERunnerRejectsUnsupportedDatabaseBeforeCommands(t *testing.T) {
+	repository, err := filepath.Abs(filepath.Clean(filepath.Join("..", "..")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), "sh", filepath.Join(repository, "test", "e2e", "run.sh"), "acceptance")
+	command.Dir = repository
+	command.Env = append(environmentWithout("POWERCONTEXT_E2E_DATABASE"), "POWERCONTEXT_E2E_DATABASE=oceanbase")
+	output, runErr := command.CombinedOutput()
+	if runErr == nil {
+		t.Fatalf("unsupported E2E database succeeded:\n%s", output)
+	}
+	exitErr, ok := errors.AsType[*exec.ExitError](runErr)
+	if !ok || exitErr.ExitCode() != 2 {
+		t.Fatalf("unsupported E2E database error = %v, want exit code 2\n%s", runErr, output)
+	}
+	if !strings.Contains(string(output), "POWERCONTEXT_E2E_DATABASE must be sqlite") {
+		t.Fatalf("unsupported E2E database output = %s", output)
+	}
+}
+
 func TestDependencySecurityScansAnUnstrippedStandardServerBuild(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	temporary := t.TempDir()
@@ -555,12 +576,6 @@ func TestMakefileMissingCredentialTargetsKeepActionableErrors(t *testing.T) {
 		variables []string
 		want      string
 	}{
-		{
-			name:      "OceanBase URL",
-			target:    "test-oceanbase-live",
-			variables: []string{"POWERCONTEXT_TEST_OCEANBASE_URL"},
-			want:      "POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database",
-		},
 		{
 			name:   "real provider model",
 			target: "real-provider-test",

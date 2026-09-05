@@ -59,17 +59,6 @@
       "inputs": ["test/conformance/parity-contract.json", "test/conformance/parity-inventory-rules.json"],
       "outputs": ["test/conformance/parity-inventory.json"],
       "evidence": ["tools/release/workflow_test.go#go run ./tools/parity-inventory-generate"]
-    },
-    {
-      "name": "dsh-operations",
-      "command": "node scripts/gen-operations.mjs",
-      "inputs": ["integrations/dsh/plugins/powercontext/openapi/powercontext.yaml", "integrations/dsh/plugins/powercontext/scripts/gen-operations.mjs"],
-      "outputs": [
-        "integrations/dsh/plugins/powercontext/src/operations.generated.ts",
-        "integrations/pi/plugins/powercontext/src/operations.generated.ts",
-        "integrations/opencode/plugins/powercontext/src/operations.generated.ts"
-      ],
-      "evidence": ["integrations/dsh/plugins/powercontext/tests/gen-check.spec.ts#it('writes and checks a fresh generated table through the public CLI'"]
     }
   ]
 }

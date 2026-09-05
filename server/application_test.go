@@ -27,6 +27,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -87,15 +88,19 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 		t.Fatalf("capabilities status = %d: %s", recorder.Code, recorder.Body.String())
 	}
 	var capabilities struct {
-		SourceTypes      []string `json:"source_types"`
-		SearchModes      []string `json:"search_modes"`
-		MemoryExtraction bool     `json:"memory_extraction"`
+		SourceTypes             []string `json:"source_types"`
+		SearchModes             []string `json:"search_modes"`
+		MemoryExtraction        bool     `json:"memory_extraction"`
+		SupportedDatabases      []string `json:"supported_databases"`
+		SupportedExternalAgents []string `json:"supported_external_agents"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &capabilities); err != nil {
 		t.Fatal(err)
 	}
 	if len(capabilities.SourceTypes) != 1 || capabilities.SourceTypes[0] != "content" ||
-		len(capabilities.SearchModes) != 2 || capabilities.MemoryExtraction {
+		len(capabilities.SearchModes) != 2 || capabilities.MemoryExtraction ||
+		!slices.Equal(capabilities.SupportedDatabases, []string{"sqlite"}) ||
+		!slices.Equal(capabilities.SupportedExternalAgents, []string{"codex", "workbuddy"}) {
 		t.Fatalf("unexpected capabilities: %#v", capabilities)
 	}
 
@@ -103,6 +108,22 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("readiness status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestOpenApplicationRejectsUnsupportedDatabaseBeforeStorageSideEffects(t *testing.T) {
+	config := applicationTestConfig(t)
+	path := filepath.Join(t.TempDir(), "unsupported-seekdb")
+	config.Database.Kind = "seekdb"
+	config.Database.SeekDB.Path = path
+
+	application, err := OpenApplication(t.Context(), config, Dependencies{})
+	var unsupported *UnsupportedDatabaseError
+	if application != nil || !errors.As(err, &unsupported) {
+		t.Fatalf("OpenApplication() = %#v, %T %v; want typed refusal", application, err, err)
+	}
+	if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("OpenApplication touched unsupported storage before refusal: %v", statErr)
 	}
 }
 

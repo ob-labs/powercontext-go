@@ -23,6 +23,12 @@ import (
 
 const PreparedContextV1 = "powercontext.prepared-context.v1"
 
+const (
+	SupportedDatabaseSQLite         = "sqlite"
+	SupportedExternalAgentCodex     = "codex"
+	SupportedExternalAgentWorkBuddy = "workbuddy"
+)
+
 type Capabilities struct {
 	sourceTypes            []string
 	artifactFamilies       []string
@@ -82,6 +88,14 @@ func NewCapabilities(options CapabilityOptions) (Capabilities, error) {
 }
 
 func EmptyCapabilities() Capabilities { return Capabilities{} }
+
+func SupportedDatabases() []string {
+	return []string{SupportedDatabaseSQLite}
+}
+
+func SupportedExternalAgents() []string {
+	return []string{SupportedExternalAgentCodex, SupportedExternalAgentWorkBuddy}
+}
 
 func (c Capabilities) SourceTypes() []string            { return slices.Clone(c.sourceTypes) }
 func (c Capabilities) ArtifactFamilies() []string       { return slices.Clone(c.artifactFamilies) }

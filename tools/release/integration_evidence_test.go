@@ -30,7 +30,7 @@ func TestReleaseIntegrationEvidenceNamesReviewedInventoryWithoutLockDependencies
 	if err := os.WriteFile(filepath.Join(repository, "LICENSE"), []byte("project license\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	lockPath := filepath.Join(repository, "integrations", "bub", "uv.lock")
+	lockPath := filepath.Join(repository, "integrations", "codex", "plugins", "powercontext", "uv.lock")
 	if err := os.WriteFile(lockPath, []byte("lock-only.example==9.8.7\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -101,12 +101,12 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 		},
 		"missing redistributed bundle": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
-				if err := os.RemoveAll(filepath.Join(fixture.root, "integrations", "bub")); err != nil {
+				if err := os.RemoveAll(filepath.Join(fixture.root, "integrations", "codex")); err != nil {
 					t.Fatal(err)
 				}
 				rewriteIntegrationEvidenceChecksums(t, fixture.root)
 			},
-			message: `redistributed integration "bub" root is missing`,
+			message: `redistributed integration "codex" root is missing`,
 		},
 		"missing internal checksum": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
@@ -130,24 +130,24 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 					packages := document["packages"].([]any)
 					document["packages"] = slices.DeleteFunc(packages, func(value any) bool {
 						packageRecord := value.(map[string]any)
-						return packageRecord["SPDXID"] == "SPDXRef-Integration-bub"
+						return packageRecord["SPDXID"] == "SPDXRef-Integration-codex"
 					})
 				})
 			},
-			message: `SPDX SBOM is missing redistributed integration package "bub"`,
+			message: `SPDX SBOM is missing redistributed integration package "codex"`,
 		},
 		"integration SPDX package drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
 					for _, value := range document["packages"].([]any) {
 						packageRecord := value.(map[string]any)
-						if packageRecord["SPDXID"] == "SPDXRef-Integration-bub" {
+						if packageRecord["SPDXID"] == "SPDXRef-Integration-codex" {
 							packageRecord["name"] = "PowerContext integration drifted"
 						}
 					}
 				})
 			},
-			message: `SPDX SBOM has invalid redistributed integration package "bub"`,
+			message: `SPDX SBOM has invalid redistributed integration package "codex"`,
 		},
 		"integration SPDX relationship drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
@@ -155,63 +155,63 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 					relationships := document["relationships"].([]any)
 					document["relationships"] = slices.DeleteFunc(relationships, func(value any) bool {
 						relationship := value.(map[string]any)
-						return relationship["relatedSpdxElement"] == "SPDXRef-Integration-bub"
+						return relationship["relatedSpdxElement"] == "SPDXRef-Integration-codex"
 					})
 				})
 			},
-			message: `SPDX SBOM is missing redistributed integration relationship for "bub"`,
+			message: `SPDX SBOM is missing redistributed integration relationship for "codex"`,
 		},
 		"integration SPDX relationship type drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
 					for _, value := range document["relationships"].([]any) {
 						relationship := value.(map[string]any)
-						if relationship["relatedSpdxElement"] == "SPDXRef-Integration-bub" {
+						if relationship["relatedSpdxElement"] == "SPDXRef-Integration-codex" {
 							relationship["relationshipType"] = "DEPENDS_ON"
 						}
 					}
 				})
 			},
-			message: `SPDX SBOM has invalid redistributed integration relationship "SPDXRef-Integration-bub"`,
+			message: `SPDX SBOM has invalid redistributed integration relationship "SPDXRef-Integration-codex"`,
 		},
 		"integration SPDX relationship source drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
 					for _, value := range document["relationships"].([]any) {
 						relationship := value.(map[string]any)
-						if relationship["relatedSpdxElement"] == "SPDXRef-Integration-bub" {
-							relationship["spdxElementId"] = "SPDXRef-Integration-bub"
+						if relationship["relatedSpdxElement"] == "SPDXRef-Integration-codex" {
+							relationship["spdxElementId"] = "SPDXRef-Integration-codex"
 						}
 					}
 				})
 			},
-			message: `SPDX SBOM has invalid redistributed integration relationship "SPDXRef-Integration-bub"`,
+			message: `SPDX SBOM has invalid redistributed integration relationship "SPDXRef-Integration-codex"`,
 		},
 		"integration SPDX license drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
 					for _, value := range document["packages"].([]any) {
 						packageRecord := value.(map[string]any)
-						if packageRecord["SPDXID"] == "SPDXRef-Integration-bub" {
+						if packageRecord["SPDXID"] == "SPDXRef-Integration-codex" {
 							packageRecord["licenseDeclared"] = "NOASSERTION"
 						}
 					}
 				})
 			},
-			message: `SPDX SBOM has invalid redistributed integration license for "bub"`,
+			message: `SPDX SBOM has invalid redistributed integration license for "codex"`,
 		},
 		"integration SPDX copyright drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
 					for _, value := range document["packages"].([]any) {
 						packageRecord := value.(map[string]any)
-						if packageRecord["SPDXID"] == "SPDXRef-Integration-bub" {
+						if packageRecord["SPDXID"] == "SPDXRef-Integration-codex" {
 							packageRecord["copyrightText"] = "Copyright drift"
 						}
 					}
 				})
 			},
-			message: `SPDX SBOM has invalid redistributed integration copyright for "bub"`,
+			message: `SPDX SBOM has invalid redistributed integration copyright for "codex"`,
 		},
 		"unreviewed integration SPDX package": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
@@ -240,14 +240,14 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 				}
 				rewriteIntegrationEvidenceChecksums(t, fixture.root)
 			},
-			message: `redistributed integration "bub" license`,
+			message: `redistributed integration "codex" license`,
 		},
 		"manifest and archive omit approved lock path": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				manifest := readIntegrationEvidenceManifest(t, fixture.root)
 				manifest.Integrations[0].LockPaths = nil
 				writeIntegrationEvidenceManifest(t, fixture.root, manifest)
-				if err := os.Remove(filepath.Join(fixture.root, "integrations", "bub", "uv.lock")); err != nil {
+				if err := os.Remove(filepath.Join(fixture.root, "integrations", "codex", "plugins", "powercontext", "uv.lock")); err != nil {
 					t.Fatal(err)
 				}
 				rewriteIntegrationEvidenceChecksums(t, fixture.root)
@@ -257,12 +257,12 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 		"manifest and archive replace approved required path": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				manifest := readIntegrationEvidenceManifest(t, fixture.root)
-				manifest.Integrations[0].RequiredPaths = []string{"integrations/bub/project.toml"}
+				manifest.Integrations[0].RequiredPaths = []string{"integrations/codex/plugins/powercontext/project.json"}
 				writeIntegrationEvidenceManifest(t, fixture.root, manifest)
-				if err := os.Remove(filepath.Join(fixture.root, "integrations", "bub", "pyproject.toml")); err != nil {
+				if err := os.Remove(filepath.Join(fixture.root, "integrations", "codex", "plugins", "powercontext", ".codex-plugin", "plugin.json")); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(fixture.root, "integrations", "bub", "project.toml"), []byte("replacement\n"), 0o600); err != nil {
+				if err := os.WriteFile(filepath.Join(fixture.root, "integrations", "codex", "plugins", "powercontext", "project.json"), []byte("replacement\n"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 				rewriteIntegrationEvidenceChecksums(t, fixture.root)

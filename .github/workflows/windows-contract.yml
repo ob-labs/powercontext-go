@@ -31,9 +31,6 @@ jobs:
       - name: Verify API baseline replacement on Windows
         run: go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'
 
-      - name: Verify seekDB build selection on Windows
-        run: go test -count=1 ./tools/release -run '^TestSeekDBBuildConstraintsSelectImplementationAndNativeSourcesTogether$'
-
       - name: Verify LF attributes and frozen fixture hashes
         shell: pwsh
         run: |
@@ -47,7 +44,6 @@ jobs:
             'api/v1/oas_client_gen.go',
             'client/invoker_gen.go',
             'internal/mcpapi/schemas_gen.go',
-            'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
             'test/conformance/parity-contract.json',
             'test/conformance/parity-inventory-rules.json',
             'test/conformance/parity-inventory.json',
@@ -91,10 +87,6 @@ jobs:
             'api/v1',
             'client/invoker_gen.go',
             'internal/mcpapi/schemas_gen.go',
-            'integrations/dsh/plugins/powercontext/openapi/powercontext.yaml',
-            'integrations/dsh/plugins/powercontext/src/operations.generated.ts',
-            'integrations/opencode/plugins/powercontext/src/operations.generated.ts',
-            'integrations/pi/plugins/powercontext/src/operations.generated.ts',
             'test/conformance/parity-contract.json',
             'test/conformance/parity-inventory-rules.json',
             'test/conformance/parity-inventory.json',

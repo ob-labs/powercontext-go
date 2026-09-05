@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/ob-labs/powercontext-go/artifact/memory"
+	artifactskill "github.com/ob-labs/powercontext-go/artifact/skill"
 )
 
 func TestLoadConfigMatchesFrozenServerEnvironment(t *testing.T) {
@@ -61,10 +62,10 @@ func TestLoadConfigMatchesFrozenServerEnvironment(t *testing.T) {
 			"allow_managed_publish":true,
 			"future_compatible":true
 		},{
-			"target_id":"claude-user",
-			"agent_kind":"claude_code",
+			"target_id":"workbuddy-user",
+			"agent_kind":"workbuddy",
 			"installation_scope":"user",
-			"path":"/home/example/.claude/skills"
+			"path":"/home/example/.workbuddy/skills"
 		}]
 	}`)
 
@@ -103,9 +104,9 @@ func TestLoadConfigMatchesFrozenServerEnvironment(t *testing.T) {
 		target.Path != "/srv/project/.agents/skills" || !target.AllowManagedPublish {
 		t.Fatalf("external Skill target = %#v", target)
 	}
-	if config.ExternalSkills.Targets[1].AgentKind != "claude_code" ||
-		config.ExternalSkills.Targets[1].Path != "/home/example/.claude/skills" {
-		t.Fatalf("Claude Code target = %#v", config.ExternalSkills.Targets[1])
+	if config.ExternalSkills.Targets[1].AgentKind != "workbuddy" ||
+		config.ExternalSkills.Targets[1].Path != "/home/example/.workbuddy/skills" {
+		t.Fatalf("WorkBuddy target = %#v", config.ExternalSkills.Targets[1])
 	}
 	if config.SchedulerPath != filepath.Join(resolvedHome, "scheduler.db") {
 		t.Fatalf("scheduler path = %q", config.SchedulerPath)
@@ -169,73 +170,88 @@ func TestDefaultConfigUsesPersistentUserStorage(t *testing.T) {
 	}
 }
 
-func TestLoadConfigSelectsOceanBase(t *testing.T) {
-	t.Setenv(PowerContextHomeEnv, t.TempDir())
-	const databaseURL = "mysql+aoceanbase://root:test@127.0.0.1:2881/powercontext?charset=utf8mb4"
-	t.Setenv("POWERCONTEXT_SERVER_DATABASE_KIND", "oceanbase")
-	t.Setenv("POWERCONTEXT_SERVER_DATABASE_URL", databaseURL)
-	config, err := LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if config.Database.Kind != "oceanbase" || config.Database.OceanBase.URL != databaseURL {
-		t.Fatalf("database config = %#v", config.Database)
-	}
-}
-
-func TestLoadConfigSelectsEmbeddedSeekDB(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "powercontext-data")
-	t.Setenv(PowerContextHomeEnv, dataDir)
-	t.Setenv("POWERCONTEXT_SERVER_DATABASE_KIND", "seekdb")
-
-	config, err := LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolvedDataDir, err := absoluteExpandedPath(dataDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if config.Database.Kind != "seekdb" || config.Database.SeekDB.Path != filepath.Join(resolvedDataDir, "seekdb") ||
-		config.Database.SeekDB.Database != "test" {
-		t.Fatalf("embedded seekDB config = %#v", config.Database.SeekDB)
-	}
-	if _, err := os.Stat(dataDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("configuration unexpectedly created the data directory: %v", err)
-	}
-}
-
-func TestLoadConfigDefaultsBlankAndAcceptsExplicitSeekDBPath(t *testing.T) {
-	for _, configured := range []string{"", "   ", filepath.Join(t.TempDir(), "custom-seekdb")} {
-		t.Run(fmt.Sprintf("path-%q", configured), func(t *testing.T) {
+func TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		kind   string
+		secret string
+		setenv map[string]string
+	}{
+		{
+			name: "OceanBase", kind: "oceanbase", secret: "database-secret",
+			setenv: map[string]string{
+				"POWERCONTEXT_SERVER_DATABASE_URL": "mysql+aoceanbase://root:database-secret@memory.example/powercontext",
+			},
+		},
+		{
+			name: "seekDB", kind: "seekdb", secret: "private-database-path",
+			setenv: map[string]string{
+				"POWERCONTEXT_SERVER_DATABASE_PATH":     "private-database-path",
+				"POWERCONTEXT_SERVER_DATABASE_DATABASE": "custom",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			dataDir := filepath.Join(t.TempDir(), "powercontext-data")
 			t.Setenv(PowerContextHomeEnv, dataDir)
-			t.Setenv("POWERCONTEXT_SERVER_DATABASE_KIND", "seekdb")
-			t.Setenv("POWERCONTEXT_SERVER_DATABASE_PATH", configured)
-			config, err := LoadConfig()
-			if err != nil {
-				t.Fatal(err)
+			t.Setenv("POWERCONTEXT_SERVER_DATABASE_KIND", test.kind)
+			for name, value := range test.setenv {
+				t.Setenv(name, value)
 			}
-			want := configured
-			if strings.TrimSpace(want) == "" {
-				want, err = absoluteExpandedPath(filepath.Join(dataDir, "seekdb"))
-				if err != nil {
-					t.Fatal(err)
-				}
+
+			_, err := LoadConfig()
+			var unsupported *UnsupportedDatabaseError
+			if !errors.As(err, &unsupported) {
+				t.Fatalf("LoadConfig() error = %T %v, want UnsupportedDatabaseError", err, err)
 			}
-			if config.Database.SeekDB.Path != want {
-				t.Fatalf("seekDB path = %q, want %q", config.Database.SeekDB.Path, want)
+			if strings.Contains(err.Error(), test.kind) || strings.Contains(err.Error(), test.secret) {
+				t.Fatalf("unsupported database error leaked configured values: %v", err)
+			}
+			if _, statErr := os.Stat(dataDir); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("LoadConfig created storage before rejecting the database: %v", statErr)
 			}
 		})
 	}
 }
 
-func TestLoadConfigRejectsCustomSeekDBDatabase(t *testing.T) {
-	t.Setenv(PowerContextHomeEnv, t.TempDir())
-	t.Setenv("POWERCONTEXT_SERVER_DATABASE_KIND", "seekdb")
-	t.Setenv("POWERCONTEXT_SERVER_DATABASE_DATABASE", "custom")
-	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "must be test") {
-		t.Fatalf("custom embedded seekDB database error = %v", err)
+func TestProcessConfigAcceptsOnlySupportedAgentSkillTargets(t *testing.T) {
+	t.Parallel()
+	for _, agentKind := range []string{"codex", "workbuddy"} {
+		config, err := DefaultConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		config.ExternalSkills = ExternalSkillsConfig{
+			HostID: "local-workspace",
+			Targets: []ExternalSkillTarget{{
+				TargetID: "supported-project", AgentKind: agentKind,
+				InstallationScope: "project", Path: t.TempDir(),
+			}},
+		}
+		if err := config.Validate(); err != nil {
+			t.Fatalf("Validate() rejected supported Agent Skill kind %q: %v", agentKind, err)
+		}
+	}
+
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const markerPath = "private-claude-target-path"
+	config.ExternalSkills = ExternalSkillsConfig{
+		HostID: "local-workspace",
+		Targets: []ExternalSkillTarget{{
+			TargetID: "unsupported-project", AgentKind: "claude_code",
+			InstallationScope: "project", Path: markerPath,
+		}},
+	}
+	err = config.Validate()
+	var unsupported *artifactskill.UnsupportedAgentKindError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("Validate() error = %T %v, want UnsupportedAgentKindError", err, err)
+	}
+	if strings.Contains(err.Error(), "claude_code") || strings.Contains(err.Error(), markerPath) {
+		t.Fatalf("unsupported Agent Skill error leaked configured values: %v", err)
 	}
 }
 
@@ -518,23 +534,44 @@ func TestSQLiteDSNPreservesFrozenAbsoluteAndRelativePaths(t *testing.T) {
 	}
 }
 
-func TestProcessConfigValidatesOceanBaseURLWithoutLeakingPassword(t *testing.T) {
+func TestProcessConfigRejectsUnsupportedDatabasesBeforeProfileValidation(t *testing.T) {
 	t.Parallel()
-	config, err := DefaultConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.Database.Kind = "oceanbase"
-	config.Database.OceanBase.URL = "mysql+pymysql://root:do-not-leak@127.0.0.1:2881/powercontext?charset=utf8mb4"
-	err = config.Validate()
-	if err == nil {
-		t.Fatal("non-official OceanBase URL was accepted")
-	}
-	if strings.Contains(err.Error(), "do-not-leak") {
-		t.Fatalf("configuration error leaked password: %v", err)
-	}
-	config.Database.OceanBase.URL = "mysql+aoceanbase://root%40tenant:secret@127.0.0.1:2881/powercontext?charset=utf8mb4"
-	if err := config.Validate(); err != nil {
-		t.Fatal(err)
+	for _, test := range []struct {
+		name   string
+		kind   string
+		secret string
+		set    func(*ProcessConfig)
+	}{
+		{
+			name: "OceanBase", kind: "oceanbase", secret: "database-secret",
+			set: func(config *ProcessConfig) {
+				config.Database.OceanBase.URL = "mysql+aoceanbase://root:database-secret@memory.example/powercontext"
+			},
+		},
+		{
+			name: "seekDB", kind: "seekdb", secret: "private-database-path",
+			set: func(config *ProcessConfig) {
+				config.Database.SeekDB.Path = "private-database-path"
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, err := DefaultConfig()
+			if err != nil {
+				t.Fatal(err)
+			}
+			config.Database.Kind = test.kind
+			test.set(&config)
+
+			err = config.Validate()
+			var unsupported *UnsupportedDatabaseError
+			if !errors.As(err, &unsupported) {
+				t.Fatalf("validation error = %T %v, want UnsupportedDatabaseError", err, err)
+			}
+			if !strings.Contains(err.Error(), "only SQLite is supported") ||
+				strings.Contains(err.Error(), test.kind) || strings.Contains(err.Error(), test.secret) {
+				t.Fatalf("unsupported database error is not stable and redacted: %v", err)
+			}
+		})
 	}
 }

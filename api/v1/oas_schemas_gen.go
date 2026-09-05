@@ -850,9 +850,11 @@ type Capabilities struct {
 	// Whether host-local external Skill discovery and exact resolution are configured.
 	ExternalSkillRegistry OptBool `json:"external_skill_registry"`
 	// Whether exact evidence can be generated into an inspectable Handoff Draft.
-	HandoffGeneration bool                    `json:"handoff_generation"`
-	SearchModes       []MemorySearchMode      `json:"search_modes"`
-	ContextVersions   []PreparedContextSchema `json:"context_versions"`
+	HandoffGeneration       bool                                      `json:"handoff_generation"`
+	SearchModes             []MemorySearchMode                        `json:"search_modes"`
+	ContextVersions         []PreparedContextSchema                   `json:"context_versions"`
+	SupportedDatabases      []CapabilitiesSupportedDatabasesItem      `json:"supported_databases"`
+	SupportedExternalAgents []CapabilitiesSupportedExternalAgentsItem `json:"supported_external_agents"`
 }
 
 // GetSourceTypes returns the value of SourceTypes.
@@ -900,6 +902,16 @@ func (s *Capabilities) GetContextVersions() []PreparedContextSchema {
 	return s.ContextVersions
 }
 
+// GetSupportedDatabases returns the value of SupportedDatabases.
+func (s *Capabilities) GetSupportedDatabases() []CapabilitiesSupportedDatabasesItem {
+	return s.SupportedDatabases
+}
+
+// GetSupportedExternalAgents returns the value of SupportedExternalAgents.
+func (s *Capabilities) GetSupportedExternalAgents() []CapabilitiesSupportedExternalAgentsItem {
+	return s.SupportedExternalAgents
+}
+
 // SetSourceTypes sets the value of SourceTypes.
 func (s *Capabilities) SetSourceTypes(val []string) {
 	s.SourceTypes = val
@@ -945,6 +957,16 @@ func (s *Capabilities) SetContextVersions(val []PreparedContextSchema) {
 	s.ContextVersions = val
 }
 
+// SetSupportedDatabases sets the value of SupportedDatabases.
+func (s *Capabilities) SetSupportedDatabases(val []CapabilitiesSupportedDatabasesItem) {
+	s.SupportedDatabases = val
+}
+
+// SetSupportedExternalAgents sets the value of SupportedExternalAgents.
+func (s *Capabilities) SetSupportedExternalAgents(val []CapabilitiesSupportedExternalAgentsItem) {
+	s.SupportedExternalAgents = val
+}
+
 // CapabilitiesHeaders wraps Capabilities with response headers.
 type CapabilitiesHeaders struct {
 	XPowerContextRequestID OptString
@@ -972,6 +994,81 @@ func (s *CapabilitiesHeaders) SetResponse(val Capabilities) {
 }
 
 func (*CapabilitiesHeaders) getCapabilitiesRes() {}
+
+type CapabilitiesSupportedDatabasesItem string
+
+const (
+	CapabilitiesSupportedDatabasesItemSqlite CapabilitiesSupportedDatabasesItem = "sqlite"
+)
+
+// AllValues returns all CapabilitiesSupportedDatabasesItem values.
+func (CapabilitiesSupportedDatabasesItem) AllValues() []CapabilitiesSupportedDatabasesItem {
+	return []CapabilitiesSupportedDatabasesItem{
+		CapabilitiesSupportedDatabasesItemSqlite,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CapabilitiesSupportedDatabasesItem) MarshalText() ([]byte, error) {
+	switch s {
+	case CapabilitiesSupportedDatabasesItemSqlite:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CapabilitiesSupportedDatabasesItem) UnmarshalText(data []byte) error {
+	switch CapabilitiesSupportedDatabasesItem(data) {
+	case CapabilitiesSupportedDatabasesItemSqlite:
+		*s = CapabilitiesSupportedDatabasesItemSqlite
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type CapabilitiesSupportedExternalAgentsItem string
+
+const (
+	CapabilitiesSupportedExternalAgentsItemCodex     CapabilitiesSupportedExternalAgentsItem = "codex"
+	CapabilitiesSupportedExternalAgentsItemWorkbuddy CapabilitiesSupportedExternalAgentsItem = "workbuddy"
+)
+
+// AllValues returns all CapabilitiesSupportedExternalAgentsItem values.
+func (CapabilitiesSupportedExternalAgentsItem) AllValues() []CapabilitiesSupportedExternalAgentsItem {
+	return []CapabilitiesSupportedExternalAgentsItem{
+		CapabilitiesSupportedExternalAgentsItemCodex,
+		CapabilitiesSupportedExternalAgentsItemWorkbuddy,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CapabilitiesSupportedExternalAgentsItem) MarshalText() ([]byte, error) {
+	switch s {
+	case CapabilitiesSupportedExternalAgentsItemCodex:
+		return []byte(s), nil
+	case CapabilitiesSupportedExternalAgentsItemWorkbuddy:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CapabilitiesSupportedExternalAgentsItem) UnmarshalText(data []byte) error {
+	switch CapabilitiesSupportedExternalAgentsItem(data) {
+	case CapabilitiesSupportedExternalAgentsItemCodex:
+		*s = CapabilitiesSupportedExternalAgentsItemCodex
+		return nil
+	case CapabilitiesSupportedExternalAgentsItemWorkbuddy:
+		*s = CapabilitiesSupportedExternalAgentsItemWorkbuddy
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // Ref: #/components/schemas/CaptureContentSourceRequest
 type CaptureContentSourceRequest struct {

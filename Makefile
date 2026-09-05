@@ -81,8 +81,8 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/trigger
 
 .PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated parity-inventory-check release-contract-check module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
-	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full test-oceanbase-live real-provider-test \
-	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
+	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full real-provider-test \
+	docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	portable-sdk-check check-portable generated-consumers downstream-compat package-standard package-full clean
 
@@ -227,7 +227,7 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 	$(GO) generate ./openapi
 	$(GO) run ./tools/mcp-schema-generate
 	$(GO) run ./tools/traceability-generate -check
-	git diff --exit-code -- openapi api/v1 client/invoker_gen.go internal/mcpapi/schemas_gen.go integrations/dsh/plugins/powercontext/src/operations.generated.ts
+	git diff --exit-code -- api/v1 client/invoker_gen.go internal/mcpapi/schemas_gen.go
 
 parity-inventory-check: ## Fail closed until the exact upstream master node list is fully classified.
 	@test -n "$(UPSTREAM_MASTER_CHECKOUT)" || { echo 'UPSTREAM_MASTER_CHECKOUT must name the exact upstream master checkout' >&2; exit 2; }
@@ -355,19 +355,10 @@ test-full: ## Run Full native-asset tests.
 	CGO_ENABLED=1 CGO_LDFLAGS="$(CGO_LDFLAGS) -L$(TOKENIZERS_LIB_DIR)" \
 		$(GO) test -tags '$(FULL_TAGS)' ./...
 
-test-oceanbase-live: ## Run the disposable live OceanBase compatibility smoke test.
-	@test -n "$${POWERCONTEXT_TEST_OCEANBASE_URL:-}" || { echo 'POWERCONTEXT_TEST_OCEANBASE_URL must name a dedicated OceanBase MySQL-mode database' >&2; exit 2; }
-	$(GO) test -count=1 -run TestLiveOceanBaseProfileSmoke -v ./test/e2e
-
 real-provider-test: ## Run explicit credentialed real-provider smoke tests.
 	@test -n "$${POWERCONTEXT_REAL_SMOKE_GENERATION_MODEL:-}$${POWERCONTEXT_REAL_SMOKE_EMBEDDING_MODEL:-}" || \
 		{ echo 'set at least one POWERCONTEXT_REAL_SMOKE_*_MODEL variable' >&2; exit 2; }
 	$(GO) test -count=1 -run '^TestRealProviderSmoke$$' ./internal/modelprovider
-
-pi-test: ## Install, test, and type-check the Pi adapter package.
-	$(PNPM) --dir integrations/pi/plugins/powercontext install --frozen-lockfile
-	$(PNPM) --dir integrations/pi/plugins/powercontext test
-	$(PNPM) --dir integrations/pi/plugins/powercontext run typecheck
 
 docs-sync: ## Synchronize the locked documentation environment.
 	$(UV) sync --project tools/docs --frozen

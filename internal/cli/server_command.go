@@ -69,6 +69,12 @@ func newServerRunCommand(state *commandState) *cobra.Command {
 				}
 				config, err := server.LoadConfigWithHTTPOverride(override)
 				if err != nil {
+					if _, ok := errors.AsType[*server.UnsupportedDatabaseError](err); ok {
+						return usageError(fmt.Errorf(
+							"server: set POWERCONTEXT_SERVER_DATABASE_KIND=sqlite: %w",
+							err,
+						))
+					}
 					if _, ok := errors.AsType[*server.UnauthenticatedNonLoopbackBindError](err); ok {
 						return usageError(err)
 					}

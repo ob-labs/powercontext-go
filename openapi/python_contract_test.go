@@ -74,7 +74,7 @@ func TestCapabilitiesReportSemanticsWithoutRuntimeTuningValues(t *testing.T) {
 	assertKeySet(t, properties,
 		"source_types", "artifact_families", "memory_extraction", "experience_generation",
 		"managed_skill_generation", "external_skill_registry", "handoff_generation",
-		"search_modes", "context_versions",
+		"search_modes", "context_versions", "supported_databases", "supported_external_agents",
 	)
 	if _, found := schemas["CapabilityLimit"]; found {
 		t.Fatal("CapabilityLimit leaked runtime tuning values into the public contract")

@@ -75,6 +75,25 @@ func TestExactManagedSkillProjectsToAgentDirectory(t *testing.T) {
 	}
 }
 
+func TestExactManagedSkillProjectsToWorkBuddyDirectory(t *testing.T) {
+	content := projectionContent(t, "powercontext-workbuddy-skill", "Use when WorkBuddy needs durable project context.")
+	ref := projectionRef(t, "skill-workbuddy", 1)
+	root := filepath.Join(t.TempDir(), "skills")
+	target := projectionTarget(t, "workbuddy-project", skill.WorkBuddyAgent, root)
+
+	destination, err := skill.ProjectSkill(ref, content, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(destination, "powercontext.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"agent_kind": "workbuddy"`) {
+		t.Fatalf("WorkBuddy projection manifest = %s", manifest)
+	}
+}
+
 func TestManagedProjectionCanBeInspectedAndSafelyUpdated(t *testing.T) {
 	root := filepath.Join(t.TempDir(), ".agents", "skills")
 	target := projectionTarget(t, "codex-project", skill.CodexAgent, root)
@@ -152,17 +171,12 @@ func TestManagedProjectionRefusesModifiedOrForeignContent(t *testing.T) {
 	}
 }
 
-func TestProjectionEnforcesAgentSpecificCompatibility(t *testing.T) {
-	root := filepath.Join(t.TempDir(), ".claude", "skills")
-	claude := projectionTarget(t, "claude-project", skill.ClaudeCodeAgent, root)
+func TestProjectionEnforcesSupportedAgentCompatibility(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".workbuddy", "skills")
+	workBuddy := projectionTarget(t, "workbuddy-project", skill.WorkBuddyAgent, root)
 	content := projectionContent(t, "review-change", "Use <carefully> when reviewing a bounded change.")
-	projected, err := skill.ProjectSkill(projectionRef(t, "skill-claude", 1), content, claude)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifest, err := os.ReadFile(filepath.Join(projected, "powercontext.json"))
-	if err != nil || !containsAll(string(manifest), `"agent_kind": "claude_code"`) {
-		t.Fatalf("Claude Code manifest = %q, %v", manifest, err)
+	if _, err := skill.ProjectSkill(projectionRef(t, "skill-workbuddy", 1), content, workBuddy); err == nil {
+		t.Fatal("WorkBuddy accepted a description containing angle brackets")
 	}
 
 	codex := projectionTarget(t, "codex-project", skill.CodexAgent, filepath.Join(t.TempDir(), "skills"))

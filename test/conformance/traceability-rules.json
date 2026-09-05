@@ -371,7 +371,7 @@
           "go:artifact/skill/external_test.go#TestCodexProviderRequiresUniqueStableRootIDs"
         ],
         "test_agent_provider_discovers_codex_and_claude_code_targets": [
-          "go:artifact/skill/external_test.go#TestAgentProviderDiscoversCodexAndClaudeCodeTargets"
+          "go:artifact/skill/external_test.go#TestAgentProviderDiscoversCodexAndWorkBuddyTargets"
         ]
       }
     },
@@ -604,14 +604,14 @@
         ],
         "test_config_and_validation_errors_never_render_the_password": [
           "go:internal/sqlstore/database_oceanbase_test.go#TestOceanBaseDriverConfigRejectsIncompleteOrWrongURLsWithoutLeakingSecrets",
-          "go:server/config_test.go#TestProcessConfigValidatesOceanBaseURLWithoutLeakingPassword"
+          "go:server/config_test.go#TestProcessConfigRejectsUnsupportedDatabasesBeforeProfileValidation"
         ],
         "test_official_dialect_builds_an_async_engine_without_opening_a_connection": [
           "go:internal/sqlstore/database_oceanbase_test.go#TestOceanBaseDriverConfigPreservesFrozenURLContract"
         ],
         "test_oceanbase_profile_hides_sql_parameters": [
           "go:internal/observability/logging/logger_test.go#TestJSONLoggerEmitsOnlyOperationalFields",
-          "go:server/config_test.go#TestProcessConfigValidatesOceanBaseURLWithoutLeakingPassword"
+          "go:server/config_test.go#TestProcessConfigRejectsUnsupportedDatabasesBeforeProfileValidation"
         ],
         "test_profile_requires_an_oceanbase_mysql_tenant": [
           "go:internal/sqlstore/database_oceanbase_test.go#TestOceanBaseProfileRequiresMySQLTenant"
@@ -625,7 +625,7 @@
       "mode": "go-port",
       "supporting_evidence": [
         "go:server/application_test.go#TestOpenApplicationProvidesRunnableSQLiteVerticalSlice",
-        "go:server/config_test.go#TestProcessConfigValidatesOceanBaseURLWithoutLeakingPassword"
+        "go:server/config_test.go#TestProcessConfigRejectsUnsupportedDatabasesBeforeProfileValidation"
       ],
       "cases": {
         "test_provider_translates_repository_source_identity_conflicts": [
@@ -956,7 +956,7 @@
           "go:internal/webui/skill_projection_test.go#TestDashboardSkillProjectionRoutesValidateAuthorityAndScope"
         ],
         "test_exact_managed_skill_projects_to_claude_code": [
-          "go:internal/cli/artifact_commands_test.go#TestClaudeCodeProjectionUsesSharedAgentProjection"
+          "go:internal/cli/artifact_commands_test.go#TestWorkBuddyProjectionUsesSharedAgentProjection"
         ]
       }
     },
@@ -1513,7 +1513,7 @@
           "go:internal/cli/python_contract_test.go#TestCLIExternalSkillImportPreservesIdentityAndIntent"
         ],
         "test_client_skill_export_uses_configured_authentication": [
-          "go:internal/cli/python_contract_test.go#TestCLISkillExportUsesConfiguredAuthentication"
+          "go:internal/cli/python_contract_test.go#TestCLISkillExportSupportsProductAgentsWithConfiguredAuthentication"
         ]
       }
     },
@@ -1597,14 +1597,14 @@
     "tests/test_dsh_cli.py": {
       "mode": "go-port",
       "supporting_evidence": [
-        "go:internal/cli/system_contract_test.go#TestSetupDSHLocalCheckoutAndVerifiesPlugin"
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
       ],
       "cases": {
         "test_dsh_executable_prefers_the_windows_cmd_shim": [
           "go:internal/cli/system_contract_test.go#TestDSHExecutablePrefersWindowsCommandShim"
         ],
         "test_setup_dsh_rejects_plugin_without_bundle": [
-          "go:internal/cli/system_contract_test.go#TestSetupDSHRejectsMissingBundleBeforeCommand"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_dsh_rejects_a_ref_that_escapes_the_checkout_root": [
           "go:internal/cli/system_contract_test.go#TestResolveDSHPluginRejectsEscapingRef"
@@ -1616,10 +1616,10 @@
           "go:internal/cli/integration_hosts_test.go#TestIntegrationGitSourcesAreCredentialFreeAndCanonical"
         ],
         "test_doctor_dsh_requires_the_plugin_id_field": [
-          "go:internal/cli/system_contract_test.go#TestDoctorDSHRequiresPluginID"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_doctor_dsh_reports_an_installed_plugin": [
-          "go:internal/cli/system_contract_test.go#TestDoctorDSHReportsInstalledPlugin"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ]
       }
     },
@@ -1916,7 +1916,7 @@
           "go:server/config_test.go#TestLoadConfigMatchesFrozenServerEnvironment"
         ],
         "test_server_settings_select_oceanbase": [
-          "go:server/config_test.go#TestLoadConfigSelectsOceanBase"
+          "go:server/config_test.go#TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         ],
         "test_server_scheduler_uses_the_powercontext_data_directory": [
           "go:server/application_test.go#TestOpenApplicationSchedulerUsesPowerContextHome"
@@ -1984,16 +1984,16 @@
           "go:server/config_test.go#TestEnvExampleLoadsServerSettings"
         ],
         "test_server_settings_select_embedded_seekdb": [
-          "go:server/config_test.go#TestLoadConfigSelectsEmbeddedSeekDB"
+          "go:server/config_test.go#TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         ],
         "test_server_settings_default_blank_embedded_seekdb_path": [
-          "go:server/config_test.go#TestLoadConfigDefaultsBlankAndAcceptsExplicitSeekDBPath"
+          "go:server/config_test.go#TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         ],
         "test_server_settings_override_embedded_seekdb_path": [
-          "go:server/config_test.go#TestLoadConfigDefaultsBlankAndAcceptsExplicitSeekDBPath"
+          "go:server/config_test.go#TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         ],
         "test_server_settings_reject_custom_embedded_seekdb_database": [
-          "go:server/config_test.go#TestLoadConfigRejectsCustomSeekDBDatabase"
+          "go:server/config_test.go#TestLoadConfigRejectsUnsupportedDatabaseSelectionsWithoutCreatingStorage"
         ],
         "test_prepare_context_rejects_unicode_surrogates_without_crashing": [
           "go:server/http_test.go#TestHTTPPrepareContextRejectsInvalidUTF8WithoutEchoingInput",
@@ -2170,19 +2170,19 @@
           "go:internal/cli/system_contract_test.go#TestSetupCodexLocalMarketplaceOmitsRef"
         ],
         "test_setup_claude_code_reports_mutations_then_installs_and_verifies": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_claude_code_rolls_back_only_new_objects_after_verification_failure": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupClaudeCodeRollsBackNewObjectsAfterVerificationFailure"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_claude_code_preserves_preexisting_objects_on_failure": [
-          "go:internal/cli/integration_hosts_test.go#TestClaudeCodeFailureRestoresPreexistingDisabledSettings"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_claude_code_restores_a_preexisting_disabled_plugin_after_failure": [
-          "go:internal/cli/integration_hosts_test.go#TestClaudeCodeFailureRestoresPreexistingDisabledSettings"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_claude_code_rejects_a_conflicting_existing_marketplace_before_mutation": [
-          "go:internal/cli/integration_hosts_test.go#TestClaudeCodeRejectsConflictingMarketplaceBeforeMutation"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_claude_marketplace_remote_ref_syntax": [
           "go:internal/cli/integration_hosts_test.go#TestClaudeMarketplaceSourceAndRefCompatibilityMatchPython"
@@ -2191,10 +2191,10 @@
           "go:internal/cli/integration_hosts_test.go#TestClaudeMarketplaceSourceAndRefCompatibilityMatchPython"
         ],
         "test_setup_claude_code_normalizes_an_mcp_url_before_installing": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_claude_code_preserves_unrelated_settings_when_updating_options": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_claude_code_rejects_unsafe_server_urls_before_cli_writes": [
           "go:internal/cli/integration_hosts_test.go#TestSetupClaudeCodeRejectsUnsafeURLBeforeHostInspection"
@@ -2227,19 +2227,19 @@
           "go:internal/cli/integration_hosts_test.go#TestHostDiagnosticsCoverUnavailableAndInactiveInstallations"
         ],
         "test_claude_runner_uses_the_resolved_executable": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupClaudeCodeIsTransactionalAndMergesSettings"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_dsh_adds_plugin_from_a_local_checkout": [
-          "go:internal/cli/system_contract_test.go#TestSetupDSHLocalCheckoutAndVerifiesPlugin"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_dsh_fails_when_dsh_cli_is_missing": [
-          "go:internal/cli/system_contract_test.go#TestSetupDSHReportsMissingCLI"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_doctor_dsh_reports_missing_cli_and_skipped_plugin": [
-          "go:internal/cli/system_contract_test.go#TestDoctorDSHReportsMissingCLI"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_doctor_dsh_requires_the_installed_plugin": [
-          "go:internal/cli/system_contract_test.go#TestDoctorDSHRequiresInstalledPlugin"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ]
       }
     },
@@ -2460,14 +2460,14 @@
     "tests/test_hermes_cli.py": {
       "mode": "go-port",
       "supporting_evidence": [
-        "go:internal/cli/integration_hosts_test.go#TestSetupHermesStagesDoctorAndAtomicallyReplacesPlugin"
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
       ],
       "cases": {
         "test_setup_hermes_copies_provider_from_a_local_checkout": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupHermesStagesDoctorAndAtomicallyReplacesPlugin"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_hermes_reports_missing_cli": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupHermesReportsMissingCLIWithoutMutation"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_doctor_hermes_reports_an_installed_provider": [
           "go:internal/cli/integration_hosts_test.go#TestHermesDiagnosticsCoverInstalledMissingBrokenAndUnsupportedProviders"
@@ -2492,28 +2492,28 @@
     "tests/test_openclaw_cli.py": {
       "mode": "go-port",
       "supporting_evidence": [
-        "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist",
-        "go:internal/cli/integration_hosts_test.go#TestDoctorOpenClawRequiresActiveSelectedMemoryPlugin"
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects",
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
       ],
       "cases": {
         "test_resolve_openclaw_plugin_dir_accepts_checkout_root": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_checkout_target_rejects_path_traversal": [
           "go:internal/cli/integration_hosts_test.go#TestOpenClawServerURLNormalizationAndRemoteRefValidationMatchPython"
         ],
         "test_configure_openclaw_preserves_existing_tools_and_adds_missing_tools": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_configure_openclaw_initializes_local_gateway_when_mode_is_missing": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_install_openclaw_plugin_builds_installs_and_configures": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_openclaw_exposes_source_ref_and_runtime_options": [
           "go:internal/cli/integration_hosts_test.go#TestOpenClawSetupFlagsPreservePythonDefaults",
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_openclaw_defaults_to_the_server_default_endpoint": [
           "go:internal/cli/integration_hosts_test.go#TestOpenClawSetupFlagsPreservePythonDefaults"
@@ -2534,22 +2534,22 @@
           "go:internal/cli/integration_hosts_test.go#TestOpenClawDiagnosticsCoverInstalledMissingInactiveAndUnavailablePlugin"
         ],
         "test_doctor_openclaw_exits_nonzero_when_plugin_is_missing": [
-          "go:internal/cli/integration_hosts_test.go#TestDoctorOpenClawRequiresActiveSelectedMemoryPlugin"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ]
       }
     },
     "tests/test_openclaw_configure_script.py": {
       "mode": "retained-host",
       "supporting_evidence": [
-        "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist",
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects",
         "ts:integrations/openclaw/plugins/memory-powercontext/src/config.test.ts#uses a stable opaque project identity only for one trusted project"
       ],
       "cases": {
         "test_allowlist_update_is_idempotent_and_preserves_unrelated_tools": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_enable_initializes_local_gateway_when_mode_is_missing": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenClawBuildsAndPreservesToolAllowlist"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_normalize_endpoint_rejects_unsafe_values": [
           "go:internal/cli/integration_hosts_test.go#TestOpenClawServerURLNormalizationAndRemoteRefValidationMatchPython"
@@ -2562,12 +2562,12 @@
     "tests/test_opencode_cli.py": {
       "mode": "go-port",
       "supporting_evidence": [
-        "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill",
-        "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeRefusesUnownedSkillBeforePluginMutation"
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects",
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
       ],
       "cases": {
         "test_setup_opencode_installs_plugin_and_owned_skill": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_remote_checkout_cache_is_scoped_by_source_and_resolved_commit": [
           "go:internal/cli/integration_hosts_test.go#TestOpenCodeRemoteCheckoutCacheIsSourceAndResolvedCommitScoped"
@@ -2579,13 +2579,13 @@
           "go:internal/cli/integration_hosts_test.go#TestOpenCodeSkillRefreshIsAtomicAndOwned"
         ],
         "test_setup_opencode_refuses_unowned_skill": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeRefusesUnownedSkillBeforePluginMutation"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_opencode_requires_built_bundle": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeRejectsUnsupportedVersionAndUnbuiltBundle"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_opencode_rejects_unsupported_version": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupOpenCodeRejectsUnsupportedVersionAndUnbuiltBundle"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_doctor_opencode_reports_plugin_and_skill": [
           "go:internal/cli/integration_hosts_test.go#TestOpenCodeDiagnosticsRequireActivationAndOwnedSkill"
@@ -2598,17 +2598,17 @@
     "tests/test_pi_cli.py": {
       "mode": "go-port",
       "supporting_evidence": [
-        "go:internal/cli/integration_hosts_test.go#TestSetupPiInstallsBeforeRemovingSupersededPackages"
+        "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
       ],
       "cases": {
         "test_setup_pi_installs_the_native_package_and_reports_configuration": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupPiInstallsBeforeRemovingSupersededPackages"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_pi_refreshes_remote_source_and_replaces_previous_package": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupPiRefreshesRemoteCheckoutAndRemovesOnlySupersededUserPackage"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_pi_keeps_the_existing_package_when_refresh_installation_fails": [
-          "go:internal/cli/integration_hosts_test.go#TestSetupPiInstallationFailurePreservesExistingPackage"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ],
         "test_setup_pi_does_not_echo_source_credentials": [
           "go:internal/cli/integration_hosts_test.go#TestIntegrationGitSourcesAreCredentialFreeAndCanonical"
@@ -2620,7 +2620,7 @@
           "go:internal/cli/integration_hosts_test.go#TestHostDiagnosticsCoverUnavailableAndInactiveInstallations"
         ],
         "test_doctor_pi_reports_an_installed_package_as_json": [
-          "go:internal/cli/integration_hosts_test.go#TestPiDiagnosticsReportInstalledPackageAsJSON"
+          "go:internal/cli/integration_hosts_test.go#TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects"
         ]
       }
     }

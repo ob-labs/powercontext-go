@@ -41,6 +41,7 @@ func TestReleaseIntegrationStagingCopiesReviewedInventoryForEveryEdition(t *test
 			if err := stageRelease(repository, root, options, facts); err != nil {
 				t.Fatal(err)
 			}
+			assertSupportedIntegrationRoots(t, root)
 			stagedByEdition[edition] = stagedReleaseIntegrationPaths(t, root, integrations)
 			assertWorkspaceStateIsNotStaged(t, root)
 			assertEditionNativeAssets(t, root, edition)
@@ -55,9 +56,9 @@ func TestReleaseIntegrationStagingExcludesIgnoredFiles(t *testing.T) {
 	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
 	writeIntegrationStagingFixture(t, repository)
 	for _, path := range []string{
-		"integrations/bub/.env",
-		"integrations/bub/.env.local",
-		"integrations/bub/trace.log",
+		"integrations/codex/.env",
+		"integrations/codex/.env.local",
+		"integrations/codex/trace.log",
 	} {
 		if err := os.WriteFile(filepath.Join(repository, filepath.FromSlash(path)), []byte("private\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -70,18 +71,17 @@ func TestReleaseIntegrationStagingExcludesIgnoredFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"integrations/bub/.env",
-		"integrations/bub/.env.local",
-		"integrations/bub/trace.log",
+		"integrations/codex/.env",
+		"integrations/codex/.env.local",
+		"integrations/codex/trace.log",
 	} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("ignored integration file %q was staged: %v", path, err)
 		}
 	}
 	for _, path := range []string{
-		".claude-plugin/marketplace.json",
-		"integrations/bub/src/powercontext_bub/client.py",
-		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
+		"integrations/codex/plugins/powercontext/.codex-plugin/plugin.json",
+		"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json",
 	} {
 		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(path)))
 		if err != nil || !info.Mode().IsRegular() {
@@ -99,8 +99,8 @@ func TestReleaseIntegrationStagingFromSourceCopyUsesReviewedManifest(t *testing.
 	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
 	writeIntegrationStagingSourceFixture(t, repository)
 	for _, path := range []string{
-		"integrations/bub/.env",
-		"integrations/bub/trace.log",
+		"integrations/codex/.env",
+		"integrations/codex/trace.log",
 	} {
 		if err := os.WriteFile(filepath.Join(repository, filepath.FromSlash(path)), []byte("private\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -115,17 +115,17 @@ func TestReleaseIntegrationStagingFromSourceCopyUsesReviewedManifest(t *testing.
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		".claude-plugin/marketplace.json",
-		"integrations/bub/src/powercontext_bub/client.py",
-		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
+		"integrations/codex/plugins/powercontext/.codex-plugin/plugin.json",
+		"integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json",
 	} {
 		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); err != nil || !info.Mode().IsRegular() {
 			t.Errorf("reviewed integration file %q was not staged: %v", path, err)
 		}
 	}
 	for _, path := range []string{
-		"integrations/bub/.env",
-		"integrations/bub/trace.log",
+		"integrations/codex/.env",
+		"integrations/codex/trace.log",
+		"integrations/claude-code/README.md",
 	} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("extra source-copy file %q was staged: %v", path, err)
@@ -136,7 +136,7 @@ func TestReleaseIntegrationStagingFromSourceCopyUsesReviewedManifest(t *testing.
 func TestReleaseIntegrationStagingRejectsTrackedFileManifestDrift(t *testing.T) {
 	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
 	writeIntegrationStagingFixture(t, repository)
-	drift := "integrations/bub/review-drift.txt"
+	drift := "integrations/codex/review-drift.txt"
 	if err := os.WriteFile(filepath.Join(repository, filepath.FromSlash(drift)), []byte("drift\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -177,19 +177,11 @@ func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) 
 	}{
 		"missing integration root": {
 			mutate: func(t *testing.T, repository string) {
-				if err := os.RemoveAll(filepath.Join(repository, "integrations", "bub")); err != nil {
+				if err := os.RemoveAll(filepath.Join(repository, "integrations", "codex")); err != nil {
 					t.Fatal(err)
 				}
 			},
-			message: `release integration "bub" root is missing`,
-		},
-		"unclassified integration root": {
-			mutate: func(t *testing.T, repository string) {
-				if err := os.Mkdir(filepath.Join(repository, "integrations", "unclassified"), 0o755); err != nil {
-					t.Fatal(err)
-				}
-			},
-			message: `integration root "unclassified" is absent from the release inventory`,
+			message: `release integration "codex" root is missing`,
 		},
 	}
 	for name, test := range tests {
@@ -210,7 +202,7 @@ func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) 
 			if len(entries) != 0 {
 				t.Fatalf("staging destination has entries after rejected staging: %v", entries)
 			}
-			for _, path := range []string{".claude-plugin", "integrations"} {
+			for _, path := range []string{"integrations"} {
 				if _, statErr := os.Stat(filepath.Join(destination, path)); !errors.Is(statErr, fs.ErrNotExist) {
 					t.Fatalf("staging destination %q exists after rejected staging: %v", path, statErr)
 				}
@@ -223,7 +215,7 @@ func writeIntegrationStagingFixture(t *testing.T, repository string) {
 	t.Helper()
 	tracked := writeIntegrationStagingSourceFixture(t, repository)
 	runIntegrationStagingGit(t, repository, "init", "--quiet")
-	tracked = append(tracked, ".gitignore", releaseIntegrationFilesManifest)
+	tracked = append(tracked, ".gitignore", releaseIntegrationFilesManifest, "integrations/claude-code/README.md")
 	runIntegrationStagingGit(t, repository, append([]string{"add", "--"}, tracked...)...)
 }
 
@@ -231,13 +223,6 @@ func writeIntegrationStagingSourceFixture(t *testing.T, repository string) []str
 	t.Helper()
 	ignore := filepath.Join(repository, ".gitignore")
 	if err := os.WriteFile(ignore, []byte("*.log\n.env\n.env.*\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	marketplace := filepath.Join(repository, ".claude-plugin", "marketplace.json")
-	if err := os.MkdirAll(filepath.Dir(marketplace), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(marketplace, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
@@ -255,18 +240,18 @@ func writeIntegrationStagingSourceFixture(t *testing.T, repository string) []str
 			t.Fatal(err)
 		}
 	}
-	client := filepath.Join(repository, "integrations", "bub", "src", "powercontext_bub", "client.py")
-	if err := os.MkdirAll(filepath.Dir(client), 0o755); err != nil {
+	historical := filepath.Join(repository, "integrations", "claude-code", "README.md")
+	if err := os.MkdirAll(filepath.Dir(historical), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(client, []byte("# fixture\n"), 0o600); err != nil {
+	if err := os.WriteFile(historical, []byte("historical source\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, directory := range []string{
 		".venv", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache",
 		"__pycache__", "coverage", ".omx", ".workbuddy", ".playwright-mcp", "dist",
 	} {
-		path := filepath.Join(repository, "integrations", "bub", directory)
+		path := filepath.Join(repository, "integrations", "codex", directory)
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -274,11 +259,7 @@ func writeIntegrationStagingSourceFixture(t *testing.T, repository string) []str
 			t.Fatal(err)
 		}
 	}
-	tracked := []string{
-		".claude-plugin/marketplace.json",
-		"integrations/bub/src/powercontext_bub/client.py",
-	}
-	tracked = append(tracked, releaseIntegrationFixturePaths...)
+	tracked := slices.Clone(releaseIntegrationFixturePaths)
 	slices.Sort(tracked)
 	manifest := strings.Join(tracked, "\n") + "\n"
 	manifestPath := filepath.Join(repository, filepath.FromSlash(releaseIntegrationFilesManifest))
@@ -335,6 +316,24 @@ func stagedReleaseIntegrationPaths(t *testing.T, root string, integrations []rel
 	}
 	slices.Sort(paths)
 	return paths
+}
+
+func assertSupportedIntegrationRoots(t *testing.T, root string) {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(root, "integrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			got = append(got, entry.Name())
+		}
+	}
+	want := []string{"codex", "workbuddy"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("staged integration roots = %v, want %v", got, want)
+	}
 }
 
 func assertEditionNativeAssets(t *testing.T, root, edition string) {

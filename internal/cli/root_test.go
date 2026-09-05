@@ -55,7 +55,9 @@ func TestCapabilitiesUsesEnvironmentAndWritesHumanOutput(t *testing.T) {
 			"external_skill_registry":false,
 			"handoff_generation":true,
 			"search_modes":["fts"],
-			"context_versions":["powercontext.prepared-context.v1"]
+			"context_versions":["powercontext.prepared-context.v1"],
+			"supported_databases":["sqlite"],
+			"supported_external_agents":["codex","workbuddy"]
 		}`))
 	})
 
@@ -71,7 +73,10 @@ func TestCapabilitiesUsesEnvironmentAndWritesHumanOutput(t *testing.T) {
 	if authorization != "Bearer secret-token" {
 		t.Fatalf("Authorization = %q", authorization)
 	}
-	for _, fragment := range []string{"Source types: content", "Artifact families: experience, skill", "Memory extraction: enabled"} {
+	for _, fragment := range []string{
+		"Source types: content", "Artifact families: experience, skill", "Memory extraction: enabled",
+		"Supported databases: sqlite", "Supported external agents: codex, workbuddy",
+	} {
 		if !strings.Contains(stdout.String(), fragment) {
 			t.Errorf("output %q does not contain %q", stdout.String(), fragment)
 		}

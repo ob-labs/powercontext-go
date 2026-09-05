@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ob-labs/powercontext-go/server"
 )
 
 const (
@@ -417,28 +419,43 @@ func TestConfigInitForceRemovesStandaloneManagedAssignments(t *testing.T) {
 	}
 }
 
-func TestConfigValidateAcceptsSupportedNonSQLiteAndPartialSettings(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-	}{
-		{
-			name: "OceanBase",
-			content: "POWERCONTEXT_SERVER_DATABASE_KIND=oceanbase\n" +
-				"POWERCONTEXT_SERVER_DATABASE_URL='mysql+aoceanbase://root:test@127.0.0.1:2881/powercontext?charset=utf8mb4'\n",
-		},
-		{name: "partial defaults", content: "POWERCONTEXT_SERVER_HTTP_HOST=127.0.0.1\n"},
+func TestConfigValidateAcceptsPartialSQLiteSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "valid.env")
+	if err := os.WriteFile(path, []byte("POWERCONTEXT_SERVER_HTTP_HOST=127.0.0.1\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "valid.env")
-			if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+	if _, _, err := executeSystemCLI(
+		t, nil, &scriptedSystemCommands{t: t}, "config", "validate", "--env-file", path,
+	); err != nil {
+		t.Fatalf("validate partial SQLite configuration: %v", err)
+	}
+}
+
+func TestConfigValidateRejectsUnsupportedDatabasesWithTypedRedactedCause(t *testing.T) {
+	for _, test := range []struct {
+		kind   string
+		secret string
+		value  string
+	}{
+		{kind: "oceanbase", secret: "database-secret", value: "POWERCONTEXT_SERVER_DATABASE_URL='mysql+aoceanbase://root:database-secret@memory.example/powercontext'\n"},
+		{kind: "seekdb", secret: "private-database-path", value: "POWERCONTEXT_SERVER_DATABASE_PATH=private-database-path\n"},
+	} {
+		t.Run(test.kind, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "unsupported.env")
+			content := "POWERCONTEXT_SERVER_DATABASE_KIND=" + test.kind + "\n" + test.value
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, err := executeSystemCLI(
+			_, _, err := executeSystemCLI(
 				t, nil, &scriptedSystemCommands{t: t}, "config", "validate", "--env-file", path,
-			); err != nil {
-				t.Fatalf("validate supported configuration: %v", err)
+			)
+			var usage *UsageError
+			var unsupported *server.UnsupportedDatabaseError
+			if !errors.As(err, &usage) || !errors.As(err, &unsupported) || ExitCode(err) != 2 {
+				t.Fatalf("config validate error = %T %v, want typed usage refusal", err, err)
+			}
+			if strings.Contains(err.Error(), test.kind) || strings.Contains(err.Error(), test.secret) {
+				t.Fatalf("config validate leaked unsupported database values: %v", err)
 			}
 		})
 	}

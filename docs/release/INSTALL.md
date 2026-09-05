@@ -27,9 +27,9 @@ authoritative OpenAPI document, `.env.example`, retained host-adapter assets,
 embedded sqlite-vec, dependency licenses, build metadata, an SPDX JSON SBOM,
 and an internal `SHA256SUMS` file.
 
-## Retained integration archive contract after v0.1.0
+## Supported integration archive contract after v0.1.0
 
-`powercontext-v0.1.0` is immutable and predates the retained-integration
+`powercontext-v0.1.0` is immutable and predates the supported-integration
 archive contract below. The contract applies to the next unpublished release
 candidate; it does not change the contents or claims of the v0.1.0 assets.
 The versioned `build/release-integrations.json` release input is the
@@ -37,21 +37,18 @@ authoritative inventory for that candidate.
 The exact range-based version recommendation is recorded in
 [`NEXT_VERSION.md`](NEXT_VERSION.md); it is not a publication claim.
 
-The Standard and Full archives must contain the same twelve integration roots.
+The Standard and Full archives must contain the same two integration roots.
 Their only edition-specific difference is the existing native inference assets;
 an integration may not appear in only one edition. The archive verification
-lane exercises the eight command-host integrations from the extracted archive:
+lane exercises both supported command-host integrations from the extracted archive:
 
 | Command-host integration | Archive consumption |
 | --- | --- |
-| Claude Code, Codex, DSH, Hermes | Use their tracked host manifest or executable bundle from the extracted archive. |
-| OpenClaw, OpenCode, Pi | Use their tracked host manifest or executable bundle from the extracted archive. |
+| Codex | Uses its tracked plugin manifest and Skill bundle from the extracted archive. |
 | WorkBuddy | Registers its hook to invoke only the extracted archive's `bin/powercontext` binary. |
 
-The four Python-package integrations, Bub, LangChain, LangGraph, and Pydantic
-AI, install and smoke-test from the extracted archive using their declared lock
-state. Installing a package from a checkout, or using a host bundle outside
-the extracted archive, is not release-consumer evidence.
+Historical adapter source is not redistributed and is not release-consumer
+evidence.
 
 Run `./bin/powercontext setup workbuddy` only from an extracted release
 archive. The setup validates the release layout and writes the owned WorkBuddy
@@ -61,12 +58,12 @@ archive to update that owned registration. This adapter update does not require
 a Server database migration.
 
 The archive contains source, manifests, declared lock files, and tracked
-executable bundles required by these integrations, but no active credential,
+hook and Skill bundles required by these integrations, but no active credential,
 prompt, source, Memory content, raw scope ID, or local database path. Runtime
 authorization stays an environment reference in the host configuration; an
 archive must never persist a bearer token. This archive boundary is separate
-from the pre-WP6 product acceptance boundary: only Codex, WorkBuddy, and
-SQLite count toward that acceptance scope.
+from historical adapter source: only Codex, WorkBuddy, and SQLite count toward
+the supported product scope.
 
 Release verification checks the packaged `.env.example` before starting the
 binary. Its security-sensitive defaults keep the Server and Client on
@@ -121,11 +118,9 @@ host SQLite package is required. The Full archive also contains ONNX Runtime und
 `lib/onnxruntime/`; set `POWERCONTEXT_ONNXRUNTIME_LIBRARY_DIR` to that
 directory before selecting a `sentence-transformers:*` embedding model.
 
-SQLite is the self-contained default and the only database in the pre-WP6
-installation and acceptance scope. seekDB and OceanBase remain the final P4
-backend-alignment work; their migration, packaging, license/SBOM, and release
-reconciliation instructions are intentionally deferred until that scope is
-accepted.
+SQLite is the self-contained default and the only supported database.
+Configurations selecting seekDB, OceanBase, or another backend are rejected
+before any database is opened.
 
 ## Upgrade and projection safety
 
@@ -159,22 +154,20 @@ does not add authentication or encryption. The Go Client also refuses remote
 plaintext unless its caller supplies an HTTP client and explicitly vouches for
 the separately secured transport with `TrustTransportSecurity`.
 
-Before WP6, Codex and WorkBuddy are the supported host-operation scope. Both
+Codex and WorkBuddy are the supported host-operation scope. Both
 integrations call a running Server; neither embeds SQLite or starts the Server.
 Use the [Codex integration guide](https://github.com/ob-labs/powercontext-go/blob/main/integrations/codex/plugins/powercontext/README.md)
 for MCP, hook, scope, and credential-backed header configuration. Install
 WorkBuddy with `./bin/powercontext setup workbuddy`, then run
 `./bin/powercontext doctor workbuddy` to check its Hook, MCP registration,
 managed Skill, and Server health without exposing credentials or prompt data.
-OpenCode, DSH, LangChain, Pydantic AI, Hermes, and other retained adapters
-remain post-WP6 work and are not covered by this installation contract.
+Other adapter source is historical and is not covered by this installation
+contract or included in release archives.
 
 The binary itself does not require a Python runtime. This monorepo tracks
 Python and TypeScript assets for host-native integrations and the evaluation
-control plane, but they are not Go binary runtime requirements. Before WP6,
-the supported acceptance matrix is Codex, WorkBuddy, and SQLite. Other
-retained host adapters are isolated from the Go implementation, call the Go
-Server over HTTP or MCP, and remain in the post-WP6 P3 work plan.
+control plane, but they are not Go binary runtime requirements. The supported
+acceptance matrix is Codex, WorkBuddy, and SQLite.
 
 The container images bind `0.0.0.0:8000` and declare the explicit
 controlled-network opt-in required for a published port. That opt-in does not

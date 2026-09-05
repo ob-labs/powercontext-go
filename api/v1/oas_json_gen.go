@@ -1996,18 +1996,36 @@ func (s *Capabilities) encodeFields(e *jx.Encoder) {
 		}
 		e.ArrEnd()
 	}
+	{
+		e.FieldStart("supported_databases")
+		e.ArrStart()
+		for _, elem := range s.SupportedDatabases {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+	{
+		e.FieldStart("supported_external_agents")
+		e.ArrStart()
+		for _, elem := range s.SupportedExternalAgents {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
 }
 
-var jsonFieldsNameOfCapabilities = [9]string{
-	0: "source_types",
-	1: "artifact_families",
-	2: "memory_extraction",
-	3: "experience_generation",
-	4: "managed_skill_generation",
-	5: "external_skill_registry",
-	6: "handoff_generation",
-	7: "search_modes",
-	8: "context_versions",
+var jsonFieldsNameOfCapabilities = [11]string{
+	0:  "source_types",
+	1:  "artifact_families",
+	2:  "memory_extraction",
+	3:  "experience_generation",
+	4:  "managed_skill_generation",
+	5:  "external_skill_registry",
+	6:  "handoff_generation",
+	7:  "search_modes",
+	8:  "context_versions",
+	9:  "supported_databases",
+	10: "supported_external_agents",
 }
 
 // Decode decodes Capabilities from json.
@@ -2150,6 +2168,42 @@ func (s *Capabilities) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"context_versions\"")
 			}
+		case "supported_databases":
+			requiredBitSet[1] |= 1 << 1
+			if err := func() error {
+				s.SupportedDatabases = make([]CapabilitiesSupportedDatabasesItem, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem CapabilitiesSupportedDatabasesItem
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.SupportedDatabases = append(s.SupportedDatabases, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"supported_databases\"")
+			}
+		case "supported_external_agents":
+			requiredBitSet[1] |= 1 << 2
+			if err := func() error {
+				s.SupportedExternalAgents = make([]CapabilitiesSupportedExternalAgentsItem, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem CapabilitiesSupportedExternalAgentsItem
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.SupportedExternalAgents = append(s.SupportedExternalAgents, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"supported_external_agents\"")
+			}
 		default:
 			return errors.Errorf("unexpected field %q", k)
 		}
@@ -2161,7 +2215,7 @@ func (s *Capabilities) Decode(d *jx.Decoder) error {
 	var failures []validate.FieldError
 	for i, mask := range [2]uint8{
 		0b11000111,
-		0b00000001,
+		0b00000111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -2203,6 +2257,84 @@ func (s *Capabilities) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *Capabilities) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes CapabilitiesSupportedDatabasesItem as json.
+func (s CapabilitiesSupportedDatabasesItem) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes CapabilitiesSupportedDatabasesItem from json.
+func (s *CapabilitiesSupportedDatabasesItem) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CapabilitiesSupportedDatabasesItem to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch CapabilitiesSupportedDatabasesItem(v) {
+	case CapabilitiesSupportedDatabasesItemSqlite:
+		*s = CapabilitiesSupportedDatabasesItemSqlite
+	default:
+		*s = CapabilitiesSupportedDatabasesItem(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s CapabilitiesSupportedDatabasesItem) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CapabilitiesSupportedDatabasesItem) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode encodes CapabilitiesSupportedExternalAgentsItem as json.
+func (s CapabilitiesSupportedExternalAgentsItem) Encode(e *jx.Encoder) {
+	e.Str(string(s))
+}
+
+// Decode decodes CapabilitiesSupportedExternalAgentsItem from json.
+func (s *CapabilitiesSupportedExternalAgentsItem) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode CapabilitiesSupportedExternalAgentsItem to nil")
+	}
+	v, err := d.StrBytes()
+	if err != nil {
+		return err
+	}
+	// Try to use constant string.
+	switch CapabilitiesSupportedExternalAgentsItem(v) {
+	case CapabilitiesSupportedExternalAgentsItemCodex:
+		*s = CapabilitiesSupportedExternalAgentsItemCodex
+	case CapabilitiesSupportedExternalAgentsItemWorkbuddy:
+		*s = CapabilitiesSupportedExternalAgentsItemWorkbuddy
+	default:
+		*s = CapabilitiesSupportedExternalAgentsItem(v)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s CapabilitiesSupportedExternalAgentsItem) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *CapabilitiesSupportedExternalAgentsItem) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

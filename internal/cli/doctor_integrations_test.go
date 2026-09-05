@@ -15,16 +15,14 @@
 package cli
 
 import (
-	"context"
 	"errors"
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestDoctorIntegrationsJSONIncludesEveryFirstClassHost(t *testing.T) {
+	setMissingWorkBuddyHome(t)
 	stdout, _, err := executeSystemCLI(
 		t, nil, &scriptedSystemCommands{t: t}, "doctor", "integrations", "--json",
 	)
@@ -36,8 +34,8 @@ func TestDoctorIntegrationsJSONIncludesEveryFirstClassHost(t *testing.T) {
 		t.Fatalf("doctor integrations summary = %#v", payload)
 	}
 	hosts := payload["hosts"].(map[string]any)
-	if len(hosts) != len(firstClassIntegrationHosts) {
-		t.Fatalf("doctor integrations hosts = %d, want %d", len(hosts), len(firstClassIntegrationHosts))
+	if len(hosts) != 2 || hosts["codex"] == nil || hosts["workbuddy"] == nil {
+		t.Fatalf("doctor integrations hosts = %#v, want only Codex and WorkBuddy", hosts)
 	}
 	for _, spec := range firstClassIntegrationHosts {
 		host := hosts[spec.name].(map[string]any)
@@ -51,11 +49,12 @@ func TestDoctorIntegrationsJSONIncludesEveryFirstClassHost(t *testing.T) {
 		}
 	}
 	assertOrderedFragments(t, stdout,
-		`"codex"`, `"claude-code"`, `"dsh"`, `"openclaw"`, `"opencode"`, `"pi"`, `"hermes"`,
+		`"codex"`, `"workbuddy"`,
 	)
 }
 
 func TestDoctorIntegrationsTreatsMissingCLIsAsSuccess(t *testing.T) {
+	setMissingWorkBuddyHome(t)
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"codex": "/usr/bin/codex"},
 		results: []systemCommandResult{{
@@ -69,15 +68,16 @@ func TestDoctorIntegrationsTreatsMissingCLIsAsSuccess(t *testing.T) {
 	payload := decodeSystemOutput(t, stdout)
 	hosts := payload["hosts"].(map[string]any)
 	codex := hosts["codex"].(map[string]any)
-	pi := hosts["pi"].(map[string]any)
+	workBuddy := hosts["workbuddy"].(map[string]any)
 	if payload["ok"] != true || payload["status"] != "ok" || codex["presence"] != "present" ||
-		codex["plugin"].(map[string]any)["ok"] != true || pi["presence"] != "missing" ||
-		pi["package"].(map[string]any)["status"] != "skipped" {
+		codex["plugin"].(map[string]any)["ok"] != true || workBuddy["presence"] != "missing" ||
+		workBuddy["hooks"].(map[string]any)["status"] != "skipped" {
 		t.Fatalf("doctor integrations = %#v", payload)
 	}
 }
 
 func TestDoctorIntegrationsPrintsHumanMatrix(t *testing.T) {
+	setMissingWorkBuddyHome(t)
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"codex": "/usr/bin/codex"},
 		results: []systemCommandResult{{
@@ -90,18 +90,22 @@ func TestDoctorIntegrationsPrintsHumanMatrix(t *testing.T) {
 	}
 	for _, line := range []string{
 		"codex: present - cli=ok plugin=ok",
-		"claude-code: missing - cli=failed plugin=skipped",
-		"opencode: missing - cli=failed plugin=skipped skill=skipped",
-		"pi: missing - cli=failed package=skipped",
+		"workbuddy: missing - config=failed hooks=skipped settings=skipped mcp=skipped skill=skipped",
 	} {
 		if !strings.Contains(stdout, line+"\n") {
 			t.Fatalf("doctor integrations output %q does not contain %q", stdout, line)
 		}
 	}
-	assertOrderedFragments(t, stdout, "codex:", "claude-code:", "dsh:", "openclaw:", "opencode:", "pi:", "hermes:")
+	assertOrderedFragments(t, stdout, "codex:", "workbuddy:")
+	for _, unsupported := range []string{"claude-code:", "dsh:", "hermes:", "openclaw:", "opencode:", "pi:"} {
+		if strings.Contains(stdout, unsupported) {
+			t.Fatalf("doctor integrations output contains unsupported host %q: %s", unsupported, stdout)
+		}
+	}
 }
 
 func TestDoctorIntegrationsFailsWhenPresentPluginIsBroken(t *testing.T) {
+	setMissingWorkBuddyHome(t)
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"codex": "/usr/bin/codex"},
 		results: []systemCommandResult{{output: `{"installed":[]}`}},
@@ -115,12 +119,13 @@ func TestDoctorIntegrationsFailsWhenPresentPluginIsBroken(t *testing.T) {
 	codex := hosts["codex"].(map[string]any)
 	if payload["ok"] != false || payload["status"] != "failed" || codex["presence"] != "present" ||
 		codex["plugin"].(map[string]any)["status"] != "failed" ||
-		hosts["dsh"].(map[string]any)["presence"] != "missing" {
+		hosts["workbuddy"].(map[string]any)["presence"] != "missing" {
 		t.Fatalf("doctor integrations = %#v", payload)
 	}
 }
 
 func TestDoctorIntegrationsFailsWhenPresentCLICannotListPlugins(t *testing.T) {
+	setMissingWorkBuddyHome(t)
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"codex": "/usr/bin/codex"},
 		results: []systemCommandResult{{err: errors.New("codex plugin list failed: timeout")}},
@@ -137,56 +142,25 @@ func TestDoctorIntegrationsFailsWhenPresentCLICannotListPlugins(t *testing.T) {
 	}
 }
 
-func TestDoctorIntegrationsFailsWhenPresentOpenCodeSkillIsBroken(t *testing.T) {
-	config := t.TempDir()
-	plugin := writeOpenCodePlugin(t, t.TempDir())
-	base := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
-		results: []systemCommandResult{
-			{output: "1.18.21\n"},
-			{output: "config " + config + "\n"},
-			{output: fmt.Sprintf(`{"plugin":[%q]}`, plugin)},
-		},
-	}
-	commands := &environmentAwareCommands{scriptedSystemCommands: base}
-	commands.runEnv = func(
-		_ context.Context,
-		environment map[string]string,
-		_ string,
-		_ ...string,
-	) ([]byte, error) {
-		if writeErr := os.WriteFile(environment[openCodeProbePath], []byte(environment[openCodeProbeNonce]), 0o600); writeErr != nil {
-			t.Fatal(writeErr)
-		}
-		return nil, nil
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "integrations", "--json")
-	if err == nil || !ErrorAlreadyReported(err) || ExitCode(err) != 1 {
-		t.Fatalf("doctor integrations error = %v, exit = %d", err, ExitCode(err))
-	}
-	opencode := decodeSystemOutput(t, stdout)["hosts"].(map[string]any)["opencode"].(map[string]any)
-	if opencode["presence"] != "present" || opencode["plugin"].(map[string]any)["status"] != "ok" ||
-		opencode["skill"].(map[string]any)["status"] != "failed" {
-		t.Fatalf("OpenCode diagnostics = %#v", opencode)
-	}
-	if _, statErr := os.Stat(filepath.Join(config, "skills", "project-context", "SKILL.md")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("doctor integrations mutated OpenCode Skill: %v", statErr)
-	}
-}
-
 func TestDoctorIntegrationsSucceedsWhenEveryHostIsMissing(t *testing.T) {
+	setMissingWorkBuddyHome(t)
 	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "integrations")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, line := range []string{
 		"codex: missing - cli=failed plugin=skipped",
-		"hermes: missing - cli=failed plugin=skipped",
+		"workbuddy: missing - config=failed hooks=skipped settings=skipped mcp=skipped skill=skipped",
 	} {
 		if !strings.Contains(stdout, line) {
 			t.Fatalf("doctor integrations output %q does not contain %q", stdout, line)
 		}
 	}
+}
+
+func setMissingWorkBuddyHome(t *testing.T) {
+	t.Helper()
+	t.Setenv("WORKBUDDY_HOME", filepath.Join(t.TempDir(), "workbuddy"))
 }
 
 func assertOrderedFragments(t *testing.T, value string, fragments ...string) {

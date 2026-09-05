@@ -16,7 +16,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -53,6 +52,34 @@ func TestSetupAndDoctorExposeCurrentHostMatrix(t *testing.T) {
 	}
 }
 
+func TestUnsupportedSetupAndDoctorCommandsRefuseBeforeSideEffects(t *testing.T) {
+	for _, host := range []string{"claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"} {
+		for _, parent := range []string{"setup", "doctor"} {
+			t.Run(parent+"/"+host, func(t *testing.T) {
+				dataDir := filepath.Join(t.TempDir(), "powercontext-data")
+				t.Setenv("POWERCONTEXT_HOME", dataDir)
+				commands := &scriptedSystemCommands{t: t}
+
+				_, _, err := executeSystemCLI(t, nil, commands, parent, host)
+				var usage *UsageError
+				var unsupported *UnsupportedIntegrationError
+				if !errors.As(err, &usage) || !errors.As(err, &unsupported) || ExitCode(err) != 2 {
+					t.Fatalf("%s %s error = %T %v, want typed usage refusal", parent, host, err, err)
+				}
+				if !strings.Contains(err.Error(), "only Codex and WorkBuddy are supported") || strings.Contains(err.Error(), host) {
+					t.Fatalf("unsupported integration error is not stable and redacted: %v", err)
+				}
+				if len(commands.lookups) != 0 || len(commands.calls) != 0 {
+					t.Fatalf("%s %s reached external commands: lookups=%v calls=%v", parent, host, commands.lookups, commands.calls)
+				}
+				if _, statErr := os.Stat(dataDir); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("%s %s created the data directory before refusal: %v", parent, host, statErr)
+				}
+			})
+		}
+	}
+}
+
 func TestIntegrationGitSourcesAreCredentialFreeAndCanonical(t *testing.T) {
 	t.Parallel()
 	for input, want := range map[string]string{
@@ -82,56 +109,6 @@ func TestIntegrationGitSourcesAreCredentialFreeAndCanonical(t *testing.T) {
 				t.Errorf("%s accepted or disclosed %q: %v", name, input, err)
 			}
 		}
-	}
-}
-
-func TestClaudeCodeRejectsConflictingMarketplaceBeforeMutation(t *testing.T) {
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"claude": "/resolved/bin/claude"},
-		results: []systemCommandResult{{output: `[{"name":"powercontext","source":"github","repo":"other/powercontext","ref":"tested-ref"}]`}},
-	}
-	_, _, err := executeSystemCLI(t, nil, commands,
-		"setup", "claude-code", "--source", "ob-labs/powercontext-go", "--ref", "tested-ref")
-	if err == nil || !strings.Contains(err.Error(), "marketplace remove powercontext") || len(commands.calls) != 1 {
-		t.Fatalf("error = %v, commands = %v", err, commands.calls)
-	}
-}
-
-func TestClaudeCodeFailureRestoresPreexistingDisabledSettings(t *testing.T) {
-	config := filepath.Join(t.TempDir(), "claude")
-	t.Setenv("CLAUDE_CONFIG_DIR", config)
-	if err := os.MkdirAll(config, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	settingsPath := filepath.Join(config, "settings.json")
-	previous := []byte(`{"enabledPlugins":{"powercontext@powercontext":false},"pluginConfigs":{"powercontext@powercontext":{"options":{"server_url":"http://127.0.0.1:7000","capture_prompts":false}}},"unrelated":{"preserved":true}}`)
-	if err := os.WriteFile(settingsPath, previous, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"claude": "/resolved/bin/claude"},
-		results: []systemCommandResult{
-			{output: `[{"name":"powercontext","source":"github","repo":"ob-labs/powercontext-go","ref":"main"}]`},
-			{output: `[{"id":"powercontext@powercontext","version":"0.1.0","enabled":false}]`},
-			{after: func(systemCommandCall) {
-				if err := os.WriteFile(settingsPath, []byte(`{"enabledPlugins":{"powercontext@powercontext":true}}`), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}},
-			{output: `[]`},
-		},
-	}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "claude-code")
-	if err == nil {
-		t.Fatal("setup unexpectedly succeeded")
-	}
-	restored, readErr := os.ReadFile(settingsPath)
-	if readErr != nil || string(restored) != string(previous) {
-		t.Fatalf("restored settings = %s, error = %v", restored, readErr)
-	}
-	if got := commandCallStrings(commands.calls); len(got) != 4 || strings.Contains(strings.Join(got, "\n"), "plugin uninstall") {
-		t.Fatalf("preexisting plugin was mutated during rollback: %v", got)
 	}
 }
 
@@ -211,34 +188,6 @@ func TestHostDiagnosticsCoverUnavailableAndInactiveInstallations(t *testing.T) {
 		if checks["claude_code"].Status != "ok" || checks["plugin"].Status != "failed" ||
 			!strings.Contains(checks["plugin"].Detail, "enabled=false") {
 			t.Fatalf("checks = %#v", checks)
-		}
-	})
-}
-
-func TestSetupOpenCodeRejectsUnsupportedVersionAndUnbuiltBundle(t *testing.T) {
-	t.Run("unsupported version", func(t *testing.T) {
-		commands := &scriptedSystemCommands{
-			t: t, paths: map[string]string{"opencode": "/resolved/bin/opencode"},
-			results: []systemCommandResult{{output: "1.18.20\n"}},
-		}
-		_, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode")
-		if err == nil || !strings.Contains(err.Error(), "unsupported") || len(commands.calls) != 1 {
-			t.Fatalf("error = %v, commands = %v", err, commands.calls)
-		}
-	})
-	t.Run("unbuilt bundle", func(t *testing.T) {
-		checkout := filepath.Join(t.TempDir(), "checkout")
-		plugin := writeOpenCodePlugin(t, checkout)
-		if err := os.Remove(filepath.Join(plugin, "lib", "index.js")); err != nil {
-			t.Fatal(err)
-		}
-		commands := &scriptedSystemCommands{
-			t: t, paths: map[string]string{"opencode": "/resolved/bin/opencode"},
-			results: []systemCommandResult{{output: "1.18.21\n"}},
-		}
-		_, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout)
-		if err == nil || !strings.Contains(err.Error(), "missing lib/index.js") || len(commands.calls) != 1 {
-			t.Fatalf("error = %v, commands = %v", err, commands.calls)
 		}
 	})
 }
@@ -484,284 +433,12 @@ func TestOpenCodeActivationProbeUsesHeadlessServerWithoutModel(t *testing.T) {
 	}
 }
 
-func TestSetupClaudeCodeIsTransactionalAndMergesSettings(t *testing.T) {
-	config := filepath.Join(t.TempDir(), "claude")
-	t.Setenv("CLAUDE_CONFIG_DIR", config)
-	if err := os.MkdirAll(config, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	settingsPath := filepath.Join(config, "settings.json")
-	if err := os.WriteFile(settingsPath, []byte(`{"unrelated":{"preserved":true}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	settingsPath, err := resolvePath(settingsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"claude": "/usr/bin/claude"},
-		results: []systemCommandResult{
-			{output: `[]`},
-			{output: `[]`},
-			{},
-			{},
-			{output: `[{"id":"powercontext@powercontext","version":"0.1.0","enabled":true}]`},
-		},
-	}
-	stdout, stderr, err := executeSystemCLI(t, nil, commands,
-		"setup", "claude-code", "--source", "ob-labs/powercontext-go", "--ref", "tested-ref",
-		"--server-url", "http://127.0.0.1:9000/mcp/", "--no-capture-prompts", "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(stderr, "no changes made yet") || !strings.Contains(stderr, settingsPath) {
-		t.Fatalf("setup plan = %q", stderr)
-	}
-	payload := decodeSystemOutput(t, stdout)
-	if payload["plugin_version"] != "0.1.0" || payload["settings_file"] != settingsPath {
-		t.Fatalf("setup output = %#v", payload)
-	}
-	var settings map[string]any
-	content, readErr := os.ReadFile(settingsPath)
-	if readErr != nil || json.Unmarshal(content, &settings) != nil {
-		t.Fatalf("settings = %q, error = %v", content, readErr)
-	}
-	if settings["unrelated"].(map[string]any)["preserved"] != true {
-		t.Fatalf("unrelated settings were lost: %#v", settings)
-	}
-	options := settings["pluginConfigs"].(map[string]any)[claudePluginID].(map[string]any)["options"].(map[string]any)
-	if options["server_url"] != "http://127.0.0.1:9000" || options["capture_prompts"] != false {
-		t.Fatalf("plugin options = %#v", options)
-	}
-	wantCalls := []string{
-		"/usr/bin/claude plugin marketplace list --json",
-		"/usr/bin/claude plugin list --json",
-		"/usr/bin/claude plugin marketplace add ob-labs/powercontext-go@tested-ref --scope user",
-		"/usr/bin/claude plugin install powercontext@powercontext --scope user",
-		"/usr/bin/claude plugin list --json",
-	}
-	if got := commandCallStrings(commands.calls); fmt.Sprint(got) != fmt.Sprint(wantCalls) {
-		t.Fatalf("commands = %v, want %v", got, wantCalls)
-	}
-}
-
-func TestSetupClaudeCodeRollsBackNewObjectsAfterVerificationFailure(t *testing.T) {
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"claude": "/usr/bin/claude"},
-		results: []systemCommandResult{{output: `[]`}, {output: `[]`}, {}, {}, {output: `[]`}, {}, {}},
-	}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "claude-code")
-	if err == nil || !strings.Contains(err.Error(), "enabled PowerContext plugin") {
-		t.Fatalf("setup error = %v", err)
-	}
-	got := commandCallStrings(commands.calls)
-	if !slices.Contains(got, "/usr/bin/claude plugin uninstall powercontext@powercontext --scope user") ||
-		got[len(got)-1] != "/usr/bin/claude plugin marketplace remove powercontext" {
-		t.Fatalf("rollback commands = %v", got)
-	}
-}
-
 func TestSetupClaudeCodeRejectsUnsafeURLBeforeHostInspection(t *testing.T) {
 	commands := &scriptedSystemCommands{t: t, paths: map[string]string{"claude": "/usr/bin/claude"}}
 	_, _, err := executeSystemCLI(t, nil, commands,
 		"setup", "claude-code", "--server-url", "http://memory.example.com")
 	if err == nil || len(commands.calls) != 0 {
 		t.Fatalf("error = %v, calls = %v", err, commands.calls)
-	}
-}
-
-func TestSetupPiInstallsBeforeRemovingSupersededPackages(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	packagePath := writePiPackage(t, checkout)
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	listing := "User packages:\n  " + packagePath + "\n    " + packagePath + "\n"
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"pi": "/usr/bin/pi"},
-		results: []systemCommandResult{{}, {output: listing}, {output: listing}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "setup", "pi", "--source", checkout, "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decodeSystemOutput(t, stdout)["package_path"] != packagePath {
-		t.Fatalf("setup output = %s", stdout)
-	}
-	want := []string{"/usr/bin/pi install " + packagePath, "/usr/bin/pi list", "/usr/bin/pi list"}
-	if got := commandCallStrings(commands.calls); fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("commands = %v, want %v", got, want)
-	}
-}
-
-func TestSetupPiRefreshesRemoteCheckoutAndRemovesOnlySupersededUserPackage(t *testing.T) {
-	dataDirectory, err := resolvePath(filepath.Join(t.TempDir(), "data"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("POWERCONTEXT_HOME", dataDirectory)
-	legacyPackage := writePiPackage(t, filepath.Join(t.TempDir(), "legacy"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"pi": "/usr/bin/pi"},
-		results: []systemCommandResult{
-			{after: func(call systemCommandCall) {
-				root := call.arguments[len(call.arguments)-1]
-				writePiPackage(t, root)
-				writeTestFile(t, filepath.Join(root, "source.txt"), "another/powercontext@master\n")
-			}},
-			{},
-			{output: "User packages:\n  " + legacyPackage + "\n    " + legacyPackage + "\n  current\n    placeholder\n"},
-			{},
-			{output: "User packages:\n  current\n    placeholder\n"},
-		},
-	}
-	// The list payload needs the stable current path, which is known before the
-	// clone executes even though its package contents are staged later.
-	currentPackage := filepath.Join(dataDirectory, "checkouts", "pi", "current", filepath.FromSlash(piRelative))
-	commands.results[2].output = strings.ReplaceAll(commands.results[2].output, "placeholder", currentPackage)
-	commands.results[4].output = strings.ReplaceAll(commands.results[4].output, "placeholder", currentPackage)
-	stdout, _, err := executeSystemCLI(t, nil, commands,
-		"setup", "pi", "--source", "another/powercontext", "--ref", "master", "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decodeSystemOutput(t, stdout)["package_path"] != currentPackage {
-		t.Fatalf("setup output = %s", stdout)
-	}
-	marker, err := os.ReadFile(filepath.Join(dataDirectory, "checkouts", "pi", "current", "source.txt"))
-	if err != nil || string(marker) != "another/powercontext@master\n" {
-		t.Fatalf("checkout marker = %q, error = %v", marker, err)
-	}
-	wantCalls := []string{
-		"git clone --depth 1 --branch master https://github.com/another/powercontext.git",
-		"/usr/bin/pi install " + currentPackage,
-		"/usr/bin/pi list",
-		"/usr/bin/pi remove " + legacyPackage,
-		"/usr/bin/pi list",
-	}
-	got := commandCallStrings(commands.calls)
-	if len(got) != len(wantCalls) || got[1] != wantCalls[1] || got[2] != wantCalls[2] || got[3] != wantCalls[3] || got[4] != wantCalls[4] {
-		t.Fatalf("commands = %v", got)
-	}
-	if !strings.HasPrefix(got[0], "git clone --depth 1 --branch master https://github.com/another/powercontext.git ") {
-		t.Fatalf("clone command = %q", got[0])
-	}
-}
-
-func TestSetupPiInstallationFailurePreservesExistingPackage(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "replacement")
-	writePiPackage(t, checkout)
-	existing := writePiPackage(t, filepath.Join(t.TempDir(), "existing"))
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"pi": "/usr/bin/pi"},
-		results: []systemCommandResult{{err: errors.New("simulated Pi installation failure")}},
-	}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "pi", "--source", checkout)
-	if err == nil || !strings.Contains(err.Error(), "simulated Pi installation failure") {
-		t.Fatalf("setup error = %v", err)
-	}
-	if len(commands.calls) != 1 || commands.calls[0].arguments[0] != "install" {
-		t.Fatalf("commands = %v", commands.calls)
-	}
-	if _, err := os.Stat(filepath.Join(existing, "package.json")); err != nil {
-		t.Fatalf("existing package was disturbed: %v", err)
-	}
-}
-
-func TestPiDiagnosticsReportInstalledPackageAsJSON(t *testing.T) {
-	packagePath := writePiPackage(t, filepath.Join(t.TempDir(), "checkout"))
-	listing := "User packages:\n  " + packagePath + "\n    " + packagePath + "\n"
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"pi": "/usr/bin/pi"},
-		results: []systemCommandResult{{output: listing}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "pi", "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	payload := decodeSystemOutput(t, stdout)
-	packageCheck := payload["checks"].(map[string]any)["package"].(map[string]any)
-	if payload["ok"] != true || packageCheck["status"] != "ok" || packageCheck["detail"] != piPackageName+" is installed" {
-		t.Fatalf("diagnostics = %#v", payload)
-	}
-}
-
-func TestSetupOpenCodeInstallsAutoloadBundleAndOwnedSkill(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	plugin := writeOpenCodePlugin(t, checkout)
-	config := filepath.Join(t.TempDir(), "config")
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
-		results: []systemCommandResult{{output: "1.18.21\n"}, {output: "config     " + config + "\n"}},
-	}
-	if _, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout); err != nil {
-		t.Fatal(err)
-	}
-	bundle := filepath.Join(config, "plugins", openCodePluginName+".js")
-	content, err := os.ReadFile(bundle)
-	if err != nil || string(content) != "export default {}\n" {
-		t.Fatalf("plugin content = %q, error = %v", content, err)
-	}
-	if !ownedOpenCodePlugin(bundle) {
-		t.Fatalf("plugin %q is not marked as PowerContext-owned", bundle)
-	}
-	skill := filepath.Join(config, "skills", "project-context")
-	if !ownedOpenCodeSkill(skill) {
-		t.Fatalf("skill %q is not marked as PowerContext-owned", skill)
-	}
-	content, err = os.ReadFile(filepath.Join(skill, "SKILL.md"))
-	if err != nil || string(content) != "project context\n" {
-		t.Fatalf("skill content = %q, error = %v", content, err)
-	}
-	if len(commands.calls) != 2 {
-		t.Fatalf("unexpected OpenCode commands = %v; source plugin = %s", commands.calls, plugin)
-	}
-}
-
-func TestSetupOpenCodeRefusesUnownedSkillBeforePluginMutation(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	writeOpenCodePlugin(t, checkout)
-	config := filepath.Join(t.TempDir(), "config")
-	target := filepath.Join(config, "skills", "project-context")
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("user owned\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
-		results: []systemCommandResult{{output: "1.18.21\n"}, {output: "config " + config + "\n"}},
-	}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout)
-	if err == nil || !strings.Contains(err.Error(), "not owned by PowerContext") || len(commands.calls) != 2 {
-		t.Fatalf("error = %v, commands = %v", err, commands.calls)
-	}
-}
-
-func TestSetupOpenCodeRefusesUnownedPluginBeforeSkillMutation(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	writeOpenCodePlugin(t, checkout)
-	config := filepath.Join(t.TempDir(), "config")
-	bundle := filepath.Join(config, "plugins", openCodePluginName+".js")
-	writeTestFile(t, bundle, "user owned\n")
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"opencode": "/usr/bin/opencode"},
-		results: []systemCommandResult{{output: "1.18.21\n"}, {output: "config " + config + "\n"}},
-	}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "opencode", "--source", checkout)
-	if err == nil || !strings.Contains(err.Error(), "not owned by PowerContext") || len(commands.calls) != 2 {
-		t.Fatalf("error = %v, commands = %v", err, commands.calls)
-	}
-	content, readErr := os.ReadFile(bundle)
-	if readErr != nil || string(content) != "user owned\n" {
-		t.Fatalf("plugin content = %q, error = %v", content, readErr)
-	}
-	if _, statErr := os.Stat(filepath.Join(config, "skills", "project-context")); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("Skill was mutated before plugin conflict was reported: %v", statErr)
 	}
 }
 
@@ -805,45 +482,6 @@ func TestInterruptedOpenCodePluginInstallRecoversOnRetry(t *testing.T) {
 	content, readErr := os.ReadFile(target)
 	if readErr != nil || string(content) != "export default {}\n" || !ownedOpenCodePlugin(target) {
 		t.Fatalf("repaired plugin content = %q, owned = %v, error = %v", content, ownedOpenCodePlugin(target), readErr)
-	}
-}
-
-func TestSetupHermesStagesDoctorAndAtomicallyReplacesPlugin(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	writeHermesPlugin(t, checkout)
-	home := filepath.Join(t.TempDir(), "hermes")
-	target := filepath.Join(home, "plugins", hermesPluginName)
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(target, "stale.py"), []byte("stale\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	home, err := resolvePath(home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target = filepath.Join(home, "plugins", hermesPluginName)
-	t.Setenv("HERMES_HOME", home)
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"hermes": "/usr/bin/hermes"},
-		results: []systemCommandResult{
-			{output: "Hermes Agent v0.20.4\n"}, {}, {}, {}, {output: "Hermes Agent v0.20.4\n"}, {}, {},
-		},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "setup", "hermes", "--source", checkout, "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decodeSystemOutput(t, stdout)["plugin_path"] != target {
-		t.Fatalf("setup output = %s", stdout)
-	}
-	if _, err := os.Stat(filepath.Join(target, "stale.py")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stale plugin content survived replacement: %v", err)
-	}
-	if _, ok := findHermesPlugin(target); !ok {
-		t.Fatal("installed Hermes plugin is incomplete")
 	}
 }
 
@@ -917,15 +555,6 @@ func TestHermesPluginPairRestoresBothTargetsWhenEnableFails(t *testing.T) {
 	}
 	if got, err := os.ReadFile(filepath.Join(home, "plugins", "other", "keep.txt")); err != nil || string(got) != "keep\n" {
 		t.Fatalf("unrelated plugin = %q, %v", got, err)
-	}
-}
-
-func TestSetupHermesReportsMissingCLIWithoutMutation(t *testing.T) {
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{t: t}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "hermes")
-	if err == nil || !strings.Contains(err.Error(), "Hermes CLI is not installed") || len(commands.calls) != 0 {
-		t.Fatalf("error = %v, commands = %v", err, commands.calls)
 	}
 }
 
@@ -1031,59 +660,6 @@ func TestHermesDiagnosticsCoverInstalledMissingBrokenAndUnsupportedProviders(t *
 	})
 }
 
-func TestSetupOpenClawBuildsAndPreservesToolAllowlist(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "checkout")
-	plugin := writeOpenClawPlugin(t, checkout)
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"openclaw": "/usr/bin/openclaw", "pnpm": "/usr/bin/pnpm"},
-		results: []systemCommandResult{
-			{output: "OpenClaw 2026.8.1-beta.2\n"},
-			{},
-			{after: func(systemCommandCall) {
-				bundle := filepath.Join(plugin, "dist", "index.js")
-				if err := os.MkdirAll(filepath.Dir(bundle), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(bundle, []byte("export default {}\n"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}},
-			{},
-			{err: errors.New("missing gateway mode")},
-			{},
-			{output: `["custom_tool","powercontext_memory_get"]`},
-			{},
-			{},
-		},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands,
-		"setup", "openclaw", "--source", checkout, "--server-url", "http://127.0.0.1:8765/", "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decodeSystemOutput(t, stdout)["server_url"] != "http://127.0.0.1:8765" {
-		t.Fatalf("setup output = %s", stdout)
-	}
-	var allowlist []string
-	call := commands.calls[7]
-	if call.arguments[0] != "config" || call.arguments[1] != "set" || json.Unmarshal([]byte(call.arguments[3]), &allowlist) != nil {
-		t.Fatalf("allowlist command = %v", call)
-	}
-	wantTools := []string{"custom_tool", "powercontext_memory_get"}
-	for _, tool := range openClawTools {
-		if !slices.Contains(wantTools, tool) {
-			wantTools = append(wantTools, tool)
-		}
-	}
-	if fmt.Sprint(allowlist) != fmt.Sprint(wantTools) {
-		t.Fatalf("allowlist = %v, want %v", allowlist, wantTools)
-	}
-	if commands.calls[len(commands.calls)-1].String() != "/usr/bin/openclaw gateway restart" {
-		t.Fatalf("last command = %v", commands.calls[len(commands.calls)-1])
-	}
-}
-
 func TestOpenClawSetupFlagsPreservePythonDefaults(t *testing.T) {
 	t.Parallel()
 	command := newSetupOpenClawCommand(&commandState{system: &scriptedSystemCommands{t: t}})
@@ -1095,21 +671,6 @@ func TestOpenClawSetupFlagsPreservePythonDefaults(t *testing.T) {
 		if flag == nil || flag.DefValue != want {
 			t.Errorf("--%s default = %v, want %q", name, flag, want)
 		}
-	}
-}
-
-func TestDoctorOpenClawRequiresActiveSelectedMemoryPlugin(t *testing.T) {
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"openclaw": "/usr/bin/openclaw"},
-		results: []systemCommandResult{{output: `{"plugins":[{"id":"memory-powercontext","enabled":true,"status":"loaded","memorySlotSelected":false}]}`}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "openclaw", "--json")
-	if err == nil {
-		t.Fatal("doctor unexpectedly accepted an unselected memory plugin")
-	}
-	plugin := decodeSystemOutput(t, stdout)["checks"].(map[string]any)["plugin"].(map[string]any)
-	if plugin["status"] != "failed" {
-		t.Fatalf("plugin diagnostic = %#v", plugin)
 	}
 }
 

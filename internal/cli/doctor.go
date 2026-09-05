@@ -74,24 +74,17 @@ func newDoctorCommand(state *commandState) *cobra.Command {
 				return nil
 			},
 		},
-		newDoctorClaudeCodeCommand(state),
+		unsupportedIntegrationCommand(newDoctorClaudeCodeCommand(state)),
 		&cobra.Command{
 			Use: "dsh", Short: "Check the optional DeepSeek Harness CLI and PowerContext plugin.", Args: cobra.NoArgs,
 			RunE: func(command *cobra.Command, _ []string) error {
-				checks := runDSHDiagnostics(command.Context(), state.system)
-				if err := writeDiagnostics(state, checks); err != nil {
-					return err
-				}
-				if diagnosticsStatus(checks) != "ok" {
-					return alreadyReported(errors.New("DeepSeek Harness diagnostics did not pass"))
-				}
-				return nil
+				return usageError(&UnsupportedIntegrationError{})
 			},
 		},
-		newDoctorPiCommand(state),
-		newDoctorOpenCodeCommand(state),
-		newDoctorHermesCommand(state),
-		newDoctorOpenClawCommand(state),
+		unsupportedIntegrationCommand(newDoctorPiCommand(state)),
+		unsupportedIntegrationCommand(newDoctorOpenCodeCommand(state)),
+		unsupportedIntegrationCommand(newDoctorHermesCommand(state)),
+		unsupportedIntegrationCommand(newDoctorOpenClawCommand(state)),
 	)
 	return command
 }

@@ -16,9 +16,11 @@ package skill_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact/skill"
@@ -43,6 +45,26 @@ func TestCodexProviderDiscoversAndExactlyResolvesLocalPackage(t *testing.T) {
 	resolution, err := provider.Resolve(context.Background(), registration)
 	if err != nil || resolution.Status != skill.Available || resolution.Entrypoint != filepath.Join(packagePath, "SKILL.md") {
 		t.Fatalf("resolution = %#v, %v", resolution, err)
+	}
+}
+
+func TestAgentSkillTargetsAcceptOnlySupportedProductAgents(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, agent := range []skill.AgentKind{skill.CodexAgent, skill.WorkBuddyAgent} {
+		if _, err := skill.NewAgentSkillTarget("supported-target", agent, skill.ProjectScope, root, true); err != nil {
+			t.Fatalf("NewAgentSkillTarget(%q): %v", agent, err)
+		}
+	}
+	for _, agent := range []skill.AgentKind{skill.ClaudeCodeAgent, "unknown-agent"} {
+		_, err := skill.NewAgentSkillTarget("unsupported-target", agent, skill.ProjectScope, root, true)
+		var unsupported *skill.UnsupportedAgentKindError
+		if !errors.As(err, &unsupported) {
+			t.Fatalf("NewAgentSkillTarget(%q) error = %T %v, want UnsupportedAgentKindError", agent, err, err)
+		}
+		if err == nil || strings.Contains(err.Error(), string(agent)) || !strings.Contains(err.Error(), "Codex and WorkBuddy") {
+			t.Fatalf("unsupported Agent Skill error is not stable and redacted: %v", err)
+		}
 	}
 }
 
@@ -151,35 +173,25 @@ func TestCodexProviderRequiresUniqueStableRootIDs(t *testing.T) {
 	}
 }
 
-func TestAgentProviderDiscoversCodexAndClaudeCodeTargets(t *testing.T) {
+func TestAgentProviderDiscoversCodexAndWorkBuddyTargets(t *testing.T) {
 	codexRoot := filepath.Join(t.TempDir(), ".agents", "skills")
-	claudeRoot := filepath.Join(t.TempDir(), ".claude", "skills")
+	workBuddyRoot := filepath.Join(t.TempDir(), ".workbuddy", "skills")
 	writeSkill(t, codexRoot, "codex-review")
-	claudePackage := filepath.Join(claudeRoot, "claude-review")
-	if err := os.MkdirAll(claudePackage, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(claudePackage, "SKILL.md"),
-		[]byte("---\ndescription: Review a change with Claude Code.\n---\n\nReview the change.\n"),
-		0o600,
-	); err != nil {
-		t.Fatal(err)
-	}
+	writeSkill(t, workBuddyRoot, "workbuddy-review")
 	codexTarget, err := skill.NewAgentSkillTarget(
 		"codex-project", skill.CodexAgent, skill.ProjectScope, codexRoot, false,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	claudeTarget, err := skill.NewAgentSkillTarget(
-		"claude-project", skill.ClaudeCodeAgent, skill.ProjectScope, claudeRoot, true,
+	workBuddyTarget, err := skill.NewAgentSkillTarget(
+		"workbuddy-project", skill.WorkBuddyAgent, skill.ProjectScope, workBuddyRoot, true,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	provider, err := skill.NewAgentSkillProvider(
-		"workstation-1", []skill.AgentSkillTarget{codexTarget, claudeTarget},
+		"workstation-1", []skill.AgentSkillTarget{codexTarget, workBuddyTarget},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -195,25 +207,25 @@ func TestAgentProviderDiscoversCodexAndClaudeCodeTargets(t *testing.T) {
 	}
 	wantIDs := []string{
 		"codex:project:codex-project/codex-review",
-		"claude_code:project:claude-project/claude-review",
+		"workbuddy:project:workbuddy-project/workbuddy-review",
 	}
 	gotIDs := []string{registrations[0].ExternalSkillID(), registrations[1].ExternalSkillID()}
 	if !slices.Equal(gotIDs, wantIDs) {
 		t.Fatalf("registration IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	claude := registrations[1]
-	if claude.Name() != "claude-review" || claude.Provider() != "claude_code" ||
-		!claudeTarget.AllowManagedPublish() {
-		t.Fatalf("Claude Code registration/target = %#v / %#v", claude, claudeTarget)
+	workBuddy := registrations[1]
+	if workBuddy.Name() != "workbuddy-review" || workBuddy.Provider() != "workbuddy" ||
+		!workBuddyTarget.AllowManagedPublish() {
+		t.Fatalf("WorkBuddy registration/target = %#v / %#v", workBuddy, workBuddyTarget)
 	}
-	resolved, err := provider.Resolve(context.Background(), claude)
-	wantPackage, pathErr := filepath.EvalSymlinks(claudePackage)
+	resolved, err := provider.Resolve(context.Background(), workBuddy)
+	wantPackage, pathErr := filepath.EvalSymlinks(filepath.Join(workBuddyRoot, "workbuddy-review"))
 	if pathErr != nil {
 		t.Fatal(pathErr)
 	}
 	if err != nil || resolved.Status != skill.Available ||
 		resolved.Entrypoint != filepath.Join(wantPackage, "SKILL.md") {
-		t.Fatalf("Claude Code resolution = %#v, %v", resolved, err)
+		t.Fatalf("WorkBuddy resolution = %#v, %v", resolved, err)
 	}
 }
 

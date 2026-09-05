@@ -41,13 +41,24 @@ func releaseIntegrationFiles(repository string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return nil, err
+	}
+	pathspecs := make([]string, 0, len(integrations))
+	for _, integration := range integrations {
+		pathspecs = append(pathspecs, "integrations/"+integration.ID)
+	}
+	if err := validateReleaseIntegrationFileScope(reviewed, pathspecs); err != nil {
+		return nil, err
+	}
 	if _, metadataErr := os.Lstat(filepath.Join(repository, ".git")); metadataErr != nil {
 		if errors.Is(metadataErr, fs.ErrNotExist) {
 			return reviewed, nil
 		}
 		return nil, fmt.Errorf("inspect release repository Git metadata: %w", metadataErr)
 	}
-	tracked, err := trackedRepositoryFiles(repository, ".claude-plugin", "integrations")
+	tracked, err := trackedRepositoryFiles(repository, pathspecs...)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +67,22 @@ func releaseIntegrationFiles(repository string) ([]string, error) {
 		return nil, errors.New("release integration file manifest does not match tracked files; update build/release-integration-files.txt")
 	}
 	return reviewed, nil
+}
+
+func validateReleaseIntegrationFileScope(files, pathspecs []string) error {
+	for _, relative := range files {
+		matched := false
+		for _, root := range pathspecs {
+			if strings.HasPrefix(relative, root+"/") {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("release integration file %q is outside the supported integration roots", relative)
+		}
+	}
+	return nil
 }
 
 func readReleaseIntegrationFiles(repository string) ([]string, error) {
@@ -71,7 +98,7 @@ func readReleaseIntegrationFiles(repository string) ([]string, error) {
 	for _, relative := range paths {
 		tree, remainder, hasSeparator := strings.Cut(relative, "/")
 		if !fs.ValidPath(relative) || path.Clean(relative) != relative || strings.ContainsAny(relative, "\\\r") ||
-			!hasSeparator || remainder == "" || tree != ".claude-plugin" && tree != "integrations" {
+			!hasSeparator || remainder == "" || tree != "integrations" {
 			return nil, fmt.Errorf("invalid release integration file manifest path %q", relative)
 		}
 		if previous != "" && relative <= previous {

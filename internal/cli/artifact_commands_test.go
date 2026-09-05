@@ -91,10 +91,10 @@ func TestCodexProjectionRejectsInvalidManagedContent(t *testing.T) {
 	}
 }
 
-func TestClaudeCodeProjectionUsesSharedAgentProjection(t *testing.T) {
-	value := testSkillArtifact("safe-skill", "Use <carefully> for a bounded task.")
-	destination := filepath.Join(t.TempDir(), ".claude", "skills", value.Content.Name)
-	projected, err := projectAgentSkill(value, destination, "claude_code")
+func TestWorkBuddyProjectionUsesSharedAgentProjection(t *testing.T) {
+	value := testSkillArtifact("safe-skill", "Use carefully for a bounded task.")
+	destination := filepath.Join(t.TempDir(), ".workbuddy", "skills", value.Content.Name)
+	projected, err := projectAgentSkill(value, destination, "workbuddy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +106,8 @@ func TestClaudeCodeProjectionUsesSharedAgentProjection(t *testing.T) {
 		Schema    string `json:"schema"`
 		AgentKind string `json:"agent_kind"`
 	}
-	if json.Unmarshal(manifestBytes, &manifest) != nil || manifest.Schema != codexProjectionSchema || manifest.AgentKind != "claude_code" {
-		t.Fatalf("Claude Code projection manifest = %s", manifestBytes)
+	if json.Unmarshal(manifestBytes, &manifest) != nil || manifest.Schema != codexProjectionSchema || manifest.AgentKind != "workbuddy" {
+		t.Fatalf("WorkBuddy projection manifest = %s", manifestBytes)
 	}
 }
 

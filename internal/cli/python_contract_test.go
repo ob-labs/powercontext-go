@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -414,6 +415,29 @@ func TestServerCommandRejectsBlankHostOverride(t *testing.T) {
 	}
 }
 
+func TestServerCommandRejectsUnsupportedDatabaseBeforeRunner(t *testing.T) {
+	t.Setenv("POWERCONTEXT_SERVER_DATABASE_KIND", "oceanbase")
+	t.Setenv("POWERCONTEXT_SERVER_DATABASE_URL", "mysql+aoceanbase://root:database-secret@memory.example/powercontext")
+	runnerCalled := false
+	runner := func(context.Context, *commandState, server.ProcessConfig) error {
+		runnerCalled = true
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	command := newCommandWithDependencies(VersionInfo{Version: "test"}, &stdout, &stderr, nil, runner)
+	command.SetArgs([]string{"server", "run"})
+
+	err := command.ExecuteContext(t.Context())
+	var usage *UsageError
+	var unsupported *server.UnsupportedDatabaseError
+	if !errors.As(err, &usage) || !errors.As(err, &unsupported) || ExitCode(err) != 2 || runnerCalled {
+		t.Fatalf("server run error = %T %v, exit=%d, runner=%t", err, err, ExitCode(err), runnerCalled)
+	}
+	if strings.Contains(err.Error(), "oceanbase") || strings.Contains(err.Error(), "database-secret") {
+		t.Fatalf("server run leaked unsupported database values: %v", err)
+	}
+}
+
 func TestServerCommandLoopbackOverrideRepairsUnsafeEnvironment(t *testing.T) {
 	t.Setenv("POWERCONTEXT_SERVER_HTTP_HOST", "0.0.0.0")
 	t.Setenv("POWERCONTEXT_SERVER_AUTH_ENABLED", "false")
@@ -733,32 +757,48 @@ func TestCLIMapsOpenAPIRequestValidationToUsage(t *testing.T) {
 	}
 }
 
-func TestCLISkillExportUsesConfiguredAuthentication(t *testing.T) {
+func TestCLISkillExportSupportsProductAgentsWithConfiguredAuthentication(t *testing.T) {
 	t.Setenv(clientURLVar, "https://powercontext.test")
 	t.Setenv(clientTokenVar, "secret-token")
 	t.Setenv(clientTimeoutVar, "10")
-	var authorization string
-	httpClient := fakeHTTPClient(func(writer http.ResponseWriter, request *http.Request) {
-		authorization = request.Header.Get("Authorization")
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{
+	for _, target := range []string{"codex", "workbuddy"} {
+		t.Run(target, func(t *testing.T) {
+			var authorization string
+			httpClient := fakeHTTPClient(func(writer http.ResponseWriter, request *http.Request) {
+				authorization = request.Header.Get("Authorization")
+				writer.Header().Set("Content-Type", "application/json")
+				_, _ = writer.Write([]byte(`{
 			"artifact":{"family":"skill","artifact_id":"skill-123","revision":1},
 			"content":{"name":"safe-skill","description":"Use for a bounded task.","instructions":"Perform the bounded task.","validation":["The expected result exists."]},
 			"source_refs":[],"artifact_refs":[]
 		}`))
-	})
-	destination := filepath.Join(t.TempDir(), "safe-skill")
-	stdout, _, err := executeContractCLI(t, httpClient,
-		"skill", "export", "--target", "codex", "--scope-id", "project", "--revision", "1",
-		"--destination", destination, "skill-123")
-	if err != nil {
-		t.Fatal(err)
+			})
+			destination := filepath.Join(t.TempDir(), "safe-skill")
+			stdout, _, err := executeContractCLI(t, httpClient,
+				"skill", "export", "--target", target, "--scope-id", "project", "--revision", "1",
+				"--destination", destination, "skill-123")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if authorization != "Bearer secret-token" || !strings.Contains(stdout, "Exported skill-123@1 for "+target) {
+				t.Fatalf("authorization = %q; output = %q", authorization, stdout)
+			}
+			if _, err := os.Stat(filepath.Join(destination, "SKILL.md")); err != nil {
+				t.Fatalf("projected SKILL.md: %v", err)
+			}
+		})
 	}
-	if authorization != "Bearer secret-token" || !strings.Contains(stdout, "Exported skill-123@1 for codex") {
-		t.Fatalf("authorization = %q; output = %q", authorization, stdout)
-	}
-	if _, err := os.Stat(filepath.Join(destination, "SKILL.md")); err != nil {
-		t.Fatalf("projected SKILL.md: %v", err)
+}
+
+func TestCLISkillExportRejectsUnsupportedAgentBeforeHTTP(t *testing.T) {
+	transportCalled := false
+	httpClient := fakeHTTPClient(func(http.ResponseWriter, *http.Request) { transportCalled = true })
+	_, _, err := executeContractCLI(t, httpClient,
+		"--server-url", "https://powercontext.test", "skill", "export", "--target", "claude_code",
+		"--scope-id", "project", "--revision", "1", "--destination", filepath.Join(t.TempDir(), "skill"), "skill-123")
+	var usage *UsageError
+	if !errors.As(err, &usage) || ExitCode(err) != 2 || transportCalled {
+		t.Fatalf("unsupported export error = %T %v, exit=%d, transport=%t", err, err, ExitCode(err), transportCalled)
 	}
 }
 

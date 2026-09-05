@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -40,29 +42,28 @@ var firstClassIntegrationHosts = [...]integrationHostSpec{
 		missingDetail: "Codex CLI is not installed or is not on PATH", probe: runCodexDiagnostics,
 	},
 	{
-		name: "claude-code", label: "Claude Code", cliKey: "claude_code", integrationKeys: []string{"plugin"},
-		missingDetail: "Claude Code CLI is not installed or is not on PATH", probe: runClaudeCodeDiagnostics,
+		name: "workbuddy", label: "WorkBuddy", cliKey: "config",
+		integrationKeys: []string{"hooks", "settings", "mcp", "skill"},
+		missingDetail:   "PowerContext WorkBuddy configuration is missing",
+		probe:           runWorkBuddyIntegrationDiagnostics,
 	},
-	{
-		name: "dsh", label: "DeepSeek Harness", cliKey: "dsh", integrationKeys: []string{"plugin"},
-		missingDetail: "DeepSeek Harness CLI is not installed or is not on PATH", probe: runDSHDiagnostics,
-	},
-	{
-		name: "openclaw", label: "OpenClaw", cliKey: "openclaw", integrationKeys: []string{"plugin"},
-		missingDetail: "OpenClaw CLI is not installed or is not on PATH", probe: runOpenClawDiagnostics,
-	},
-	{
-		name: "opencode", label: "OpenCode", cliKey: "opencode", integrationKeys: []string{"plugin", "skill"},
-		missingDetail: "OpenCode CLI is not installed or is not on PATH", probe: runOpenCodeDiagnostics,
-	},
-	{
-		name: "pi", label: "Pi", cliKey: "pi", integrationKeys: []string{"package"},
-		missingDetail: "Pi CLI is not installed or is not on PATH", probe: runPiDiagnostics,
-	},
-	{
-		name: "hermes", label: "Hermes", cliKey: "hermes", integrationKeys: []string{"plugin", "command_plugin"},
-		missingDetail: "Hermes CLI is not installed or is not on PATH", probe: runHermesDiagnostics,
-	},
+}
+
+func runWorkBuddyIntegrationDiagnostics(context.Context, systemCommandExecutor) map[string]diagnostic {
+	home, err := workBuddyHome()
+	if err == nil {
+		_, statErr := os.Stat(filepath.Join(home, workBuddyConfigFilename))
+		if errors.Is(statErr, os.ErrNotExist) {
+			return map[string]diagnostic{
+				"config":   {Status: "failed", Detail: "PowerContext WorkBuddy configuration is missing"},
+				"hooks":    {Status: "skipped", Detail: "not checked because WorkBuddy is not configured"},
+				"settings": {Status: "skipped", Detail: "not checked because WorkBuddy is not configured"},
+				"mcp":      {Status: "skipped", Detail: "not checked because WorkBuddy is not configured"},
+				"skill":    {Status: "skipped", Detail: "not checked because WorkBuddy is not configured"},
+			}
+		}
+	}
+	return runWorkBuddyDiagnostics()
 }
 
 type integrationCheck struct {
@@ -156,7 +157,11 @@ func writeIntegrationReport(state *commandState, report integrationReport) error
 	}
 	for _, row := range report.hosts {
 		statuses := make([]string, 0, len(row.integrations)+1)
-		statuses = append(statuses, "cli="+row.cli.Status)
+		primary := "cli"
+		if row.cliKey == "config" {
+			primary = "config"
+		}
+		statuses = append(statuses, primary+"="+row.cli.Status)
 		for _, check := range row.integrations {
 			statuses = append(statuses, check.name+"="+check.diagnostic.Status)
 		}
@@ -176,13 +181,8 @@ type integrationReportJSON struct {
 }
 
 type integrationHostsJSON struct {
-	Codex      map[string]any `json:"codex"`
-	ClaudeCode map[string]any `json:"claude-code"`
-	DSH        map[string]any `json:"dsh"`
-	OpenClaw   map[string]any `json:"openclaw"`
-	OpenCode   map[string]any `json:"opencode"`
-	Pi         map[string]any `json:"pi"`
-	Hermes     map[string]any `json:"hermes"`
+	Codex     map[string]any `json:"codex"`
+	WorkBuddy map[string]any `json:"workbuddy"`
 }
 
 func (r integrationReport) jsonValue() integrationReportJSON {
@@ -192,18 +192,8 @@ func (r integrationReport) jsonValue() integrationReportJSON {
 		switch row.host {
 		case "codex":
 			value.Hosts.Codex = host
-		case "claude-code":
-			value.Hosts.ClaudeCode = host
-		case "dsh":
-			value.Hosts.DSH = host
-		case "openclaw":
-			value.Hosts.OpenClaw = host
-		case "opencode":
-			value.Hosts.OpenCode = host
-		case "pi":
-			value.Hosts.Pi = host
-		case "hermes":
-			value.Hosts.Hermes = host
+		case "workbuddy":
+			value.Hosts.WorkBuddy = host
 		}
 	}
 	return value

@@ -22,7 +22,7 @@ candidate comparison and explicitly says that a release must not be assumed to
 be a patch release. That policy does not mechanically assign semantic-version
 numbers. This recommendation uses the compatible new public functionality in
 the candidate range as the material distinction: a patch number would
-understate the new CLI and retained-integration behavior, while no evidence
+understate the new CLI and supported-integration behavior, while no evidence
 through this candidate requires a breaking major-line decision.
 
 ## Exact-diff record
@@ -33,14 +33,11 @@ through this candidate requires a breaking major-line decision.
 | Public Go API | The recorded source-surface analysis finds no changes under Makefile `PUBLIC_API_PACKAGES`: `api/v1`, `artifact`, `artifact/experience`, `artifact/handoff`, `artifact/memory`, `artifact/skill`, `client`, `inference`, `server`, `source`, or `trigger`. The candidate delta through `fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` also has no changes there. The `v0.1.0` API baseline is renamed and bound to its release tag. | No public Go API migration is identified. `make api-compat` remains the release gate for incompatible exported changes. |
 | OpenAPI | The recorded source-surface analysis leaves `openapi/powercontext.yaml` unchanged, and the candidate delta through `fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` does not change it. | No HTTP wire-contract migration or regenerated-client change is identified. |
 | Server persistence | The recorded source-surface analysis leaves `internal/sqlstore` unchanged, and the candidate delta through `fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` adds no Server schema or persistence migration. | No database migration is required by this release decision. Preserve the existing SQLite upgrade and projection-safety procedure. |
-| Installation and adapters | The WorkBuddy Go hook replaces the installed Python hook boundary. LangChain is added as a retained Python-package integration, and the retained inventory records all twelve roots. The candidate delta completes archive staging, command-host and Python-consumer proof, integration evidence, release-workflow verification, and the corresponding release documentation. | The archive must carry the reviewed integration inventory and credential-free configuration boundary. |
-| Archive and release process | The candidate adds an explicit integration inventory and release-draft/review flow, separate Standard and Full runtime verification, and the final archive-consumer and evidence checks. | Standard and Full must expose identical retained integrations; only their existing native inference assets differ. Publication remains a separate reviewed action. |
+| Installation and adapters | Codex and WorkBuddy are the only supported integration roots. The WorkBuddy Go hook replaces the installed Python hook boundary; historical adapter source is not redistributed. | The archive must carry the reviewed two-root integration inventory and credential-free configuration boundary. |
+| Archive and release process | The candidate adds an explicit integration inventory and release-draft/review flow, separate Standard and Full runtime verification, and final archive evidence checks. | Standard and Full must expose identical Codex and WorkBuddy integrations; only their existing native inference assets differ. Publication remains a separate reviewed action. |
 
-The twelve retained integrations are eight command hosts (Claude Code, Codex,
-DSH, Hermes, OpenClaw, OpenCode, Pi, and WorkBuddy) and four Python packages
-(Bub, LangChain, LangGraph, and Pydantic AI). Command hosts must consume the
-extracted archive. Python packages must install and smoke-test from that
-archive and their declared lock state. WorkBuddy registration must invoke only
+The two supported integrations are the Codex and WorkBuddy command hosts. Both
+must consume the extracted archive. WorkBuddy registration must invoke only
 the extracted archive binary. These requirements do not make the archive a
 credential store: credentials remain runtime environment references and are
 not archive content.

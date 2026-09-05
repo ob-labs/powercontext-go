@@ -114,6 +114,13 @@ func (h *Handler) GetCapabilities(ctx context.Context) (v1.GetCapabilitiesRes, e
 	for _, version := range value.ContextVersions() {
 		versions = append(versions, v1.PreparedContextSchema(version))
 	}
+	supportedDatabases := []v1.CapabilitiesSupportedDatabasesItem{
+		v1.CapabilitiesSupportedDatabasesItemSqlite,
+	}
+	supportedExternalAgents := []v1.CapabilitiesSupportedExternalAgentsItem{
+		v1.CapabilitiesSupportedExternalAgentsItemCodex,
+		v1.CapabilitiesSupportedExternalAgentsItemWorkbuddy,
+	}
 	return &v1.CapabilitiesHeaders{
 		XPowerContextRequestID: requestID(ctx),
 		Response: v1.Capabilities{
@@ -123,6 +130,7 @@ func (h *Handler) GetCapabilities(ctx context.Context) (v1.GetCapabilitiesRes, e
 			ManagedSkillGeneration: v1.NewOptBool(value.ManagedSkillGeneration()),
 			ExternalSkillRegistry:  v1.NewOptBool(value.ExternalSkillRegistry()),
 			HandoffGeneration:      value.HandoffGeneration(), SearchModes: searchModes, ContextVersions: versions,
+			SupportedDatabases: supportedDatabases, SupportedExternalAgents: supportedExternalAgents,
 		},
 	}, nil
 }

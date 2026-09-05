@@ -72,16 +72,8 @@ func validateReleaseIntegrations(repository string, integrations []releaseIntegr
 	if !repositoryInfo.IsDir() {
 		return errors.New("release repository is not a directory")
 	}
-	integrationDirectory := filepath.Join(repository, "integrations")
-	directories, err := os.ReadDir(integrationDirectory)
-	if err != nil {
-		return fmt.Errorf("read integration roots: %w", err)
-	}
-
-	recorded := make(map[string]struct{}, len(integrations))
 	for _, integration := range integrations {
-		recorded[integration.ID] = struct{}{}
-		root := filepath.Join(integrationDirectory, integration.ID)
+		root := filepath.Join(repository, "integrations", integration.ID)
 		info, statErr := os.Stat(root)
 		if statErr != nil {
 			return fmt.Errorf("release integration %q root is missing: %w", integration.ID, statErr)
@@ -97,15 +89,6 @@ func validateReleaseIntegrations(repository string, integrations []releaseIntegr
 			if !info.Mode().IsRegular() {
 				return fmt.Errorf("release integration %q declared path %q is not a regular file", integration.ID, releasePath)
 			}
-		}
-	}
-
-	for _, entry := range directories {
-		if !entry.IsDir() {
-			continue
-		}
-		if _, ok := recorded[entry.Name()]; !ok {
-			return fmt.Errorf("integration root %q is absent from the release inventory", entry.Name())
 		}
 	}
 	return nil

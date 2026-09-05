@@ -370,11 +370,11 @@ func writeHuman(writer io.Writer, value any) error {
 	switch value := value.(type) {
 	case v1.Capabilities:
 		_, err := fmt.Fprintf(writer,
-			"Source types: %s\nArtifact families: %s\nMemory extraction: %s\nExperience generation: %s\nManaged Skill generation: %s\nExternal Skill Registry: %s\nHandoff generation: %s\nSearch modes: %s\nContext versions: %s\n",
+			"Source types: %s\nArtifact families: %s\nMemory extraction: %s\nExperience generation: %s\nManaged Skill generation: %s\nExternal Skill Registry: %s\nHandoff generation: %s\nSearch modes: %s\nContext versions: %s\nSupported databases: %s\nSupported external agents: %s\n",
 			items(value.SourceTypes), items(value.ArtifactFamilies), enabled(value.MemoryExtraction),
 			enabled(value.ExperienceGeneration.Or(false)), enabled(value.ManagedSkillGeneration.Or(false)),
 			enabled(value.ExternalSkillRegistry.Or(false)), enabled(value.HandoffGeneration),
-			items(value.SearchModes), items(value.ContextVersions),
+			items(value.SearchModes), items(value.ContextVersions), items(value.SupportedDatabases), items(value.SupportedExternalAgents),
 		)
 		return err
 	case v1.HealthResponse:

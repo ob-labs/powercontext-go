@@ -6,8 +6,8 @@ counterpart or enforces a Go release constraint that does not exist in Python.
 
 | Python workflow | Go workflow | Deliberate adaptation |
 | --- | --- | --- |
-| `master.yml` | `master.yml` | Pinned lint and formatting, an independent Go 1.27 readonly package build with explicit SQLite development headers, race-enabled atomic coverage, built-binary dependency-license evidence, a pinned standard-release vulnerability scan, machine-checked contribution contracts, Go module verification, vet, generated transport contracts, Go tests, and the same Pi package replace Python lock, prek, and interpreter tests. |
-| `e2e-harness.yml` | `e2e-harness.yml` | The same validate/SQLite/OceanBase/evidence lifecycle drives the Go process and live OceanBase acceptance tests. |
+| `master.yml` | `master.yml` | Pinned lint and formatting, an independent Go 1.27 readonly package build with explicit SQLite development headers, race-enabled atomic coverage, built-binary dependency-license evidence, a pinned standard-release vulnerability scan, machine-checked contribution contracts, Go module verification, vet, generated transport contracts, and Go tests. |
+| `e2e-harness.yml` | `e2e-harness.yml` | The validate/SQLite/evidence lifecycle drives the supported Go process acceptance test. |
 | `license-check.yml` | `license-check.yml` | Both call SkyWalking Eyes 0.8.0 directly. `make license-check` and `make license-fix` remain local entry points. |
 | `deploy-docs.yml` | `deploy-docs.yml` | Both build locked Zensical documentation and deploy GitHub Pages. |
 | `build-artifacts.yml` | `build-artifacts.yml` | Go binary bundles replace Python wheel and offline-wheel bundles; standard and Full editions are release requirements. |
@@ -19,7 +19,7 @@ Four Go-specific workflows extend, rather than replace, that Python topology:
 
 | Go workflow | Purpose |
 | --- | --- |
-| `migration-gates.yml` | Reusable PR assurance called by `master.yml`: explicit owned-module integrity, fresh generated-consumer builds, public API compatibility, online verification of the recorded upstream tag, release bytes, and PyPI provenance, frozen Python Oracle and exact v0.1.0 release-fixture regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, live OceanBase, split host-adapter evidence, Codex/SQLite evaluation, four-platform standard/Full builds, CGO-disabled portable SDK cross-builds, and the isolated downstream public-consumer workflow. |
+| `migration-gates.yml` | Reusable PR assurance called by `master.yml`: explicit owned-module integrity, fresh generated-consumer builds, public API compatibility, online verification of the recorded upstream tag, release bytes, and PyPI provenance, frozen Python Oracle and exact v0.1.0 release-fixture regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, Codex/WorkBuddy host-adapter evidence, Codex/SQLite evaluation, four-platform standard/Full builds, CGO-disabled portable SDK cross-builds, and the isolated downstream public-consumer workflow. |
 | `codeql.yml` | Go CodeQL analysis on pull requests, pushes to `main`, a weekly schedule, and manual dispatch. Pull request runs check out the exact submitted head commit before the explicit Go build. |
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
 | `windows-contract.yml` | Windows checkout-only contract guard: verifies LF attributes, both versioned fixture SHA-256 inventories, and generated-contract cleanliness without claiming Windows binary support. |
@@ -36,18 +36,17 @@ it does not silently replace the historical Oracle. Pull requests regenerate bot
 sources, while Python-to-Go interoperability and HTTP differential checks continue to state exactly which Oracle
 they exercise.
 
-Within `migration-gates.yml`, host and evaluation evidence has three explicit
+Within `migration-gates.yml`, host and evaluation evidence has two explicit
 contracts:
 
 | Job ID and display name | Scope | Acceptance role |
 | --- | --- | --- |
-| `host-adapters` / `Pre-WP6 host adapters` | Codex and WorkBuddy | Stable required pre-WP6 host gate; it must run for every pull request. |
-| `retained-host-adapters` / `Post-WP6 retained host adapters` | Bub, Claude Code, DSH, Hermes, LangGraph, OpenClaw, OpenCode, and Pi | Executable P3 evidence. It remains failing when its real tests fail, but branch protection must not count it as a pre-WP6 required check. |
-| `evaluation` / `Codex/SQLite evaluation control plane` | Python control plane and frontend for Codex/SQLite evaluation | WP5 evidence; it is not proof of every retained host adapter. |
+| `host-adapters` / `Pre-WP6 host adapters` | Codex and WorkBuddy | Stable supported host gate; it must run for every pull request. |
+| `evaluation` / `Codex/SQLite evaluation control plane` | Python control plane and frontend for Codex/SQLite evaluation | Evidence for the supported evaluation surface. |
 
-After the new checks first run on `main`, repository administrators must retain
-the stable `Pre-WP6 host adapters` required check and explicitly review branch
-protection so the retained P3 job is not added to the pre-WP6 required set.
+Repository administrators should retain the stable `Pre-WP6 host adapters`
+required check. Unsupported backend and retained-host jobs are not active
+workflow checks.
 
 All third-party GitHub Actions are pinned to reviewed 40-character commit SHAs. The adjacent version comments retain
 the human-readable update intent while preventing a mutable tag from changing executable CI code.

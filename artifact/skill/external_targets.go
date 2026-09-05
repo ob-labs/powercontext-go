@@ -35,7 +35,7 @@ func NewAgentSkillTarget(
 		return AgentSkillTarget{}, fmt.Errorf("Agent Skill target ID is invalid")
 	}
 	if !validAgentKind(string(agentKind)) {
-		return AgentSkillTarget{}, fmt.Errorf("invalid Agent Skill kind %q", agentKind)
+		return AgentSkillTarget{}, &UnsupportedAgentKindError{}
 	}
 	if scope != UserScope && scope != ProjectScope && scope != PluginScope {
 		return AgentSkillTarget{}, fmt.Errorf("invalid external Skill installation scope %q", scope)

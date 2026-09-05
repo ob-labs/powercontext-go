@@ -14,7 +14,7 @@ historical fixture python-v0.0.2 3a6cb0151670eaff7dc0293466edd673124e80da
 ```
 
 The HTTP source of truth is [`openapi/powercontext.yaml`](openapi/powercontext.yaml).
-Generated code under `api/v1` and generated operation tables are never edited
+Generated code under `api/v1` is never edited
 by hand. Compatibility evidence lives under `test/conformance`: the v0.1.0
 release inventory contains 812 Python test cases in 132 files, alongside the
 immutable historical v0.0.2 fixture. The generated
@@ -33,25 +33,21 @@ binary release.
 | Upstream release identity | `powercontext-v0.1.0` at `7b736206a53a6de6f43d4b517893ee1a80e7183d`; the generated [case-by-case inventory](test/conformance/parity-inventory.json) covers 812 cases in 132 files. | The exact target, distribution digests, fixtures, traceability rules, and generated inventory are checked by the release-contract workflow. |
 | Go Server, SDK, CLI, and OpenAPI | Go-native implementation with `openapi/powercontext.yaml` as the authoritative HTTP contract. | SQLite is the only database accepted before WP6. |
 | Codex and WorkBuddy | Installed integrations call the running Go Server through HTTP or MCP; their service-chain evidence is a required `Pre-WP6 host adapters` check. | These are the only host integrations counted toward WP6 acceptance. |
-| Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is WP5 evidence, not evidence for every retained host adapter. |
-| Retained adapters | Other maintained adapters retain their own executable `Post-WP6 retained host adapters` CI evidence. | Bub, Claude Code, DSH, Hermes, LangChain, LangGraph, OpenClaw, OpenCode, Pi, and Pydantic AI are P3 work and are not WP6 acceptance evidence. |
-| seekDB and OceanBase | Existing code and jobs remain useful backend-plan evidence. | Feature parity, migrations, packaging, license/SBOM work, and release reconciliation are final P4 work. |
+| Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is evaluation evidence for the supported matrix. |
+| Historical adapters and backends | Source may remain for comparison and migration history. | It is not active product, release, installation, or CI evidence. |
 
 See [`docs/release/INSTALL.md`](docs/release/INSTALL.md) for the exact release
 identity, configuration, upgrade, transport, and host-operation contract.
 
-## Retained integration archive
+## Supported integration archive
 
-The next unpublished release candidate has one explicit twelve-root retained
-integration inventory. It is an archive-completeness contract, not an
-expansion of the pre-WP6 acceptance scope above. Standard and Full archives
-must contain the same integrations; edition differences remain limited to
-their existing native inference assets.
+The next unpublished release candidate has one explicit two-root integration
+inventory. Standard and Full archives contain exactly Codex and WorkBuddy;
+edition differences remain limited to their existing native inference assets.
 
 | Consumer mode | Integrations | Required archive evidence |
 | --- | --- | --- |
-| Command host (8) | Claude Code, Codex, DSH, Hermes, OpenClaw, OpenCode, Pi, WorkBuddy | Consume the extracted archive's tracked host manifest or executable bundle. WorkBuddy registration invokes only the extracted archive binary. |
-| Python package (4) | Bub, LangChain, LangGraph, Pydantic AI | Install and smoke-test from the extracted archive and each package's declared lock state. |
+| Command host (2) | Codex, WorkBuddy | Consume the extracted archive's tracked host manifest or hook bundle. WorkBuddy registration invokes only the extracted archive binary. |
 
 The archived integration content consists of reviewed source, manifests, lock
 files, and tracked executable bundles. It never carries an active credential,
@@ -75,11 +71,9 @@ consumer result is not archive evidence.
   observability. Native seekDB and sqlite-vec ownership lives below
   `internal/sqlstore`.
 
-- `integrations` contains the twelve maintained retained integrations in the
-  archive inventory. They communicate only with the Go Server and are
-  auxiliary monorepo assets rather than Go binary implementation languages.
-  Before WP6 acceptance, the primary host scope is Codex and WorkBuddy only;
-  all other retained integrations are P3 work.
+- `integrations` contains the supported Codex and WorkBuddy release roots plus
+  historical adapter source. Only Codex and WorkBuddy are packaged, installed,
+  or exercised as active host integrations.
 - `evaluation` contains the deployment-neutral Codex/SQLite evaluation control
   plane. It is maintained and tested in this repository, but is neither
   embedded in the Go binary nor a Go release-runtime requirement.
@@ -103,9 +97,8 @@ example, privacy-safe `log/slog` setup under `internal/observability/logging`.
 This is a Go-primary monorepo: Python and TypeScript host assets and the
 evaluation control plane remain tracked, licensed, and tested, but GitHub
 language statistics deliberately exclude them from the primary Go product
-classification. The pre-WP6 acceptance matrix is Codex, WorkBuddy, and
-SQLite. Retained host adapters expand after WP6; seekDB and OceanBase remain
-the final backend-alignment scope.
+classification. The supported product matrix is Codex, WorkBuddy, and SQLite.
+Other adapter and backend source is historical and does not expand that matrix.
 
 See [`docs/architecture/README.md`](docs/architecture/README.md) for the full
 directory map and dependency rules.
@@ -143,8 +136,8 @@ Run `powercontext config init --non-interactive` to create a managed local
 environment file. Inspect it without disclosing credential values with
 `powercontext config show --env-file .env`, and validate syntax, persistent
 storage paths, and Server settings with `powercontext config validate --env-file .env`.
-SQLite remains the zero-dependency default. seekDB and OceanBase installation
-and release guidance remain deferred to the final P4 backend-alignment scope.
+SQLite is the only supported database. Configuration that selects seekDB,
+OceanBase, or another database is rejected before storage is opened.
 
 Plain HTTP is trusted only on loopback (`localhost`, `::1`, or any address in
 `127.0.0.0/8`). The Server refuses an unauthenticated non-loopback bind by
@@ -171,12 +164,10 @@ Useful verification targets:
 ```sh
 make lint-fix
 make license-check
-make pi-test
 make docs-test
+make test-sqlite
 make test-race
 make test-full TOKENIZERS_LIB_DIR=/path/to/tokenizers/lib
-POWERCONTEXT_TEST_OCEANBASE_URL='mysql+aoceanbase://root%40tenant:password@127.0.0.1:2881/powercontext?charset=utf8mb4' \
-  make test-oceanbase-live
 ```
 
 The lint targets install the pinned `golangci-lint` release under
@@ -194,11 +185,6 @@ The checked file types and deliberate generated/vendor exclusions are defined
 in [`.licenserc.yaml`](.licenserc.yaml). SkyWalking Eyes is version-pinned by
 the Make target and does not modify prompt text, fixtures, lock files, or
 generated Go contracts.
-
-The OceanBase target requires a dedicated disposable MySQL-mode database. It
-verifies tenant and charset negotiation, the complete core and optional Report
-schemas, Source cursor CAS, and Handoff Report Activity allocation against the
-real server rather than a SQL mock.
 
 The Go-native LoCoMo benchmark uses the same runtime, database, providers, and
 frozen dataset contract as Python:

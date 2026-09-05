@@ -35,7 +35,7 @@ import (
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
-const capabilitiesJSON = `{"source_types":[],"artifact_families":[],"memory_extraction":false,"experience_generation":false,"managed_skill_generation":false,"external_skill_registry":false,"handoff_generation":false,"search_modes":[],"context_versions":[]}`
+const capabilitiesJSON = `{"source_types":[],"artifact_families":[],"memory_extraction":false,"experience_generation":false,"managed_skill_generation":false,"external_skill_registry":false,"handoff_generation":false,"search_modes":[],"context_versions":[],"supported_databases":["sqlite"],"supported_external_agents":["codex","workbuddy"]}`
 
 func repeatValue[T any](value T, count int) []T {
 	result := make([]T, count)

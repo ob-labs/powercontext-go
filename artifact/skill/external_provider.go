@@ -31,7 +31,7 @@ type AgentSkillProvider struct {
 }
 
 func NewAgentSkillProvider(hostID string, targets []AgentSkillTarget) (*AgentSkillProvider, error) {
-	return newAgentSkillProvider(hostID, targets, []string{string(CodexAgent), string(ClaudeCodeAgent)})
+	return newAgentSkillProvider(hostID, targets, []string{string(CodexAgent), string(WorkBuddyAgent)})
 }
 
 func newAgentSkillProvider(

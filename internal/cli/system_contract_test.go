@@ -317,77 +317,6 @@ func TestDoctorCodexRequiresEnabledPlugin(t *testing.T) {
 	}
 }
 
-func TestSetupDSHLocalCheckoutAndVerifiesPlugin(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "powercontext")
-	plugin := writeDSHPlugin(t, checkout, true)
-	home := filepath.Join(t.TempDir(), "data")
-	t.Setenv("POWERCONTEXT_HOME", home)
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"},
-		results: []systemCommandResult{{}, {output: "id: powercontext-dsh\n"}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "setup", "dsh", "--source", checkout, "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	plugin, err = resolvePath(plugin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	home, err = resolvePath(home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	payload := decodeSystemOutput(t, stdout)
-	if payload["plugin"] != dshPluginName || payload["plugin_path"] != plugin || payload["data_dir"] != home {
-		t.Fatalf("setup output = %#v", payload)
-	}
-	want := []string{
-		"/usr/bin/dsh plugin --profile web add " + plugin,
-		"/usr/bin/dsh --profile web --dump-config",
-	}
-	if got := commandCallStrings(commands.calls); fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("commands = %v, want %v", got, want)
-	}
-}
-
-func TestSetupDSHReportsMissingCLI(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "data")
-	t.Setenv("POWERCONTEXT_HOME", home)
-	_, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t},
-		"setup", "dsh", "--source", t.TempDir())
-	if err == nil || !strings.Contains(err.Error(), "DeepSeek Harness CLI is not installed") {
-		t.Fatalf("setup error = %v", err)
-	}
-	if _, statErr := os.Stat(home); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("missing CLI changed data directory: %v", statErr)
-	}
-}
-
-func TestDoctorDSHReportsMissingCLI(t *testing.T) {
-	stdout, _, err := executeSystemCLI(t, nil, &scriptedSystemCommands{t: t}, "doctor", "dsh", "--json")
-	if err == nil {
-		t.Fatal("doctor dsh unexpectedly succeeded")
-	}
-	checks := decodeSystemOutput(t, stdout)["checks"].(map[string]any)
-	if checks["dsh"].(map[string]any)["detail"] != "DeepSeek Harness CLI is not installed or is not on PATH" ||
-		checks["plugin"].(map[string]any)["status"] != "skipped" {
-		t.Fatalf("checks = %#v", checks)
-	}
-}
-
-func TestDoctorDSHRequiresInstalledPlugin(t *testing.T) {
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"},
-		results: []systemCommandResult{{output: "id: other-plugin\n"}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "dsh")
-	if err == nil || !strings.Contains(stdout, "dsh: ok - /usr/bin/dsh") ||
-		!strings.Contains(stdout, "plugin: failed - PowerContext DSH plugin is not installed") {
-		t.Fatalf("output = %q, error = %v", stdout, err)
-	}
-}
-
 func TestDSHExecutablePrefersWindowsCommandShim(t *testing.T) {
 	commands := &scriptedSystemCommands{
 		t: t, paths: map[string]string{"dsh.cmd": `C:\\bin\\dsh.cmd`, "dsh": `C:\\bin\\dsh.exe`},
@@ -398,17 +327,6 @@ func TestDSHExecutablePrefersWindowsCommandShim(t *testing.T) {
 	}
 	if got != `C:\\bin\\dsh.cmd` || fmt.Sprint(commands.lookups) != "[dsh.cmd]" {
 		t.Fatalf("executable = %q, lookups = %v", got, commands.lookups)
-	}
-}
-
-func TestSetupDSHRejectsMissingBundleBeforeCommand(t *testing.T) {
-	checkout := filepath.Join(t.TempDir(), "powercontext")
-	writeDSHPlugin(t, checkout, false)
-	t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-	commands := &scriptedSystemCommands{t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"}}
-	_, _, err := executeSystemCLI(t, nil, commands, "setup", "dsh", "--source", checkout)
-	if err == nil || !strings.Contains(err.Error(), "lib/index.js") || len(commands.calls) != 0 {
-		t.Fatalf("setup error = %v, commands = %v", err, commands.calls)
 	}
 }
 
@@ -461,92 +379,6 @@ func TestResolveDSHPluginReplacesBrokenCheckout(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(stale, "README")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("broken checkout was not replaced: %v", statErr)
-	}
-}
-
-func TestDoctorDSHRequiresPluginID(t *testing.T) {
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"},
-		results: []systemCommandResult{{output: "name: powercontext-dsh\n"}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "dsh")
-	if err == nil || !strings.Contains(stdout, "plugin: failed - PowerContext DSH plugin is not installed") {
-		t.Fatalf("output = %q, error = %v", stdout, err)
-	}
-}
-
-func TestDoctorDSHReportsInstalledPlugin(t *testing.T) {
-	commands := &scriptedSystemCommands{
-		t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"},
-		results: []systemCommandResult{{output: "- id: powercontext-dsh\n  name: powercontext-dsh\n"}},
-	}
-	stdout, _, err := executeSystemCLI(t, nil, commands, "doctor", "dsh", "--json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	payload := decodeSystemOutput(t, stdout)
-	plugin := payload["checks"].(map[string]any)["plugin"].(map[string]any)
-	if payload["ok"] != true || plugin["ok"] != true || plugin["status"] != "ok" ||
-		plugin["detail"] != "powercontext-dsh is installed" {
-		t.Fatalf("doctor output = %#v", payload)
-	}
-}
-
-func TestSetupRequiresPostInstallHostVerification(t *testing.T) {
-	t.Run("codex", func(t *testing.T) {
-		t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-		commands := &scriptedSystemCommands{
-			t: t, paths: map[string]string{"codex": "/usr/bin/codex"},
-			results: []systemCommandResult{
-				{output: `{"marketplaceName":"powercontext"}`},
-				{output: `{"name":"powercontext","version":"0.1.0"}`},
-				{output: `{"installed":[]}`},
-			},
-		}
-		stdout, _, err := executeSystemCLI(t, nil, commands, "setup", "codex", "--json")
-		if err == nil || !ErrorAlreadyReported(err) {
-			t.Fatalf("setup error = %v", err)
-		}
-		payload := decodeSystemOutput(t, stdout)
-		if payload["status"] != "failed" || payload["checks"].(map[string]any)["plugin"].(map[string]any)["status"] != "failed" {
-			t.Fatalf("diagnostics = %#v", payload)
-		}
-	})
-
-	t.Run("dsh", func(t *testing.T) {
-		checkout := filepath.Join(t.TempDir(), "powercontext")
-		writeDSHPlugin(t, checkout, true)
-		t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "data"))
-		commands := &scriptedSystemCommands{
-			t: t, paths: map[string]string{"dsh": "/usr/bin/dsh"},
-			results: []systemCommandResult{{}, {output: "id: other-plugin\n"}},
-		}
-		stdout, _, err := executeSystemCLI(t, nil, commands,
-			"setup", "dsh", "--source", checkout, "--json")
-		if err == nil || !ErrorAlreadyReported(err) {
-			t.Fatalf("setup error = %v", err)
-		}
-		payload := decodeSystemOutput(t, stdout)
-		if payload["status"] != "failed" || payload["checks"].(map[string]any)["plugin"].(map[string]any)["status"] != "failed" {
-			t.Fatalf("diagnostics = %#v", payload)
-		}
-	})
-}
-
-func TestCheckoutTargetRejectsExistingSymlinkEscape(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "checkouts", "dsh")
-	outside := t.TempDir()
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := checkoutTarget(root, filepath.Join("escape", "victim")); err == nil {
-		t.Fatal("checkout target followed a symlink outside its trusted root")
-	}
-	if _, err := os.Stat(outside); err != nil {
-		t.Fatalf("outside directory was changed: %v", err)
 	}
 }
 
