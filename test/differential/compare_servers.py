@@ -39,6 +39,9 @@ from urllib.request import ProxyHandler, Request, build_opener
 _DYNAMIC_JSON_FIELDS = frozenset(
     {"as_of", "generated_at", "report_digest", "request_id"}
 )
+_GO_CAPABILITIES_EXTENSIONS = frozenset(
+    {"supported_databases", "supported_external_agents"}
+)
 _SECRET_ENV_MARKERS = ("API_KEY", "AUTH_TOKEN", "PASSWORD", "SECRET", "TOKEN")
 _LOOPBACK_OPENER = build_opener(ProxyHandler({}))
 _POST_PATHS = (
@@ -256,14 +259,28 @@ def _observe(
 ) -> tuple[dict[str, Any], Any]:
     status, headers, response = _request(base_url, method, path, payload)
     content_type = headers.get("content-type", "").partition(";")[0]
+    normalized = _normalize_observation_payload(path, response)
     observation = {
         "status": status,
         "content_type": content_type,
         "cache_control": headers.get("cache-control"),
         "has_request_id": bool(headers.get("x-powercontext-request-id")),
-        "payload": _normalize_json(response),
+        "payload": normalized,
     }
     return observation, response
+
+
+def _normalize_observation_payload(path: str, response: Any) -> Any:
+    normalized = _normalize_json(response)
+    if path == "/v1/capabilities" and isinstance(normalized, dict):
+        # The frozen v0.1.0 Oracle predates the Go-only supported-product
+        # matrix. Keep its comparison strict for all shared capability fields.
+        return {
+            key: value
+            for key, value in normalized.items()
+            if key not in _GO_CAPABILITIES_EXTENSIONS
+        }
+    return normalized
 
 
 def _normalize_json(value: Any) -> Any:
