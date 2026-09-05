@@ -75,11 +75,11 @@ consumer result is not archive evidence.
   observability. Native seekDB and sqlite-vec ownership lives below
   `internal/sqlstore`.
 
-- `integrations` contains the twelve maintained host-native adapters in the
-  retained archive inventory. They communicate only with the Go Server and are
+- `integrations` contains the twelve maintained retained integrations in the
+  archive inventory. They communicate only with the Go Server and are
   auxiliary monorepo assets rather than Go binary implementation languages.
   Before WP6 acceptance, the primary host scope is Codex and WorkBuddy only;
-  all other retained hosts are P3 work.
+  all other retained integrations are P3 work.
 - `evaluation` contains the deployment-neutral Codex/SQLite evaluation control
   plane. It is maintained and tested in this repository, but is neither
   embedded in the Go binary nor a Go release-runtime requirement.
