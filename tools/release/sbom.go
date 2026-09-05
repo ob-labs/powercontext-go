@@ -72,12 +72,12 @@ func filterLockfileDependencyPackages(document map[string]any) {
 	removed := make(map[string]struct{})
 	kept := make([]any, 0, len(packages))
 	for _, value := range packages {
-		packageRecord, ok := value.(map[string]any)
-		if !ok || !lockfileOnlyPackage(packageRecord) {
+		packageRecord, packageRecordOK := value.(map[string]any)
+		if !packageRecordOK || !lockfileOnlyPackage(packageRecord) {
 			kept = append(kept, value)
 			continue
 		}
-		if id, ok := packageRecord["SPDXID"].(string); ok {
+		if id, idOK := packageRecord["SPDXID"].(string); idOK {
 			removed[id] = struct{}{}
 		}
 	}
@@ -88,8 +88,8 @@ func filterLockfileDependencyPackages(document map[string]any) {
 	}
 	keptRelationships := make([]any, 0, len(relationships))
 	for _, value := range relationships {
-		relationship, ok := value.(map[string]any)
-		if !ok {
+		relationship, relationshipOK := value.(map[string]any)
+		if !relationshipOK {
 			keptRelationships = append(keptRelationships, value)
 			continue
 		}
@@ -110,8 +110,8 @@ func lockfileOnlyPackage(packageRecord map[string]any) bool {
 		return false
 	}
 	for _, value := range references {
-		reference, ok := value.(map[string]any)
-		if !ok || reference["referenceCategory"] != "PACKAGE-MANAGER" || reference["referenceType"] != "purl" {
+		reference, referenceOK := value.(map[string]any)
+		if !referenceOK || reference["referenceCategory"] != "PACKAGE-MANAGER" || reference["referenceType"] != "purl" {
 			continue
 		}
 		locator, _ := reference["referenceLocator"].(string)

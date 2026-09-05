@@ -250,8 +250,8 @@ func verifyIntegrationEvidence(root, repository string, records []integrationEvi
 	if err != nil {
 		return fmt.Errorf("read frozen release integration inventory: %w", err)
 	}
-	if err := validateReleaseIntegrations(repository, expected); err != nil {
-		return fmt.Errorf("validate frozen release integration inventory: %w", err)
+	if validationErr := validateReleaseIntegrations(repository, expected); validationErr != nil {
+		return fmt.Errorf("validate frozen release integration inventory: %w", validationErr)
 	}
 	if !slices.EqualFunc(integrations, expected, equalReleaseIntegration) {
 		return errors.New("redistributed integration evidence does not match frozen release integration inventory")

@@ -143,8 +143,8 @@ func collectIntegrationEvidence(repository string) ([]integrationEvidence, error
 	if err != nil {
 		return nil, err
 	}
-	if err := validateReleaseIntegrations(repository, integrations); err != nil {
-		return nil, err
+	if validationErr := validateReleaseIntegrations(repository, integrations); validationErr != nil {
+		return nil, validationErr
 	}
 	license, err := readBoundedFile(filepath.Join(repository, "LICENSE"), maxLicenseBytes)
 	if err != nil {

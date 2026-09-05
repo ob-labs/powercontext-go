@@ -395,15 +395,15 @@ func writeReleaseIntegrationEvidenceFixture(t *testing.T) releaseIntegrationEvid
 	root := t.TempDir()
 	for _, releasePath := range releaseIntegrationFixturePaths {
 		archivePath := filepath.Join(root, filepath.FromSlash(releasePath))
-		if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
-			t.Fatal(err)
+		if mkdirErr := os.MkdirAll(filepath.Dir(archivePath), 0o755); mkdirErr != nil {
+			t.Fatal(mkdirErr)
 		}
-		if err := os.WriteFile(archivePath, []byte("fixture\n"), 0o600); err != nil {
-			t.Fatal(err)
+		if writeErr := os.WriteFile(archivePath, []byte("fixture\n"), 0o600); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(root, "LICENSE"), []byte("project license\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(filepath.Join(root, "LICENSE"), []byte("project license\n"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	manifest := dependencyManifest{
 		SchemaVersion: 1,
@@ -493,8 +493,8 @@ func mutateIntegrationEvidenceSBOM(t *testing.T, fixture releaseIntegrationEvide
 		t.Fatal(err)
 	}
 	var document map[string]any
-	if err := json.Unmarshal(payload, &document); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(payload, &document); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	mutate(document)
 	payload, err = json.Marshal(document)
@@ -502,8 +502,8 @@ func mutateIntegrationEvidenceSBOM(t *testing.T, fixture releaseIntegrationEvide
 		t.Fatal(err)
 	}
 	for _, path := range []string{filepath.Join(fixture.root, "SBOM.spdx.json"), fixture.detachedSBOM} {
-		if err := os.WriteFile(path, payload, 0o600); err != nil {
-			t.Fatal(err)
+		if writeErr := os.WriteFile(path, payload, 0o600); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 	}
 	rewriteIntegrationEvidenceChecksums(t, fixture.root)

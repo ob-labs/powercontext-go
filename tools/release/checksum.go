@@ -155,9 +155,9 @@ func verifyTreeChecksums(root string) error {
 		if entry.Type()&os.ModeSymlink == 0 && !entry.Type().IsRegular() {
 			return fmt.Errorf("unsupported release file %q", filePath)
 		}
-		relative, err := filepath.Rel(root, filePath)
-		if err != nil {
-			return err
+		relative, relativeErr := filepath.Rel(root, filePath)
+		if relativeErr != nil {
+			return relativeErr
 		}
 		expected[filepath.ToSlash(relative)] = struct{}{}
 		return nil

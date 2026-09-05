@@ -41,11 +41,11 @@ func releaseIntegrationFiles(repository string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Lstat(filepath.Join(repository, ".git")); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+	if _, metadataErr := os.Lstat(filepath.Join(repository, ".git")); metadataErr != nil {
+		if errors.Is(metadataErr, fs.ErrNotExist) {
 			return reviewed, nil
 		}
-		return nil, fmt.Errorf("inspect release repository Git metadata: %w", err)
+		return nil, fmt.Errorf("inspect release repository Git metadata: %w", metadataErr)
 	}
 	tracked, err := trackedRepositoryFiles(repository, ".claude-plugin", "integrations")
 	if err != nil {

@@ -456,8 +456,8 @@ func stageIntegrations(repository, root string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateReleaseIntegrations(repository, integrations); err != nil {
-		return err
+	if validationErr := validateReleaseIntegrations(repository, integrations); validationErr != nil {
+		return validationErr
 	}
 	files, err := releaseIntegrationFiles(repository)
 	if err != nil {
