@@ -80,7 +80,7 @@ PUBLIC_API_PACKAGES := \
 	$(MODULE_PATH)/source \
 	$(MODULE_PATH)/trigger
 
-.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated release-contract-check module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
+.PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated parity-inventory-check release-contract-check module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full test-oceanbase-live real-provider-test \
 	pi-test docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
@@ -228,6 +228,12 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 	$(GO) run ./tools/mcp-schema-generate
 	$(GO) run ./tools/traceability-generate -check
 	git diff --exit-code -- openapi api/v1 client/invoker_gen.go internal/mcpapi/schemas_gen.go integrations/dsh/plugins/powercontext/src/operations.generated.ts
+
+parity-inventory-check: ## Fail closed until the exact upstream master node list is fully classified.
+	@test -n "$(UPSTREAM_MASTER_CHECKOUT)" || { echo 'UPSTREAM_MASTER_CHECKOUT must name the exact upstream master checkout' >&2; exit 2; }
+	@test "$$(git -C "$(UPSTREAM_MASTER_CHECKOUT)" rev-parse HEAD)" = 74b961fbb07165595314726715d412a3d0d90589 || { echo 'UPSTREAM_MASTER_CHECKOUT is not 74b961fbb07165595314726715d412a3d0d90589' >&2; exit 2; }
+	POWERCONTEXT_REQUIRE_UPSTREAM_MASTER_SCOPE=1 $(GO) test -count=1 ./test/conformance -run '^TestUpstreamMasterDiscovery'
+	$(GO) run ./tools/parity-inventory-generate -check-latest-scope -scope test/conformance/parity-scope.json -latest-case-list test/conformance/upstream-master-node-ids.json
 
 release-contract-check: ## Verify the recorded upstream tag, release assets, and PyPI provenance.
 	$(GO) run ./tools/release-contract-verify

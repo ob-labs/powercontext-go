@@ -190,6 +190,39 @@ jobs:
       - name: Compare deliberate public packages with the approved baseline
         run: make api-compat
 
+  upstream-master-discovery:
+    name: Upstream master discovery and SQLite/Codex/WorkBuddy scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out Go implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check out exact upstream master
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: oceanbase/powercontext
+          ref: 74b961fbb07165595314726715d412a3d0d90589
+          path: _upstream_master
+
+      - name: Verify upstream master identity
+        run: test "$(git -C _upstream_master rev-parse HEAD)" = 74b961fbb07165595314726715d412a3d0d90589
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Install SQLite development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+
+      - name: Require latest-master SQLite, Codex, and WorkBuddy scope linkage
+        env:
+          POWERCONTEXT_UPSTREAM_CHECKOUT: ${{ github.workspace }}/_upstream_master
+        run: |
+          go test -count=1 ./test/conformance -run '^TestUpstreamMasterOpenAPI'
+          make parity-inventory-check UPSTREAM_MASTER_CHECKOUT="$POWERCONTEXT_UPSTREAM_CHECKOUT"
+
   frozen-oracle:
     name: Frozen Python Oracle and differential fixtures
     runs-on: ubuntu-24.04

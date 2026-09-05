@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "oceanbase/powercontext",
+    "branch": "master",
+    "commit": "74b961fbb07165595314726715d412a3d0d90589"
+  },
+  "go": {
+    "repository": "ob-labs/powercontext-go",
+    "commit": "e9dce330e58c4acbcfb1c0c5f0a4c9df581750e9"
+  },
+  "operation_counts": {
+    "common": 39,
+    "upstream_only": 38,
+    "go_only": 14
+  },
+  "endpoint_counts": {
+    "upstream_only": 39,
+    "go_only": 15
+  },
+  "method_migrations": [
+    {
+      "operation_id": "get_stats",
+      "go": {"method": "get", "path": "/v1/stats"},
+      "upstream": {"method": "post", "path": "/v1/stats"}
+    }
+  ],
+  "upstream_only": [
+    {"operation_id": "clear_scope_binding", "method": "post", "path": "/v1/scope-bindings/clear", "cluster": "scope"},
+    {"operation_id": "commit_connector_checkpoint", "method": "post", "path": "/v1/connector-checkpoints/commit", "cluster": "source"},
+    {"operation_id": "create_artifact", "method": "post", "path": "/v1/scopes/{scope_id}/artifacts", "cluster": "artifact"},
+    {"operation_id": "create_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/create", "cluster": "remote-skill"},
+    {"operation_id": "create_scope", "method": "post", "path": "/v1/scopes", "cluster": "scope"},
+    {"operation_id": "create_source", "method": "post", "path": "/v1/scopes/{scope_id}/sources", "cluster": "source"},
+    {"operation_id": "download_remote_skill_package", "method": "post", "path": "/v1/skill/remote/package/download", "cluster": "remote-skill"},
+    {"operation_id": "download_skill_package", "method": "post", "path": "/v1/skill/package/download", "cluster": "managed-skill"},
+    {"operation_id": "enroll_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/enroll", "cluster": "remote-skill"},
+    {"operation_id": "get_artifact", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}", "cluster": "artifact"},
+    {"operation_id": "get_artifact_revision", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}/revisions/{revision}", "cluster": "artifact"},
+    {"operation_id": "get_connector_checkpoint", "method": "post", "path": "/v1/connector-checkpoints/get", "cluster": "source"},
+    {"operation_id": "get_default_scope", "method": "get", "path": "/v1/scopes/default", "cluster": "scope"},
+    {"operation_id": "get_scope", "method": "get", "path": "/v1/scopes/{scope_id}", "cluster": "scope"},
+    {"operation_id": "get_skill_package_manifest", "method": "post", "path": "/v1/skill/package/manifest", "cluster": "managed-skill"},
+    {"operation_id": "get_source", "method": "get", "path": "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}", "cluster": "source"},
+    {"operation_id": "list_artifacts", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}", "cluster": "artifact"},
+    {"operation_id": "list_managed_skills", "method": "post", "path": "/v1/skill/library", "cluster": "managed-skill"},
+    {"operation_id": "list_remote_skill_targets", "method": "post", "path": "/v1/skill/remote/targets", "cluster": "remote-skill"},
+    {"operation_id": "list_scopes", "method": "get", "path": "/v1/scopes", "cluster": "scope"},
+    {"operation_id": "propose_skill_package", "method": "post", "path": "/v1/skill/package/propose", "cluster": "managed-skill"},
+    {"operation_id": "publish_artifact", "method": "post", "path": "/v1/artifact-publications", "cluster": "artifact"},
+    {"operation_id": "publish_remote_skill", "method": "post", "path": "/v1/skill/remote/publication/publish", "cluster": "remote-skill"},
+    {"operation_id": "reconcile_remote_skills", "method": "post", "path": "/v1/skill/remote/reconcile", "cluster": "remote-skill"},
+    {"operation_id": "record_remote_skill_receipt", "method": "post", "path": "/v1/skill/remote/receipt", "cluster": "remote-skill"},
+    {"operation_id": "record_skill_usage", "method": "post", "path": "/v1/skill/usage", "cluster": "managed-skill"},
+    {"operation_id": "register_source_definition", "method": "post", "path": "/v1/source-definitions/register", "cluster": "source"},
+    {"operation_id": "rename_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/rename", "cluster": "remote-skill"},
+    {"operation_id": "replace_artifact", "method": "put", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}", "cluster": "artifact"},
+    {"operation_id": "resolve_scope_binding", "method": "post", "path": "/v1/scope-bindings/resolve", "cluster": "scope"},
+    {"operation_id": "resolve_scope_selection", "method": "post", "path": "/v1/scopes/selection/resolve", "cluster": "scope"},
+    {"operation_id": "revoke_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/revoke", "cluster": "remote-skill"},
+    {"operation_id": "set_default_scope", "method": "put", "path": "/v1/scopes/default", "cluster": "scope"},
+    {"operation_id": "set_scope_binding", "method": "put", "path": "/v1/scope-bindings", "cluster": "scope"},
+    {"operation_id": "submit_source_observation", "method": "post", "path": "/v1/source-observations", "cluster": "source"},
+    {"operation_id": "unpublish_remote_skill", "method": "post", "path": "/v1/skill/remote/publication/unpublish", "cluster": "remote-skill"},
+    {"operation_id": "update_scope", "method": "put", "path": "/v1/scopes/{scope_id}", "cluster": "scope"},
+    {"operation_id": "update_skill_lifecycle", "method": "post", "path": "/v1/skill/lifecycle", "cluster": "managed-skill"}
+  ],
+  "go_only": [
+    {"operation_id": "attach_handoff_report_workspace", "method": "post", "path": "/v1/handoff-reports/workspace-bindings/attach", "status": "retained-go-extension"},
+    {"operation_id": "create_handoff_report_project", "method": "post", "path": "/v1/handoff-reports/projects/create", "status": "retained-go-extension"},
+    {"operation_id": "detach_handoff_report_workspace", "method": "post", "path": "/v1/handoff-reports/workspace-bindings/detach", "status": "retained-go-extension"},
+    {"operation_id": "get_handoff_report_project", "method": "post", "path": "/v1/handoff-reports/projects/get", "status": "retained-go-extension"},
+    {"operation_id": "get_handoff_report_workspace", "method": "post", "path": "/v1/handoff-reports/workspace-bindings/get", "status": "retained-go-extension"},
+    {"operation_id": "list_handoff_report_activities", "method": "post", "path": "/v1/handoff-reports/activities/list", "status": "retained-go-extension"},
+    {"operation_id": "list_handoff_report_known_scopes", "method": "post", "path": "/v1/handoff-reports/scopes/list-known", "status": "retained-go-extension"},
+    {"operation_id": "list_handoff_report_projects", "method": "post", "path": "/v1/handoff-reports/projects/list", "status": "retained-go-extension"},
+    {"operation_id": "list_handoff_report_workstreams", "method": "post", "path": "/v1/handoff-reports/workstreams/list", "status": "retained-go-extension"},
+    {"operation_id": "purge_handoff_report_activities", "method": "post", "path": "/v1/handoff-reports/activities/purge", "status": "retained-go-extension"},
+    {"operation_id": "record_handoff_report_activity", "method": "post", "path": "/v1/handoff-reports/activities/record", "status": "retained-go-extension"},
+    {"operation_id": "register_handoff_report_workstream", "method": "post", "path": "/v1/handoff-reports/workstreams/register", "status": "retained-go-extension"},
+    {"operation_id": "update_handoff_report_project", "method": "post", "path": "/v1/handoff-reports/projects/update", "status": "retained-go-extension"},
+    {"operation_id": "update_handoff_report_workstream", "method": "post", "path": "/v1/handoff-reports/workstreams/update", "status": "retained-go-extension"}
+  ]
+}

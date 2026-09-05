@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -108,6 +109,34 @@ type ruleSet struct {
 	Files         map[string]fileRule `json:"files"`
 }
 
+// parityScope defines the deliberately narrow support boundary for a future
+// moving-upstream inventory. The frozen release inventory remains governed by
+// parity-contract.json and parity-inventory-rules.json.
+type parityScope struct {
+	SchemaVersion     int                      `json:"schema_version"`
+	Databases         []string                 `json:"databases"`
+	ExternalAgents    []string                 `json:"external_agents"`
+	OutOfScopeReasons []string                 `json:"out_of_scope_reasons"`
+	Cases             map[string]caseScopeRule `json:"cases"`
+}
+
+type latestNodeManifest struct {
+	SchemaVersion  int      `json:"schema_version"`
+	UpstreamCommit string   `json:"upstream_commit"`
+	NodeIDs        []string `json:"node_ids"`
+}
+
+type caseScopeRule struct {
+	Classification            string   `json:"classification"`
+	Database                  string   `json:"database,omitempty"`
+	ExternalAgent             string   `json:"external_agent,omitempty"`
+	OutOfScopeReason          string   `json:"out_of_scope_reason,omitempty"`
+	SupportedSurfaces         []string `json:"supported_surfaces,omitempty"`
+	UnsupportedDatabases      []string `json:"unsupported_databases,omitempty"`
+	UnsupportedExternalAgents []string `json:"unsupported_external_agents,omitempty"`
+	Reason                    string   `json:"reason,omitempty"`
+}
+
 type fileRule struct {
 	Mode   string              `json:"mode"`
 	Reason string              `json:"reason"`
@@ -145,19 +174,24 @@ var (
 )
 
 const (
-	modeGoPort       = "go-port"
-	modeRetainedHost = "retained-host"
-	modeCrossLayer   = "cross-layer"
-	statusMapped     = "mapped"
-	statusPending    = "pending"
-	sourceOracle     = "oracle-traceability"
-	sourceRules      = "rules"
+	latestNodeManifestSchemaVersion = 1
+	latestNodeManifestCommit        = "74b961fbb07165595314726715d412a3d0d90589"
+	modeGoPort                      = "go-port"
+	modeRetainedHost                = "retained-host"
+	modeCrossLayer                  = "cross-layer"
+	statusMapped                    = "mapped"
+	statusPending                   = "pending"
+	sourceOracle                    = "oracle-traceability"
+	sourceRules                     = "rules"
 )
 
 func main() {
 	contractPath := flag.String("contract", "test/conformance/parity-contract.json", "parity contract")
 	traceabilityPath := flag.String("traceability", "test/conformance/traceability.json", "frozen Oracle traceability table")
 	rulesPath := flag.String("rules", "test/conformance/parity-inventory-rules.json", "parity inventory rules")
+	scopePath := flag.String("scope", "test/conformance/parity-scope.json", "latest-upstream SQLite and external-agent scope contract")
+	latestCaseList := flag.String("latest-case-list", "", "latest-upstream node manifest JSON")
+	checkLatestScope := flag.Bool("check-latest-scope", false, "validate -scope against -latest-case-list and exit")
 	outputPath := flag.String("output", "test/conformance/parity-inventory.json", "generated parity inventory")
 	upstream := flag.String("upstream", "", "upstream Python checkout pinned at the contract target SHA (required)")
 	previousUpstream := flag.String("previous-upstream", "", "previous Python target checkout used to verify the reviewed target delta")
@@ -168,6 +202,24 @@ func main() {
 	check := flag.Bool("check", false, "verify generated output without rewriting")
 	flag.Parse()
 	cleanRoot := filepath.Clean(*root)
+	if *checkLatestScope {
+		if *latestCaseList == "" {
+			fmt.Fprintln(os.Stderr, "parity-inventory-generate: -check-latest-scope requires -latest-case-list")
+			os.Exit(1)
+		}
+		if err := validateLatestScopeFile(
+			resolveOutputPath(cleanRoot, *scopePath),
+			resolveOutputPath(cleanRoot, *latestCaseList),
+		); err != nil {
+			fmt.Fprintln(os.Stderr, "parity-inventory-generate:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *latestCaseList != "" {
+		fmt.Fprintln(os.Stderr, "parity-inventory-generate: -latest-case-list requires -check-latest-scope")
+		os.Exit(1)
+	}
 	if err := run(cleanRoot, *contractPath, *traceabilityPath, *rulesPath, *outputPath, *upstream, *check); err != nil {
 		fmt.Fprintln(os.Stderr, "parity-inventory-generate:", err)
 		os.Exit(1)
@@ -344,6 +396,269 @@ func resolveOutputPath(root, output string) string {
 
 func validMode(mode string) bool {
 	return mode == modeGoPort || mode == modeRetainedHost || mode == modeCrossLayer
+}
+
+func loadParityScope(path string) (parityScope, error) {
+	var scope parityScope
+	if err := readJSON(path, &scope); err != nil {
+		return parityScope{}, fmt.Errorf("read parity scope: %w", err)
+	}
+	if err := validateParityScope(scope); err != nil {
+		return parityScope{}, fmt.Errorf("validate parity scope: %w", err)
+	}
+	return scope, nil
+}
+
+func validateParityScope(scope parityScope) error {
+	if scope.SchemaVersion != 1 {
+		return fmt.Errorf("unsupported scope schema %d", scope.SchemaVersion)
+	}
+	if err := requireExactSet("databases", scope.Databases, "sqlite"); err != nil {
+		return err
+	}
+	if err := requireExactSet("external_agents", scope.ExternalAgents, "codex", "workbuddy"); err != nil {
+		return err
+	}
+	if err := requireExactSet("out_of_scope_reasons", scope.OutOfScopeReasons, "unsupported-database", "unsupported-agent", "non-product"); err != nil {
+		return err
+	}
+	for caseID, rule := range scope.Cases {
+		if strings.TrimSpace(caseID) == "" {
+			return errors.New("case scope contains an empty case identifier")
+		}
+		if err := validateCaseScopeRule(caseID, rule); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateLatestCaseScope requires a scope declaration for every discovered
+// latest-upstream case and rejects declarations that no longer name a real
+// case. The current frozen release generator intentionally does not call this
+// function because its target is not the moving latest-upstream inventory.
+func validateLatestCaseScope(scope parityScope, discoveredCaseIDs []string) error {
+	if err := validateParityScope(scope); err != nil {
+		return err
+	}
+	discovered := make(map[string]struct{}, len(discoveredCaseIDs))
+	for _, caseID := range discoveredCaseIDs {
+		if strings.TrimSpace(caseID) == "" {
+			return errors.New("discovered latest case set contains an empty case identifier")
+		}
+		if _, ok := discovered[caseID]; ok {
+			return fmt.Errorf("discovered latest case set contains duplicate case %q", caseID)
+		}
+		discovered[caseID] = struct{}{}
+	}
+	for caseID := range discovered {
+		if _, ok := scope.Cases[caseID]; !ok {
+			return fmt.Errorf("latest case %s has no scope classification", caseID)
+		}
+	}
+	for caseID := range scope.Cases {
+		if _, ok := discovered[caseID]; !ok {
+			return fmt.Errorf("scope classification names unknown latest case %s", caseID)
+		}
+	}
+	return nil
+}
+
+func validateLatestScopeFile(scopePath, nodeManifestPath string) error {
+	scope, err := loadParityScope(scopePath)
+	if err != nil {
+		return err
+	}
+	discoveredCaseIDs, err := loadLatestNodeManifest(nodeManifestPath)
+	if err != nil {
+		return err
+	}
+	return validateLatestCaseScope(scope, discoveredCaseIDs)
+}
+
+func loadLatestNodeManifest(manifestPath string) ([]string, error) {
+	var manifest latestNodeManifest
+	if err := readJSON(manifestPath, &manifest); err != nil {
+		return nil, fmt.Errorf("read latest node manifest: %w", err)
+	}
+	if err := validateLatestNodeManifest(manifest); err != nil {
+		return nil, fmt.Errorf("validate latest node manifest: %w", err)
+	}
+	return manifest.NodeIDs, nil
+}
+
+func validateLatestNodeManifest(manifest latestNodeManifest) error {
+	if manifest.SchemaVersion != latestNodeManifestSchemaVersion {
+		return fmt.Errorf("unsupported latest node manifest schema %d", manifest.SchemaVersion)
+	}
+	if manifest.UpstreamCommit != latestNodeManifestCommit {
+		return fmt.Errorf("latest node manifest commit %q does not match %q", manifest.UpstreamCommit, latestNodeManifestCommit)
+	}
+	if len(manifest.NodeIDs) == 0 {
+		return errors.New("latest node manifest contains no node IDs")
+	}
+
+	seen := make(map[string]struct{}, len(manifest.NodeIDs))
+	for index, nodeID := range manifest.NodeIDs {
+		if err := validateLatestNodeID(nodeID); err != nil {
+			return fmt.Errorf("node_ids[%d]: %w", index, err)
+		}
+		if _, exists := seen[nodeID]; exists {
+			return fmt.Errorf("node_ids contains duplicate node ID %q", nodeID)
+		}
+		seen[nodeID] = struct{}{}
+		if index > 0 && manifest.NodeIDs[index-1] >= nodeID {
+			return fmt.Errorf("node_ids is not strictly sorted at %q", nodeID)
+		}
+	}
+	return nil
+}
+
+func validateLatestNodeID(nodeID string) error {
+	if nodeID == "" || strings.TrimSpace(nodeID) != nodeID {
+		return errors.New("node ID is empty or space-padded")
+	}
+	nodePath, testName, found := strings.Cut(nodeID, "::")
+	if !found || testName == "" {
+		return fmt.Errorf("node ID %q is missing a test name", nodeID)
+	}
+	if filepath.IsAbs(nodePath) || strings.HasPrefix(nodePath, "/") {
+		return fmt.Errorf("node path %q is not relative", nodePath)
+	}
+	if strings.Contains(nodePath, "\\") || path.Clean(nodePath) != nodePath {
+		return fmt.Errorf("node path %q is not canonical", nodePath)
+	}
+	if !strings.HasPrefix(nodePath, "tests/") {
+		return fmt.Errorf("node path %q is outside tests", nodePath)
+	}
+	return nil
+}
+
+func requireExactSet(name string, values []string, want ...string) error {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			return fmt.Errorf("%s contains duplicate value %q", name, value)
+		}
+		seen[value] = struct{}{}
+	}
+	if len(seen) != len(want) {
+		return fmt.Errorf("%s = %v, want exactly %v", name, values, want)
+	}
+	for _, value := range want {
+		if _, ok := seen[value]; !ok {
+			return fmt.Errorf("%s = %v, want exactly %v", name, values, want)
+		}
+	}
+	return nil
+}
+
+func validateCaseScopeRule(caseID string, rule caseScopeRule) error {
+	switch rule.Classification {
+	case "in_scope":
+		if rule.OutOfScopeReason != "" || rule.Reason != "" {
+			return fmt.Errorf("%s is in_scope but has an exclusion reason", caseID)
+		}
+		if len(rule.SupportedSurfaces) != 0 || len(rule.UnsupportedDatabases) != 0 || len(rule.UnsupportedExternalAgents) != 0 {
+			return fmt.Errorf("%s is in_scope but has mixed classification fields", caseID)
+		}
+		if rule.Database != "" && rule.Database != "sqlite" {
+			return fmt.Errorf("%s names unsupported in-scope database %q", caseID, rule.Database)
+		}
+		if rule.ExternalAgent != "" && rule.ExternalAgent != "codex" && rule.ExternalAgent != "workbuddy" {
+			return fmt.Errorf("%s names unsupported in-scope external agent %q", caseID, rule.ExternalAgent)
+		}
+		return nil
+	case "out_of_scope":
+		if len(rule.SupportedSurfaces) != 0 || len(rule.UnsupportedDatabases) != 0 || len(rule.UnsupportedExternalAgents) != 0 {
+			return fmt.Errorf("%s is out_of_scope but has mixed classification fields", caseID)
+		}
+		return validateOutOfScopeCase(caseID, rule)
+	case "mixed":
+		return validateMixedCase(caseID, rule)
+	default:
+		return fmt.Errorf("%s has unsupported classification %q", caseID, rule.Classification)
+	}
+}
+
+func validateMixedCase(caseID string, rule caseScopeRule) error {
+	if strings.TrimSpace(rule.Reason) == "" {
+		return fmt.Errorf("%s is mixed without a factual reason", caseID)
+	}
+	if rule.Database != "" || rule.ExternalAgent != "" || rule.OutOfScopeReason != "" {
+		return fmt.Errorf("%s is mixed but has legacy classification fields", caseID)
+	}
+	if len(rule.SupportedSurfaces) == 0 {
+		return fmt.Errorf("%s is mixed without a supported surface", caseID)
+	}
+	if len(rule.UnsupportedDatabases) == 0 && len(rule.UnsupportedExternalAgents) == 0 {
+		return fmt.Errorf("%s is mixed without an unsupported dependency", caseID)
+	}
+
+	supported := make(map[string]struct{}, len(rule.SupportedSurfaces))
+	for _, surface := range rule.SupportedSurfaces {
+		if _, exists := supported[surface]; exists {
+			return fmt.Errorf("%s repeats supported surface %q", caseID, surface)
+		}
+		switch surface {
+		case "core", "sqlite", "codex", "workbuddy":
+			supported[surface] = struct{}{}
+		default:
+			return fmt.Errorf("%s names unsupported surface %q", caseID, surface)
+		}
+	}
+	if err := validateMixedUnsupportedValues(caseID, "database", rule.UnsupportedDatabases, "sqlite"); err != nil {
+		return err
+	}
+	return validateMixedUnsupportedValues(caseID, "external agent", rule.UnsupportedExternalAgents, "codex", "workbuddy")
+}
+
+func validateMixedUnsupportedValues(caseID, kind string, values []string, supported ...string) error {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" || strings.TrimSpace(value) != value {
+			return fmt.Errorf("%s has an empty or space-padded unsupported %s", caseID, kind)
+		}
+		if _, exists := seen[value]; exists {
+			return fmt.Errorf("%s repeats unsupported %s %q", caseID, kind, value)
+		}
+		for _, supportedValue := range supported {
+			if value == supportedValue {
+				return fmt.Errorf("%s puts supported %s %q in an unsupported list", caseID, kind, value)
+			}
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
+}
+
+func validateOutOfScopeCase(caseID string, rule caseScopeRule) error {
+	if strings.TrimSpace(rule.Reason) == "" {
+		return fmt.Errorf("%s is out_of_scope without a factual reason", caseID)
+	}
+	switch rule.OutOfScopeReason {
+	case "unsupported-database":
+		if rule.Database == "" || rule.Database == "sqlite" {
+			return fmt.Errorf("%s excludes an unsupported database without naming one", caseID)
+		}
+		if rule.ExternalAgent != "" {
+			return fmt.Errorf("%s excludes a database but also names an external agent", caseID)
+		}
+	case "unsupported-agent":
+		if rule.ExternalAgent == "" || rule.ExternalAgent == "codex" || rule.ExternalAgent == "workbuddy" {
+			return fmt.Errorf("%s excludes an unsupported external agent without naming one", caseID)
+		}
+		if rule.Database != "" {
+			return fmt.Errorf("%s excludes an external agent but also names a database", caseID)
+		}
+	case "non-product":
+		if rule.Database != "" || rule.ExternalAgent != "" {
+			return fmt.Errorf("%s is non-product but names a database or external agent", caseID)
+		}
+	default:
+		return fmt.Errorf("%s has unsupported out_of_scope_reason %q", caseID, rule.OutOfScopeReason)
+	}
+	return nil
 }
 
 func upstreamHead(upstream string) (string, error) {

@@ -127,6 +127,81 @@ func TestWorkflowRejectsNonVerifyingIdentitySteps(t *testing.T) {
 	}
 }
 
+func TestWorkflowRequiresExactUpstreamMasterScopeGate(t *testing.T) {
+	contents, err := os.ReadFile(filepath.Join(repositoryRoot(t), ".github", "workflows", "migration-gates.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Name string            `yaml:"name"`
+				Env  map[string]string `yaml:"env"`
+				With struct {
+					Repository string `yaml:"repository"`
+					Ref        string `yaml:"ref"`
+					Path       string `yaml:"path"`
+				} `yaml:"with"`
+				Run string `yaml:"run"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(contents, &workflow); err != nil {
+		t.Fatal(err)
+	}
+	job, ok := workflow.Jobs["upstream-master-discovery"]
+	if !ok {
+		t.Fatal("migration-gates.yml has no upstream-master-discovery job")
+	}
+	checkout, identity, sqliteHeaders, scopeGate := false, false, false, false
+	for _, step := range job.Steps {
+		switch step.Name {
+		case "Check out exact upstream master":
+			checkout = step.With.Repository == "oceanbase/powercontext" && step.With.Ref == upstreamMasterDiscoveryCommit && step.With.Path == "_upstream_master"
+		case "Verify upstream master identity":
+			identity = validCheckoutIdentityCommand(step.Run, "_upstream_master", upstreamMasterDiscoveryCommit)
+		case "Install SQLite development headers":
+			sqliteHeaders = strings.Contains(step.Run, "sudo apt-get install --yes --no-install-recommends libsqlite3-dev")
+		case "Require latest-master SQLite, Codex, and WorkBuddy scope linkage":
+			scopeGate = step.Env["POWERCONTEXT_UPSTREAM_CHECKOUT"] == "${{ github.workspace }}/_upstream_master" &&
+				strings.Contains(step.Run, "go test -count=1 ./test/conformance -run '^TestUpstreamMasterOpenAPI'") &&
+				strings.Contains(step.Run, "make parity-inventory-check UPSTREAM_MASTER_CHECKOUT=\"$POWERCONTEXT_UPSTREAM_CHECKOUT\"") && sqliteHeaders
+		}
+		if strings.Contains(strings.ToLower(step.Name+"\n"+step.Run), "oceanbase") || strings.Contains(strings.ToLower(step.Name+"\n"+step.Run), "retained-host") {
+			t.Fatalf("upstream-master-discovery must not treat unsupported backend or retained-host work as planning evidence: %q", step.Name)
+		}
+	}
+	if !checkout {
+		t.Error("upstream-master-discovery has no exact master checkout at _upstream_master")
+	}
+	if !identity {
+		t.Error("upstream-master-discovery has no exact master identity verification")
+	}
+	if !sqliteHeaders {
+		t.Error("upstream-master-discovery must install SQLite development headers before compiling the complete conformance package")
+	}
+	if !scopeGate {
+		t.Error("upstream-master-discovery has no fail-closed SQLite/Codex/WorkBuddy scope gate")
+	}
+}
+
+func TestParityInventoryCheckRequiresStrictLatestScopeGenerator(t *testing.T) {
+	contents, err := os.ReadFile(filepath.Join(repositoryRoot(t), "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStrictLatestScopeGeneratorCommand(string(contents)) {
+		t.Fatal("parity-inventory-check does not invoke the strict latest-scope generator validation")
+	}
+	mutant := strings.Replace(string(contents), strictLatestScopeGeneratorCommand, "", 1)
+	if mutant == string(contents) {
+		t.Fatal("strict latest-scope generator mutant did not change Makefile")
+	}
+	if hasStrictLatestScopeGeneratorCommand(mutant) {
+		t.Fatal("accepted parity-inventory-check without strict latest-scope generator validation")
+	}
+}
+
 func TestParityContractRecordsSeparateConcepts(t *testing.T) {
 	contract := readParityContract(t)
 	root := repositoryRoot(t)
@@ -384,4 +459,10 @@ func validGitHubRepositorySlug(slug string) bool {
 func validCheckoutIdentityCommand(command, checkoutPath, commit string) bool {
 	want := `test "$(git -C ` + checkoutPath + ` rev-parse HEAD)" = ` + commit
 	return strings.TrimSpace(command) == want
+}
+
+const strictLatestScopeGeneratorCommand = "$(GO) run ./tools/parity-inventory-generate -check-latest-scope -scope test/conformance/parity-scope.json -latest-case-list test/conformance/upstream-master-node-ids.json"
+
+func hasStrictLatestScopeGeneratorCommand(contents string) bool {
+	return strings.Contains(contents, strictLatestScopeGeneratorCommand)
 }

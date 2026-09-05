@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "oceanbase/powercontext",
+    "branch": "master",
+    "commit": "74b961fbb07165595314726715d412a3d0d90589"
+  },
+  "collection": {
+    "command": [
+      "python",
+      "-m",
+      "pytest",
+      "--collect-only",
+      "-q",
+      "--doctest-modules",
+      "-p",
+      "no:cacheprovider"
+    ],
+    "environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+    },
+    "exit_code": 0,
+    "test_case_count": 1345
+  },
+  "locked_environment": {
+    "python_version": "3.11.15",
+    "pytest_version": "9.1.1",
+    "uv_lock_sha256": "268a9cdb9e570cd933e999fe947b45ebf8e49b09c6c6c76c71a0c4edeac6b467"
+  },
+  "evidence": {
+    "raw_stdout_sha256": "284a43727a937bc91f34e9315f673bb386e28affab6368e01a5b8a27ef480a6c",
+    "node_manifest_sha256": "9fde01ae816827b3da781888023dd105e9afb45c147dd140483d02441e4ab7f8"
+  },
+  "normalized_node_ids": {
+    "state": "required",
+    "count": 1345,
+    "required_input": "test/conformance/upstream-master-node-ids.json",
+    "scope": "test/conformance/parity-scope.json"
+  }
+}
