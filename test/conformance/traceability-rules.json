@@ -403,7 +403,7 @@
           "go:internal/sqlstore/product_surfaces_test.go#TestExternalSkillReplacementIsScopedAtomicAndDeterministic"
         ],
         "test_agent_registry_removes_a_provider_when_its_targets_are_unconfigured": [
-          "go:internal/sqlstore/product_surfaces_test.go#TestExternalSkillReplacementAtomicallyCoversAllAgentProviders"
+          "go:internal/sqlstore/product_surfaces_test.go#TestExternalSkillReplacementAtomicallyCoversSupportedAgentProviders"
         ]
       }
     },

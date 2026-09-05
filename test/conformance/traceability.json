@@ -1236,7 +1236,7 @@
         {
           "kind": "go",
           "file": "internal/sqlstore/product_surfaces_test.go",
-          "test": "TestExternalSkillReplacementAtomicallyCoversAllAgentProviders"
+          "test": "TestExternalSkillReplacementAtomicallyCoversSupportedAgentProviders"
         }
       ]
     },
