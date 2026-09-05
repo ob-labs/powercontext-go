@@ -66,11 +66,10 @@ var sharedAdapterConsumerBuild = sync.OnceValues(func() (adapterConsumerBuildRes
 })
 
 func TestMain(m *testing.M) {
-	code := m.Run()
+	m.Run()
 	if adapterConsumerBuildDirectory != "" {
 		_ = os.RemoveAll(adapterConsumerBuildDirectory)
 	}
-	os.Exit(code)
 }
 
 func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
