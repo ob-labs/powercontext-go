@@ -456,28 +456,28 @@ func stageIntegrations(repository, root string) error {
 	if err := validateReleaseIntegrations(repository, integrations); err != nil {
 		return err
 	}
-	// Claude Code discovers a local marketplace from this repository-level
-	// manifest; copying only integrations/ leaves the plugin files present but
-	// makes `setup claude-code --source <archive>` unusable.
-	if err := copyTree(
-		filepath.Join(repository, ".claude-plugin"),
-		filepath.Join(root, ".claude-plugin"),
-	); err != nil {
+	tracked, err := trackedRepositoryFiles(repository, ".claude-plugin", "integrations")
+	if err != nil {
 		return err
 	}
-	if err := copyTree(
-		filepath.Join(repository, "integrations"),
-		filepath.Join(root, "integrations"),
-	); err != nil {
+	trackedSet := make(map[string]struct{}, len(tracked))
+	for _, path := range tracked {
+		trackedSet[path] = struct{}{}
+	}
+	if _, ok := trackedSet[".claude-plugin/marketplace.json"]; !ok {
+		return errors.New("Claude Code marketplace manifest is not tracked")
+	}
+	for _, integration := range integrations {
+		for _, path := range append(slices.Clone(integration.RequiredPaths), integration.LockPaths...) {
+			if _, ok := trackedSet[path]; !ok {
+				return fmt.Errorf("release integration %q path %q is not tracked", integration.ID, path)
+			}
+		}
+	}
+	if err := copyRepositoryFiles(repository, root, tracked); err != nil {
 		return err
 	}
-	// dist is normally workspace output and is filtered by copyTree. OpenClaw's
-	// tracked bundle is its executable adapter, so stage that one runtime tree
-	// explicitly after copying the source tree.
-	return copyTree(
-		filepath.Join(repository, "integrations", "openclaw", "plugins", "memory-powercontext", "dist"),
-		filepath.Join(root, "integrations", "openclaw", "plugins", "memory-powercontext", "dist"),
-	)
+	return nil
 }
 
 func describeNativeAssets(

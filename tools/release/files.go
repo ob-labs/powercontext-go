@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -30,6 +31,79 @@ var (
 	darwinORTLibrary = regexp.MustCompile(`^libonnxruntime(?:_[A-Za-z0-9_]+)?(?:\.[0-9]+)*\.dylib$`)
 	linuxORTLibrary  = regexp.MustCompile(`^libonnxruntime(?:_[A-Za-z0-9_]+)?\.so(?:\.[0-9]+)*$`)
 )
+
+func trackedRepositoryFiles(repository string, pathspecs ...string) ([]string, error) {
+	arguments := []string{"-C", repository, "ls-files", "--cached", "-z", "--"}
+	command := exec.Command("git", append(arguments, pathspecs...)...)
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list tracked release files: %w", err)
+	}
+	paths := make([]string, 0)
+	for path := range strings.SplitSeq(string(output), "\x00") {
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
+
+func copyRepositoryFiles(repository, destination string, relativePaths []string) error {
+	root, err := filepath.Abs(repository)
+	if err != nil {
+		return err
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	for _, relative := range relativePaths {
+		nativeRelative := filepath.FromSlash(relative)
+		if filepath.IsAbs(nativeRelative) || nativeRelative == "." || nativeRelative == ".." ||
+			strings.HasPrefix(nativeRelative, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("tracked release path %q escapes the repository", relative)
+		}
+		source := filepath.Join(root, nativeRelative)
+		target := filepath.Join(destination, nativeRelative)
+		info, err := os.Lstat(source)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			link, err := os.Readlink(source)
+			if err != nil {
+				return err
+			}
+			if filepath.IsAbs(link) {
+				return fmt.Errorf("release symlink %q is absolute", relative)
+			}
+			resolved, err := filepath.EvalSymlinks(source)
+			if err != nil {
+				return err
+			}
+			tree, _, _ := strings.Cut(relative, "/")
+			treeRoot := filepath.Join(root, tree)
+			inside, err := filepath.Rel(treeRoot, resolved)
+			if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("release symlink %q escapes its source tree", relative)
+			}
+			if err := os.Symlink(link, target); err != nil {
+				return err
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported release entry %q", relative)
+		}
+		if err := copyRegularFile(source, target, os.FileMode(normalizedFileMode(info.Mode()))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func copyTree(source, destination string) error {
 	root, err := filepath.Abs(source)

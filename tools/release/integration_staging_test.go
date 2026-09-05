@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -48,6 +49,50 @@ func TestReleaseIntegrationStagingCopiesReviewedInventoryForEveryEdition(t *test
 	if !slices.Equal(stagedByEdition["standard"], stagedByEdition["full"]) {
 		t.Fatalf("staged integration inventory differs between editions (-standard +full):\n%s", strings.Join(stagedByEdition["standard"], "\n")+"\n"+strings.Join(stagedByEdition["full"], "\n"))
 	}
+}
+
+func TestReleaseIntegrationStagingExcludesIgnoredFiles(t *testing.T) {
+	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
+	writeIntegrationStagingFixture(t, repository)
+	for _, path := range []string{
+		"integrations/bub/.env",
+		"integrations/bub/.env.local",
+		"integrations/bub/trace.log",
+	} {
+		if err := os.WriteFile(filepath.Join(repository, filepath.FromSlash(path)), []byte("private\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		runIntegrationStagingGit(t, repository, "check-ignore", "--quiet", "--", path)
+	}
+
+	root := t.TempDir()
+	if err := stageIntegrations(repository, root); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"integrations/bub/.env",
+		"integrations/bub/.env.local",
+		"integrations/bub/trace.log",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("ignored integration file %q was staged: %v", path, err)
+		}
+	}
+	for _, path := range []string{
+		".claude-plugin/marketplace.json",
+		"integrations/bub/src/powercontext_bub/client.py",
+		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
+	} {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil || !info.Mode().IsRegular() {
+			t.Errorf("tracked integration file %q was not staged: %v", path, err)
+		}
+	}
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stagedReleaseIntegrationPaths(t, root, integrations)
 }
 
 func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) {
@@ -101,6 +146,10 @@ func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) 
 
 func writeIntegrationStagingFixture(t *testing.T, repository string) {
 	t.Helper()
+	ignore := filepath.Join(repository, ".gitignore")
+	if err := os.WriteFile(ignore, []byte("*.log\n.env\n.env.*\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	marketplace := filepath.Join(repository, ".claude-plugin", "marketplace.json")
 	if err := os.MkdirAll(filepath.Dir(marketplace), 0o755); err != nil {
 		t.Fatal(err)
@@ -123,6 +172,13 @@ func writeIntegrationStagingFixture(t *testing.T, repository string) {
 			t.Fatal(err)
 		}
 	}
+	client := filepath.Join(repository, "integrations", "bub", "src", "powercontext_bub", "client.py")
+	if err := os.MkdirAll(filepath.Dir(client), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(client, []byte("# fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, directory := range []string{
 		".venv", "node_modules", ".mypy_cache", ".pytest_cache", ".ruff_cache",
 		"__pycache__", "coverage", ".omx", ".workbuddy", ".playwright-mcp", "dist",
@@ -134,6 +190,22 @@ func writeIntegrationStagingFixture(t *testing.T, repository string) {
 		if err := os.WriteFile(filepath.Join(path, "workspace.txt"), []byte("workspace\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	runIntegrationStagingGit(t, repository, "init", "--quiet")
+	tracked := []string{
+		".gitignore",
+		".claude-plugin/marketplace.json",
+		"integrations/bub/src/powercontext_bub/client.py",
+	}
+	tracked = append(tracked, releaseIntegrationFixturePaths...)
+	runIntegrationStagingGit(t, repository, append([]string{"add", "--"}, tracked...)...)
+}
+
+func runIntegrationStagingGit(t *testing.T, repository string, arguments ...string) {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), "git", append([]string{"-C", repository}, arguments...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(arguments, " "), err, output)
 	}
 }
 
