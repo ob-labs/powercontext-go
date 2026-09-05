@@ -161,6 +161,32 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 			},
 			message: `SPDX SBOM is missing redistributed integration relationship for "bub"`,
 		},
+		"integration SPDX relationship type drift": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					for _, value := range document["relationships"].([]any) {
+						relationship := value.(map[string]any)
+						if relationship["relatedSpdxElement"] == "SPDXRef-Integration-bub" {
+							relationship["relationshipType"] = "DEPENDS_ON"
+						}
+					}
+				})
+			},
+			message: `SPDX SBOM has invalid redistributed integration relationship "SPDXRef-Integration-bub"`,
+		},
+		"integration SPDX relationship source drift": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					for _, value := range document["relationships"].([]any) {
+						relationship := value.(map[string]any)
+						if relationship["relatedSpdxElement"] == "SPDXRef-Integration-bub" {
+							relationship["spdxElementId"] = "SPDXRef-Integration-bub"
+						}
+					}
+				})
+			},
+			message: `SPDX SBOM has invalid redistributed integration relationship "SPDXRef-Integration-bub"`,
+		},
 		"integration SPDX license drift": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {

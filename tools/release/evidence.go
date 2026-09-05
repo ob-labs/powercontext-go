@@ -184,11 +184,24 @@ func verifyIntegrationSPDXEvidence(document spdxDocument, integrations []integra
 			recordedPackages[packageRecord.SPDXID] = packageRecord
 		}
 	}
+	expectedRelationships := make(map[string]struct{}, len(integrations))
+	for _, integration := range integrations {
+		expectedRelationships[integrationSPDXID(integration.ID)] = struct{}{}
+	}
 	recordedRelationships := make(map[string]int, len(integrations))
 	for _, relationship := range document.Relationships {
-		if relationship.ElementID == "SPDXRef-DOCUMENT" && relationship.Type == "CONTAINS" {
-			recordedRelationships[relationship.RelatedElementID]++
+		involvesIntegration := strings.HasPrefix(relationship.ElementID, "SPDXRef-Integration-") ||
+			strings.HasPrefix(relationship.RelatedElementID, "SPDXRef-Integration-")
+		if !involvesIntegration {
+			continue
 		}
+		if relationship.ElementID != "SPDXRef-DOCUMENT" || relationship.Type != "CONTAINS" {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration relationship %q", relationship.RelatedElementID)
+		}
+		if _, approved := expectedRelationships[relationship.RelatedElementID]; !approved {
+			return fmt.Errorf("SPDX SBOM has unreviewed redistributed integration relationship %q", relationship.RelatedElementID)
+		}
+		recordedRelationships[relationship.RelatedElementID]++
 	}
 	for _, integration := range integrations {
 		spdxID := integrationSPDXID(integration.ID)
@@ -213,16 +226,6 @@ func verifyIntegrationSPDXEvidence(document spdxDocument, integrations []integra
 	}
 	if len(recordedPackages) != len(integrations) {
 		return errors.New("SPDX SBOM has unreviewed redistributed integration packages")
-	}
-	for relationshipID, count := range recordedRelationships {
-		if strings.HasPrefix(relationshipID, "SPDXRef-Integration-") && count != 1 {
-			return fmt.Errorf("SPDX SBOM has invalid redistributed integration relationship %q", relationshipID)
-		}
-		if strings.HasPrefix(relationshipID, "SPDXRef-Integration-") {
-			if _, exists := recordedPackages[relationshipID]; !exists {
-				return fmt.Errorf("SPDX SBOM has unreviewed redistributed integration relationship %q", relationshipID)
-			}
-		}
 	}
 	return nil
 }
