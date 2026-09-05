@@ -16,7 +16,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/v2"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,9 +26,13 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
-const releaseCommandHostCheckoutMutation = "POWERCONTEXT_RELEASE_COMMAND_HOST_CHECKOUT_MUTATION"
+const (
+	releaseCommandHostCheckoutMutation = "POWERCONTEXT_RELEASE_COMMAND_HOST_CHECKOUT_MUTATION"
+	releaseCommandHostMutationTimeout  = 4 * time.Minute
+)
 
 func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -201,28 +207,29 @@ func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 
 func assertCheckoutSubstitutionFails(t *testing.T) {
 	t.Helper()
-	for _, mutation := range []struct {
-		host   string
-		marker string
-	}{
-		{host: "hermes", marker: "release-archive-marker-hermes"},
-		{host: "opencode", marker: "release-archive-marker-opencode"},
-		{host: "workbuddy", marker: "release-archive-marker-workbuddy"},
+	deadlineCause := errors.New("checkout substitution mutant exceeded its test deadline")
+	deadlineContext, cancel := context.WithTimeoutCause(t.Context(), releaseCommandHostMutationTimeout, deadlineCause)
+	defer cancel()
+	command := exec.CommandContext(
+		deadlineContext, os.Args[0], "-test.count=1",
+		"-test.run=^TestReleaseArchiveProvidesConsumableCommandHosts/(hermes|opencode|workbuddy)$",
+	)
+	command.Env = append(os.Environ(), releaseCommandHostCheckoutMutation+"=1")
+	output, runErr := command.CombinedOutput()
+	if errors.Is(context.Cause(deadlineContext), deadlineCause) {
+		t.Fatalf("checkout substitution mutant timed out after %s:\n%s", releaseCommandHostMutationTimeout, output)
+	}
+	if runErr == nil {
+		t.Fatalf("checkout substitution mutant unexpectedly passed:\n%s", output)
+	}
+	for _, marker := range []string{
+		"release-archive-marker-hermes",
+		"release-archive-marker-opencode",
+		"release-archive-marker-workbuddy",
 	} {
-		t.Run(mutation.host, func(t *testing.T) {
-			command := exec.CommandContext(
-				t.Context(), os.Args[0], "-test.count=1",
-				"-test.run=^TestReleaseArchiveProvidesConsumableCommandHosts/"+mutation.host+"$",
-			)
-			command.Env = append(os.Environ(), releaseCommandHostCheckoutMutation+"=1")
-			output, runErr := command.CombinedOutput()
-			if runErr == nil {
-				t.Fatalf("%s checkout substitution mutant unexpectedly passed:\n%s", mutation.host, output)
-			}
-			if !strings.Contains(string(output), mutation.marker) {
-				t.Fatalf("%s checkout substitution mutant did not fail marker %q:\n%s", mutation.host, mutation.marker, output)
-			}
-		})
+		if !strings.Contains(string(output), marker) {
+			t.Fatalf("checkout substitution mutant did not fail marker %q:\n%s", marker, output)
+		}
 	}
 }
 
