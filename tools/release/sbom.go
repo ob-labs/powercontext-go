@@ -166,8 +166,8 @@ func addIntegrationEvidenceToSBOM(path, repository string) error {
 	if err != nil {
 		return fmt.Errorf("read release integration inventory: %w", err)
 	}
-	if err := validateReleaseIntegrations(repository, integrations); err != nil {
-		return fmt.Errorf("validate release integration inventory: %w", err)
+	if validationErr := validateReleaseIntegrations(repository, integrations); validationErr != nil {
+		return fmt.Errorf("validate release integration inventory: %w", validationErr)
 	}
 	contents, err := readBoundedFile(path, maxMetadataBytes)
 	if err != nil {

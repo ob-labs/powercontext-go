@@ -490,39 +490,6 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 	}
 }
 
-func releaseWorkBuddyHookCommand(t *testing.T, settings []byte) string {
-	t.Helper()
-	var value map[string]any
-	if err := json.Unmarshal(settings, &value); err != nil {
-		t.Fatal(err)
-	}
-	hooks, ok := value["hooks"].(map[string]any)
-	if !ok {
-		t.Fatalf("WorkBuddy settings hooks = %#v", value["hooks"])
-	}
-	matchers, ok := hooks["UserPromptSubmit"].([]any)
-	if !ok || len(matchers) == 0 {
-		t.Fatalf("WorkBuddy UserPromptSubmit hooks = %#v", hooks["UserPromptSubmit"])
-	}
-	matcher, ok := matchers[0].(map[string]any)
-	if !ok {
-		t.Fatalf("WorkBuddy matcher = %#v", matchers[0])
-	}
-	entries, ok := matcher["hooks"].([]any)
-	if !ok || len(entries) == 0 {
-		t.Fatalf("WorkBuddy hook entries = %#v", matcher["hooks"])
-	}
-	entry, ok := entries[0].(map[string]any)
-	if !ok {
-		t.Fatalf("WorkBuddy hook entry = %#v", entries[0])
-	}
-	command, ok := entry["command"].(string)
-	if !ok {
-		t.Fatalf("WorkBuddy hook command = %#v", entry["command"])
-	}
-	return command
-}
-
 func replaceReleaseWorkBuddyHookCommand(t *testing.T, settings []byte, command string) []byte {
 	t.Helper()
 	var value map[string]any

@@ -425,15 +425,15 @@ func writeReleaseIntegrationEvidenceFixture(t *testing.T) releaseIntegrationEvid
 			writeLicense(&notices, license.Name, []byte("license text\n"))
 		}
 	}
-	if err := os.WriteFile(filepath.Join(root, "THIRD-PARTY-LICENSES.txt"), []byte(notices.String()), 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(filepath.Join(root, "THIRD-PARTY-LICENSES.txt"), []byte(notices.String()), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	temporarySBOM := filepath.Join(t.TempDir(), "SBOM.spdx.json")
-	if err := os.WriteFile(temporarySBOM, dependencyOnlySPDX(), 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(temporarySBOM, dependencyOnlySPDX(), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := addIntegrationEvidenceToSBOM(temporarySBOM, repository); err != nil {
-		t.Fatal(err)
+	if augmentErr := addIntegrationEvidenceToSBOM(temporarySBOM, repository); augmentErr != nil {
+		t.Fatal(augmentErr)
 	}
 	sbom, err := os.ReadFile(temporarySBOM)
 	if err != nil {
