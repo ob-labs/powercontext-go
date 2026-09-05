@@ -77,7 +77,7 @@ func TestExternalSkillReplacementIsScopedAtomicAndDeterministic(t *testing.T) {
 	}
 }
 
-func TestExternalSkillReplacementAtomicallyCoversAllAgentProviders(t *testing.T) {
+func TestExternalSkillReplacementAtomicallyCoversSupportedAgentProviders(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	database := openTestDatabase(t)
@@ -86,11 +86,11 @@ func TestExternalSkillReplacementAtomicallyCoversAllAgentProviders(t *testing.T)
 		t.Fatal(err)
 	}
 	codex := externalRegistration(t, "codex-review", "/workspace/codex-review", "a")
-	claude := externalRegistrationForProvider(
-		t, "claude_code", "claude-review", "/workspace/claude-review", "b",
+	workBuddy := externalRegistrationForProvider(
+		t, "workbuddy", "workbuddy-review", "/workspace/workbuddy-review", "b",
 	)
-	providers := []string{"codex", "claude_code"}
-	if _, replaceErr := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex, claude}); replaceErr != nil {
+	providers := []string{"codex", "workbuddy"}
+	if _, replaceErr := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex, workBuddy}); replaceErr != nil {
 		t.Fatal(replaceErr)
 	}
 	if _, replaceErr := store.Replace(ctx, providers, "workstation-1", []skill.Registration{codex}); replaceErr != nil {
