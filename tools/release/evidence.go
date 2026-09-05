@@ -28,9 +28,10 @@ import (
 )
 
 type spdxDocument struct {
-	SPDXVersion string                    `json:"spdxVersion"`
-	Packages    []spdxPackage             `json:"packages"`
-	Extra       map[string]jsontext.Value `json:",embed"`
+	SPDXVersion   string                    `json:"spdxVersion"`
+	Packages      []spdxPackage             `json:"packages"`
+	Relationships []spdxRelationship        `json:"relationships"`
+	Extra         map[string]jsontext.Value `json:",embed"`
 }
 
 type spdxPackage struct {
@@ -38,6 +39,8 @@ type spdxPackage struct {
 	SPDXID             string                    `json:"SPDXID,omitempty"`
 	Version            string                    `json:"versionInfo,omitempty"`
 	DownloadLocation   string                    `json:"downloadLocation,omitempty"`
+	LicenseConcluded   string                    `json:"licenseConcluded,omitempty"`
+	LicenseDeclared    string                    `json:"licenseDeclared,omitempty"`
 	FilesAnalyzed      *bool                     `json:"filesAnalyzed,omitempty"`
 	ExternalReferences []spdxExternalReference   `json:"externalRefs,omitempty"`
 	Extra              map[string]jsontext.Value `json:",embed"`
@@ -48,6 +51,13 @@ type spdxExternalReference struct {
 	Type     string                    `json:"referenceType"`
 	Locator  string                    `json:"referenceLocator"`
 	Extra    map[string]jsontext.Value `json:",embed"`
+}
+
+type spdxRelationship struct {
+	ElementID        string                    `json:"spdxElementId"`
+	Type             string                    `json:"relationshipType"`
+	RelatedElementID string                    `json:"relatedSpdxElement"`
+	Extra            map[string]jsontext.Value `json:",embed"`
 }
 
 func runVerifyEvidence(arguments []string) error {
@@ -134,6 +144,11 @@ func verifyReleaseEvidence(root, detachedSBOM, repository string) error {
 			return errors.New("detached SPDX SBOM does not match the archived SPDX SBOM")
 		}
 	}
+	if requiresIntegrationEvidence {
+		if integrationSBOMErr := verifyIntegrationSPDXEvidence(sbom, manifest.Integrations); integrationSBOMErr != nil {
+			return integrationSBOMErr
+		}
+	}
 
 	recorded := make(map[string]struct{})
 	for _, packageRecord := range sbom.Packages {
@@ -156,6 +171,51 @@ func verifyReleaseEvidence(root, detachedSBOM, repository string) error {
 		}
 	}
 	return nil
+}
+
+func verifyIntegrationSPDXEvidence(document spdxDocument, integrations []integrationEvidence) error {
+	recordedPackages := make(map[string]spdxPackage, len(integrations))
+	for _, packageRecord := range document.Packages {
+		if strings.HasPrefix(packageRecord.SPDXID, "SPDXRef-Integration-") {
+			if _, duplicate := recordedPackages[packageRecord.SPDXID]; duplicate {
+				return fmt.Errorf("SPDX SBOM contains duplicate redistributed integration package %q", packageRecord.SPDXID)
+			}
+			recordedPackages[packageRecord.SPDXID] = packageRecord
+		}
+	}
+	recordedRelationships := make(map[string]int, len(integrations))
+	for _, relationship := range document.Relationships {
+		if relationship.ElementID == "SPDXRef-DOCUMENT" && relationship.Type == "CONTAINS" {
+			recordedRelationships[relationship.RelatedElementID]++
+		}
+	}
+	for _, integration := range integrations {
+		spdxID := integrationSPDXID(integration.ID)
+		packageRecord, exists := recordedPackages[spdxID]
+		if !exists {
+			return fmt.Errorf("SPDX SBOM is missing redistributed integration package %q", integration.ID)
+		}
+		if packageRecord.Name != integrationSPDXName(integration.ID) ||
+			packageRecord.DownloadLocation != "NOASSERTION" ||
+			packageRecord.FilesAnalyzed == nil || *packageRecord.FilesAnalyzed {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration package %q", integration.ID)
+		}
+		if packageRecord.LicenseConcluded != "Apache-2.0" || packageRecord.LicenseDeclared != "Apache-2.0" {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration license for %q", integration.ID)
+		}
+		if recordedRelationships[spdxID] != 1 {
+			return fmt.Errorf("SPDX SBOM is missing redistributed integration relationship for %q", integration.ID)
+		}
+	}
+	return nil
+}
+
+func integrationSPDXID(id string) string {
+	return "SPDXRef-Integration-" + id
+}
+
+func integrationSPDXName(id string) string {
+	return "PowerContext integration " + id
 }
 
 func verifyIntegrationEvidence(root, repository string, records []integrationEvidence) error {

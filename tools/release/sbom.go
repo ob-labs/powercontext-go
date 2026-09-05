@@ -101,3 +101,55 @@ func addNativeDependenciesToSBOM(path string, dependencies []dependencyRecord) e
 	}
 	return os.WriteFile(path, append(encoded, '\n'), 0o644)
 }
+
+func addIntegrationEvidenceToSBOM(path, repository string) error {
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return fmt.Errorf("read release integration inventory: %w", err)
+	}
+	if err := validateReleaseIntegrations(repository, integrations); err != nil {
+		return fmt.Errorf("validate release integration inventory: %w", err)
+	}
+	contents, err := readBoundedFile(path, maxMetadataBytes)
+	if err != nil {
+		return err
+	}
+	var document spdxDocument
+	if decodeErr := jsonv2.Unmarshal(contents, &document); decodeErr != nil || !strings.HasPrefix(document.SPDXVersion, "SPDX-") {
+		return errors.New("Syft did not produce a valid SPDX JSON document")
+	}
+	recordedPackages := make(map[string]struct{}, len(document.Packages))
+	for _, packageRecord := range document.Packages {
+		recordedPackages[packageRecord.SPDXID] = struct{}{}
+	}
+	recordedRelationships := make(map[string]struct{}, len(document.Relationships))
+	for _, relationship := range document.Relationships {
+		if relationship.ElementID == "SPDXRef-DOCUMENT" && relationship.Type == "CONTAINS" {
+			recordedRelationships[relationship.RelatedElementID] = struct{}{}
+		}
+	}
+	for _, integration := range integrations {
+		spdxID := integrationSPDXID(integration.ID)
+		if _, exists := recordedPackages[spdxID]; exists {
+			return fmt.Errorf("SPDX SBOM already contains redistributed integration package %q", integration.ID)
+		}
+		document.Packages = append(document.Packages, spdxPackage{
+			Name: integrationSPDXName(integration.ID), SPDXID: spdxID,
+			DownloadLocation: "NOASSERTION", FilesAnalyzed: new(false),
+			LicenseConcluded: "Apache-2.0", LicenseDeclared: "Apache-2.0",
+		})
+		recordedPackages[spdxID] = struct{}{}
+		if _, exists := recordedRelationships[spdxID]; exists {
+			return fmt.Errorf("SPDX SBOM already contains redistributed integration relationship for %q", integration.ID)
+		}
+		document.Relationships = append(document.Relationships, spdxRelationship{
+			ElementID: "SPDXRef-DOCUMENT", Type: "CONTAINS", RelatedElementID: spdxID,
+		})
+		recordedRelationships[spdxID] = struct{}{}
+	}
+	encoded, err := jsonv2.Marshal(&document, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(encoded, '\n'), 0o644)
+}

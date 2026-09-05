@@ -215,6 +215,9 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	if augmentErr := addNativeDependenciesToSBOM(temporarySBOM, dependencies.Native); augmentErr != nil {
 		return packageResult{}, augmentErr
 	}
+	if augmentErr := addIntegrationEvidenceToSBOM(temporarySBOM, repository); augmentErr != nil {
+		return packageResult{}, augmentErr
+	}
 	if copyErr := copyRegularFile(temporarySBOM, filepath.Join(root, "SBOM.spdx.json"), 0o644); copyErr != nil {
 		return packageResult{}, copyErr
 	}

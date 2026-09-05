@@ -122,6 +122,56 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 			},
 			message: "detached SPDX SBOM does not match",
 		},
+		"integration SPDX package omitted": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					packages := document["packages"].([]any)
+					document["packages"] = slices.DeleteFunc(packages, func(value any) bool {
+						packageRecord := value.(map[string]any)
+						return packageRecord["SPDXID"] == "SPDXRef-Integration-bub"
+					})
+				})
+			},
+			message: `SPDX SBOM is missing redistributed integration package "bub"`,
+		},
+		"integration SPDX package drift": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					for _, value := range document["packages"].([]any) {
+						packageRecord := value.(map[string]any)
+						if packageRecord["SPDXID"] == "SPDXRef-Integration-bub" {
+							packageRecord["name"] = "PowerContext integration drifted"
+						}
+					}
+				})
+			},
+			message: `SPDX SBOM has invalid redistributed integration package "bub"`,
+		},
+		"integration SPDX relationship drift": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					relationships := document["relationships"].([]any)
+					document["relationships"] = slices.DeleteFunc(relationships, func(value any) bool {
+						relationship := value.(map[string]any)
+						return relationship["relatedSpdxElement"] == "SPDXRef-Integration-bub"
+					})
+				})
+			},
+			message: `SPDX SBOM is missing redistributed integration relationship for "bub"`,
+		},
+		"integration SPDX license drift": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					for _, value := range document["packages"].([]any) {
+						packageRecord := value.(map[string]any)
+						if packageRecord["SPDXID"] == "SPDXRef-Integration-bub" {
+							packageRecord["licenseDeclared"] = "NOASSERTION"
+						}
+					}
+				})
+			},
+			message: `SPDX SBOM has invalid redistributed integration license for "bub"`,
+		},
 		"integration license mismatch": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				if err := os.WriteFile(filepath.Join(fixture.root, "LICENSE"), []byte("changed license\n"), 0o600); err != nil {
@@ -178,6 +228,33 @@ func TestReleaseIntegrationEvidenceAcceptsReconciledArchive(t *testing.T) {
 	}
 }
 
+func TestReleaseIntegrationSPDXGenerationCoversFrozenArchiveInventory(t *testing.T) {
+	fixture := writeReleaseIntegrationEvidenceFixture(t)
+	sbomPath := filepath.Join(t.TempDir(), "SBOM.spdx.json")
+	if err := os.WriteFile(sbomPath, dependencyOnlySPDX(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := addIntegrationEvidenceToSBOM(sbomPath, fixture.repository); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(sbomPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(fixture.root, "SBOM.spdx.json"), fixture.detachedSBOM} {
+		if err := os.WriteFile(path, payload, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rewriteIntegrationEvidenceChecksums(t, fixture.root)
+	if err := verifyReleaseEvidence(fixture.root, fixture.detachedSBOM, fixture.repository); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), "uv.lock") || strings.Contains(string(payload), "pnpm-lock.yaml") {
+		t.Fatalf("generated SPDX SBOM misclassified lock-only dependencies: %s", payload)
+	}
+}
+
 type releaseIntegrationEvidenceFixture struct {
 	root         string
 	detachedSBOM string
@@ -230,14 +307,17 @@ func writeReleaseIntegrationEvidenceFixture(t *testing.T) releaseIntegrationEvid
 	if err := os.WriteFile(filepath.Join(root, "THIRD-PARTY-LICENSES.txt"), []byte(notices.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sbom := []byte(`{
-  "spdxVersion": "SPDX-2.3",
-  "packages": [
-    {"externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:golang/example.com/covered@v1.2.3"}]},
-    {"externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:generic/example.com/native@v4.5.6"}]}
-  ]
-}
-`)
+	temporarySBOM := filepath.Join(t.TempDir(), "SBOM.spdx.json")
+	if err := os.WriteFile(temporarySBOM, dependencyOnlySPDX(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := addIntegrationEvidenceToSBOM(temporarySBOM, repository); err != nil {
+		t.Fatal(err)
+	}
+	sbom, err := os.ReadFile(temporarySBOM)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "SBOM.spdx.json"), sbom, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -283,4 +363,38 @@ func rewriteIntegrationEvidenceChecksums(t *testing.T, root string) {
 	if err := writeTreeChecksums(root); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func mutateIntegrationEvidenceSBOM(t *testing.T, fixture releaseIntegrationEvidenceFixture, mutate func(document map[string]any)) {
+	t.Helper()
+	payload, err := os.ReadFile(filepath.Join(fixture.root, "SBOM.spdx.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	mutate(document)
+	payload, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(fixture.root, "SBOM.spdx.json"), fixture.detachedSBOM} {
+		if err := os.WriteFile(path, payload, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rewriteIntegrationEvidenceChecksums(t, fixture.root)
+}
+
+func dependencyOnlySPDX() []byte {
+	return []byte(`{
+  "spdxVersion": "SPDX-2.3",
+  "packages": [
+    {"externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:golang/example.com/covered@v1.2.3"}]},
+    {"externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:generic/example.com/native@v4.5.6"}]}
+  ]
+}
+`)
 }
