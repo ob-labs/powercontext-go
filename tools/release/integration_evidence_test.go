@@ -172,6 +172,39 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 			},
 			message: `SPDX SBOM has invalid redistributed integration license for "bub"`,
 		},
+		"integration SPDX copyright drift": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					for _, value := range document["packages"].([]any) {
+						packageRecord := value.(map[string]any)
+						if packageRecord["SPDXID"] == "SPDXRef-Integration-bub" {
+							packageRecord["copyrightText"] = "Copyright drift"
+						}
+					}
+				})
+			},
+			message: `SPDX SBOM has invalid redistributed integration copyright for "bub"`,
+		},
+		"unreviewed integration SPDX package": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					document["packages"] = append(document["packages"].([]any), map[string]any{
+						"SPDXID": "SPDXRef-Integration-unreviewed", "name": "PowerContext integration unreviewed",
+					})
+				})
+			},
+			message: "unreviewed redistributed integration packages",
+		},
+		"unreviewed integration SPDX relationship": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				mutateIntegrationEvidenceSBOM(t, fixture, func(document map[string]any) {
+					document["relationships"] = append(document["relationships"].([]any), map[string]any{
+						"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-Integration-unreviewed",
+					})
+				})
+			},
+			message: "unreviewed redistributed integration relationship",
+		},
 		"integration license mismatch": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
 				if err := os.WriteFile(filepath.Join(fixture.root, "LICENSE"), []byte("changed license\n"), 0o600); err != nil {
@@ -252,6 +285,33 @@ func TestReleaseIntegrationSPDXGenerationCoversFrozenArchiveInventory(t *testing
 	}
 	if strings.Contains(string(payload), "uv.lock") || strings.Contains(string(payload), "pnpm-lock.yaml") {
 		t.Fatalf("generated SPDX SBOM misclassified lock-only dependencies: %s", payload)
+	}
+}
+
+func TestGenerateSBOMRemovesLockfileDependencyPackages(t *testing.T) {
+	document := map[string]any{
+		"packages": []any{
+			map[string]any{"SPDXID": "SPDXRef-Go", "externalRefs": []any{map[string]any{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:golang/example.com/kept@v1.0.0"}}},
+			map[string]any{"SPDXID": "SPDXRef-PyPI", "externalRefs": []any{map[string]any{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:pypi/lock-only@1.0.0"}}},
+			map[string]any{"SPDXID": "SPDXRef-NPM", "externalRefs": []any{map[string]any{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:npm/lock-only@1.0.0"}}},
+		},
+		"relationships": []any{
+			map[string]any{"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PyPI"},
+			map[string]any{"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Go"},
+		},
+	}
+	filterLockfileDependencyPackages(document)
+	payload, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"SPDXRef-PyPI", "SPDXRef-NPM", "lock-only"} {
+		if strings.Contains(string(payload), forbidden) {
+			t.Fatalf("lockfile dependency remains in SPDX document: %s", payload)
+		}
+	}
+	if !strings.Contains(string(payload), "SPDXRef-Go") {
+		t.Fatalf("Go package was removed from SPDX document: %s", payload)
 	}
 }
 

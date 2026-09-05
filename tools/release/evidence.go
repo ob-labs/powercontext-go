@@ -41,6 +41,7 @@ type spdxPackage struct {
 	DownloadLocation   string                    `json:"downloadLocation,omitempty"`
 	LicenseConcluded   string                    `json:"licenseConcluded,omitempty"`
 	LicenseDeclared    string                    `json:"licenseDeclared,omitempty"`
+	CopyrightText      string                    `json:"copyrightText,omitempty"`
 	FilesAnalyzed      *bool                     `json:"filesAnalyzed,omitempty"`
 	ExternalReferences []spdxExternalReference   `json:"externalRefs,omitempty"`
 	Extra              map[string]jsontext.Value `json:",embed"`
@@ -203,8 +204,24 @@ func verifyIntegrationSPDXEvidence(document spdxDocument, integrations []integra
 		if packageRecord.LicenseConcluded != "Apache-2.0" || packageRecord.LicenseDeclared != "Apache-2.0" {
 			return fmt.Errorf("SPDX SBOM has invalid redistributed integration license for %q", integration.ID)
 		}
+		if packageRecord.CopyrightText != "NOASSERTION" {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration copyright for %q", integration.ID)
+		}
 		if recordedRelationships[spdxID] != 1 {
 			return fmt.Errorf("SPDX SBOM is missing redistributed integration relationship for %q", integration.ID)
+		}
+	}
+	if len(recordedPackages) != len(integrations) {
+		return errors.New("SPDX SBOM has unreviewed redistributed integration packages")
+	}
+	for relationshipID, count := range recordedRelationships {
+		if strings.HasPrefix(relationshipID, "SPDXRef-Integration-") && count != 1 {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration relationship %q", relationshipID)
+		}
+		if strings.HasPrefix(relationshipID, "SPDXRef-Integration-") {
+			if _, exists := recordedPackages[relationshipID]; !exists {
+				return fmt.Errorf("SPDX SBOM has unreviewed redistributed integration relationship %q", relationshipID)
+			}
 		}
 	}
 	return nil

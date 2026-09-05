@@ -60,7 +60,66 @@ func generateSBOM(syft, root, output, syftVersion string, created time.Time) err
 		"Organization: Anchore, Inc",
 		"Tool: syft-" + syftVersion,
 	}
+	filterLockfileDependencyPackages(document)
 	return writeJSON(output, document)
+}
+
+func filterLockfileDependencyPackages(document map[string]any) {
+	packages, ok := document["packages"].([]any)
+	if !ok {
+		return
+	}
+	removed := make(map[string]struct{})
+	kept := make([]any, 0, len(packages))
+	for _, value := range packages {
+		packageRecord, ok := value.(map[string]any)
+		if !ok || !lockfileOnlyPackage(packageRecord) {
+			kept = append(kept, value)
+			continue
+		}
+		if id, ok := packageRecord["SPDXID"].(string); ok {
+			removed[id] = struct{}{}
+		}
+	}
+	document["packages"] = kept
+	relationships, ok := document["relationships"].([]any)
+	if !ok || len(removed) == 0 {
+		return
+	}
+	keptRelationships := make([]any, 0, len(relationships))
+	for _, value := range relationships {
+		relationship, ok := value.(map[string]any)
+		if !ok {
+			keptRelationships = append(keptRelationships, value)
+			continue
+		}
+		elementID, _ := relationship["spdxElementId"].(string)
+		relatedID, _ := relationship["relatedSpdxElement"].(string)
+		_, removesElement := removed[elementID]
+		_, removesRelated := removed[relatedID]
+		if !removesElement && !removesRelated {
+			keptRelationships = append(keptRelationships, value)
+		}
+	}
+	document["relationships"] = keptRelationships
+}
+
+func lockfileOnlyPackage(packageRecord map[string]any) bool {
+	references, ok := packageRecord["externalRefs"].([]any)
+	if !ok {
+		return false
+	}
+	for _, value := range references {
+		reference, ok := value.(map[string]any)
+		if !ok || reference["referenceCategory"] != "PACKAGE-MANAGER" || reference["referenceType"] != "purl" {
+			continue
+		}
+		locator, _ := reference["referenceLocator"].(string)
+		if strings.HasPrefix(locator, "pkg:pypi/") || strings.HasPrefix(locator, "pkg:npm/") {
+			return true
+		}
+	}
+	return false
 }
 
 func addNativeDependenciesToSBOM(path string, dependencies []dependencyRecord) error {
@@ -136,7 +195,7 @@ func addIntegrationEvidenceToSBOM(path, repository string) error {
 		document.Packages = append(document.Packages, spdxPackage{
 			Name: integrationSPDXName(integration.ID), SPDXID: spdxID,
 			DownloadLocation: "NOASSERTION", FilesAnalyzed: new(false),
-			LicenseConcluded: "Apache-2.0", LicenseDeclared: "Apache-2.0",
+			LicenseConcluded: "Apache-2.0", LicenseDeclared: "Apache-2.0", CopyrightText: "NOASSERTION",
 		})
 		recordedPackages[spdxID] = struct{}{}
 		if _, exists := recordedRelationships[spdxID]; exists {
