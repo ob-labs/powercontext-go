@@ -36,6 +36,16 @@ jobs:
       - name: Set up the Go environment
         uses: ./.github/actions/setup-go-env
 
+      - name: Set up Python for the published integration consumer
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv for the published integration consumer
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.12"
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
@@ -104,6 +114,11 @@ jobs:
           cd "$ASSET_DIR"
           sha256sum --check --strict SHA256SUMS
 
+      - name: Consume Python integrations from the published Standard archive
+        env:
+          POWERCONTEXT_ARCHIVE: ${{ runner.temp }}/powercontext-release-assets/powercontext-${{ steps.release.outputs.version }}-linux-amd64.tar.gz
+        run: go test -count=1 -tags archive_consumer ./tools/release -run '^TestReleaseArchivePythonAdaptersConsumeExtractedArtifact$' -v
+
       - name: Verify extracted Linux release contracts
         id: archives
         shell: bash
@@ -141,13 +156,18 @@ jobs:
               --arg version "$VERSION" \
               '.schema_version == 1 and .product == "PowerContext" and .edition == $edition and .version == $version and .commit == $commit and .build_date == $build_date and .target == "linux-amd64" and .cgo_enabled == true' \
               "$root/BUILD-INFO.json" >/dev/null
-            go run ./tools/release verify-evidence -root "$root"
+            go run ./tools/release verify-evidence -root "$root" -repository "$GITHUB_WORKSPACE" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"
             test "$("$root/bin/powercontext" --version)" = "$VERSION"
             echo "${edition}_root=$root" >> "$GITHUB_OUTPUT"
           }
 
           verify_archive standard
           verify_archive full
+
+      - name: Verify Standard and Full integration inventory parity
+        shell: bash
+        run: |
+          cmp --silent <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json") <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json")
 
       - name: Exercise the released standard binary
         id: standard_smoke

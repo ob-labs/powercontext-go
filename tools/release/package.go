@@ -215,6 +215,9 @@ func packageRelease(options packageOptions) (packageResult, error) {
 	if augmentErr := addNativeDependenciesToSBOM(temporarySBOM, dependencies.Native); augmentErr != nil {
 		return packageResult{}, augmentErr
 	}
+	if augmentErr := addIntegrationEvidenceToSBOM(temporarySBOM, repository); augmentErr != nil {
+		return packageResult{}, augmentErr
+	}
 	if copyErr := copyRegularFile(temporarySBOM, filepath.Join(root, "SBOM.spdx.json"), 0o644); copyErr != nil {
 		return packageResult{}, copyErr
 	}
@@ -449,28 +452,35 @@ func stageRelease(repository, root string, options packageOptions, facts binaryF
 }
 
 func stageIntegrations(repository, root string) error {
-	// Claude Code discovers a local marketplace from this repository-level
-	// manifest; copying only integrations/ leaves the plugin files present but
-	// makes `setup claude-code --source <archive>` unusable.
-	if err := copyTree(
-		filepath.Join(repository, ".claude-plugin"),
-		filepath.Join(root, ".claude-plugin"),
-	); err != nil {
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
 		return err
 	}
-	if err := copyTree(
-		filepath.Join(repository, "integrations"),
-		filepath.Join(root, "integrations"),
-	); err != nil {
+	if validationErr := validateReleaseIntegrations(repository, integrations); validationErr != nil {
+		return validationErr
+	}
+	files, err := releaseIntegrationFiles(repository)
+	if err != nil {
 		return err
 	}
-	// dist is normally workspace output and is filtered by copyTree. OpenClaw's
-	// tracked bundle is its executable adapter, so stage that one runtime tree
-	// explicitly after copying the source tree.
-	return copyTree(
-		filepath.Join(repository, "integrations", "openclaw", "plugins", "memory-powercontext", "dist"),
-		filepath.Join(root, "integrations", "openclaw", "plugins", "memory-powercontext", "dist"),
-	)
+	reviewedSet := make(map[string]struct{}, len(files))
+	for _, path := range files {
+		reviewedSet[path] = struct{}{}
+	}
+	if _, ok := reviewedSet[".claude-plugin/marketplace.json"]; !ok {
+		return errors.New("Claude Code marketplace manifest is absent from the release integration file manifest")
+	}
+	for _, integration := range integrations {
+		for _, path := range append(slices.Clone(integration.RequiredPaths), integration.LockPaths...) {
+			if _, ok := reviewedSet[path]; !ok {
+				return fmt.Errorf("release integration %q path %q is absent from the release integration file manifest", integration.ID, path)
+			}
+		}
+	}
+	if err := copyRepositoryFiles(repository, root, files); err != nil {
+		return err
+	}
+	return nil
 }
 
 func describeNativeAssets(

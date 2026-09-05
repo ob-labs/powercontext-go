@@ -34,11 +34,30 @@ binary release.
 | Go Server, SDK, CLI, and OpenAPI | Go-native implementation with `openapi/powercontext.yaml` as the authoritative HTTP contract. | SQLite is the only database accepted before WP6. |
 | Codex and WorkBuddy | Installed integrations call the running Go Server through HTTP or MCP; their service-chain evidence is a required `Pre-WP6 host adapters` check. | These are the only host integrations counted toward WP6 acceptance. |
 | Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is WP5 evidence, not evidence for every retained host adapter. |
-| Retained adapters | Other maintained adapters retain their own executable `Post-WP6 retained host adapters` CI evidence. | Bub, Claude Code, DSH, Hermes, LangGraph, OpenClaw, OpenCode, and Pi are P3 work and are not WP6 acceptance evidence. |
+| Retained adapters | Other maintained adapters retain their own executable `Post-WP6 retained host adapters` CI evidence. | Bub, Claude Code, DSH, Hermes, LangChain, LangGraph, OpenClaw, OpenCode, Pi, and Pydantic AI are P3 work and are not WP6 acceptance evidence. |
 | seekDB and OceanBase | Existing code and jobs remain useful backend-plan evidence. | Feature parity, migrations, packaging, license/SBOM work, and release reconciliation are final P4 work. |
 
 See [`docs/release/INSTALL.md`](docs/release/INSTALL.md) for the exact release
 identity, configuration, upgrade, transport, and host-operation contract.
+
+## Retained integration archive
+
+The next unpublished release candidate has one explicit twelve-root retained
+integration inventory. It is an archive-completeness contract, not an
+expansion of the pre-WP6 acceptance scope above. Standard and Full archives
+must contain the same integrations; edition differences remain limited to
+their existing native inference assets.
+
+| Consumer mode | Integrations | Required archive evidence |
+| --- | --- | --- |
+| Command host (8) | Claude Code, Codex, DSH, Hermes, OpenClaw, OpenCode, Pi, WorkBuddy | Consume the extracted archive's tracked host manifest or executable bundle. WorkBuddy registration invokes only the extracted archive binary. |
+| Python package (4) | Bub, LangChain, LangGraph, Pydantic AI | Install and smoke-test from the extracted archive and each package's declared lock state. |
+
+The archived integration content consists of reviewed source, manifests, lock
+files, and tracked executable bundles. It never carries an active credential,
+prompt, source or Memory content, raw scope ID, or local database path.
+Authorization remains a runtime environment reference. A checkout-local
+consumer result is not archive evidence.
 
 ## Repository shape
 
@@ -56,10 +75,11 @@ identity, configuration, upgrade, transport, and host-operation contract.
   observability. Native seekDB and sqlite-vec ownership lives below
   `internal/sqlstore`.
 
-- `integrations` contains maintained host-native adapters. They communicate
-  only with the Go Server and are auxiliary monorepo assets rather than Go
-  binary implementation languages. Before WP6 acceptance, the primary host
-  scope is Codex and WorkBuddy only; all other retained hosts are P3 work.
+- `integrations` contains the twelve maintained retained integrations in the
+  archive inventory. They communicate only with the Go Server and are
+  auxiliary monorepo assets rather than Go binary implementation languages.
+  Before WP6 acceptance, the primary host scope is Codex and WorkBuddy only;
+  all other retained integrations are P3 work.
 - `evaluation` contains the deployment-neutral Codex/SQLite evaluation control
   plane. It is maintained and tested in this repository, but is neither
   embedded in the Go binary nor a Go release-runtime requirement.

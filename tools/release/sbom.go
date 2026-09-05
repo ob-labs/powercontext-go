@@ -60,7 +60,66 @@ func generateSBOM(syft, root, output, syftVersion string, created time.Time) err
 		"Organization: Anchore, Inc",
 		"Tool: syft-" + syftVersion,
 	}
+	filterLockfileDependencyPackages(document)
 	return writeJSON(output, document)
+}
+
+func filterLockfileDependencyPackages(document map[string]any) {
+	packages, ok := document["packages"].([]any)
+	if !ok {
+		return
+	}
+	removed := make(map[string]struct{})
+	kept := make([]any, 0, len(packages))
+	for _, value := range packages {
+		packageRecord, packageRecordOK := value.(map[string]any)
+		if !packageRecordOK || !lockfileOnlyPackage(packageRecord) {
+			kept = append(kept, value)
+			continue
+		}
+		if id, idOK := packageRecord["SPDXID"].(string); idOK {
+			removed[id] = struct{}{}
+		}
+	}
+	document["packages"] = kept
+	relationships, ok := document["relationships"].([]any)
+	if !ok || len(removed) == 0 {
+		return
+	}
+	keptRelationships := make([]any, 0, len(relationships))
+	for _, value := range relationships {
+		relationship, relationshipOK := value.(map[string]any)
+		if !relationshipOK {
+			keptRelationships = append(keptRelationships, value)
+			continue
+		}
+		elementID, _ := relationship["spdxElementId"].(string)
+		relatedID, _ := relationship["relatedSpdxElement"].(string)
+		_, removesElement := removed[elementID]
+		_, removesRelated := removed[relatedID]
+		if !removesElement && !removesRelated {
+			keptRelationships = append(keptRelationships, value)
+		}
+	}
+	document["relationships"] = keptRelationships
+}
+
+func lockfileOnlyPackage(packageRecord map[string]any) bool {
+	references, ok := packageRecord["externalRefs"].([]any)
+	if !ok {
+		return false
+	}
+	for _, value := range references {
+		reference, referenceOK := value.(map[string]any)
+		if !referenceOK || reference["referenceCategory"] != "PACKAGE-MANAGER" || reference["referenceType"] != "purl" {
+			continue
+		}
+		locator, _ := reference["referenceLocator"].(string)
+		if strings.HasPrefix(locator, "pkg:pypi/") || strings.HasPrefix(locator, "pkg:npm/") {
+			return true
+		}
+	}
+	return false
 }
 
 func addNativeDependenciesToSBOM(path string, dependencies []dependencyRecord) error {
@@ -94,6 +153,58 @@ func addNativeDependenciesToSBOM(path string, dependencies []dependencyRecord) e
 			}},
 		})
 		recorded[purl] = struct{}{}
+	}
+	encoded, err := jsonv2.Marshal(&document, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(encoded, '\n'), 0o644)
+}
+
+func addIntegrationEvidenceToSBOM(path, repository string) error {
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return fmt.Errorf("read release integration inventory: %w", err)
+	}
+	if validationErr := validateReleaseIntegrations(repository, integrations); validationErr != nil {
+		return fmt.Errorf("validate release integration inventory: %w", validationErr)
+	}
+	contents, err := readBoundedFile(path, maxMetadataBytes)
+	if err != nil {
+		return err
+	}
+	var document spdxDocument
+	if decodeErr := jsonv2.Unmarshal(contents, &document); decodeErr != nil || !strings.HasPrefix(document.SPDXVersion, "SPDX-") {
+		return errors.New("Syft did not produce a valid SPDX JSON document")
+	}
+	recordedPackages := make(map[string]struct{}, len(document.Packages))
+	for _, packageRecord := range document.Packages {
+		recordedPackages[packageRecord.SPDXID] = struct{}{}
+	}
+	recordedRelationships := make(map[string]struct{}, len(document.Relationships))
+	for _, relationship := range document.Relationships {
+		if relationship.ElementID == "SPDXRef-DOCUMENT" && relationship.Type == "CONTAINS" {
+			recordedRelationships[relationship.RelatedElementID] = struct{}{}
+		}
+	}
+	for _, integration := range integrations {
+		spdxID := integrationSPDXID(integration.ID)
+		if _, exists := recordedPackages[spdxID]; exists {
+			return fmt.Errorf("SPDX SBOM already contains redistributed integration package %q", integration.ID)
+		}
+		document.Packages = append(document.Packages, spdxPackage{
+			Name: integrationSPDXName(integration.ID), SPDXID: spdxID,
+			DownloadLocation: "NOASSERTION", FilesAnalyzed: new(false),
+			LicenseConcluded: "Apache-2.0", LicenseDeclared: "Apache-2.0", CopyrightText: "NOASSERTION",
+		})
+		recordedPackages[spdxID] = struct{}{}
+		if _, exists := recordedRelationships[spdxID]; exists {
+			return fmt.Errorf("SPDX SBOM already contains redistributed integration relationship for %q", integration.ID)
+		}
+		document.Relationships = append(document.Relationships, spdxRelationship{
+			ElementID: "SPDXRef-DOCUMENT", Type: "CONTAINS", RelatedElementID: spdxID,
+		})
+		recordedRelationships[spdxID] = struct{}{}
 	}
 	encoded, err := jsonv2.Marshal(&document, jsonv2.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {

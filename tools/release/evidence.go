@@ -28,9 +28,10 @@ import (
 )
 
 type spdxDocument struct {
-	SPDXVersion string                    `json:"spdxVersion"`
-	Packages    []spdxPackage             `json:"packages"`
-	Extra       map[string]jsontext.Value `json:",embed"`
+	SPDXVersion   string                    `json:"spdxVersion"`
+	Packages      []spdxPackage             `json:"packages"`
+	Relationships []spdxRelationship        `json:"relationships"`
+	Extra         map[string]jsontext.Value `json:",embed"`
 }
 
 type spdxPackage struct {
@@ -38,6 +39,9 @@ type spdxPackage struct {
 	SPDXID             string                    `json:"SPDXID,omitempty"`
 	Version            string                    `json:"versionInfo,omitempty"`
 	DownloadLocation   string                    `json:"downloadLocation,omitempty"`
+	LicenseConcluded   string                    `json:"licenseConcluded,omitempty"`
+	LicenseDeclared    string                    `json:"licenseDeclared,omitempty"`
+	CopyrightText      string                    `json:"copyrightText,omitempty"`
 	FilesAnalyzed      *bool                     `json:"filesAnalyzed,omitempty"`
 	ExternalReferences []spdxExternalReference   `json:"externalRefs,omitempty"`
 	Extra              map[string]jsontext.Value `json:",embed"`
@@ -50,20 +54,29 @@ type spdxExternalReference struct {
 	Extra    map[string]jsontext.Value `json:",embed"`
 }
 
+type spdxRelationship struct {
+	ElementID        string                    `json:"spdxElementId"`
+	Type             string                    `json:"relationshipType"`
+	RelatedElementID string                    `json:"relatedSpdxElement"`
+	Extra            map[string]jsontext.Value `json:",embed"`
+}
+
 func runVerifyEvidence(arguments []string) error {
 	flags := flag.NewFlagSet("verify-evidence", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	root := flags.String("root", "", "extracted release root")
+	repository := flags.String("repository", "", "released source checkout")
+	sbom := flags.String("sbom", "", "detached SPDX SBOM")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || *root == "" {
 		return errors.New("verify-evidence requires an extracted release root")
 	}
-	return verifyReleaseEvidence(*root)
+	return verifyReleaseEvidence(*root, *sbom, *repository)
 }
 
-func verifyReleaseEvidence(root string) error {
+func verifyReleaseEvidence(root, detachedSBOM, repository string) error {
 	absoluteRoot, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -86,6 +99,27 @@ func verifyReleaseEvidence(root string) error {
 	if nativeErr := verifyDependencyRecords(manifest.Native, "native dependency"); nativeErr != nil {
 		return nativeErr
 	}
+	integrationRootInfo, integrationRootErr := os.Stat(filepath.Join(absoluteRoot, "integrations"))
+	_, buildInfoErr := os.Stat(filepath.Join(absoluteRoot, "BUILD-INFO.json"))
+	requiresIntegrationEvidence := len(manifest.Integrations) > 0 ||
+		(integrationRootErr == nil && integrationRootInfo.IsDir()) || buildInfoErr == nil
+	if requiresIntegrationEvidence {
+		if checksumErr := verifyTreeChecksums(absoluteRoot); checksumErr != nil {
+			return checksumErr
+		}
+		if len(manifest.Integrations) == 0 {
+			return errors.New("redistributed integration inventory is empty")
+		}
+		if repository == "" {
+			return errors.New("released source checkout is required for redistributed integration evidence")
+		}
+		if integrationErr := verifyIntegrationEvidence(absoluteRoot, repository, manifest.Integrations); integrationErr != nil {
+			return integrationErr
+		}
+		if detachedSBOM == "" {
+			return errors.New("detached SPDX SBOM is required for redistributed integration evidence")
+		}
+	}
 	if noticeErr := verifyLicenseNotices(filepath.Join(absoluteRoot, "THIRD-PARTY-LICENSES.txt"), manifest); noticeErr != nil {
 		return noticeErr
 	}
@@ -101,6 +135,20 @@ func verifyReleaseEvidence(root string) error {
 	}
 	if !strings.HasPrefix(sbom.SPDXVersion, "SPDX-") {
 		return errors.New("SPDX SBOM is missing its version")
+	}
+	if detachedSBOM != "" {
+		detachedBytes, readErr := readBoundedFile(detachedSBOM, maxMetadataBytes)
+		if readErr != nil {
+			return fmt.Errorf("read detached SPDX SBOM: %w", readErr)
+		}
+		if !slices.Equal(sbomBytes, detachedBytes) {
+			return errors.New("detached SPDX SBOM does not match the archived SPDX SBOM")
+		}
+	}
+	if requiresIntegrationEvidence {
+		if integrationSBOMErr := verifyIntegrationSPDXEvidence(sbom, manifest.Integrations); integrationSBOMErr != nil {
+			return integrationSBOMErr
+		}
 	}
 
 	recorded := make(map[string]struct{})
@@ -124,6 +172,136 @@ func verifyReleaseEvidence(root string) error {
 		}
 	}
 	return nil
+}
+
+func verifyIntegrationSPDXEvidence(document spdxDocument, integrations []integrationEvidence) error {
+	recordedPackages := make(map[string]spdxPackage, len(integrations))
+	for _, packageRecord := range document.Packages {
+		if strings.HasPrefix(packageRecord.SPDXID, "SPDXRef-Integration-") {
+			if _, duplicate := recordedPackages[packageRecord.SPDXID]; duplicate {
+				return fmt.Errorf("SPDX SBOM contains duplicate redistributed integration package %q", packageRecord.SPDXID)
+			}
+			recordedPackages[packageRecord.SPDXID] = packageRecord
+		}
+	}
+	expectedRelationships := make(map[string]struct{}, len(integrations))
+	for _, integration := range integrations {
+		expectedRelationships[integrationSPDXID(integration.ID)] = struct{}{}
+	}
+	recordedRelationships := make(map[string]int, len(integrations))
+	for _, relationship := range document.Relationships {
+		involvesIntegration := strings.HasPrefix(relationship.ElementID, "SPDXRef-Integration-") ||
+			strings.HasPrefix(relationship.RelatedElementID, "SPDXRef-Integration-")
+		if !involvesIntegration {
+			continue
+		}
+		if relationship.ElementID != "SPDXRef-DOCUMENT" || relationship.Type != "CONTAINS" {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration relationship %q", relationship.RelatedElementID)
+		}
+		if _, approved := expectedRelationships[relationship.RelatedElementID]; !approved {
+			return fmt.Errorf("SPDX SBOM has unreviewed redistributed integration relationship %q", relationship.RelatedElementID)
+		}
+		recordedRelationships[relationship.RelatedElementID]++
+	}
+	for _, integration := range integrations {
+		spdxID := integrationSPDXID(integration.ID)
+		packageRecord, exists := recordedPackages[spdxID]
+		if !exists {
+			return fmt.Errorf("SPDX SBOM is missing redistributed integration package %q", integration.ID)
+		}
+		if packageRecord.Name != integrationSPDXName(integration.ID) ||
+			packageRecord.DownloadLocation != "NOASSERTION" ||
+			packageRecord.FilesAnalyzed == nil || *packageRecord.FilesAnalyzed {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration package %q", integration.ID)
+		}
+		if packageRecord.LicenseConcluded != "Apache-2.0" || packageRecord.LicenseDeclared != "Apache-2.0" {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration license for %q", integration.ID)
+		}
+		if packageRecord.CopyrightText != "NOASSERTION" {
+			return fmt.Errorf("SPDX SBOM has invalid redistributed integration copyright for %q", integration.ID)
+		}
+		if recordedRelationships[spdxID] != 1 {
+			return fmt.Errorf("SPDX SBOM is missing redistributed integration relationship for %q", integration.ID)
+		}
+	}
+	if len(recordedPackages) != len(integrations) {
+		return errors.New("SPDX SBOM has unreviewed redistributed integration packages")
+	}
+	return nil
+}
+
+func integrationSPDXID(id string) string {
+	return "SPDXRef-Integration-" + id
+}
+
+func integrationSPDXName(id string) string {
+	return "PowerContext integration " + id
+}
+
+func verifyIntegrationEvidence(root, repository string, records []integrationEvidence) error {
+	integrations := make([]releaseIntegration, len(records))
+	for index, record := range records {
+		integrations[index] = record.releaseIntegration
+	}
+	if err := validateReleaseIntegrationRecords(integrations); err != nil {
+		return fmt.Errorf("validate redistributed integration evidence: %w", err)
+	}
+	expected, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return fmt.Errorf("read frozen release integration inventory: %w", err)
+	}
+	if validationErr := validateReleaseIntegrations(repository, expected); validationErr != nil {
+		return fmt.Errorf("validate frozen release integration inventory: %w", validationErr)
+	}
+	if !slices.EqualFunc(integrations, expected, equalReleaseIntegration) {
+		return errors.New("redistributed integration evidence does not match frozen release integration inventory")
+	}
+	licenseHash, _, err := hashFile(filepath.Join(root, "LICENSE"))
+	if err != nil {
+		return fmt.Errorf("read redistributed integration license: %w", err)
+	}
+	recorded := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		recorded[record.ID] = struct{}{}
+		integrationRoot := filepath.Join(root, "integrations", record.ID)
+		info, statErr := os.Stat(integrationRoot)
+		if statErr != nil {
+			return fmt.Errorf("redistributed integration %q root is missing: %w", record.ID, statErr)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("redistributed integration %q root is not a directory", record.ID)
+		}
+		for _, releasePath := range append(slices.Clone(record.RequiredPaths), record.LockPaths...) {
+			info, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(releasePath)))
+			if statErr != nil || !info.Mode().IsRegular() {
+				return fmt.Errorf("redistributed integration %q is missing declared file %q", record.ID, releasePath)
+			}
+		}
+		if len(record.Licenses) != 1 || record.Licenses[0].Name != "LICENSE" ||
+			record.Licenses[0].SHA256 != licenseHash {
+			return fmt.Errorf("redistributed integration %q license does not match the archived project license", record.ID)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "integrations"))
+	if err != nil {
+		return fmt.Errorf("read redistributed integration roots: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, exists := recorded[entry.Name()]; !exists {
+			return fmt.Errorf("integration root %q is absent from redistributed integration evidence", entry.Name())
+		}
+	}
+	return nil
+}
+
+func equalReleaseIntegration(left, right releaseIntegration) bool {
+	return left.ID == right.ID && left.Class == right.Class &&
+		left.ConsumerMode == right.ConsumerMode &&
+		slices.Equal(left.RequiredPaths, right.RequiredPaths) &&
+		slices.Equal(left.LockPaths, right.LockPaths)
 }
 
 func verifyDependencyRecords(records []dependencyRecord, kind string) error {

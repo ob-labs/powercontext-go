@@ -18,8 +18,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -27,9 +29,48 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+const adapterConsumerBuildTimeout = 4 * time.Minute
+
+type adapterConsumerBuildResult struct {
+	binary string
+}
+
+var adapterConsumerBuildDirectory string
+
+var sharedAdapterConsumerBuild = sync.OnceValues(func() (adapterConsumerBuildResult, error) {
+	directory, err := os.MkdirTemp("", "powercontext-release-consumer-")
+	if err != nil {
+		return adapterConsumerBuildResult{}, fmt.Errorf("create release CLI build directory: %w", err)
+	}
+	adapterConsumerBuildDirectory = directory
+	deadlineCause := errors.New("release CLI build exceeded its test deadline")
+	buildContext, cancel := context.WithTimeoutCause(context.Background(), adapterConsumerBuildTimeout, deadlineCause)
+	defer cancel()
+	binary := filepath.Join(directory, "powercontext")
+	build := exec.CommandContext(buildContext, "go", "build", "-tags", "sqlite_fts5", "-o", binary, "./cmd/powercontext")
+	build.Dir = filepath.Clean(filepath.Join("..", ".."))
+	output, buildErr := build.CombinedOutput()
+	if buildErr != nil {
+		_ = os.RemoveAll(directory)
+		if errors.Is(context.Cause(buildContext), deadlineCause) {
+			return adapterConsumerBuildResult{}, fmt.Errorf("build release CLI timed out after %s:\n%s", adapterConsumerBuildTimeout, output)
+		}
+		return adapterConsumerBuildResult{}, fmt.Errorf("build release CLI: %w\n%s", buildErr, output)
+	}
+	return adapterConsumerBuildResult{binary: binary}, nil
+})
+
+func TestMain(m *testing.M) {
+	m.Run()
+	if adapterConsumerBuildDirectory != "" {
+		_ = os.RemoveAll(adapterConsumerBuildDirectory)
+	}
+}
 
 func TestLicenseInventoryWritesBoundedDependencyEvidence(t *testing.T) {
 	t.Parallel()
@@ -466,10 +507,6 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 	}
 
 	repository := filepath.Clean(filepath.Join("..", ".."))
-	checkoutRoot, checkoutErr := filepath.Abs(repository)
-	if checkoutErr != nil {
-		t.Fatal(checkoutErr)
-	}
 	archive := buildAdapterConsumerArchive(t, repository)
 	releaseRoot := unpackReleaseArchive(t, archive)
 
@@ -492,160 +529,6 @@ func TestReleaseArchiveProvidesConsumableAdapterSources(t *testing.T) {
 			t.Errorf("release artifact adapter entrypoint %q is unavailable: %v", required, statErr)
 		}
 	}
-
-	binDirectory, commandLog := writeAdapterConsumerHosts(t)
-	t.Setenv("PATH", binDirectory+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("FAKE_HOST_LOG", commandLog)
-	t.Setenv("FAKE_PI_PACKAGE", filepath.Join(releaseRoot, "integrations", "pi", "plugins", "powercontext"))
-	openCodeConfig := filepath.Join(t.TempDir(), "opencode")
-	t.Setenv("FAKE_OPENCODE_CONFIG", openCodeConfig)
-
-	for _, host := range []string{"codex", "claude-code", "dsh", "hermes", "opencode", "openclaw", "pi"} {
-		t.Run(host, func(t *testing.T) {
-			t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "powercontext-home"))
-			t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(t.TempDir(), "claude"))
-			t.Setenv("HERMES_HOME", filepath.Join(t.TempDir(), "hermes"))
-			command := exec.CommandContext(
-				t.Context(), filepath.Join(releaseRoot, "bin", "powercontext"), "setup", host, "--source", releaseRoot,
-			)
-			output, commandErr := command.CombinedOutput()
-			if commandErr != nil {
-				t.Fatalf("packaged %s setup failed: %v\n%s", host, commandErr, output)
-			}
-			if !strings.Contains(string(output), "setup complete") {
-				t.Fatalf("packaged %s setup output = %q", host, output)
-			}
-		})
-	}
-	t.Run("workbuddy", func(t *testing.T) {
-		home := filepath.Join(t.TempDir(), "workbuddy")
-		t.Setenv("WORKBUDDY_HOME", home)
-		t.Setenv("POWERCONTEXT_HOME", filepath.Join(t.TempDir(), "powercontext-home"))
-		binary := filepath.Join(releaseRoot, "bin", "powercontext")
-		setup := exec.CommandContext(t.Context(), binary, "setup", "workbuddy", "--source", releaseRoot)
-		setup.Dir = releaseRoot
-		if output, setupErr := setup.CombinedOutput(); setupErr != nil {
-			t.Fatalf("packaged WorkBuddy setup failed: %v\n%s", setupErr, output)
-		}
-
-		settingsPath := filepath.Join(home, "settings.json")
-		settings, settingsErr := os.ReadFile(settingsPath)
-		if settingsErr != nil {
-			t.Fatal(settingsErr)
-		}
-		command := releaseWorkBuddyHookCommand(t, settings)
-		if !strings.Contains(command, binary) || strings.Contains(command, "python") || strings.Contains(command, ".py") || strings.Contains(command, checkoutRoot) || strings.Contains(command, "token") {
-			t.Fatalf("packaged WorkBuddy command = %q, want only the extracted release binary", command)
-		}
-
-		hook := exec.CommandContext(t.Context(), binary, "hook", "workbuddy")
-		hook.Dir = releaseRoot
-		hook.Stdin = strings.NewReader(`{"hook_event_name":"UserPromptSubmit","cwd":"` + releaseRoot + `","prompt":"release WorkBuddy hook","session_id":"release-consumer","prompt_id":"prompt-1"}`)
-		hookOutput, hookErr := hook.CombinedOutput()
-		if hookErr != nil {
-			t.Fatalf("packaged WorkBuddy hook failed: %v\n%s", hookErr, hookOutput)
-		}
-		var hookResponse struct {
-			HookSpecificOutput struct {
-				HookEventName string `json:"hookEventName"`
-			} `json:"hookSpecificOutput"`
-		}
-		if decodeErr := json.Unmarshal(hookOutput, &hookResponse); decodeErr != nil || hookResponse.HookSpecificOutput.HookEventName != "UserPromptSubmit" {
-			t.Fatalf("packaged WorkBuddy hook response = %q, error = %v", hookOutput, decodeErr)
-		}
-
-		outside := filepath.Join(t.TempDir(), "powercontext")
-		tampered := replaceReleaseWorkBuddyHookCommand(t, settings, "'"+strings.ReplaceAll(outside, "'", "'\\''")+"' hook workbuddy")
-		if writeErr := os.WriteFile(settingsPath, tampered, 0o600); writeErr != nil {
-			t.Fatal(writeErr)
-		}
-		doctor := exec.CommandContext(t.Context(), binary, "doctor", "workbuddy", "--json")
-		doctor.Dir = releaseRoot
-		diagnostics, doctorErr := doctor.CombinedOutput()
-		if doctorErr == nil {
-			t.Fatalf("packaged WorkBuddy doctor accepted an outside release command: %s", diagnostics)
-		}
-		if !strings.Contains(string(diagnostics), `"hooks"`) || !strings.Contains(string(diagnostics), `"failed"`) {
-			t.Fatalf("packaged WorkBuddy rejection diagnostics = %q", diagnostics)
-		}
-		after, afterErr := os.ReadFile(settingsPath)
-		if afterErr != nil {
-			t.Fatal(afterErr)
-		}
-		if !bytes.Equal(after, tampered) {
-			t.Fatalf("outside WorkBuddy registration mutated settings:\n got %q\nwant %q", after, tampered)
-		}
-	})
-
-	commands, commandLogErr := os.ReadFile(commandLog)
-	if commandLogErr != nil {
-		t.Fatal(commandLogErr)
-	}
-	for _, expected := range []string{
-		"codex|plugin marketplace add " + releaseRoot,
-		"claude|plugin marketplace add " + releaseRoot,
-		"dsh|plugin --profile web add " + filepath.Join(releaseRoot, "integrations", "dsh", "plugins", "powercontext"),
-		"openclaw|plugins install --link --force " + filepath.Join(releaseRoot, "integrations", "openclaw", "plugins", "memory-powercontext"),
-		"pi|install " + filepath.Join(releaseRoot, "integrations", "pi", "plugins", "powercontext"),
-	} {
-		if !strings.Contains(string(commands), expected) {
-			t.Errorf("packaged setup did not consume expected release adapter path %q:\n%s", expected, commands)
-		}
-	}
-	if strings.Contains(string(commands), "opencode|plugin ") {
-		t.Errorf("packaged setup used the retired OpenCode plugin installer:\n%s", commands)
-	}
-	sourceBundle := filepath.Join(releaseRoot, "integrations", "opencode", "plugins", "powercontext", "lib", "index.js")
-	installedBundle := filepath.Join(openCodeConfig, "plugins", "powercontext-opencode.js")
-	sourceContent, sourceErr := os.ReadFile(sourceBundle)
-	installedContent, installedErr := os.ReadFile(installedBundle)
-	if sourceErr != nil || installedErr != nil || !bytes.Equal(sourceContent, installedContent) {
-		t.Fatalf("packaged OpenCode autoload bundle source = %q/%v, installed = %q/%v", sourceContent, sourceErr, installedContent, installedErr)
-	}
-	var manifest struct {
-		Schema      int    `json:"schema"`
-		Owner       string `json:"owner"`
-		Integration string `json:"integration"`
-	}
-	manifestPath := filepath.Join(openCodeConfig, "plugins", ".powercontext-opencode.json")
-	manifestContent, manifestErr := os.ReadFile(manifestPath)
-	if manifestErr != nil || json.Unmarshal(manifestContent, &manifest) != nil || manifest.Schema != 1 ||
-		manifest.Owner != "powercontext" || manifest.Integration != "opencode-plugin" {
-		t.Fatalf("packaged OpenCode ownership manifest = %q, error = %v", manifestContent, manifestErr)
-	}
-}
-
-func releaseWorkBuddyHookCommand(t *testing.T, settings []byte) string {
-	t.Helper()
-	var value map[string]any
-	if err := json.Unmarshal(settings, &value); err != nil {
-		t.Fatal(err)
-	}
-	hooks, ok := value["hooks"].(map[string]any)
-	if !ok {
-		t.Fatalf("WorkBuddy settings hooks = %#v", value["hooks"])
-	}
-	matchers, ok := hooks["UserPromptSubmit"].([]any)
-	if !ok || len(matchers) == 0 {
-		t.Fatalf("WorkBuddy UserPromptSubmit hooks = %#v", hooks["UserPromptSubmit"])
-	}
-	matcher, ok := matchers[0].(map[string]any)
-	if !ok {
-		t.Fatalf("WorkBuddy matcher = %#v", matchers[0])
-	}
-	entries, ok := matcher["hooks"].([]any)
-	if !ok || len(entries) == 0 {
-		t.Fatalf("WorkBuddy hook entries = %#v", matcher["hooks"])
-	}
-	entry, ok := entries[0].(map[string]any)
-	if !ok {
-		t.Fatalf("WorkBuddy hook entry = %#v", entries[0])
-	}
-	command, ok := entry["command"].(string)
-	if !ok {
-		t.Fatalf("WorkBuddy hook command = %#v", entry["command"])
-	}
-	return command
 }
 
 func replaceReleaseWorkBuddyHookCommand(t *testing.T, settings []byte, command string) []byte {
@@ -669,14 +552,12 @@ func replaceReleaseWorkBuddyHookCommand(t *testing.T, settings []byte, command s
 
 func buildAdapterConsumerArchive(t *testing.T, repository string) string {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "powercontext")
-	build := exec.CommandContext(t.Context(), "go", "build", "-tags", "sqlite_fts5", "-o", binary, "./cmd/powercontext")
-	build.Dir = repository
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build release CLI: %v\n%s", err, output)
+	build, err := sharedAdapterConsumerBuild()
+	if err != nil {
+		t.Fatal(err)
 	}
 	root := filepath.Join(t.TempDir(), "powercontext-0.0.0-linux-amd64")
-	if err := stageRelease(repository, root, packageOptions{Binary: binary}, binaryFacts{}); err != nil {
+	if err := stageRelease(repository, root, packageOptions{Binary: build.binary}, binaryFacts{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "BUILD-INFO.json"), []byte("{}\n"), 0o644); err != nil {
@@ -765,7 +646,13 @@ func writeAdapterConsumerHosts(t *testing.T) (string, string) {
 	script := `#!/usr/bin/env sh
 set -eu
 name="$(basename "$0")"
-printf '%s|%s\n' "$name" "$*" >> "$FAKE_HOST_LOG"
+{
+  printf '%s' "$name"
+  for argument in "$@"; do
+    printf '\t%s' "$argument"
+  done
+  printf '\n'
+} >> "$FAKE_HOST_LOG"
 first="${1-}"
 second="${2-}"
 third="${3-}"

@@ -27,6 +27,47 @@ authoritative OpenAPI document, `.env.example`, retained host-adapter assets,
 embedded sqlite-vec, dependency licenses, build metadata, an SPDX JSON SBOM,
 and an internal `SHA256SUMS` file.
 
+## Retained integration archive contract after v0.1.0
+
+`powercontext-v0.1.0` is immutable and predates the retained-integration
+archive contract below. The contract applies to the next unpublished release
+candidate; it does not change the contents or claims of the v0.1.0 assets.
+The versioned `build/release-integrations.json` release input is the
+authoritative inventory for that candidate.
+The exact range-based version recommendation is recorded in
+[`NEXT_VERSION.md`](NEXT_VERSION.md); it is not a publication claim.
+
+The Standard and Full archives must contain the same twelve integration roots.
+Their only edition-specific difference is the existing native inference assets;
+an integration may not appear in only one edition. The archive verification
+lane exercises the eight command-host integrations from the extracted archive:
+
+| Command-host integration | Archive consumption |
+| --- | --- |
+| Claude Code, Codex, DSH, Hermes | Use their tracked host manifest or executable bundle from the extracted archive. |
+| OpenClaw, OpenCode, Pi | Use their tracked host manifest or executable bundle from the extracted archive. |
+| WorkBuddy | Registers its hook to invoke only the extracted archive's `bin/powercontext` binary. |
+
+The four Python-package integrations, Bub, LangChain, LangGraph, and Pydantic
+AI, install and smoke-test from the extracted archive using their declared lock
+state. Installing a package from a checkout, or using a host bundle outside
+the extracted archive, is not release-consumer evidence.
+
+Run `./bin/powercontext setup workbuddy` only from an extracted release
+archive. The setup validates the release layout and writes the owned WorkBuddy
+hook and Skill so that their executable boundary is that archive's binary, not
+a source checkout or a Python hook driver. Re-run setup after replacing the
+archive to update that owned registration. This adapter update does not require
+a Server database migration.
+
+The archive contains source, manifests, declared lock files, and tracked
+executable bundles required by these integrations, but no active credential,
+prompt, source, Memory content, raw scope ID, or local database path. Runtime
+authorization stays an environment reference in the host configuration; an
+archive must never persist a bearer token. This archive boundary is separate
+from the pre-WP6 product acceptance boundary: only Codex, WorkBuddy, and
+SQLite count toward that acceptance scope.
+
 Release verification checks the packaged `.env.example` before starting the
 binary. Its security-sensitive defaults keep the Server and Client on
 `127.0.0.1`, leave bearer authentication disabled for that loopback-only

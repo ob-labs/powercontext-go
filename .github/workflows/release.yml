@@ -109,6 +109,18 @@ jobs:
       - name: Set up the Go environment
         uses: ./.github/actions/setup-go-env
 
+      - name: Set up Python for the release integration consumer
+        if: matrix.target == 'linux-amd64'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv for the release integration consumer
+        if: matrix.target == 'linux-amd64'
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.12"
+
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -161,6 +173,12 @@ jobs:
         run: |
           make package-standard
           make package-full
+
+      - name: Consume Python integrations from the packaged Standard archive
+        if: matrix.target == 'linux-amd64'
+        env:
+          POWERCONTEXT_ARCHIVE: ${{ github.workspace }}/dist/powercontext-${{ needs.prepare.outputs.version }}-linux-amd64.tar.gz
+        run: go test -count=1 -tags archive_consumer ./tools/release -run '^TestReleaseArchivePythonAdaptersConsumeExtractedArtifact$' -v
 
       - name: Smoke test both released process surfaces
         env:
