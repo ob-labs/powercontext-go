@@ -310,11 +310,22 @@ func TestGenerateSBOMRemovesLockfileDependencyPackages(t *testing.T) {
 			t.Fatalf("lockfile dependency remains in generated SPDX document: %s", value)
 		}
 	}
-	for _, required := range []string{"SPDXRef-Go", "SPDXRef-Native", "native-extra", "SPDXRef-Go CONTAINS SPDXRef-Native"} {
+	for _, required := range []string{"SPDXRef-Go", "SPDXRef-Native", "native-extra"} {
 		if !strings.Contains(value, required) {
 			t.Fatalf("generated SPDX document is missing preserved Syft evidence %q: %s", required, value)
 		}
 	}
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	for _, relationship := range document["relationships"].([]any) {
+		value := relationship.(map[string]any)
+		if value["spdxElementId"] == "SPDXRef-Go" && value["relationshipType"] == "CONTAINS" && value["relatedSpdxElement"] == "SPDXRef-Native" {
+			return
+		}
+	}
+	t.Fatalf("generated SPDX document is missing preserved Go/native relationship: %s", payload)
 }
 
 func writeLockfileSyftFixture(t *testing.T) string {
