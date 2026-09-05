@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 
@@ -38,9 +39,10 @@ const maxLicenseBytes = 2 << 20
 var nativeLicenses embed.FS
 
 type dependencyManifest struct {
-	SchemaVersion int                `json:"schema_version"`
-	Modules       []dependencyRecord `json:"go_modules"`
-	Native        []dependencyRecord `json:"native_dependencies"`
+	SchemaVersion int                   `json:"schema_version"`
+	Modules       []dependencyRecord    `json:"go_modules"`
+	Native        []dependencyRecord    `json:"native_dependencies"`
+	Integrations  []integrationEvidence `json:"redistributed_integrations,omitempty"`
 }
 
 type dependencyRecord struct {
@@ -53,6 +55,11 @@ type dependencyRecord struct {
 type licenseRecord struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
+}
+
+type integrationEvidence struct {
+	releaseIntegration
+	Licenses []licenseRecord `json:"licenses"`
 }
 
 func collectLicenses(
@@ -68,7 +75,11 @@ func collectLicenses(
 		return dependencyManifest{}, nil, err
 	}
 
-	dependencies := dependencyManifest{SchemaVersion: 1}
+	integrations, err := collectIntegrationEvidence(repository)
+	if err != nil {
+		return dependencyManifest{}, nil, err
+	}
+	dependencies := dependencyManifest{SchemaVersion: 1, Integrations: integrations}
 	var notices strings.Builder
 	for _, dependency := range info.Deps {
 		directory, replacement, err := moduleDirectory(dependency, moduleCache, repository)
@@ -125,6 +136,32 @@ func collectLicenses(
 		writeLicense(&notices, filepath.Base(native.file), contents)
 	}
 	return dependencies, []byte(notices.String()), nil
+}
+
+func collectIntegrationEvidence(repository string) ([]integrationEvidence, error) {
+	integrations, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateReleaseIntegrations(repository, integrations); err != nil {
+		return nil, err
+	}
+	license, err := readBoundedFile(filepath.Join(repository, "LICENSE"), maxLicenseBytes)
+	if err != nil {
+		return nil, fmt.Errorf("read redistributed integration license: %w", err)
+	}
+	digest := sha256.Sum256(license)
+	projectLicense := licenseRecord{Name: "LICENSE", SHA256: hex.EncodeToString(digest[:])}
+	records := make([]integrationEvidence, len(integrations))
+	for index, integration := range integrations {
+		integration.RequiredPaths = slices.Clone(integration.RequiredPaths)
+		integration.LockPaths = slices.Clone(integration.LockPaths)
+		records[index] = integrationEvidence{
+			releaseIntegration: integration,
+			Licenses:           []licenseRecord{projectLicense},
+		}
+	}
+	return records, nil
 }
 
 func collectModuleGraphLicenses(manifest *dependencyManifest, repository string, modules []string) error {

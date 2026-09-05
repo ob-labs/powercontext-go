@@ -22,8 +22,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -133,6 +136,67 @@ func writeTreeChecksums(root string) error {
 		fmt.Fprintf(&contents, "%s  %s\n", hash, filepath.ToSlash(relative))
 	}
 	return os.WriteFile(filepath.Join(root, "SHA256SUMS"), []byte(contents.String()), 0o644)
+}
+
+func verifyTreeChecksums(root string) error {
+	manifestPath := filepath.Join(root, "SHA256SUMS")
+	contents, err := readBoundedFile(manifestPath, maxMetadataBytes)
+	if err != nil {
+		return fmt.Errorf("read internal checksum manifest: %w", err)
+	}
+	expected := make(map[string]struct{})
+	err = filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if filePath == root || entry.IsDir() || filepath.Base(filePath) == "SHA256SUMS" {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink == 0 && !entry.Type().IsRegular() {
+			return fmt.Errorf("unsupported release file %q", filePath)
+		}
+		relative, err := filepath.Rel(root, filePath)
+		if err != nil {
+			return err
+		}
+		expected[filepath.ToSlash(relative)] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(expected))
+	for line := range strings.SplitSeq(string(contents), "\n") {
+		if line == "" {
+			continue
+		}
+		hash, name, ok := strings.Cut(line, "  ")
+		if !ok || !validSHA256(hash) || name == "" || strings.ContainsRune(name, '\\') ||
+			path.IsAbs(name) || path.Clean(name) != name || name == "." || name == ".." ||
+			strings.HasPrefix(name, "../") || name == "SHA256SUMS" {
+			return errors.New("internal checksum manifest contains an invalid record")
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("internal checksum manifest contains duplicate path %q", name)
+		}
+		seen[name] = struct{}{}
+		if _, exists := expected[name]; !exists {
+			return fmt.Errorf("internal checksum manifest names absent path %q", name)
+		}
+		actual, _, err := hashFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			return fmt.Errorf("verify internal checksum for %q: %w", name, err)
+		}
+		if actual != hash {
+			return fmt.Errorf("internal checksum mismatch for %q", name)
+		}
+		delete(expected, name)
+	}
+	if len(expected) != 0 {
+		missing := slices.Sorted(maps.Keys(expected))
+		return fmt.Errorf("internal checksum manifest is missing path %q", missing[0])
+	}
+	return nil
 }
 
 func checksumDisplayPath(root, value string) string {

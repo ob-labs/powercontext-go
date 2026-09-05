@@ -1821,6 +1821,171 @@ func TestReleaseVerificationRechecksPublishedSurfaces(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowPackagesAndVerifiesPythonIntegrations(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	releasePayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verificationPayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateReleaseIntegrationWorkflows(releasePayload, verificationPayload); err != nil {
+		t.Fatal(err)
+	}
+
+	mutations := []struct {
+		name            string
+		releaseOld      string
+		releaseNew      string
+		verificationOld string
+		verificationNew string
+	}{
+		{
+			name:       "checkout-local archive input",
+			releaseOld: "${{ github.workspace }}/dist/powercontext-${{ needs.prepare.outputs.version }}-linux-amd64.tar.gz",
+			releaseNew: "${{ github.workspace }}/integrations/bub",
+		},
+		{
+			name:       "skipped-success consumer execution",
+			releaseOld: "-v\n",
+			releaseNew: "-v || true\n",
+		},
+		{
+			name:            "missing edition inventory comparison",
+			verificationOld: "cmp --silent <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json\") <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json\")\n",
+			verificationNew: "",
+		},
+		{
+			name:            "missing published asset consumer",
+			verificationOld: "      - name: Consume Python integrations from the published Standard archive\n",
+			verificationNew: "      - name: Retired published consumer\n",
+		},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			release := string(releasePayload)
+			verification := string(verificationPayload)
+			if mutation.releaseOld != "" {
+				if !strings.Contains(release, mutation.releaseOld) {
+					t.Fatalf("release workflow mutation source %q is missing", mutation.releaseOld)
+				}
+				release = strings.Replace(release, mutation.releaseOld, mutation.releaseNew, 1)
+			}
+			if mutation.verificationOld != "" {
+				if !strings.Contains(verification, mutation.verificationOld) {
+					t.Fatalf("verification workflow mutation source %q is missing", mutation.verificationOld)
+				}
+				verification = strings.Replace(verification, mutation.verificationOld, mutation.verificationNew, 1)
+			}
+			if err := validateReleaseIntegrationWorkflows([]byte(release), []byte(verification)); err == nil {
+				t.Fatal("invalid release integration workflow contract was accepted")
+			}
+		})
+	}
+}
+
+func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []byte) error {
+	var releaseWorkflow, verificationWorkflow releaseIntegrationWorkflow
+	if err := yaml.Unmarshal(releasePayload, &releaseWorkflow); err != nil {
+		return err
+	}
+	if err := yaml.Unmarshal(verificationPayload, &verificationWorkflow); err != nil {
+		return err
+	}
+	setupPython := "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97"
+	setupUV := "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
+	consumerCommand := "go test -count=1 -tags archive_consumer ./tools/release -run '^TestReleaseArchivePythonAdaptersConsumeExtractedArtifact$' -v"
+	releaseArchive := "${{ github.workspace }}/dist/powercontext-${{ needs.prepare.outputs.version }}-linux-amd64.tar.gz"
+	publishedArchive := "${{ runner.temp }}/powercontext-release-assets/powercontext-${{ steps.release.outputs.version }}-linux-amd64.tar.gz"
+	condition := "matrix.target == 'linux-amd64'"
+
+	for jobName, job := range releaseWorkflow.Jobs {
+		for _, step := range job.Steps {
+			if (step.Uses == setupPython || step.Uses == setupUV) && jobName != "binaries" {
+				return fmt.Errorf("release.yml provisions archive consumer prerequisites in job %q", jobName)
+			}
+		}
+	}
+	binaries, ok := releaseWorkflow.Jobs["binaries"]
+	if !ok {
+		return fmt.Errorf("release.yml has no binaries job")
+	}
+	pythonIndex, python := findReleaseIntegrationWorkflowStep(binaries.Steps, "Set up Python for the release integration consumer")
+	uvIndex, uv := findReleaseIntegrationWorkflowStep(binaries.Steps, "Set up uv for the release integration consumer")
+	packageIndex, packaging := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build and package both editions")
+	consumerIndex, consumer := findReleaseIntegrationWorkflowStep(binaries.Steps, "Consume Python integrations from the packaged Standard archive")
+	if python == nil || python.If != condition || python.Uses != setupPython || python.With["python-version"] != "3.12" {
+		return fmt.Errorf("release.yml Python integration setup = %#v", python)
+	}
+	if uv == nil || uv.If != condition || uv.Uses != setupUV || uv.With["version"] != "0.10.12" {
+		return fmt.Errorf("release.yml uv integration setup = %#v", uv)
+	}
+	if packaging == nil || !strings.Contains(packaging.Run, "make package-standard") || !strings.Contains(packaging.Run, "make package-full") {
+		return fmt.Errorf("release.yml packaging step = %#v", packaging)
+	}
+	if consumer == nil || consumer.If != condition || consumer.Env["POWERCONTEXT_ARCHIVE"] != releaseArchive ||
+		strings.TrimSpace(consumer.Run) != consumerCommand ||
+		!(pythonIndex < uvIndex && uvIndex < packageIndex && packageIndex < consumerIndex) {
+		return fmt.Errorf("release.yml packaged integration consumer = %#v at step %d", consumer, consumerIndex)
+	}
+
+	verification, ok := verificationWorkflow.Jobs["verify"]
+	if !ok {
+		return fmt.Errorf("release-verify.yml has no verify job")
+	}
+	_, publishedPython := findReleaseIntegrationWorkflowStep(verification.Steps, "Set up Python for the published integration consumer")
+	_, publishedUV := findReleaseIntegrationWorkflowStep(verification.Steps, "Set up uv for the published integration consumer")
+	downloadIndex, _ := findReleaseIntegrationWorkflowStep(verification.Steps, "Download and verify the complete GitHub Release")
+	publishedIndex, published := findReleaseIntegrationWorkflowStep(verification.Steps, "Consume Python integrations from the published Standard archive")
+	_, archives := findReleaseIntegrationWorkflowStep(verification.Steps, "Verify extracted Linux release contracts")
+	_, parity := findReleaseIntegrationWorkflowStep(verification.Steps, "Verify Standard and Full integration inventory parity")
+	if publishedPython == nil || publishedPython.If != "" || publishedPython.Uses != setupPython ||
+		publishedPython.With["python-version"] != "3.12" {
+		return fmt.Errorf("release-verify.yml Python integration setup = %#v", publishedPython)
+	}
+	if publishedUV == nil || publishedUV.If != "" || publishedUV.Uses != setupUV || publishedUV.With["version"] != "0.10.12" {
+		return fmt.Errorf("release-verify.yml uv integration setup = %#v", publishedUV)
+	}
+	if published == nil || published.Env["POWERCONTEXT_ARCHIVE"] != publishedArchive ||
+		strings.TrimSpace(published.Run) != consumerCommand || publishedIndex <= downloadIndex {
+		return fmt.Errorf("release-verify.yml published integration consumer = %#v at step %d", published, publishedIndex)
+	}
+	if archives == nil || !strings.Contains(archives.Run, `go run ./tools/release verify-evidence -root "$root" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"`) {
+		return fmt.Errorf("release-verify.yml archive evidence step = %#v", archives)
+	}
+	wantParity := `cmp --silent <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json") <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json")`
+	if parity == nil || strings.TrimSpace(parity.Run) != wantParity {
+		return fmt.Errorf("release-verify.yml integration parity step = %#v", parity)
+	}
+	return nil
+}
+
+type releaseIntegrationWorkflow struct {
+	Jobs map[string]struct {
+		Steps []releaseIntegrationWorkflowStep `yaml:"steps"`
+	} `yaml:"jobs"`
+}
+
+type releaseIntegrationWorkflowStep struct {
+	Name string            `yaml:"name"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	With map[string]string `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
+	Run  string            `yaml:"run"`
+}
+
+func findReleaseIntegrationWorkflowStep(steps []releaseIntegrationWorkflowStep, name string) (int, *releaseIntegrationWorkflowStep) {
+	for index := range steps {
+		if steps[index].Name == name {
+			return index, &steps[index]
+		}
+	}
+	return -1, nil
+}
+
 func TestEvaluationLockUsesOfficialPyPI(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, "evaluation", "uv.lock"))

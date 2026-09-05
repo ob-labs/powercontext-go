@@ -54,16 +54,17 @@ func runVerifyEvidence(arguments []string) error {
 	flags := flag.NewFlagSet("verify-evidence", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	root := flags.String("root", "", "extracted release root")
+	sbom := flags.String("sbom", "", "detached SPDX SBOM")
 	if err := flags.Parse(arguments); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || *root == "" {
 		return errors.New("verify-evidence requires an extracted release root")
 	}
-	return verifyReleaseEvidence(*root)
+	return verifyReleaseEvidence(*root, *sbom)
 }
 
-func verifyReleaseEvidence(root string) error {
+func verifyReleaseEvidence(root, detachedSBOM string) error {
 	absoluteRoot, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -86,6 +87,24 @@ func verifyReleaseEvidence(root string) error {
 	if nativeErr := verifyDependencyRecords(manifest.Native, "native dependency"); nativeErr != nil {
 		return nativeErr
 	}
+	integrationRootInfo, integrationRootErr := os.Stat(filepath.Join(absoluteRoot, "integrations"))
+	_, buildInfoErr := os.Stat(filepath.Join(absoluteRoot, "BUILD-INFO.json"))
+	requiresIntegrationEvidence := len(manifest.Integrations) > 0 ||
+		(integrationRootErr == nil && integrationRootInfo.IsDir()) || buildInfoErr == nil
+	if requiresIntegrationEvidence {
+		if checksumErr := verifyTreeChecksums(absoluteRoot); checksumErr != nil {
+			return checksumErr
+		}
+		if len(manifest.Integrations) == 0 {
+			return errors.New("redistributed integration inventory is empty")
+		}
+		if integrationErr := verifyIntegrationEvidence(absoluteRoot, manifest.Integrations); integrationErr != nil {
+			return integrationErr
+		}
+		if detachedSBOM == "" {
+			return errors.New("detached SPDX SBOM is required for redistributed integration evidence")
+		}
+	}
 	if noticeErr := verifyLicenseNotices(filepath.Join(absoluteRoot, "THIRD-PARTY-LICENSES.txt"), manifest); noticeErr != nil {
 		return noticeErr
 	}
@@ -101,6 +120,15 @@ func verifyReleaseEvidence(root string) error {
 	}
 	if !strings.HasPrefix(sbom.SPDXVersion, "SPDX-") {
 		return errors.New("SPDX SBOM is missing its version")
+	}
+	if detachedSBOM != "" {
+		detachedBytes, readErr := readBoundedFile(detachedSBOM, maxMetadataBytes)
+		if readErr != nil {
+			return fmt.Errorf("read detached SPDX SBOM: %w", readErr)
+		}
+		if !slices.Equal(sbomBytes, detachedBytes) {
+			return errors.New("detached SPDX SBOM does not match the archived SPDX SBOM")
+		}
 	}
 
 	recorded := make(map[string]struct{})
@@ -121,6 +149,55 @@ func verifyReleaseEvidence(root string) error {
 		purl := "pkg:generic/" + native.Path + "@" + native.Version
 		if _, ok := recorded[purl]; !ok {
 			return fmt.Errorf("SPDX SBOM is missing native dependency %q at version %q", native.Path, native.Version)
+		}
+	}
+	return nil
+}
+
+func verifyIntegrationEvidence(root string, records []integrationEvidence) error {
+	integrations := make([]releaseIntegration, len(records))
+	for index, record := range records {
+		integrations[index] = record.releaseIntegration
+	}
+	if err := validateReleaseIntegrationRecords(integrations); err != nil {
+		return fmt.Errorf("validate redistributed integration evidence: %w", err)
+	}
+	licenseHash, _, err := hashFile(filepath.Join(root, "LICENSE"))
+	if err != nil {
+		return fmt.Errorf("read redistributed integration license: %w", err)
+	}
+	recorded := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		recorded[record.ID] = struct{}{}
+		integrationRoot := filepath.Join(root, "integrations", record.ID)
+		info, statErr := os.Stat(integrationRoot)
+		if statErr != nil {
+			return fmt.Errorf("redistributed integration %q root is missing: %w", record.ID, statErr)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("redistributed integration %q root is not a directory", record.ID)
+		}
+		for _, releasePath := range append(slices.Clone(record.RequiredPaths), record.LockPaths...) {
+			info, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(releasePath)))
+			if statErr != nil || !info.Mode().IsRegular() {
+				return fmt.Errorf("redistributed integration %q is missing declared file %q", record.ID, releasePath)
+			}
+		}
+		if len(record.Licenses) != 1 || record.Licenses[0].Name != "LICENSE" ||
+			record.Licenses[0].SHA256 != licenseHash {
+			return fmt.Errorf("redistributed integration %q license does not match the archived project license", record.ID)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "integrations"))
+	if err != nil {
+		return fmt.Errorf("read redistributed integration roots: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, exists := recorded[entry.Name()]; !exists {
+			return fmt.Errorf("integration root %q is absent from redistributed integration evidence", entry.Name())
 		}
 	}
 	return nil
