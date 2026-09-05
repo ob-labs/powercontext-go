@@ -5,10 +5,10 @@
 This is a recommendation for the next unpublished PowerContext Go release. It
 does not create a tag, draft, GitHub Release, archive, image, or publication
 claim. This record covers the candidate
-`f1bf135b52e2c2ae3ab92f47a4128f8db2ebf0d2` against
+`fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` against
 `powercontext-v0.1.0`. The source-surface analysis below was recorded at
 `e4cd0646c553a88a0d99b8422501d0a99c814ffd`; the candidate delta through
-`f1bf135b52e2c2ae3ab92f47a4128f8db2ebf0d2` was also checked. The final tag or
+`fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` was also checked. The final tag or
 PR Head remains a separate release-time input and must be re-evaluated
 immediately before publishing.
 
