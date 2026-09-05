@@ -62,6 +62,18 @@ or security boundaries, and the evidence required to declare work complete.
 - SQL projections and indexes are rebuildable; immutable Artifact revisions and
   Memory manifests remain authoritative.
 
+## Unsupported storage backends
+
+- seekDB and OceanBase are not supported product backends. Do not add, restore,
+  or advertise seekDB or OceanBase runtime, configuration, migration, CI,
+  release, documentation, or compatibility behavior.
+- Existing seekDB and OceanBase source and tests are historical compatibility
+  material, not a supported surface. Do not convert their checks into
+  skipped-success evidence or use them to claim platform or release support.
+- A change to this boundary requires an explicit maintainer policy decision in
+  the tracked issue and corresponding implementation, documentation, and
+  release-validation scope; it must not be inferred from dormant code.
+
 ## Dependency direction
 
 ```text
