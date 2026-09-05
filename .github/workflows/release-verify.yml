@@ -156,7 +156,7 @@ jobs:
               --arg version "$VERSION" \
               '.schema_version == 1 and .product == "PowerContext" and .edition == $edition and .version == $version and .commit == $commit and .build_date == $build_date and .target == "linux-amd64" and .cgo_enabled == true' \
               "$root/BUILD-INFO.json" >/dev/null
-            go run ./tools/release verify-evidence -root "$root" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"
+            go run ./tools/release verify-evidence -root "$root" -repository "$GITHUB_WORKSPACE" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"
             test "$("$root/bin/powercontext" --version)" = "$VERSION"
             echo "${edition}_root=$root" >> "$GITHUB_OUTPUT"
           }

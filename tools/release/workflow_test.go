@@ -1853,6 +1853,16 @@ func TestReleaseWorkflowPackagesAndVerifiesPythonIntegrations(t *testing.T) {
 			releaseNew: "-v || true\n",
 		},
 		{
+			name:       "packaged consumer step tolerates failure",
+			releaseOld: "      - name: Consume Python integrations from the packaged Standard archive\n",
+			releaseNew: "      - name: Consume Python integrations from the packaged Standard archive\n        continue-on-error: true\n",
+		},
+		{
+			name:       "packaged consumer job tolerates failure",
+			releaseOld: "  binaries:\n    name: Binary archives",
+			releaseNew: "  binaries:\n    continue-on-error: true\n    name: Binary archives",
+		},
+		{
 			name:            "missing edition inventory comparison",
 			verificationOld: "cmp --silent <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json\") <(jq -S '.redistributed_integrations' \"${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json\")\n",
 			verificationNew: "",
@@ -1861,6 +1871,16 @@ func TestReleaseWorkflowPackagesAndVerifiesPythonIntegrations(t *testing.T) {
 			name:            "missing published asset consumer",
 			verificationOld: "      - name: Consume Python integrations from the published Standard archive\n",
 			verificationNew: "      - name: Retired published consumer\n",
+		},
+		{
+			name:            "published consumer step tolerates failure",
+			verificationOld: "      - name: Consume Python integrations from the published Standard archive\n",
+			verificationNew: "      - name: Consume Python integrations from the published Standard archive\n        continue-on-error: true\n",
+		},
+		{
+			name:            "published consumer job tolerates failure expression",
+			verificationOld: "  verify:\n    name: GitHub Release and GHCR",
+			verificationNew: "  verify:\n    continue-on-error: ${{ always() }}\n    name: GitHub Release and GHCR",
 		},
 	}
 	for _, mutation := range mutations {
@@ -1926,9 +1946,12 @@ func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []b
 		return fmt.Errorf("release.yml packaging step = %#v", packaging)
 	}
 	if consumer == nil || consumer.If != condition || consumer.Env["POWERCONTEXT_ARCHIVE"] != releaseArchive ||
-		strings.TrimSpace(consumer.Run) != consumerCommand ||
+		strings.TrimSpace(consumer.Run) != consumerCommand || continueOnErrorEnabled(consumer.ContinueOnError) ||
 		!(pythonIndex < uvIndex && uvIndex < packageIndex && packageIndex < consumerIndex) {
 		return fmt.Errorf("release.yml packaged integration consumer = %#v at step %d", consumer, consumerIndex)
+	}
+	if continueOnErrorEnabled(binaries.ContinueOnError) {
+		return fmt.Errorf("release.yml binaries job tolerates archive consumer failure")
 	}
 
 	verification, ok := verificationWorkflow.Jobs["verify"]
@@ -1949,10 +1972,14 @@ func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []b
 		return fmt.Errorf("release-verify.yml uv integration setup = %#v", publishedUV)
 	}
 	if published == nil || published.Env["POWERCONTEXT_ARCHIVE"] != publishedArchive ||
-		strings.TrimSpace(published.Run) != consumerCommand || publishedIndex <= downloadIndex {
+		strings.TrimSpace(published.Run) != consumerCommand || continueOnErrorEnabled(published.ContinueOnError) ||
+		publishedIndex <= downloadIndex {
 		return fmt.Errorf("release-verify.yml published integration consumer = %#v at step %d", published, publishedIndex)
 	}
-	if archives == nil || !strings.Contains(archives.Run, `go run ./tools/release verify-evidence -root "$root" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"`) {
+	if continueOnErrorEnabled(verification.ContinueOnError) {
+		return fmt.Errorf("release-verify.yml verify job tolerates archive consumer failure")
+	}
+	if archives == nil || !strings.Contains(archives.Run, `go run ./tools/release verify-evidence -root "$root" -repository "$GITHUB_WORKSPACE" -sbom "$ASSET_DIR/${product}-${VERSION}-linux-amd64.spdx.json"`) {
 		return fmt.Errorf("release-verify.yml archive evidence step = %#v", archives)
 	}
 	wantParity := `cmp --silent <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json") <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json")`
@@ -1964,17 +1991,27 @@ func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []b
 
 type releaseIntegrationWorkflow struct {
 	Jobs map[string]struct {
-		Steps []releaseIntegrationWorkflowStep `yaml:"steps"`
+		ContinueOnError any                              `yaml:"continue-on-error"`
+		Steps           []releaseIntegrationWorkflowStep `yaml:"steps"`
 	} `yaml:"jobs"`
 }
 
 type releaseIntegrationWorkflowStep struct {
-	Name string            `yaml:"name"`
-	If   string            `yaml:"if"`
-	Uses string            `yaml:"uses"`
-	With map[string]string `yaml:"with"`
-	Env  map[string]string `yaml:"env"`
-	Run  string            `yaml:"run"`
+	Name            string            `yaml:"name"`
+	If              string            `yaml:"if"`
+	Uses            string            `yaml:"uses"`
+	With            map[string]string `yaml:"with"`
+	Env             map[string]string `yaml:"env"`
+	Run             string            `yaml:"run"`
+	ContinueOnError any               `yaml:"continue-on-error"`
+}
+
+func continueOnErrorEnabled(value any) bool {
+	if value == nil {
+		return false
+	}
+	enabled, boolean := value.(bool)
+	return !boolean || enabled
 }
 
 func findReleaseIntegrationWorkflowStep(steps []releaseIntegrationWorkflowStep, name string) (int, *releaseIntegrationWorkflowStep) {

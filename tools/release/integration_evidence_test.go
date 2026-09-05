@@ -74,7 +74,7 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 				writeIntegrationEvidenceManifest(t, fixture.root, manifest)
 				rewriteIntegrationEvidenceChecksums(t, fixture.root)
 			},
-			message: "absent from redistributed integration evidence",
+			message: "does not match frozen release integration inventory",
 		},
 		"all integration evidence omitted": {
 			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
@@ -131,12 +131,39 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 			},
 			message: `redistributed integration "bub" license`,
 		},
+		"manifest and archive omit approved lock path": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				manifest := readIntegrationEvidenceManifest(t, fixture.root)
+				manifest.Integrations[0].LockPaths = nil
+				writeIntegrationEvidenceManifest(t, fixture.root, manifest)
+				if err := os.Remove(filepath.Join(fixture.root, "integrations", "bub", "uv.lock")); err != nil {
+					t.Fatal(err)
+				}
+				rewriteIntegrationEvidenceChecksums(t, fixture.root)
+			},
+			message: "does not match frozen release integration inventory",
+		},
+		"manifest and archive replace approved required path": {
+			mutate: func(t *testing.T, fixture releaseIntegrationEvidenceFixture) {
+				manifest := readIntegrationEvidenceManifest(t, fixture.root)
+				manifest.Integrations[0].RequiredPaths = []string{"integrations/bub/project.toml"}
+				writeIntegrationEvidenceManifest(t, fixture.root, manifest)
+				if err := os.Remove(filepath.Join(fixture.root, "integrations", "bub", "pyproject.toml")); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(fixture.root, "integrations", "bub", "project.toml"), []byte("replacement\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				rewriteIntegrationEvidenceChecksums(t, fixture.root)
+			},
+			message: "does not match frozen release integration inventory",
+		},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			fixture := writeReleaseIntegrationEvidenceFixture(t)
 			test.mutate(t, fixture)
-			err := verifyReleaseEvidence(fixture.root, fixture.detachedSBOM)
+			err := verifyReleaseEvidence(fixture.root, fixture.detachedSBOM, fixture.repository)
 			if err == nil || !strings.Contains(err.Error(), test.message) {
 				t.Fatalf("verifyReleaseEvidence error = %v, want %q", err, test.message)
 			}
@@ -146,7 +173,7 @@ func TestReleaseIntegrationEvidenceRejectsArchiveEvidenceDrift(t *testing.T) {
 
 func TestReleaseIntegrationEvidenceAcceptsReconciledArchive(t *testing.T) {
 	fixture := writeReleaseIntegrationEvidenceFixture(t)
-	if err := verifyReleaseEvidence(fixture.root, fixture.detachedSBOM); err != nil {
+	if err := verifyReleaseEvidence(fixture.root, fixture.detachedSBOM, fixture.repository); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -154,16 +181,30 @@ func TestReleaseIntegrationEvidenceAcceptsReconciledArchive(t *testing.T) {
 type releaseIntegrationEvidenceFixture struct {
 	root         string
 	detachedSBOM string
+	repository   string
 }
 
 func writeReleaseIntegrationEvidenceFixture(t *testing.T) releaseIntegrationEvidenceFixture {
 	t.Helper()
-	root := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
-	if err := os.WriteFile(filepath.Join(root, "LICENSE"), []byte("project license\n"), 0o600); err != nil {
+	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
+	if err := os.WriteFile(filepath.Join(repository, "LICENSE"), []byte("project license\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	integrations, err := collectIntegrationEvidence(root)
+	integrations, err := collectIntegrationEvidence(repository)
 	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	for _, releasePath := range releaseIntegrationFixturePaths {
+		archivePath := filepath.Join(root, filepath.FromSlash(releasePath))
+		if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(archivePath, []byte("fixture\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "LICENSE"), []byte("project license\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	manifest := dependencyManifest{
@@ -207,7 +248,7 @@ func writeReleaseIntegrationEvidenceFixture(t *testing.T) releaseIntegrationEvid
 	if err := writeTreeChecksums(root); err != nil {
 		t.Fatal(err)
 	}
-	return releaseIntegrationEvidenceFixture{root: root, detachedSBOM: detached}
+	return releaseIntegrationEvidenceFixture{root: root, detachedSBOM: detached, repository: repository}
 }
 
 func readIntegrationEvidenceManifest(t *testing.T, root string) dependencyManifest {

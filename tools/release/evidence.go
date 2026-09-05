@@ -54,6 +54,7 @@ func runVerifyEvidence(arguments []string) error {
 	flags := flag.NewFlagSet("verify-evidence", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	root := flags.String("root", "", "extracted release root")
+	repository := flags.String("repository", "", "released source checkout")
 	sbom := flags.String("sbom", "", "detached SPDX SBOM")
 	if err := flags.Parse(arguments); err != nil {
 		return err
@@ -61,10 +62,10 @@ func runVerifyEvidence(arguments []string) error {
 	if flags.NArg() != 0 || *root == "" {
 		return errors.New("verify-evidence requires an extracted release root")
 	}
-	return verifyReleaseEvidence(*root, *sbom)
+	return verifyReleaseEvidence(*root, *sbom, *repository)
 }
 
-func verifyReleaseEvidence(root, detachedSBOM string) error {
+func verifyReleaseEvidence(root, detachedSBOM, repository string) error {
 	absoluteRoot, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -98,7 +99,10 @@ func verifyReleaseEvidence(root, detachedSBOM string) error {
 		if len(manifest.Integrations) == 0 {
 			return errors.New("redistributed integration inventory is empty")
 		}
-		if integrationErr := verifyIntegrationEvidence(absoluteRoot, manifest.Integrations); integrationErr != nil {
+		if repository == "" {
+			return errors.New("released source checkout is required for redistributed integration evidence")
+		}
+		if integrationErr := verifyIntegrationEvidence(absoluteRoot, repository, manifest.Integrations); integrationErr != nil {
 			return integrationErr
 		}
 		if detachedSBOM == "" {
@@ -154,13 +158,23 @@ func verifyReleaseEvidence(root, detachedSBOM string) error {
 	return nil
 }
 
-func verifyIntegrationEvidence(root string, records []integrationEvidence) error {
+func verifyIntegrationEvidence(root, repository string, records []integrationEvidence) error {
 	integrations := make([]releaseIntegration, len(records))
 	for index, record := range records {
 		integrations[index] = record.releaseIntegration
 	}
 	if err := validateReleaseIntegrationRecords(integrations); err != nil {
 		return fmt.Errorf("validate redistributed integration evidence: %w", err)
+	}
+	expected, err := readReleaseIntegrations(repository)
+	if err != nil {
+		return fmt.Errorf("read frozen release integration inventory: %w", err)
+	}
+	if err := validateReleaseIntegrations(repository, expected); err != nil {
+		return fmt.Errorf("validate frozen release integration inventory: %w", err)
+	}
+	if !slices.EqualFunc(integrations, expected, equalReleaseIntegration) {
+		return errors.New("redistributed integration evidence does not match frozen release integration inventory")
 	}
 	licenseHash, _, err := hashFile(filepath.Join(root, "LICENSE"))
 	if err != nil {
@@ -201,6 +215,13 @@ func verifyIntegrationEvidence(root string, records []integrationEvidence) error
 		}
 	}
 	return nil
+}
+
+func equalReleaseIntegration(left, right releaseIntegration) bool {
+	return left.ID == right.ID && left.Class == right.Class &&
+		left.ConsumerMode == right.ConsumerMode &&
+		slices.Equal(left.RequiredPaths, right.RequiredPaths) &&
+		slices.Equal(left.LockPaths, right.LockPaths)
 }
 
 func verifyDependencyRecords(records []dependencyRecord, kind string) error {
