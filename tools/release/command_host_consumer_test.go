@@ -130,6 +130,7 @@ func TestReleaseArchiveProvidesConsumableCommandHosts(t *testing.T) {
 		assertReleaseCommandLog(t, commands, [][]string{
 			{"pi", "install", plugin},
 			{"pi", "list"},
+			{"pi", "list"},
 		})
 		assertNoCheckoutPath(t, commands, checkoutRoot, sourceRoot == releaseRoot)
 	})
