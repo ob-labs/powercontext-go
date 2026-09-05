@@ -107,6 +107,9 @@ func copyRepositoryFiles(repository, destination string, relativePaths []string)
 	if err != nil {
 		return err
 	}
+	if err := validateRepositoryFiles(root, relativePaths); err != nil {
+		return err
+	}
 	for _, relative := range relativePaths {
 		nativeRelative := filepath.FromSlash(relative)
 		if filepath.IsAbs(nativeRelative) || nativeRelative == "." || nativeRelative == ".." ||
@@ -150,6 +153,45 @@ func copyRepositoryFiles(repository, destination string, relativePaths []string)
 		}
 		if err := copyRegularFile(source, target, os.FileMode(normalizedFileMode(info.Mode()))); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateRepositoryFiles(root string, relativePaths []string) error {
+	for _, relative := range relativePaths {
+		nativeRelative := filepath.FromSlash(relative)
+		if filepath.IsAbs(nativeRelative) || nativeRelative == "." || nativeRelative == ".." ||
+			strings.HasPrefix(nativeRelative, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("tracked release path %q escapes the repository", relative)
+		}
+		source := filepath.Join(root, nativeRelative)
+		info, err := os.Lstat(source)
+		if err != nil {
+			return fmt.Errorf("validate tracked release path %q: %w", relative, err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("unsupported release entry %q", relative)
+			}
+			continue
+		}
+		link, err := os.Readlink(source)
+		if err != nil {
+			return err
+		}
+		if filepath.IsAbs(link) {
+			return fmt.Errorf("release symlink %q is absolute", relative)
+		}
+		resolved, err := filepath.EvalSymlinks(source)
+		if err != nil {
+			return err
+		}
+		tree, _, _ := strings.Cut(relative, "/")
+		treeRoot := filepath.Join(root, tree)
+		inside, err := filepath.Rel(treeRoot, resolved)
+		if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("release symlink %q escapes its source tree", relative)
 		}
 	}
 	return nil

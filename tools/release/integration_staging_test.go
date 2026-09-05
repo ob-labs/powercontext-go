@@ -152,6 +152,24 @@ func TestReleaseIntegrationStagingRejectsTrackedFileManifestDrift(t *testing.T) 
 	}
 }
 
+func TestReleaseIntegrationStagingPreflightsEveryReviewedFile(t *testing.T) {
+	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
+	writeIntegrationStagingFixture(t, repository)
+	missing := "integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json"
+	if err := os.Remove(filepath.Join(repository, filepath.FromSlash(missing))); err != nil {
+		t.Fatal(err)
+	}
+	destination := t.TempDir()
+	err := stageIntegrations(repository, destination)
+	if err == nil || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("stageIntegrations error = %v, want missing late reviewed path %q", err, missing)
+	}
+	entries, readErr := os.ReadDir(destination)
+	if readErr != nil || len(entries) != 0 {
+		t.Fatalf("staging destination after missing reviewed file = %v, %v; want empty", entries, readErr)
+	}
+}
+
 func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) {
 	tests := map[string]struct {
 		mutate  func(t *testing.T, repository string)
