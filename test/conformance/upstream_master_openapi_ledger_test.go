@@ -454,8 +454,7 @@ func upstreamOpenAPICheckout(t *testing.T) string {
 	t.Helper()
 	checkout := os.Getenv("POWERCONTEXT_UPSTREAM_CHECKOUT")
 	if checkout == "" {
-		root := repositoryRoot(t)
-		checkout = filepath.Join(filepath.Dir(filepath.Dir(root)), ".evidence", "powercontext-74b961f")
+		t.Skip("upstream OpenAPI comparison runs in the dedicated upstream-master-discovery job")
 	}
 	info, err := os.Stat(checkout)
 	if err != nil || !info.IsDir() {

@@ -141,6 +141,7 @@ func TestWorkflowRequiresExactUpstreamMasterScopeGate(t *testing.T) {
 					Repository string `yaml:"repository"`
 					Ref        string `yaml:"ref"`
 					Path       string `yaml:"path"`
+					FetchDepth *int   `yaml:"fetch-depth"`
 				} `yaml:"with"`
 				Run string `yaml:"run"`
 			} `yaml:"steps"`
@@ -153,9 +154,11 @@ func TestWorkflowRequiresExactUpstreamMasterScopeGate(t *testing.T) {
 	if !ok {
 		t.Fatal("migration-gates.yml has no upstream-master-discovery job")
 	}
-	checkout, identity, sqliteHeaders, scopeGate := false, false, false, false
+	goCheckout, checkout, identity, sqliteHeaders, scopeGate := false, false, false, false, false
 	for _, step := range job.Steps {
 		switch step.Name {
+		case "Check out Go implementation":
+			goCheckout = step.With.FetchDepth != nil && *step.With.FetchDepth == 0
 		case "Check out exact upstream master":
 			checkout = step.With.Repository == "oceanbase/powercontext" && step.With.Ref == upstreamMasterDiscoveryCommit && step.With.Path == "_upstream_master"
 		case "Verify upstream master identity":
@@ -170,6 +173,9 @@ func TestWorkflowRequiresExactUpstreamMasterScopeGate(t *testing.T) {
 		if strings.Contains(strings.ToLower(step.Name+"\n"+step.Run), "oceanbase") || strings.Contains(strings.ToLower(step.Name+"\n"+step.Run), "retained-host") {
 			t.Fatalf("upstream-master-discovery must not treat unsupported backend or retained-host work as planning evidence: %q", step.Name)
 		}
+	}
+	if !goCheckout {
+		t.Error("upstream-master-discovery must fetch complete Go history for the pinned baseline commit")
 	}
 	if !checkout {
 		t.Error("upstream-master-discovery has no exact master checkout at _upstream_master")

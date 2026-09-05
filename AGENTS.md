@@ -454,3 +454,8 @@ source / artifact / trigger / inference
   invariants without executing it. Scan every matching hook entry in setup and
   diagnostics; verify prior-release rollback and upgrade, sibling preservation,
   external-command rejection before mutation, and duplicate-candidate failure.
+- When a conformance test needs an external checkout or a historical Git object,
+  keep ordinary repository-wide tests independent of that checkout and enforce
+  the comparison in one dedicated CI job with full history and an exact external
+  revision. Verify both the ordinary no-input path and the dedicated exact-input
+  path.
