@@ -18,9 +18,11 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReleaseIntegrationEvidenceNamesReviewedInventoryWithoutLockDependencies(t *testing.T) {
@@ -289,30 +291,52 @@ func TestReleaseIntegrationSPDXGenerationCoversFrozenArchiveInventory(t *testing
 }
 
 func TestGenerateSBOMRemovesLockfileDependencyPackages(t *testing.T) {
-	document := map[string]any{
-		"packages": []any{
-			map[string]any{"SPDXID": "SPDXRef-Go", "externalRefs": []any{map[string]any{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:golang/example.com/kept@v1.0.0"}}},
-			map[string]any{"SPDXID": "SPDXRef-PyPI", "externalRefs": []any{map[string]any{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:pypi/lock-only@1.0.0"}}},
-			map[string]any{"SPDXID": "SPDXRef-NPM", "externalRefs": []any{map[string]any{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": "pkg:npm/lock-only@1.0.0"}}},
-		},
-		"relationships": []any{
-			map[string]any{"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PyPI"},
-			map[string]any{"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-Go"},
-		},
+	helper := writeLockfileSyftFixture(t)
+	root := filepath.Join(t.TempDir(), "release-root")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	filterLockfileDependencyPackages(document)
-	payload, err := json.Marshal(document)
+	output := filepath.Join(t.TempDir(), "SBOM.spdx.json")
+	if err := generateSBOM(helper, root, output, "test", time.Unix(0, 0).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(output)
 	if err != nil {
 		t.Fatal(err)
 	}
+	value := string(payload)
 	for _, forbidden := range []string{"SPDXRef-PyPI", "SPDXRef-NPM", "lock-only"} {
-		if strings.Contains(string(payload), forbidden) {
-			t.Fatalf("lockfile dependency remains in SPDX document: %s", payload)
+		if strings.Contains(value, forbidden) {
+			t.Fatalf("lockfile dependency remains in generated SPDX document: %s", value)
 		}
 	}
-	if !strings.Contains(string(payload), "SPDXRef-Go") {
-		t.Fatalf("Go package was removed from SPDX document: %s", payload)
+	for _, required := range []string{"SPDXRef-Go", "SPDXRef-Native", "native-extra", "SPDXRef-Go CONTAINS SPDXRef-Native"} {
+		if !strings.Contains(value, required) {
+			t.Fatalf("generated SPDX document is missing preserved Syft evidence %q: %s", required, value)
+		}
 	}
+}
+
+func writeLockfileSyftFixture(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Syft fixture uses a POSIX executable; Linux release CI exercises the generated SBOM path")
+	}
+	contents := `{"spdxVersion":"SPDX-2.3","creationInfo":{"created":"now","creators":["fixture"]},"packages":[{"name":"go","SPDXID":"SPDXRef-Go","externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:golang/example.com/kept@v1.0.0"}]},{"name":"native","SPDXID":"SPDXRef-Native","customField":"native-extra","externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:generic/example.com/native@v1.0.0"}]},{"name":"python lock","SPDXID":"SPDXRef-PyPI","externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:pypi/lock-only@v1.0.0"}]},{"name":"npm lock","SPDXID":"SPDXRef-NPM","externalRefs":[{"referenceCategory":"PACKAGE-MANAGER","referenceType":"purl","referenceLocator":"pkg:npm/lock-only@v1.0.0"}]}],"relationships":[{"spdxElementId":"SPDXRef-DOCUMENT","relationshipType":"DESCRIBES","relatedSpdxElement":"SPDXRef-Go"},{"spdxElementId":"SPDXRef-DOCUMENT","relationshipType":"DESCRIBES","relatedSpdxElement":"SPDXRef-Native"},{"spdxElementId":"SPDXRef-DOCUMENT","relationshipType":"DESCRIBES","relatedSpdxElement":"SPDXRef-PyPI"},{"spdxElementId":"SPDXRef-Go","relationshipType":"CONTAINS","relatedSpdxElement":"SPDXRef-Native"},{"spdxElementId":"SPDXRef-PyPI","relationshipType":"DEPENDS_ON","relatedSpdxElement":"SPDXRef-Native"}]}`
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(t.TempDir(), "syft.cmd")
+		script := "@echo off\r\nset \"output=%~6\"\r\nset \"output=%output:*==%\"\r\n> \"%output%\" echo " + contents + "\r\n"
+		if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	path := filepath.Join(t.TempDir(), "syft")
+	script := "#!/bin/sh\nset -eu\noutput=${6#spdx-json=}\nprintf '%s' '" + contents + "' > \"$output\"\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 type releaseIntegrationEvidenceFixture struct {
