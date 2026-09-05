@@ -456,25 +456,25 @@ func stageIntegrations(repository, root string) error {
 	if err := validateReleaseIntegrations(repository, integrations); err != nil {
 		return err
 	}
-	tracked, err := trackedRepositoryFiles(repository, ".claude-plugin", "integrations")
+	files, err := releaseIntegrationFiles(repository)
 	if err != nil {
 		return err
 	}
-	trackedSet := make(map[string]struct{}, len(tracked))
-	for _, path := range tracked {
-		trackedSet[path] = struct{}{}
+	reviewedSet := make(map[string]struct{}, len(files))
+	for _, path := range files {
+		reviewedSet[path] = struct{}{}
 	}
-	if _, ok := trackedSet[".claude-plugin/marketplace.json"]; !ok {
-		return errors.New("Claude Code marketplace manifest is not tracked")
+	if _, ok := reviewedSet[".claude-plugin/marketplace.json"]; !ok {
+		return errors.New("Claude Code marketplace manifest is absent from the release integration file manifest")
 	}
 	for _, integration := range integrations {
 		for _, path := range append(slices.Clone(integration.RequiredPaths), integration.LockPaths...) {
-			if _, ok := trackedSet[path]; !ok {
-				return fmt.Errorf("release integration %q path %q is not tracked", integration.ID, path)
+			if _, ok := reviewedSet[path]; !ok {
+				return fmt.Errorf("release integration %q path %q is absent from the release integration file manifest", integration.ID, path)
 			}
 		}
 	}
-	if err := copyRepositoryFiles(repository, root, tracked); err != nil {
+	if err := copyRepositoryFiles(repository, root, files); err != nil {
 		return err
 	}
 	return nil

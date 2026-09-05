@@ -281,10 +281,12 @@ source / artifact / trigger / inference
   module-only fallback as symbol-level evidence. Build an unstripped scan twin
   from the same entrypoint, tags, dependency lock, and version metadata, and
   verify build-before-scan ordering and exact arguments with executable fakes.
-- When release staging includes integration trees, select reviewed, tracked files
-  instead of recursively copying working-tree contents. Verify ignored regular
-  files stay excluded while tracked sources, entrypoints, lock files, and
-  executable bundles remain staged.
+- When release staging includes integration trees, stage only a committed,
+  reviewed exact-file manifest and, when Git metadata is present, require it to
+  equal the tracked integration set. Verify a VCS-free source copy remains
+  packageable, ignored regular files stay excluded, and tracked-file drift
+  fails before tracked sources, entrypoints, lock files, or executable bundles
+  are staged.
 - When a test must cancel while a synchronous foreign-function call is in
   flight, coordinate entry and release with explicit barriers instead of a
   fixed sleep. Verify the public error and cleanup side effects under high

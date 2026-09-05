@@ -16,11 +16,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -31,6 +33,54 @@ var (
 	darwinORTLibrary = regexp.MustCompile(`^libonnxruntime(?:_[A-Za-z0-9_]+)?(?:\.[0-9]+)*\.dylib$`)
 	linuxORTLibrary  = regexp.MustCompile(`^libonnxruntime(?:_[A-Za-z0-9_]+)?\.so(?:\.[0-9]+)*$`)
 )
+
+const releaseIntegrationFilesManifest = "build/release-integration-files.txt"
+
+func releaseIntegrationFiles(repository string) ([]string, error) {
+	reviewed, err := readReleaseIntegrationFiles(repository)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Lstat(filepath.Join(repository, ".git")); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return reviewed, nil
+		}
+		return nil, fmt.Errorf("inspect release repository Git metadata: %w", err)
+	}
+	tracked, err := trackedRepositoryFiles(repository, ".claude-plugin", "integrations")
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(tracked)
+	if !slices.Equal(reviewed, tracked) {
+		return nil, errors.New("release integration file manifest does not match tracked files; update build/release-integration-files.txt")
+	}
+	return reviewed, nil
+}
+
+func readReleaseIntegrationFiles(repository string) ([]string, error) {
+	contents, err := os.ReadFile(filepath.Join(repository, filepath.FromSlash(releaseIntegrationFilesManifest)))
+	if err != nil {
+		return nil, fmt.Errorf("read release integration file manifest: %w", err)
+	}
+	if len(contents) == 0 || contents[len(contents)-1] != '\n' {
+		return nil, errors.New("release integration file manifest must be nonempty and end with LF")
+	}
+	paths := strings.Split(strings.TrimSuffix(string(contents), "\n"), "\n")
+	previous := ""
+	for _, relative := range paths {
+		tree, remainder, hasSeparator := strings.Cut(relative, "/")
+		if !fs.ValidPath(relative) || path.Clean(relative) != relative || strings.ContainsAny(relative, "\\\r") ||
+			!hasSeparator || remainder == "" || tree != ".claude-plugin" && tree != "integrations" {
+			return nil, fmt.Errorf("invalid release integration file manifest path %q", relative)
+		}
+		if previous != "" && relative <= previous {
+			return nil, errors.New("release integration file manifest paths must be unique and sorted")
+		}
+		previous = relative
+	}
+	return paths, nil
+}
 
 func trackedRepositoryFiles(repository string, pathspecs ...string) ([]string, error) {
 	arguments := []string{"-C", repository, "ls-files", "--cached", "-z", "--"}

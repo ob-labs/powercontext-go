@@ -95,6 +95,63 @@ func TestReleaseIntegrationStagingExcludesIgnoredFiles(t *testing.T) {
 	stagedReleaseIntegrationPaths(t, root, integrations)
 }
 
+func TestReleaseIntegrationStagingFromSourceCopyUsesReviewedManifest(t *testing.T) {
+	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
+	writeIntegrationStagingSourceFixture(t, repository)
+	for _, path := range []string{
+		"integrations/bub/.env",
+		"integrations/bub/trace.log",
+	} {
+		if err := os.WriteFile(filepath.Join(repository, filepath.FromSlash(path)), []byte("private\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(repository, ".git")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("source copy has Git metadata: %v", err)
+	}
+
+	root := t.TempDir()
+	if err := stageIntegrations(repository, root); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		".claude-plugin/marketplace.json",
+		"integrations/bub/src/powercontext_bub/client.py",
+		"integrations/openclaw/plugins/memory-powercontext/dist/index.js",
+	} {
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); err != nil || !info.Mode().IsRegular() {
+			t.Errorf("reviewed integration file %q was not staged: %v", path, err)
+		}
+	}
+	for _, path := range []string{
+		"integrations/bub/.env",
+		"integrations/bub/trace.log",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("extra source-copy file %q was staged: %v", path, err)
+		}
+	}
+}
+
+func TestReleaseIntegrationStagingRejectsTrackedFileManifestDrift(t *testing.T) {
+	repository := writeReleaseIntegrationRepository(t, reviewedReleaseIntegrations, nil)
+	writeIntegrationStagingFixture(t, repository)
+	drift := "integrations/bub/review-drift.txt"
+	if err := os.WriteFile(filepath.Join(repository, filepath.FromSlash(drift)), []byte("drift\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runIntegrationStagingGit(t, repository, "add", "--", drift)
+
+	destination := t.TempDir()
+	err := stageIntegrations(repository, destination)
+	if err == nil || !strings.Contains(err.Error(), "release integration file manifest does not match tracked files") {
+		t.Fatalf("stageIntegrations error = %v, want tracked-file manifest drift error", err)
+	}
+	if entries, readErr := os.ReadDir(destination); readErr != nil || len(entries) != 0 {
+		t.Fatalf("staging destination after manifest drift = %v, %v; want empty", entries, readErr)
+	}
+}
+
 func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) {
 	tests := map[string]struct {
 		mutate  func(t *testing.T, repository string)
@@ -146,6 +203,14 @@ func TestReleaseIntegrationStagingRejectsInventoryRepositoryDrift(t *testing.T) 
 
 func writeIntegrationStagingFixture(t *testing.T, repository string) {
 	t.Helper()
+	tracked := writeIntegrationStagingSourceFixture(t, repository)
+	runIntegrationStagingGit(t, repository, "init", "--quiet")
+	tracked = append(tracked, ".gitignore", releaseIntegrationFilesManifest)
+	runIntegrationStagingGit(t, repository, append([]string{"add", "--"}, tracked...)...)
+}
+
+func writeIntegrationStagingSourceFixture(t *testing.T, repository string) []string {
+	t.Helper()
 	ignore := filepath.Join(repository, ".gitignore")
 	if err := os.WriteFile(ignore, []byte("*.log\n.env\n.env.*\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -191,14 +256,21 @@ func writeIntegrationStagingFixture(t *testing.T, repository string) {
 			t.Fatal(err)
 		}
 	}
-	runIntegrationStagingGit(t, repository, "init", "--quiet")
 	tracked := []string{
-		".gitignore",
 		".claude-plugin/marketplace.json",
 		"integrations/bub/src/powercontext_bub/client.py",
 	}
 	tracked = append(tracked, releaseIntegrationFixturePaths...)
-	runIntegrationStagingGit(t, repository, append([]string{"add", "--"}, tracked...)...)
+	slices.Sort(tracked)
+	manifest := strings.Join(tracked, "\n") + "\n"
+	manifestPath := filepath.Join(repository, filepath.FromSlash(releaseIntegrationFilesManifest))
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return tracked
 }
 
 func runIntegrationStagingGit(t *testing.T, repository string, arguments ...string) {
