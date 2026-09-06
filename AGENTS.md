@@ -507,3 +507,9 @@ source / artifact / trigger / inference
   cancellation dominate any no-op or successful completion before producing a
   result or saving a checkpoint; verify a connector that ignores cancellation
   cannot report success or advance state.
+- When a Runtime has a ScopeReader, resolve every scope-bearing path before any
+  lease, persistence, provider declaration or run, scheduler, or model side
+  effect. Verify an unknown Connector scope invokes no declaration, checkpoint
+  load, provider run, or save, and an unknown scheduled scope acquires no lease
+  or process callback while direct context references are all resolved before
+  any recall begins.

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact/memory"
+	"github.com/ob-labs/powercontext-go/internal/scope"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
@@ -174,6 +175,56 @@ func TestScheduledSourceWindowNoopRecordsFlushStage(t *testing.T) {
 			"powercontext.memory.flush.source_count": 0,
 		}) {
 		t.Fatalf("stages = %#v", tracing.stages)
+	}
+}
+
+func TestScheduledProcessorRejectsUnregisteredScopeBeforeLeaseOrCallback(t *testing.T) {
+	t.Parallel()
+	tracing := &recordingStageTracing{}
+	lifecycle, err := NewConfigured(RuntimeOptions{
+		Tracing: tracing,
+		ScopeReader: ScopeReaderFunc(func(context.Context, string) (scope.Descriptor, bool, error) {
+			return scope.Descriptor{}, false, nil
+		}),
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var observations []ScheduledObservation
+	processor := &ScheduledProcessor{
+		runtime: lifecycle,
+		scopes:  staticScopes{"missing-scope"},
+		observe: func(_ context.Context, observation ScheduledObservation) {
+			observations = append(observations, observation)
+		},
+	}
+	called := false
+	if err := processor.process(t.Context(), ProcessSourceWindowOperation, func(context.Context, string) ScheduledObservation {
+		called = true
+		return ScheduledObservation{Operation: ProcessSourceWindowOperation, Outcome: ScheduledProcessingSuccess}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("unregistered Scope reached scheduled process callback")
+	}
+	if len(observations) != 1 || observations[0].Outcome != ScheduledProcessingFailure {
+		t.Fatalf("observations = %#v, want one Scope admission failure", observations)
+	}
+	var missing *scope.NotFoundError
+	if !errors.As(observations[0].Err, &missing) {
+		t.Fatalf("observation error = %v, want Scope NotFoundError", observations[0].Err)
+	}
+	lifecycle.scopes.mu.Lock()
+	cached, active := lifecycle.scopes.countsLocked()
+	lifecycle.scopes.mu.Unlock()
+	if cached != 0 || active != 0 {
+		t.Fatalf("unregistered Scope acquired a lease: cached=%d active=%d", cached, active)
+	}
+	tracing.mu.Lock()
+	defer tracing.mu.Unlock()
+	if len(tracing.stages) != 1 || tracing.stages[0].name != "scope.context" {
+		t.Fatalf("stages = %#v, want only Scope admission", tracing.stages)
 	}
 }
 

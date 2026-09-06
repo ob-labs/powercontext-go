@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/ob-labs/powercontext-go/internal/scope"
 )
 
 const DefaultScopeCacheSize = 128
@@ -28,11 +30,26 @@ type (
 	ScopeEvictor       func(scopeID string)
 )
 
+// ScopeReader is the durable Scope admission boundary consumed by Runtime.
+// Implementations must return found=false for a missing Scope without exposing
+// its opaque identity in any error.
+type ScopeReader interface {
+	Get(context.Context, string) (scope.Descriptor, bool, error)
+}
+
+// ScopeReaderFunc adapts a Scope lookup function to ScopeReader.
+type ScopeReaderFunc func(context.Context, string) (scope.Descriptor, bool, error)
+
+func (f ScopeReaderFunc) Get(ctx context.Context, id string) (scope.Descriptor, bool, error) {
+	return f(ctx, id)
+}
+
 type RuntimeOptions struct {
 	ScopeCacheSize int
 	ScopeEvictor   ScopeEvictor
 	ScopeObserver  ScopeCacheObserver
 	Tracing        StageTracing
+	ScopeReader    ScopeReader
 }
 
 type scopeEntry struct {

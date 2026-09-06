@@ -135,14 +135,13 @@ func (p *ScheduledProcessor) process(
 				outcome = scheduledAggregateOutcome(outcome, observation.Outcome)
 				continue
 			}
-			lease, releaseLease := p.runtime.scopes.lease(scope)
-			if resolveErr := p.runtime.resolveScope(ctx); resolveErr != nil {
-				releaseLease()
+			if _, resolveErr := p.runtime.resolveScope(ctx, scope); resolveErr != nil {
 				observation := ScheduledObservation{Operation: operation, Outcome: ScheduledProcessingFailure, Err: resolveErr}
 				p.notify(ctx, observation)
 				outcome = scheduledAggregateOutcome(outcome, observation.Outcome)
 				continue
 			}
+			lease, releaseLease := p.runtime.scopes.lease(scope)
 			var release func()
 			err = p.runtime.runStage(ctx, "scope.lock", map[string]TraceAttribute{
 				"powercontext.scope.lock.contended": lease.contended(),
