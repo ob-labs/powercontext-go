@@ -110,6 +110,14 @@ var builtinSchema = []string{
         checkpoint BLOB NOT NULL,
         PRIMARY KEY (scope_id, binding_id)
     )`,
+	`CREATE TABLE IF NOT EXISTS pc_source_definition_manifests (
+        definition_name VARCHAR(128) NOT NULL,
+        definition_version VARCHAR(128) NOT NULL,
+        fingerprint VARCHAR(71) NOT NULL,
+        manifest BLOB NOT NULL,
+        PRIMARY KEY (definition_name, definition_version),
+        CONSTRAINT uq_pc_source_definition_manifest_fingerprint UNIQUE (definition_name, fingerprint)
+    )`,
 	`CREATE TABLE IF NOT EXISTS pc_source_journal_heads (
         scope_id VARCHAR(256) NOT NULL,
         position BIGINT NOT NULL,
