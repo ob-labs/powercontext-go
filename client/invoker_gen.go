@@ -62,6 +62,16 @@ func (i normalizedInvoker) CaptureContentSource(ctx context.Context, request *v1
 	})
 }
 
+func (i normalizedInvoker) ClearScopeBinding(ctx context.Context, request *v1.ClearScopeBindingRequest) (v1.ClearScopeBindingRes, error) {
+	if err := validateOperationRequest("/v1/scope-bindings/clear", request); err != nil {
+		var zero v1.ClearScopeBindingRes
+		return zero, err
+	}
+	return invokeOperation(ctx, operationDescriptor{path: "/v1/scope-bindings/clear", successStatus: 200}, func(ctx context.Context) (v1.ClearScopeBindingRes, error) {
+		return i.raw.ClearScopeBinding(ctx, request)
+	})
+}
+
 func (i normalizedInvoker) CommitHandoff(ctx context.Context, request *v1.CommitHandoffRequest) (v1.CommitHandoffRes, error) {
 	if err := validateOperationRequest("/v1/handoff/commit", request); err != nil {
 		var zero v1.CommitHandoffRes
@@ -460,6 +470,16 @@ func (i normalizedInvoker) ResolveExternalSkill(ctx context.Context, request *v1
 	})
 }
 
+func (i normalizedInvoker) ResolveScopeBinding(ctx context.Context, request *v1.ResolveScopeBindingRequest) (v1.ResolveScopeBindingRes, error) {
+	if err := validateOperationRequest("/v1/scope-bindings/resolve", request); err != nil {
+		var zero v1.ResolveScopeBindingRes
+		return zero, err
+	}
+	return invokeOperation(ctx, operationDescriptor{path: "/v1/scope-bindings/resolve", successStatus: 200}, func(ctx context.Context) (v1.ResolveScopeBindingRes, error) {
+		return i.raw.ResolveScopeBinding(ctx, request)
+	})
+}
+
 func (i normalizedInvoker) RetireMemoryEntry(ctx context.Context, request *v1.RetireMemoryEntryRequest) (v1.RetireMemoryEntryRes, error) {
 	if err := validateOperationRequest("/v1/memory/entries/retire", request); err != nil {
 		var zero v1.RetireMemoryEntryRes
@@ -507,6 +527,16 @@ func (i normalizedInvoker) SearchMemory(ctx context.Context, request *v1.SearchM
 	}
 	return invokeOperation(ctx, operationDescriptor{path: "/v1/memory/search", successStatus: 200}, func(ctx context.Context) (v1.SearchMemoryRes, error) {
 		return i.raw.SearchMemory(ctx, request)
+	})
+}
+
+func (i normalizedInvoker) SetScopeBinding(ctx context.Context, request *v1.ScopeBinding) (v1.SetScopeBindingRes, error) {
+	if err := validateOperationRequest("/v1/scope-bindings", request); err != nil {
+		var zero v1.SetScopeBindingRes
+		return zero, err
+	}
+	return invokeOperation(ctx, operationDescriptor{path: "/v1/scope-bindings", successStatus: 200}, func(ctx context.Context) (v1.SetScopeBindingRes, error) {
+		return i.raw.SetScopeBinding(ctx, request)
 	})
 }
 

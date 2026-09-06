@@ -63,6 +63,46 @@ func TestScopeApplicationResolvesExplicitBindingAndDefaultInOrder(t *testing.T) 
 	}
 }
 
+func TestScopeApplicationClearsBindingAndResolvesDefault(t *testing.T) {
+	store := &memoryScopeStore{scopes: map[string]scope.Descriptor{}}
+	application, err := NewScopeApplication(New(), store, func() string { return "scope-created" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := scope.NewDraft("title", "summary", "", nil, nil, "create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := application.Create(t.Context(), draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, setDefaultErr := application.SetDefault(t.Context(), created.ID()); setDefaultErr != nil {
+		t.Fatal(setDefaultErr)
+	}
+	key, err := scope.NewBindingKey("codex", "project", "repository")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, bindErr := application.Bind(t.Context(), key, created.ID()); bindErr != nil {
+		t.Fatal(bindErr)
+	}
+	cleared, err := application.ClearBinding(t.Context(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cleared {
+		t.Fatal("existing binding was not cleared")
+	}
+	resolved, err := application.Resolve(t.Context(), nil, []scope.BindingKey{key})
+	if err != nil || resolved.ID() != created.ID() {
+		t.Fatalf("resolved after clearing binding = %#v, %v", resolved, err)
+	}
+	if cleared, err := application.ClearBinding(t.Context(), key); err != nil || cleared {
+		t.Fatalf("clearing a missing binding = %t, %v", cleared, err)
+	}
+}
+
 func TestScopeApplicationRejectsInvalidRelationships(t *testing.T) {
 	for _, test := range []struct {
 		name       string
@@ -176,6 +216,15 @@ func (s *memoryScopeStore) SetBinding(_ context.Context, key scope.BindingKey, i
 	}
 	s.bindings[key] = binding
 	return binding, nil
+}
+
+func (s *memoryScopeStore) ClearBinding(_ context.Context, key scope.BindingKey) (bool, error) {
+	_, found := s.bindings[key]
+	if !found {
+		return false, nil
+	}
+	delete(s.bindings, key)
+	return true, nil
 }
 
 func (s *memoryScopeStore) Binding(_ context.Context, key scope.BindingKey) (scope.Binding, bool, error) {

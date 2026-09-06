@@ -26,6 +26,7 @@ import (
 	"github.com/ob-labs/powercontext-go/internal/handoffreport"
 	"github.com/ob-labs/powercontext-go/internal/review"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/scope"
 	"github.com/ob-labs/powercontext-go/internal/work"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -254,6 +255,15 @@ func mapHandoffError(err error) (ErrorMapping, bool) {
 }
 
 func mapDomainError(err error) ErrorMapping {
+	var scopeMissing *scope.NotFoundError
+	var bindingMissing *scope.BindingNotFoundError
+	if errors.As(err, &scopeMissing) || errors.As(err, &bindingMissing) {
+		return mapping(http.StatusNotFound, "scope_not_found", "The requested Scope was not found.", nil)
+	}
+	var scopeVersion *scope.VersionConflictError
+	if errors.As(err, &scopeVersion) {
+		return mapping(http.StatusConflict, "scope_conflict", "The Scope metadata is stale.", nil)
+	}
 	var artifactMissing *artifact.NotFoundError
 	if errors.As(err, &artifactMissing) {
 		return mapping(http.StatusNotFound, "artifact_not_found", "The requested Artifact was not found.", nil)
@@ -300,17 +310,20 @@ func invalidDomainRequest(err error) bool {
 	var citation *memory.InvalidCitationError
 	var operation *memory.InvalidOperationError
 	var canonical *memory.CanonicalError
-	var scope *runtime.InvalidScopeError
+	var invalidRuntimeScope *runtime.InvalidScopeError
 	var handoffScope *handoff.ScopeMismatchError
 	var handoffRef *handoff.InvalidReferenceError
 	var sourceRef *source.InvalidReferenceError
 	var artifactRef *artifact.InvalidReferenceError
 	var invalidWork *work.InvalidError
 	var invalidWorkRequest *work.InvalidRequestError
+	var invalidScope *scope.ValidationError
+	var invalidRelationship *scope.RelationshipError
 	return errors.As(err, &candidate) || errors.As(err, &evidence) || errors.As(err, &citation) ||
-		errors.As(err, &operation) || errors.As(err, &canonical) || errors.As(err, &scope) ||
+		errors.As(err, &operation) || errors.As(err, &canonical) || errors.As(err, &invalidRuntimeScope) ||
 		errors.As(err, &handoffScope) || errors.As(err, &handoffRef) || errors.As(err, &sourceRef) ||
-		errors.As(err, &artifactRef) || errors.As(err, &invalidWork) || errors.As(err, &invalidWorkRequest)
+		errors.As(err, &artifactRef) || errors.As(err, &invalidWork) || errors.As(err, &invalidWorkRequest) ||
+		errors.As(err, &invalidScope) || errors.As(err, &invalidRelationship)
 }
 
 func invalidRequest() ErrorMapping {

@@ -35,6 +35,7 @@ var selectedOperations = map[string]bool{
 	"activate_handoff":                 true,
 	"approve_artifact_candidate":       true,
 	"capture_content_source":           true,
+	"clear_scope_binding":              true,
 	"commit_handoff":                   true,
 	"continue_handoff":                 true,
 	"create_work_contract":             true,
@@ -51,7 +52,9 @@ var selectedOperations = map[string]bool{
 	"retire_memory_entry":              true,
 	"revise_artifact_candidate":        true,
 	"revise_memory_entry":              true,
+	"resolve_scope_binding":            true,
 	"search_memory":                    true,
+	"set_scope_binding":                true,
 	"get_handoff_report":               true,
 	"get_handoff_report_workspace":     true,
 }

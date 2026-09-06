@@ -21,6 +21,10 @@ type CaptureContentSourceRes interface {
 	captureContentSourceRes()
 }
 
+type ClearScopeBindingRes interface {
+	clearScopeBindingRes()
+}
+
 type CommitHandoffRes interface {
 	commitHandoffRes()
 }
@@ -181,6 +185,10 @@ type ResolveExternalSkillRes interface {
 	resolveExternalSkillRes()
 }
 
+type ResolveScopeBindingRes interface {
+	resolveScopeBindingRes()
+}
+
 type RetireMemoryEntryRes interface {
 	retireMemoryEntryRes()
 }
@@ -199,6 +207,10 @@ type ScanExternalSkillsRes interface {
 
 type SearchMemoryRes interface {
 	searchMemoryRes()
+}
+
+type SetScopeBindingRes interface {
+	setScopeBindingRes()
 }
 
 type UpdateHandoffReportProjectRes interface {

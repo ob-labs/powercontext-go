@@ -211,6 +211,14 @@ func (s *RegisterHandoffReportWorkstreamRequest) setDefaults() {
 }
 
 // setDefaults set default value of fields.
+func (s *ResolveScopeBindingRequest) setDefaults() {
+	{
+		var defaultVal0 []ScopeBindingKey
+		s.BindingKeys = defaultVal0
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *ResolvedUsagePeriod) setDefaults() {
 	{
 		val := StatsPeriod("30d")

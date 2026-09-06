@@ -59,6 +59,15 @@ func (UnimplementedHandler) CaptureContentSource(ctx context.Context, req *Captu
 	return r, ht.ErrNotImplemented
 }
 
+// ClearScopeBinding implements clear_scope_binding operation.
+//
+// Remove one external integration binding. Repeating the request is idempotent.
+//
+// POST /v1/scope-bindings/clear
+func (UnimplementedHandler) ClearScopeBinding(ctx context.Context, req *ClearScopeBindingRequest) (r ClearScopeBindingRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CommitHandoff implements commit_handoff operation.
 //
 // Commit an explicit Handoff milestone.
@@ -435,6 +444,15 @@ func (UnimplementedHandler) ResolveExternalSkill(ctx context.Context, req *Resol
 	return r, ht.ErrNotImplemented
 }
 
+// ResolveScopeBinding implements resolve_scope_binding operation.
+//
+// Resolve an explicit Scope, ordered durable external bindings, or the durable default Scope.
+//
+// POST /v1/scope-bindings/resolve
+func (UnimplementedHandler) ResolveScopeBinding(ctx context.Context, req *ResolveScopeBindingRequest) (r ResolveScopeBindingRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // RetireMemoryEntry implements retire_memory_entry operation.
 //
 // Deactivate an entry against an explicit current Memory Revision without deleting history.
@@ -477,6 +495,15 @@ func (UnimplementedHandler) ScanExternalSkills(ctx context.Context, req *ScanExt
 //
 // POST /v1/memory/search
 func (UnimplementedHandler) SearchMemory(ctx context.Context, req *SearchMemoryRequest) (r SearchMemoryRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SetScopeBinding implements set_scope_binding operation.
+//
+// Associate one external integration key with an existing Scope.
+//
+// PUT /v1/scope-bindings
+func (UnimplementedHandler) SetScopeBinding(ctx context.Context, req *ScopeBinding) (r SetScopeBindingRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

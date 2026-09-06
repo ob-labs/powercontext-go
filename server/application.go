@@ -100,7 +100,7 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 		Sources:      services.sources, Memory: services.memory, Context: services.context,
 		Review: services.review, Generation: services.generation, External: services.externalSkills,
 		Handoff: services.handoff, Work: services.work, HandoffReport: services.handoffReport,
-		Statistics: services.statistics,
+		Statistics: services.statistics, Scopes: services.scopes,
 	})
 	if _, err := application.getReadiness(ctx); err != nil {
 		return fail(err)

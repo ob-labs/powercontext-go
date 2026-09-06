@@ -80,6 +80,20 @@ func encodeCaptureContentSourceRequest(
 	return nil
 }
 
+func encodeClearScopeBindingRequest(
+	req *ClearScopeBindingRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCommitHandoffRequest(
 	req *CommitHandoffRequest,
 	r *http.Request,
@@ -598,6 +612,20 @@ func encodeResolveExternalSkillRequest(
 	return nil
 }
 
+func encodeResolveScopeBindingRequest(
+	req *ResolveScopeBindingRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeRetireMemoryEntryRequest(
 	req *RetireMemoryEntryRequest,
 	r *http.Request,
@@ -656,6 +684,20 @@ func encodeScanExternalSkillsRequest(
 
 func encodeSearchMemoryRequest(
 	req *SearchMemoryRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeSetScopeBindingRequest(
+	req *ScopeBinding,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

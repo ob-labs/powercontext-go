@@ -204,6 +204,23 @@ func (ScopeRepository) SetBinding(ctx context.Context, db DBTX, key scope.Bindin
 	return scope.NewBinding(key, id)
 }
 
+// ClearBinding removes one durable binding and reports whether it existed.
+func (ScopeRepository) ClearBinding(ctx context.Context, db DBTX, key scope.BindingKey) (bool, error) {
+	if _, err := scope.NewBinding(key, "scope"); err != nil {
+		return false, err
+	}
+	result, err := db.ExecContext(ctx, `DELETE FROM pc_scope_bindings
+        WHERE integration = ? AND kind = ? AND external_id = ?`, key.Integration(), key.Kind(), key.ExternalID())
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected != 0, nil
+}
+
 func (ScopeRepository) Binding(ctx context.Context, db DBTX, key scope.BindingKey) (scope.Binding, bool, error) {
 	var id string
 	err := db.QueryRowContext(ctx, `SELECT scope_id FROM pc_scope_bindings

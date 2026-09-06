@@ -39,6 +39,12 @@ type Handler interface {
 	//
 	// POST /v1/sources/content
 	CaptureContentSource(ctx context.Context, req *CaptureContentSourceRequest) (CaptureContentSourceRes, error)
+	// ClearScopeBinding implements clear_scope_binding operation.
+	//
+	// Remove one external integration binding. Repeating the request is idempotent.
+	//
+	// POST /v1/scope-bindings/clear
+	ClearScopeBinding(ctx context.Context, req *ClearScopeBindingRequest) (ClearScopeBindingRes, error)
 	// CommitHandoff implements commit_handoff operation.
 	//
 	// Commit an explicit Handoff milestone.
@@ -292,6 +298,12 @@ type Handler interface {
 	//
 	// POST /v1/external-skills/resolve
 	ResolveExternalSkill(ctx context.Context, req *ResolveExternalSkillRequest) (ResolveExternalSkillRes, error)
+	// ResolveScopeBinding implements resolve_scope_binding operation.
+	//
+	// Resolve an explicit Scope, ordered durable external bindings, or the durable default Scope.
+	//
+	// POST /v1/scope-bindings/resolve
+	ResolveScopeBinding(ctx context.Context, req *ResolveScopeBindingRequest) (ResolveScopeBindingRes, error)
 	// RetireMemoryEntry implements retire_memory_entry operation.
 	//
 	// Deactivate an entry against an explicit current Memory Revision without deleting history.
@@ -322,6 +334,12 @@ type Handler interface {
 	//
 	// POST /v1/memory/search
 	SearchMemory(ctx context.Context, req *SearchMemoryRequest) (SearchMemoryRes, error)
+	// SetScopeBinding implements set_scope_binding operation.
+	//
+	// Associate one external integration key with an existing Scope.
+	//
+	// PUT /v1/scope-bindings
+	SetScopeBinding(ctx context.Context, req *ScopeBinding) (SetScopeBindingRes, error)
 	// UpdateHandoffReportProject implements update_handoff_report_project operation.
 	//
 	// Update a Handoff Report Project.

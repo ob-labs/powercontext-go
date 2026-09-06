@@ -28,6 +28,7 @@ import (
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	requesttrace "github.com/ob-labs/powercontext-go/internal/observability/tracing"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/scope"
 )
 
 var baseToolNames = []string{
@@ -35,6 +36,7 @@ var baseToolNames = []string{
 	"activate_handoff",
 	"approve_artifact_candidate",
 	"capture_content_source",
+	"clear_scope_binding",
 	"commit_handoff",
 	"continue_handoff",
 	"create_work_contract",
@@ -47,10 +49,12 @@ var baseToolNames = []string{
 	"reject_artifact_candidate",
 	"record_task_outcome",
 	"remember_memory",
+	"resolve_scope_binding",
 	"retire_memory_entry",
 	"revise_artifact_candidate",
 	"revise_memory_entry",
 	"search_memory",
+	"set_scope_binding",
 }
 
 func TestDefaultServerInfoMatchesFrozenPython(t *testing.T) {
@@ -129,6 +133,87 @@ func TestReviewWriteToolAnnotationsMatchUpstreamHostApprovalSemantics(t *testing
 			decision.OpenWorldHint == nil || *decision.OpenWorldHint {
 			t.Fatalf("%s annotations = %#v", name, decision)
 		}
+	}
+}
+
+func TestScopeBindingToolAnnotationsReflectReadAndIdempotentWrites(t *testing.T) {
+	t.Parallel()
+	server, err := NewServer(endpoint.NewHandler(endpoint.HandlerOptions{}), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := connectInMemory(t, server).ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := make(map[string]*mcp.Tool, len(result.Tools))
+	for _, tool := range result.Tools {
+		tools[tool.Name] = tool
+	}
+	read := tools["resolve_scope_binding"]
+	if read == nil || read.Annotations == nil || !read.Annotations.ReadOnlyHint || read.Annotations.DestructiveHint == nil ||
+		*read.Annotations.DestructiveHint || read.Annotations.OpenWorldHint == nil || *read.Annotations.OpenWorldHint {
+		t.Fatalf("resolve_scope_binding annotations = %#v", read)
+	}
+	for _, name := range []string{"set_scope_binding", "clear_scope_binding"} {
+		tool := tools[name]
+		if tool == nil || tool.Annotations == nil || tool.Annotations.ReadOnlyHint || tool.Annotations.DestructiveHint == nil ||
+			*tool.Annotations.DestructiveHint || !tool.Annotations.IdempotentHint || tool.Annotations.OpenWorldHint == nil || *tool.Annotations.OpenWorldHint {
+			t.Fatalf("%s annotations = %#v", name, tool)
+		}
+	}
+}
+
+func TestScopeBindingToolsDispatchThroughSharedEndpoint(t *testing.T) {
+	t.Parallel()
+	descriptor, err := scope.NewDescriptor("scope-1", "Repository", "Repository context", "", nil, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := &mcpScopeOperations{resolved: descriptor}
+	handler := endpoint.NewHandler(endpoint.HandlerOptions{Scopes: operations})
+	server, err := NewServer(handler, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := connectInMemory(t, server)
+	key := map[string]any{"integration": "codex", "kind": "project", "external_id": "repository"}
+	set, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "set_scope_binding", Arguments: map[string]any{"key": key, "scope_id": "scope-1"},
+	})
+	if err != nil || set.IsError {
+		t.Fatalf("set_scope_binding = %#v, %v", set, err)
+	}
+	if !reflect.DeepEqual(set.StructuredContent, map[string]any{"key": key, "scope_id": "scope-1"}) {
+		t.Fatalf("set structured content = %#v", set.StructuredContent)
+	}
+	resolve, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "resolve_scope_binding", Arguments: map[string]any{},
+	})
+	if err != nil || resolve.IsError {
+		t.Fatalf("resolve_scope_binding = %#v, %v", resolve, err)
+	}
+	resolved, ok := resolve.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("resolve structured content type = %T", resolve.StructuredContent)
+	}
+	if got := resolved["scope_id"]; got != "scope-1" {
+		t.Fatalf("resolve scope_id = %#v", got)
+	}
+	if parent, present := resolved["parent_scope_id"]; !present || parent != nil {
+		t.Fatalf("resolve parent_scope_id = %#v, want null", parent)
+	}
+	clear, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "clear_scope_binding", Arguments: map[string]any{"key": key},
+	})
+	if err != nil || clear.IsError || !reflect.DeepEqual(clear.StructuredContent, map[string]any{"cleared": true}) {
+		t.Fatalf("clear_scope_binding = %#v, %v", clear, err)
+	}
+	legacy, err := client.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "clear_scope_binding", Arguments: map[string]any{"binding_key": key},
+	})
+	if err != nil || !legacy.IsError {
+		t.Fatalf("legacy binding_key clear = %#v, %v", legacy, err)
 	}
 }
 
@@ -395,6 +480,22 @@ type memoryOperationsStub struct {
 	scopeID         string
 	includeInactive bool
 	requestID       string
+}
+
+type mcpScopeOperations struct {
+	resolved scope.Descriptor
+}
+
+func (m *mcpScopeOperations) Bind(_ context.Context, key scope.BindingKey, id string) (scope.Binding, error) {
+	return scope.NewBinding(key, id)
+}
+
+func (*mcpScopeOperations) ClearBinding(context.Context, scope.BindingKey) (bool, error) {
+	return true, nil
+}
+
+func (m *mcpScopeOperations) Resolve(_ context.Context, _ *string, _ []scope.BindingKey) (scope.Descriptor, error) {
+	return m.resolved, nil
 }
 
 func (m *memoryOperationsStub) List(ctx context.Context, scopeID string, includeInactive bool) (runtime.MemoryEntriesPage, error) {

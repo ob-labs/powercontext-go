@@ -58,6 +58,7 @@ var baseToolNames = []string{
 	"activate_handoff",
 	"approve_artifact_candidate",
 	"capture_content_source",
+	"clear_scope_binding",
 	"commit_handoff",
 	"continue_handoff",
 	"create_work_contract",
@@ -70,10 +71,12 @@ var baseToolNames = []string{
 	"reject_artifact_candidate",
 	"record_task_outcome",
 	"remember_memory",
+	"resolve_scope_binding",
 	"retire_memory_entry",
 	"revise_artifact_candidate",
 	"revise_memory_entry",
 	"search_memory",
+	"set_scope_binding",
 }
 
 type options struct {
@@ -101,7 +104,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf(
-		"Verified PowerContext %s CLI, HTTP, authenticated Dashboard, MCP 20/24-tool surfaces, SQLite restart persistence, and graceful shutdown.\n",
+		"Verified PowerContext %s CLI, HTTP, authenticated Dashboard, MCP 23/27-tool surfaces, SQLite restart persistence, and graceful shutdown.\n",
 		*version,
 	)
 }

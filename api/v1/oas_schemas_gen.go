@@ -1229,6 +1229,64 @@ func (s *CaptureStatus) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/ClearScopeBindingRequest
+type ClearScopeBindingRequest struct {
+	Key ScopeBindingKey `json:"key"`
+}
+
+// GetKey returns the value of Key.
+func (s *ClearScopeBindingRequest) GetKey() ScopeBindingKey {
+	return s.Key
+}
+
+// SetKey sets the value of Key.
+func (s *ClearScopeBindingRequest) SetKey(val ScopeBindingKey) {
+	s.Key = val
+}
+
+// Ref: #/components/schemas/ClearScopeBindingResponse
+type ClearScopeBindingResponse struct {
+	Cleared bool `json:"cleared"`
+}
+
+// GetCleared returns the value of Cleared.
+func (s *ClearScopeBindingResponse) GetCleared() bool {
+	return s.Cleared
+}
+
+// SetCleared sets the value of Cleared.
+func (s *ClearScopeBindingResponse) SetCleared(val bool) {
+	s.Cleared = val
+}
+
+// ClearScopeBindingResponseHeaders wraps ClearScopeBindingResponse with response headers.
+type ClearScopeBindingResponseHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ClearScopeBindingResponse
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *ClearScopeBindingResponseHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ClearScopeBindingResponseHeaders) GetResponse() ClearScopeBindingResponse {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *ClearScopeBindingResponseHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ClearScopeBindingResponseHeaders) SetResponse(val ClearScopeBindingResponse) {
+	s.Response = val
+}
+
+func (*ClearScopeBindingResponseHeaders) clearScopeBindingRes() {}
+
 // Ref: #/components/schemas/CommitHandoffRequest
 type CommitHandoffRequest struct {
 	ScopeID string          `json:"scope_id"`
@@ -5595,6 +5653,7 @@ func (*InternalErrorHeaders) activateHandoffRes()                 {}
 func (*InternalErrorHeaders) approveArtifactCandidateRes()        {}
 func (*InternalErrorHeaders) attachHandoffReportWorkspaceRes()    {}
 func (*InternalErrorHeaders) captureContentSourceRes()            {}
+func (*InternalErrorHeaders) clearScopeBindingRes()               {}
 func (*InternalErrorHeaders) commitHandoffRes()                   {}
 func (*InternalErrorHeaders) continueHandoffRes()                 {}
 func (*InternalErrorHeaders) createHandoffReportProjectRes()      {}
@@ -5633,11 +5692,13 @@ func (*InternalErrorHeaders) registerHandoffReportWorkstreamRes() {}
 func (*InternalErrorHeaders) rejectArtifactCandidateRes()         {}
 func (*InternalErrorHeaders) rememberMemoryRes()                  {}
 func (*InternalErrorHeaders) resolveExternalSkillRes()            {}
+func (*InternalErrorHeaders) resolveScopeBindingRes()             {}
 func (*InternalErrorHeaders) retireMemoryEntryRes()               {}
 func (*InternalErrorHeaders) reviseArtifactCandidateRes()         {}
 func (*InternalErrorHeaders) reviseMemoryEntryRes()               {}
 func (*InternalErrorHeaders) scanExternalSkillsRes()              {}
 func (*InternalErrorHeaders) searchMemoryRes()                    {}
+func (*InternalErrorHeaders) setScopeBindingRes()                 {}
 func (*InternalErrorHeaders) updateHandoffReportProjectRes()      {}
 func (*InternalErrorHeaders) updateHandoffReportWorkstreamRes()   {}
 
@@ -5672,6 +5733,7 @@ func (*InvalidRequestHeaders) activateHandoffRes()                 {}
 func (*InvalidRequestHeaders) approveArtifactCandidateRes()        {}
 func (*InvalidRequestHeaders) attachHandoffReportWorkspaceRes()    {}
 func (*InvalidRequestHeaders) captureContentSourceRes()            {}
+func (*InvalidRequestHeaders) clearScopeBindingRes()               {}
 func (*InvalidRequestHeaders) commitHandoffRes()                   {}
 func (*InvalidRequestHeaders) continueHandoffRes()                 {}
 func (*InvalidRequestHeaders) createHandoffReportProjectRes()      {}
@@ -5710,11 +5772,13 @@ func (*InvalidRequestHeaders) registerHandoffReportWorkstreamRes() {}
 func (*InvalidRequestHeaders) rejectArtifactCandidateRes()         {}
 func (*InvalidRequestHeaders) rememberMemoryRes()                  {}
 func (*InvalidRequestHeaders) resolveExternalSkillRes()            {}
+func (*InvalidRequestHeaders) resolveScopeBindingRes()             {}
 func (*InvalidRequestHeaders) retireMemoryEntryRes()               {}
 func (*InvalidRequestHeaders) reviseArtifactCandidateRes()         {}
 func (*InvalidRequestHeaders) reviseMemoryEntryRes()               {}
 func (*InvalidRequestHeaders) scanExternalSkillsRes()              {}
 func (*InvalidRequestHeaders) searchMemoryRes()                    {}
+func (*InvalidRequestHeaders) setScopeBindingRes()                 {}
 func (*InvalidRequestHeaders) updateHandoffReportProjectRes()      {}
 func (*InvalidRequestHeaders) updateHandoffReportWorkstreamRes()   {}
 
@@ -7863,9 +7927,11 @@ func (*NotFoundHeaders) recordTaskOutcomeRes()               {}
 func (*NotFoundHeaders) registerHandoffReportWorkstreamRes() {}
 func (*NotFoundHeaders) rejectArtifactCandidateRes()         {}
 func (*NotFoundHeaders) resolveExternalSkillRes()            {}
+func (*NotFoundHeaders) resolveScopeBindingRes()             {}
 func (*NotFoundHeaders) retireMemoryEntryRes()               {}
 func (*NotFoundHeaders) reviseArtifactCandidateRes()         {}
 func (*NotFoundHeaders) reviseMemoryEntryRes()               {}
+func (*NotFoundHeaders) setScopeBindingRes()                 {}
 func (*NotFoundHeaders) updateHandoffReportProjectRes()      {}
 func (*NotFoundHeaders) updateHandoffReportWorkstreamRes()   {}
 
@@ -11468,6 +11534,32 @@ func (s *ResolveExternalSkillRequest) SetFingerprint(val string) {
 	s.Fingerprint = val
 }
 
+// Ref: #/components/schemas/ResolveScopeBindingRequest
+type ResolveScopeBindingRequest struct {
+	ExplicitScopeID OptNilString      `json:"explicit_scope_id"`
+	BindingKeys     []ScopeBindingKey `json:"binding_keys"`
+}
+
+// GetExplicitScopeID returns the value of ExplicitScopeID.
+func (s *ResolveScopeBindingRequest) GetExplicitScopeID() OptNilString {
+	return s.ExplicitScopeID
+}
+
+// GetBindingKeys returns the value of BindingKeys.
+func (s *ResolveScopeBindingRequest) GetBindingKeys() []ScopeBindingKey {
+	return s.BindingKeys
+}
+
+// SetExplicitScopeID sets the value of ExplicitScopeID.
+func (s *ResolveScopeBindingRequest) SetExplicitScopeID(val OptNilString) {
+	s.ExplicitScopeID = val
+}
+
+// SetBindingKeys sets the value of BindingKeys.
+func (s *ResolveScopeBindingRequest) SetBindingKeys(val []ScopeBindingKey) {
+	s.BindingKeys = val
+}
+
 // Ref: #/components/schemas/ResolvedUsagePeriod
 type ResolvedUsagePeriod struct {
 	Preset    StatsPeriod                 `json:"preset"`
@@ -11878,6 +11970,232 @@ func (s *ScanExternalSkillsResponseHeaders) SetResponse(val ScanExternalSkillsRe
 }
 
 func (*ScanExternalSkillsResponseHeaders) scanExternalSkillsRes() {}
+
+// Ref: #/components/schemas/ScopeBinding
+type ScopeBinding struct {
+	Key     ScopeBindingKey `json:"key"`
+	ScopeID string          `json:"scope_id"`
+}
+
+// GetKey returns the value of Key.
+func (s *ScopeBinding) GetKey() ScopeBindingKey {
+	return s.Key
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *ScopeBinding) GetScopeID() string {
+	return s.ScopeID
+}
+
+// SetKey sets the value of Key.
+func (s *ScopeBinding) SetKey(val ScopeBindingKey) {
+	s.Key = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *ScopeBinding) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+// ScopeBindingHeaders wraps ScopeBinding with response headers.
+type ScopeBindingHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ScopeBinding
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *ScopeBindingHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ScopeBindingHeaders) GetResponse() ScopeBinding {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *ScopeBindingHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ScopeBindingHeaders) SetResponse(val ScopeBinding) {
+	s.Response = val
+}
+
+func (*ScopeBindingHeaders) setScopeBindingRes() {}
+
+// Ref: #/components/schemas/ScopeBindingKey
+type ScopeBindingKey struct {
+	Integration string `json:"integration"`
+	Kind        string `json:"kind"`
+	ExternalID  string `json:"external_id"`
+}
+
+// GetIntegration returns the value of Integration.
+func (s *ScopeBindingKey) GetIntegration() string {
+	return s.Integration
+}
+
+// GetKind returns the value of Kind.
+func (s *ScopeBindingKey) GetKind() string {
+	return s.Kind
+}
+
+// GetExternalID returns the value of ExternalID.
+func (s *ScopeBindingKey) GetExternalID() string {
+	return s.ExternalID
+}
+
+// SetIntegration sets the value of Integration.
+func (s *ScopeBindingKey) SetIntegration(val string) {
+	s.Integration = val
+}
+
+// SetKind sets the value of Kind.
+func (s *ScopeBindingKey) SetKind(val string) {
+	s.Kind = val
+}
+
+// SetExternalID sets the value of ExternalID.
+func (s *ScopeBindingKey) SetExternalID(val string) {
+	s.ExternalID = val
+}
+
+// Ref: #/components/schemas/ScopeDescriptor
+type ScopeDescriptor struct {
+	ScopeID            string                   `json:"scope_id"`
+	Title              string                   `json:"title"`
+	Summary            string                   `json:"summary"`
+	ParentScopeID      OptNilString             `json:"parent_scope_id"`
+	ContextReferences  []string                 `json:"context_references"`
+	ExternalReferences []ScopeExternalReference `json:"external_references"`
+	Version            int                      `json:"version"`
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *ScopeDescriptor) GetScopeID() string {
+	return s.ScopeID
+}
+
+// GetTitle returns the value of Title.
+func (s *ScopeDescriptor) GetTitle() string {
+	return s.Title
+}
+
+// GetSummary returns the value of Summary.
+func (s *ScopeDescriptor) GetSummary() string {
+	return s.Summary
+}
+
+// GetParentScopeID returns the value of ParentScopeID.
+func (s *ScopeDescriptor) GetParentScopeID() OptNilString {
+	return s.ParentScopeID
+}
+
+// GetContextReferences returns the value of ContextReferences.
+func (s *ScopeDescriptor) GetContextReferences() []string {
+	return s.ContextReferences
+}
+
+// GetExternalReferences returns the value of ExternalReferences.
+func (s *ScopeDescriptor) GetExternalReferences() []ScopeExternalReference {
+	return s.ExternalReferences
+}
+
+// GetVersion returns the value of Version.
+func (s *ScopeDescriptor) GetVersion() int {
+	return s.Version
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *ScopeDescriptor) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+// SetTitle sets the value of Title.
+func (s *ScopeDescriptor) SetTitle(val string) {
+	s.Title = val
+}
+
+// SetSummary sets the value of Summary.
+func (s *ScopeDescriptor) SetSummary(val string) {
+	s.Summary = val
+}
+
+// SetParentScopeID sets the value of ParentScopeID.
+func (s *ScopeDescriptor) SetParentScopeID(val OptNilString) {
+	s.ParentScopeID = val
+}
+
+// SetContextReferences sets the value of ContextReferences.
+func (s *ScopeDescriptor) SetContextReferences(val []string) {
+	s.ContextReferences = val
+}
+
+// SetExternalReferences sets the value of ExternalReferences.
+func (s *ScopeDescriptor) SetExternalReferences(val []ScopeExternalReference) {
+	s.ExternalReferences = val
+}
+
+// SetVersion sets the value of Version.
+func (s *ScopeDescriptor) SetVersion(val int) {
+	s.Version = val
+}
+
+// ScopeDescriptorHeaders wraps ScopeDescriptor with response headers.
+type ScopeDescriptorHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ScopeDescriptor
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *ScopeDescriptorHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ScopeDescriptorHeaders) GetResponse() ScopeDescriptor {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *ScopeDescriptorHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ScopeDescriptorHeaders) SetResponse(val ScopeDescriptor) {
+	s.Response = val
+}
+
+func (*ScopeDescriptorHeaders) resolveScopeBindingRes() {}
+
+// Ref: #/components/schemas/ScopeExternalReference
+type ScopeExternalReference struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+// GetKind returns the value of Kind.
+func (s *ScopeExternalReference) GetKind() string {
+	return s.Kind
+}
+
+// GetValue returns the value of Value.
+func (s *ScopeExternalReference) GetValue() string {
+	return s.Value
+}
+
+// SetKind sets the value of Kind.
+func (s *ScopeExternalReference) SetKind(val string) {
+	s.Kind = val
+}
+
+// SetValue sets the value of Value.
+func (s *ScopeExternalReference) SetValue(val string) {
+	s.Value = val
+}
 
 // Ref: #/components/schemas/ScopedStats
 type ScopedStats struct {
@@ -12937,6 +13255,7 @@ func (*UnauthorizedHeaders) activateHandoffRes()                 {}
 func (*UnauthorizedHeaders) approveArtifactCandidateRes()        {}
 func (*UnauthorizedHeaders) attachHandoffReportWorkspaceRes()    {}
 func (*UnauthorizedHeaders) captureContentSourceRes()            {}
+func (*UnauthorizedHeaders) clearScopeBindingRes()               {}
 func (*UnauthorizedHeaders) commitHandoffRes()                   {}
 func (*UnauthorizedHeaders) continueHandoffRes()                 {}
 func (*UnauthorizedHeaders) createHandoffReportProjectRes()      {}
@@ -12976,11 +13295,13 @@ func (*UnauthorizedHeaders) registerHandoffReportWorkstreamRes() {}
 func (*UnauthorizedHeaders) rejectArtifactCandidateRes()         {}
 func (*UnauthorizedHeaders) rememberMemoryRes()                  {}
 func (*UnauthorizedHeaders) resolveExternalSkillRes()            {}
+func (*UnauthorizedHeaders) resolveScopeBindingRes()             {}
 func (*UnauthorizedHeaders) retireMemoryEntryRes()               {}
 func (*UnauthorizedHeaders) reviseArtifactCandidateRes()         {}
 func (*UnauthorizedHeaders) reviseMemoryEntryRes()               {}
 func (*UnauthorizedHeaders) scanExternalSkillsRes()              {}
 func (*UnauthorizedHeaders) searchMemoryRes()                    {}
+func (*UnauthorizedHeaders) setScopeBindingRes()                 {}
 func (*UnauthorizedHeaders) updateHandoffReportProjectRes()      {}
 func (*UnauthorizedHeaders) updateHandoffReportWorkstreamRes()   {}
 
@@ -13014,6 +13335,7 @@ func (*UnavailableHeaders) acknowledgeHandoffRes()       {}
 func (*UnavailableHeaders) activateHandoffRes()          {}
 func (*UnavailableHeaders) approveArtifactCandidateRes() {}
 func (*UnavailableHeaders) captureContentSourceRes()     {}
+func (*UnavailableHeaders) clearScopeBindingRes()        {}
 func (*UnavailableHeaders) commitHandoffRes()            {}
 func (*UnavailableHeaders) continueHandoffRes()          {}
 func (*UnavailableHeaders) createWorkContractRes()       {}
@@ -13041,11 +13363,13 @@ func (*UnavailableHeaders) recordTaskOutcomeRes()        {}
 func (*UnavailableHeaders) rejectArtifactCandidateRes()  {}
 func (*UnavailableHeaders) rememberMemoryRes()           {}
 func (*UnavailableHeaders) resolveExternalSkillRes()     {}
+func (*UnavailableHeaders) resolveScopeBindingRes()      {}
 func (*UnavailableHeaders) retireMemoryEntryRes()        {}
 func (*UnavailableHeaders) reviseArtifactCandidateRes()  {}
 func (*UnavailableHeaders) reviseMemoryEntryRes()        {}
 func (*UnavailableHeaders) scanExternalSkillsRes()       {}
 func (*UnavailableHeaders) searchMemoryRes()             {}
+func (*UnavailableHeaders) setScopeBindingRes()          {}
 
 // Ref: #/components/schemas/UpdateHandoffReportProjectRequest
 type UpdateHandoffReportProjectRequest struct {

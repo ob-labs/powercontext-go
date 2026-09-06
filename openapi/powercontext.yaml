@@ -1688,6 +1688,100 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "500":
           $ref: "#/components/responses/InternalError"
+  /v1/scope-bindings/resolve:
+    post:
+      tags: [scope-bindings]
+      summary: Resolve a Scope binding
+      description: Resolve an explicit Scope, ordered durable external bindings, or the durable default Scope.
+      operationId: resolve_scope_binding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveScopeBindingRequest"
+      responses:
+        "200":
+          description: The resolved durable Scope descriptor.
+          headers:
+            X-PowerContext-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScopeDescriptor"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /v1/scope-bindings:
+    put:
+      tags: [scope-bindings]
+      summary: Set a durable Scope binding
+      description: Associate one external integration key with an existing Scope.
+      operationId: set_scope_binding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetScopeBindingRequest"
+      responses:
+        "200":
+          description: The durable Scope binding after replacement.
+          headers:
+            X-PowerContext-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScopeBinding"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /v1/scope-bindings/clear:
+    post:
+      tags: [scope-bindings]
+      summary: Clear a durable Scope binding
+      description: Remove one external integration binding. Repeating the request is idempotent.
+      operationId: clear_scope_binding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClearScopeBindingRequest"
+      responses:
+        "200":
+          description: Whether a durable binding was removed.
+          headers:
+            X-PowerContext-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClearScopeBindingResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     BearerAuth:
@@ -1771,6 +1865,126 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    ClearScopeBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        key:
+          $ref: "#/components/schemas/ScopeBindingKey"
+    ClearScopeBindingResponse:
+      type: object
+      additionalProperties: false
+      required: [cleared]
+      properties:
+        cleared:
+          type: boolean
+    ScopeBinding:
+      type: object
+      additionalProperties: false
+      required: [key, scope_id]
+      properties:
+        key:
+          $ref: "#/components/schemas/ScopeBindingKey"
+        scope_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '.*\S.*'
+    ScopeBindingKey:
+      type: object
+      additionalProperties: false
+      required: [integration, kind, external_id]
+      properties:
+        integration:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '.*\S.*'
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '.*\S.*'
+        external_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '.*\S.*'
+    ScopeDescriptor:
+      type: object
+      additionalProperties: false
+      required: [scope_id, title, summary, context_references, external_references, version]
+      properties:
+        scope_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '.*\S.*'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '.*\S.*'
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: '.*\S.*'
+        parent_scope_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '.*\S.*'
+          nullable: true
+        context_references:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 256
+            pattern: '.*\S.*'
+        external_references:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ScopeExternalReference"
+        version:
+          type: integer
+          minimum: 1
+    ScopeExternalReference:
+      type: object
+      additionalProperties: false
+      required: [kind, value]
+      properties:
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '.*\S.*'
+        value:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          pattern: '.*\S.*'
+    ResolveScopeBindingRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        explicit_scope_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '.*\S.*'
+          nullable: true
+        binding_keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScopeBindingKey"
+          default: []
+    SetScopeBindingRequest:
+      $ref: "#/components/schemas/ScopeBinding"
     ActivateHandoffRequest:
       type: object
       additionalProperties: false

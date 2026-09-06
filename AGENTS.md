@@ -513,3 +513,10 @@ source / artifact / trigger / inference
   load, provider run, or save, and an unknown scheduled scope acquires no lease
   or process callback while direct context references are all resolved before
   any recall begins.
+- When an upstream transport contract distinguishes a nullable response field
+  from an omitted field, preserve the generated response's custom JSON
+  marshaler across every adapter and set an explicit JSON `null` when required;
+  do not return a value when only its pointer implements the marshaler. Verify
+  canonical field names and explicit-null semantics through the generated
+  client, HTTP handler, and MCP tool, including rejection of the retired field
+  name.

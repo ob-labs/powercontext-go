@@ -39,6 +39,7 @@ type HandlerOptions struct {
 	Work          WorkOperations
 	HandoffReport HandoffReportOperations
 	Statistics    StatisticsOperations
+	Scopes        ScopeOperations
 }
 
 // Handler is the single application-operation adapter shared by HTTP and MCP.
@@ -58,6 +59,7 @@ type Handler struct {
 	work          WorkOperations
 	handoffReport HandoffReportOperations
 	statistics    StatisticsOperations
+	scopes        ScopeOperations
 }
 
 var _ v1.Handler = (*Handler)(nil)
@@ -76,6 +78,7 @@ func NewHandler(options HandlerOptions) *Handler {
 		work:          options.Work,
 		handoffReport: options.HandoffReport,
 		statistics:    options.Statistics,
+		scopes:        options.Scopes,
 	}
 }
 

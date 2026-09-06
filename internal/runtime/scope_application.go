@@ -34,6 +34,7 @@ type ScopeStore interface {
 	SetDefault(context.Context, string) (scope.Descriptor, error)
 	Default(context.Context) (scope.Descriptor, bool, error)
 	SetBinding(context.Context, scope.BindingKey, string) (scope.Binding, error)
+	ClearBinding(context.Context, scope.BindingKey) (bool, error)
 	Binding(context.Context, scope.BindingKey) (scope.Binding, bool, error)
 }
 
@@ -124,6 +125,17 @@ func (a *ScopeApplication) Bind(ctx context.Context, key scope.BindingKey, id st
 		value, bindErr := a.store.SetBinding(ctx, key, id)
 		result = value
 		return bindErr
+	})
+	return result, err
+}
+
+// ClearBinding removes one durable external-to-Scope association. Repeating a
+// successful clear is idempotent and reports false without changing storage.
+func (a *ScopeApplication) ClearBinding(ctx context.Context, key scope.BindingKey) (result bool, err error) {
+	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
+		cleared, clearErr := a.store.ClearBinding(ctx, key)
+		result = cleared
+		return clearErr
 	})
 	return result, err
 }

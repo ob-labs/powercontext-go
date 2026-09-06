@@ -436,8 +436,8 @@ func TestOptionalMCPRouteUsesConfiguredPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 20 {
-		t.Fatalf("tools = %d, want 20", len(tools.Tools))
+	if len(tools.Tools) != 23 {
+		t.Fatalf("tools = %d, want 23", len(tools.Tools))
 	}
 
 	disabled, err := NewHTTPHandler(endpoint.NewHandler(endpoint.HandlerOptions{}), HTTPOptions{})

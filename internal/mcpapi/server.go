@@ -233,6 +233,12 @@ func dispatch(ctx context.Context, handler v1.Handler, name string, raw json.Raw
 			return nil, err
 		}
 		return endpointPayload(handler.CaptureContentSource(ctx, request))
+	case "clear_scope_binding":
+		request := new(v1.ClearScopeBindingRequest)
+		if err := decodeRequest(raw, request); err != nil {
+			return nil, err
+		}
+		return endpointPayload(handler.ClearScopeBinding(ctx, request))
 	case "commit_handoff":
 		request := new(v1.CommitHandoffRequest)
 		if err := decodeRequest(raw, request); err != nil {
@@ -311,6 +317,12 @@ func dispatch(ctx context.Context, handler v1.Handler, name string, raw json.Raw
 			return nil, err
 		}
 		return endpointPayload(handler.RecordTaskOutcome(ctx, request))
+	case "resolve_scope_binding":
+		request := new(v1.ResolveScopeBindingRequest)
+		if err := decodeRequest(raw, request); err != nil {
+			return nil, err
+		}
+		return endpointPayload(handler.ResolveScopeBinding(ctx, request))
 	case "reject_artifact_candidate":
 		request := new(v1.RejectArtifactCandidateRequest)
 		if err := decodeRequest(raw, request); err != nil {
@@ -347,6 +359,12 @@ func dispatch(ctx context.Context, handler v1.Handler, name string, raw json.Raw
 			return nil, err
 		}
 		return endpointPayload(handler.SearchMemory(ctx, request))
+	case "set_scope_binding":
+		request := new(v1.ScopeBinding)
+		if err := decodeRequest(raw, request); err != nil {
+			return nil, err
+		}
+		return endpointPayload(handler.SetScopeBinding(ctx, request))
 	default:
 		return nil, errUnexpectedEndpointResponse
 	}
@@ -364,6 +382,8 @@ func endpointPayload(response any, err error) (any, error) {
 	switch value := response.(type) {
 	case *v1.CaptureContentSourceResponseHeaders:
 		return value.Response, nil
+	case *v1.ClearScopeBindingResponseHeaders:
+		return value.Response, nil
 	case *v1.HandoffActivationHeaders:
 		return value.Response, nil
 	case *v1.PreparedHandoffHeaders:
@@ -380,6 +400,10 @@ func endpointPayload(response any, err error) (any, error) {
 		return value.Response, nil
 	case *v1.SearchMemoryResponseHeaders:
 		return value.Response, nil
+	case *v1.ScopeBindingHeaders:
+		return value.Response, nil
+	case *v1.ScopeDescriptorHeaders:
+		return &value.Response, nil
 	case *v1.ListMemoryEntriesResponseHeaders:
 		return value.Response, nil
 	case *v1.MemoryEntryHeaders:
@@ -493,7 +517,7 @@ func annotations(name string) *mcp.ToolAnnotations {
 	switch name {
 	case "continue_handoff", "get_artifact_candidate", "get_handoff_report", "get_handoff_report_workspace",
 		"get_memory_entry", "list_artifact_candidates", "list_handoff_report_known_scopes", "list_memory_entries",
-		"search_memory", "select_handoff_workstream":
+		"resolve_scope_binding", "search_memory", "select_handoff_workstream":
 		value := &mcp.ToolAnnotations{OpenWorldHint: &closedWorld}
 		value.ReadOnlyHint = true
 		nondestructive := false
@@ -509,6 +533,12 @@ func annotations(name string) *mcp.ToolAnnotations {
 		value.IdempotentHint = false
 		return value
 	case "commit_handoff":
+		value := &mcp.ToolAnnotations{OpenWorldHint: &closedWorld}
+		nondestructive := false
+		value.DestructiveHint = &nondestructive
+		value.IdempotentHint = true
+		return value
+	case "clear_scope_binding", "set_scope_binding":
 		value := &mcp.ToolAnnotations{OpenWorldHint: &closedWorld}
 		nondestructive := false
 		value.DestructiveHint = &nondestructive

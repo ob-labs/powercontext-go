@@ -66,6 +66,17 @@ func TestRuntimeScopeStoreOwnsScopeTransactions(t *testing.T) {
 	if err != nil || !bindingFound || binding.ScopeID() != created.ID() {
 		t.Fatalf("binding = %#v, %t, %v", binding, bindingFound, err)
 	}
+	cleared, err := store.ClearBinding(t.Context(), key)
+	if err != nil || !cleared {
+		t.Fatalf("clear binding = %t, %v", cleared, err)
+	}
+	if _, found, lookupErr := store.Binding(t.Context(), key); lookupErr != nil || found {
+		t.Fatalf("cleared binding lookup = found:%t err:%v", found, lookupErr)
+	}
+	cleared, err = store.ClearBinding(t.Context(), key)
+	if err != nil || cleared {
+		t.Fatalf("idempotent binding clear = %t, %v", cleared, err)
+	}
 }
 
 func TestScopeApplicationSQLiteValidatesRelationshipsBeforeMetadataCAS(t *testing.T) {

@@ -111,6 +111,155 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 	}
 }
 
+func TestOpenApplicationPersistsAuthenticatedScopeBindingsAcrossRestart(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "scope-bindings.db")
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Database.SQLite.URL = sqliteURL(databasePath)
+	config.MCP.Enabled = false
+	config.Metrics.Enabled = false
+	config.Auth.Enabled = true
+	config.Auth.Token = "scope-binding-token"
+
+	first, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstHandler, err := first.HTTPHandler()
+	if err != nil {
+		_ = first.Close(t.Context())
+		t.Fatal(err)
+	}
+	unauthorized := applicationScopeBindingRequest(t, firstHandler, http.MethodPost, "/v1/scope-bindings/clear", map[string]any{
+		"key": map[string]any{"integration": "codex", "kind": "project", "external_id": "secret-repository"},
+	}, "")
+	if unauthorized.Code != http.StatusUnauthorized || strings.Contains(unauthorized.Body.String(), "secret-repository") {
+		t.Fatalf("unauthorized scope binding response = %d %s", unauthorized.Code, unauthorized.Body.String())
+	}
+
+	resolved := applicationScopeBindingRequest(t, firstHandler, http.MethodPost, "/v1/scope-bindings/resolve", map[string]any{}, config.Auth.Token)
+	if resolved.Code != http.StatusOK {
+		_ = first.Close(t.Context())
+		t.Fatalf("resolve default Scope = %d %s", resolved.Code, resolved.Body.String())
+	}
+	var descriptor struct {
+		ScopeID string `json:"scope_id"`
+	}
+	if err := json.Unmarshal(resolved.Body.Bytes(), &descriptor); err != nil {
+		_ = first.Close(t.Context())
+		t.Fatal(err)
+	}
+	if descriptor.ScopeID == "" {
+		_ = first.Close(t.Context())
+		t.Fatal("default Scope was not returned")
+	}
+	key := map[string]any{"integration": "codex", "kind": "project", "external_id": "repository"}
+	var resolvedObject map[string]json.RawMessage
+	if err := json.Unmarshal(resolved.Body.Bytes(), &resolvedObject); err != nil {
+		_ = first.Close(t.Context())
+		t.Fatal(err)
+	}
+	if parent, present := resolvedObject["parent_scope_id"]; !present || string(parent) != "null" {
+		_ = first.Close(t.Context())
+		t.Fatalf("default Scope parent_scope_id = %q, want null: %s", parent, resolved.Body.String())
+	}
+	keys := make([]any, 33)
+	for index := range keys {
+		keys[index] = key
+	}
+	longResolve := applicationScopeBindingRequest(t, firstHandler, http.MethodPost, "/v1/scope-bindings/resolve", map[string]any{
+		"binding_keys": keys,
+	}, config.Auth.Token)
+	if longResolve.Code != http.StatusOK {
+		_ = first.Close(t.Context())
+		t.Fatalf("resolve with more than 32 binding keys = %d %s", longResolve.Code, longResolve.Body.String())
+	}
+	set := applicationScopeBindingRequest(t, firstHandler, http.MethodPut, "/v1/scope-bindings", map[string]any{
+		"key": key, "scope_id": descriptor.ScopeID,
+	}, config.Auth.Token)
+	if set.Code != http.StatusOK {
+		_ = first.Close(t.Context())
+		t.Fatalf("set Scope binding = %d %s", set.Code, set.Body.String())
+	}
+	var binding struct {
+		Key map[string]any `json:"key"`
+	}
+	if err := json.Unmarshal(set.Body.Bytes(), &binding); err != nil || !mapsEqual(binding.Key, key) {
+		_ = first.Close(t.Context())
+		t.Fatalf("canonical set response = %#v, %v", binding, err)
+	}
+	legacySet := applicationScopeBindingRequest(t, firstHandler, http.MethodPut, "/v1/scope-bindings", map[string]any{
+		"binding_key": key, "scope_id": descriptor.ScopeID,
+	}, config.Auth.Token)
+	if legacySet.Code < http.StatusBadRequest || legacySet.Code >= http.StatusInternalServerError {
+		_ = first.Close(t.Context())
+		t.Fatalf("legacy binding_key set status = %d: %s", legacySet.Code, legacySet.Body.String())
+	}
+	if closeErr := first.Close(t.Context()); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	second, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Close(context.Background()) })
+	secondHandler, err := second.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved = applicationScopeBindingRequest(t, secondHandler, http.MethodPost, "/v1/scope-bindings/resolve", map[string]any{
+		"binding_keys": []any{key},
+	}, config.Auth.Token)
+	if resolved.Code != http.StatusOK {
+		t.Fatalf("resolve durable Scope binding = %d %s", resolved.Code, resolved.Body.String())
+	}
+	if err := json.Unmarshal(resolved.Body.Bytes(), &descriptor); err != nil || descriptor.ScopeID == "" {
+		t.Fatalf("resolved durable Scope = %#v, %v", descriptor, err)
+	}
+	cleared := applicationScopeBindingRequest(t, secondHandler, http.MethodPost, "/v1/scope-bindings/clear", map[string]any{
+		"key": key,
+	}, config.Auth.Token)
+	if cleared.Code != http.StatusOK || cleared.Body.String() != `{"cleared":true}` {
+		t.Fatalf("clear durable Scope binding = %d %s", cleared.Code, cleared.Body.String())
+	}
+	cleared = applicationScopeBindingRequest(t, secondHandler, http.MethodPost, "/v1/scope-bindings/clear", map[string]any{
+		"key": key,
+	}, config.Auth.Token)
+	if cleared.Code != http.StatusOK || cleared.Body.String() != `{"cleared":false}` {
+		t.Fatalf("repeat clear durable Scope binding = %d %s", cleared.Code, cleared.Body.String())
+	}
+}
+
+func TestOpenApplicationGeneratedClientResolvesDefaultScopeWithEmptyRequest(t *testing.T) {
+	config := applicationTestConfig(t)
+	application, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = application.Close(context.Background()) })
+	handler, err := application.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated, err := v1.NewClient("http://powercontext.test", applicationTestSecuritySource{}, v1.WithClient(&http.Client{
+		Transport: applicationHandlerRoundTripper{handler: handler},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := generated.ResolveScopeBinding(t.Context(), &v1.ResolveScopeBindingRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers, ok := resolved.(*v1.ScopeDescriptorHeaders)
+	if !ok || headers.Response.ScopeID == "" || !headers.Response.ParentScopeID.IsNull() {
+		t.Fatalf("generated default Scope resolution = %#v", resolved)
+	}
+}
+
 func TestOpenApplicationRejectsUnsupportedDatabaseBeforeStorageSideEffects(t *testing.T) {
 	config := applicationTestConfig(t)
 	path := filepath.Join(t.TempDir(), "unsupported-seekdb")
@@ -1262,6 +1411,42 @@ func postApplicationJSON(t *testing.T, handler http.Handler, path string, value 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	return recorder
+}
+
+func applicationScopeBindingRequest(
+	t *testing.T, handler http.Handler, method, path string, value any, token string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(method, path, bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
+}
+
+type applicationHandlerRoundTripper struct{ handler http.Handler }
+
+func (r applicationHandlerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	response := httptest.NewRecorder()
+	r.handler.ServeHTTP(response, request)
+	return response.Result(), nil
+}
+
+func mapsEqual(left, right map[string]any) bool {
+	return len(left) == len(right) && left["integration"] == right["integration"] && left["kind"] == right["kind"] && left["external_id"] == right["external_id"]
+}
+
+type applicationTestSecuritySource struct{}
+
+func (applicationTestSecuritySource) BearerAuth(context.Context, v1.OperationName) (v1.BearerAuth, error) {
+	return v1.BearerAuth{}, nil
 }
 
 type noOpMemoryCandidates struct{}
