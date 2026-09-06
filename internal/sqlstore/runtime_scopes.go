@@ -184,6 +184,18 @@ func (s *RuntimeScopeStore) SetBinding(ctx context.Context, key scope.BindingKey
 	return result, err
 }
 
+func (s *RuntimeScopeStore) ClearBinding(ctx context.Context, key scope.BindingKey) (cleared bool, err error) {
+	err = s.database.Transaction(ctx, func(tx DBTX) error {
+		if lockErr := s.repository.LockHierarchy(ctx, tx); lockErr != nil {
+			return lockErr
+		}
+		var clearErr error
+		cleared, clearErr = s.repository.ClearBinding(ctx, tx, key)
+		return clearErr
+	})
+	return cleared, err
+}
+
 func requiredScopeError(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return &scope.NotFoundError{}
