@@ -18,8 +18,10 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"strings"
 	"unicode/utf8"
@@ -56,6 +58,12 @@ type SourceRepository struct {
 func (r *SourceRepository) Ref(value source.Value) (source.Ref, error) {
 	if value == nil {
 		return source.Ref{}, &source.InvalidEntryError{}
+	}
+	if observation, ok := value.(source.SourceObservation); ok {
+		if err := observation.Validate(); err != nil {
+			return source.Ref{}, err
+		}
+		return observation.Ref(), nil
 	}
 	codec, ok := r.bySource[reflect.TypeOf(value)]
 	if !ok {
@@ -95,17 +103,9 @@ func (r *SourceRepository) Add(
 	if err := requireScope(scopeID); err != nil {
 		return StoredSource{}, err
 	}
-	codec, ok := r.bySource[reflect.TypeOf(value)]
-	if !ok {
-		return StoredSource{}, &RepositoryNotFoundError{Kind: "source-adapter", Identity: reflect.TypeOf(value)}
-	}
-	ref, err := r.Ref(value)
+	ref, payload, observation, err := r.encode(value)
 	if err != nil {
 		return StoredSource{}, err
-	}
-	payload, err := codec.encode(value)
-	if err != nil {
-		return StoredSource{}, &InvalidStoredPayloadError{Kind: "source", Name: codec.name, Issue: "value is not JSON serializable"}
 	}
 	if lockErr := r.lockJournalHead(ctx, db, scopeID); lockErr != nil {
 		return StoredSource{}, lockErr
@@ -115,7 +115,14 @@ func (r *SourceRepository) Add(
 		return StoredSource{}, err
 	}
 	if found {
-		if !bytes.Equal(existing.payload, payload) {
+		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, observation)
+		if equalErr != nil {
+			return StoredSource{}, invalidStoredSourceObservation()
+		}
+		if !equal {
+			if observation {
+				return StoredSource{}, sourceObservationConflict()
+			}
 			return StoredSource{}, &StoredPayloadConflictError{Kind: "source", Identity: sourceIdentity(scopeID, ref)}
 		}
 		return r.decode(existing)
@@ -136,12 +143,45 @@ func (r *SourceRepository) Add(
 		if !found {
 			return StoredSource{}, err
 		}
-		if !bytes.Equal(existing.payload, payload) {
+		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, observation)
+		if equalErr != nil {
+			return StoredSource{}, invalidStoredSourceObservation()
+		}
+		if !equal {
+			if observation {
+				return StoredSource{}, sourceObservationConflict()
+			}
 			return StoredSource{}, &StoredPayloadConflictError{Kind: "source", Identity: sourceIdentity(scopeID, ref)}
 		}
 		return r.decode(existing)
 	}
 	return StoredSource{Ref: ref, Value: value, JournalPosition: position}, nil
+}
+
+func (r *SourceRepository) encode(value source.Value) (source.Ref, []byte, bool, error) {
+	if observation, ok := value.(source.SourceObservation); ok {
+		if err := observation.Validate(); err != nil {
+			return source.Ref{}, nil, true, err
+		}
+		payload, err := encodeSourceObservation(observation)
+		if err != nil {
+			return source.Ref{}, nil, true, err
+		}
+		return observation.Ref(), payload, true, nil
+	}
+	codec, ok := r.bySource[reflect.TypeOf(value)]
+	if !ok {
+		return source.Ref{}, nil, false, &RepositoryNotFoundError{Kind: "source-adapter", Identity: reflect.TypeOf(value)}
+	}
+	ref, err := r.Ref(value)
+	if err != nil {
+		return source.Ref{}, nil, false, err
+	}
+	payload, err := codec.encode(value)
+	if err != nil {
+		return source.Ref{}, nil, false, &InvalidStoredPayloadError{Kind: "source", Name: codec.name, Issue: "value is not JSON serializable"}
+	}
+	return ref, payload, false, nil
 }
 
 func (r *SourceRepository) Get(
@@ -279,11 +319,34 @@ func scanSource(value scanner) (storedSourceRow, error) {
 }
 
 func (r *SourceRepository) decode(row storedSourceRow) (StoredSource, error) {
+	envelope, recognized, envelopeErr := parseSourceEnvelope(row.payload)
+	if recognized {
+		if envelopeErr != nil {
+			return StoredSource{}, invalidStoredSourceObservation()
+		}
+		switch envelope.representation {
+		case sourceObservationRepresentation:
+			indexed, err := source.NewRef(row.typeName, row.sourceID)
+			if err != nil {
+				return StoredSource{}, err
+			}
+			if indexed != envelope.observation.Ref() {
+				return StoredSource{}, sourceObservationIdentityMismatch()
+			}
+			return StoredSource{Ref: indexed, Value: envelope.observation, JournalPosition: row.position}, nil
+		case sourceNativeRepresentation:
+			return r.decodeNative(row, envelope.value)
+		}
+	}
+	return r.decodeNative(row, row.payload)
+}
+
+func (r *SourceRepository) decodeNative(row storedSourceRow, payload []byte) (StoredSource, error) {
 	codec, ok := r.byName[row.typeName]
 	if !ok {
 		return StoredSource{}, &RepositoryNotFoundError{Kind: "source-adapter", Identity: row.typeName}
 	}
-	value, err := codec.decode(row.payload)
+	value, err := codec.decode(payload)
 	if err != nil {
 		return StoredSource{}, &InvalidStoredPayloadError{Kind: "source", Name: row.typeName, Issue: "payload does not match the model"}
 	}
@@ -299,6 +362,233 @@ func (r *SourceRepository) decode(row storedSourceRow) (StoredSource, error) {
 		return StoredSource{}, &IdentityMismatchError{Kind: "source", Indexed: indexed, Decoded: decoded}
 	}
 	return StoredSource{Ref: indexed, Value: value, JournalPosition: row.position}, nil
+}
+
+func sameStoredSourcePayload(stored, expected []byte, observation bool) (bool, error) {
+	if !observation {
+		return bytes.Equal(stored, expected), nil
+	}
+	envelope, recognized, err := parseSourceEnvelope(stored)
+	if err != nil {
+		return false, err
+	}
+	if !recognized || envelope.representation != sourceObservationRepresentation {
+		return false, nil
+	}
+	return equalJSONValues(jsontext.Value(stored), jsontext.Value(expected))
+}
+
+func equalJSONValues(left, right jsontext.Value) (bool, error) {
+	if !left.IsValid() || !right.IsValid() {
+		return false, fmt.Errorf("invalid JSON value")
+	}
+	leftKind, rightKind := left.Kind(), right.Kind()
+	if leftKind != rightKind {
+		return false, nil
+	}
+	switch leftKind {
+	case '{':
+		return equalJSONObjects(left, right)
+	case '[':
+		return equalJSONArrays(left, right)
+	case '"':
+		return equalJSONStrings(left, right)
+	case '0':
+		return equalJSONNumbers(left, right)
+	default:
+		return bytes.Equal(bytes.TrimSpace(left), bytes.TrimSpace(right)), nil
+	}
+}
+
+func equalJSONObjects(left, right jsontext.Value) (bool, error) {
+	leftMembers, err := jsonObjectMembers(left)
+	if err != nil {
+		return false, err
+	}
+	rightMembers, err := jsonObjectMembers(right)
+	if err != nil {
+		return false, err
+	}
+	if len(leftMembers) != len(rightMembers) {
+		return false, nil
+	}
+	for name, leftValue := range leftMembers {
+		rightValue, ok := rightMembers[name]
+		if !ok {
+			return false, nil
+		}
+		equal, err := equalJSONValues(leftValue, rightValue)
+		if err != nil || !equal {
+			return equal, err
+		}
+	}
+	return true, nil
+}
+
+func jsonObjectMembers(value jsontext.Value) (map[string]jsontext.Value, error) {
+	decoder := jsontext.NewDecoder(bytes.NewReader(value))
+	start, err := decoder.ReadToken()
+	if err != nil || start.Kind() != '{' {
+		return nil, fmt.Errorf("invalid JSON object")
+	}
+	members := make(map[string]jsontext.Value)
+	for decoder.PeekKind() != '}' {
+		name, err := decoder.ReadToken()
+		if err != nil || name.Kind() != '"' {
+			return nil, fmt.Errorf("invalid JSON object member")
+		}
+		memberName := name.Clone().String()
+		member, err := decoder.ReadValue()
+		if err != nil {
+			return nil, err
+		}
+		members[memberName] = member.Clone()
+	}
+	if _, err := decoder.ReadToken(); err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+func equalJSONArrays(left, right jsontext.Value) (bool, error) {
+	leftValues, err := jsonArrayValues(left)
+	if err != nil {
+		return false, err
+	}
+	rightValues, err := jsonArrayValues(right)
+	if err != nil {
+		return false, err
+	}
+	if len(leftValues) != len(rightValues) {
+		return false, nil
+	}
+	for index := range leftValues {
+		equal, err := equalJSONValues(leftValues[index], rightValues[index])
+		if err != nil || !equal {
+			return equal, err
+		}
+	}
+	return true, nil
+}
+
+func jsonArrayValues(value jsontext.Value) ([]jsontext.Value, error) {
+	decoder := jsontext.NewDecoder(bytes.NewReader(value))
+	start, err := decoder.ReadToken()
+	if err != nil || start.Kind() != '[' {
+		return nil, fmt.Errorf("invalid JSON array")
+	}
+	values := make([]jsontext.Value, 0)
+	for decoder.PeekKind() != ']' {
+		entry, err := decoder.ReadValue()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, entry.Clone())
+	}
+	if _, err := decoder.ReadToken(); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func equalJSONStrings(left, right jsontext.Value) (bool, error) {
+	var leftString, rightString string
+	if err := unmarshalJSON(left, &leftString); err != nil {
+		return false, err
+	}
+	if err := unmarshalJSON(right, &rightString); err != nil {
+		return false, err
+	}
+	return leftString == rightString, nil
+}
+
+func equalJSONNumbers(left, right jsontext.Value) (bool, error) {
+	leftNumber, err := parseJSONNumber(left)
+	if err != nil {
+		return false, err
+	}
+	rightNumber, err := parseJSONNumber(right)
+	if err != nil {
+		return false, err
+	}
+	if leftNumber.zero || rightNumber.zero {
+		return leftNumber.zero == rightNumber.zero, nil
+	}
+	return leftNumber.negative == rightNumber.negative &&
+		leftNumber.significand == rightNumber.significand &&
+		leftNumber.exponent.Cmp(rightNumber.exponent) == 0, nil
+}
+
+type jsonNumber struct {
+	negative    bool
+	zero        bool
+	significand string
+	exponent    *big.Int
+}
+
+func parseJSONNumber(value jsontext.Value) (jsonNumber, error) {
+	raw := bytes.TrimSpace(value)
+	negative := false
+	if raw[0] == '-' {
+		negative = true
+		raw = raw[1:]
+	}
+	exponentIndex := bytes.IndexAny(raw, "eE")
+	mantissa, exponentText := raw, []byte(nil)
+	if exponentIndex >= 0 {
+		mantissa, exponentText = raw[:exponentIndex], raw[exponentIndex+1:]
+	}
+	fractionDigits := 0
+	if decimalIndex := bytes.IndexByte(mantissa, '.'); decimalIndex >= 0 {
+		fractionDigits = len(mantissa) - decimalIndex - 1
+		mantissa = append(bytes.Clone(mantissa[:decimalIndex]), mantissa[decimalIndex+1:]...)
+	}
+	mantissa = bytes.TrimLeft(mantissa, "0")
+	if len(mantissa) == 0 {
+		return jsonNumber{zero: true}, nil
+	}
+	trailingZeros := len(mantissa) - len(bytes.TrimRight(mantissa, "0"))
+	mantissa = mantissa[:len(mantissa)-trailingZeros]
+	exponent := new(big.Int).Neg(big.NewInt(int64(fractionDigits)))
+	if len(exponentText) > 0 {
+		if exponentText[0] == '+' {
+			exponentText = exponentText[1:]
+		}
+		parsedExponent, ok := new(big.Int).SetString(string(exponentText), 10)
+		if !ok {
+			return jsonNumber{}, fmt.Errorf("invalid JSON number")
+		}
+		exponent.Add(exponent, parsedExponent)
+	}
+	exponent.Add(exponent, big.NewInt(int64(trailingZeros)))
+	return jsonNumber{
+		negative:    negative,
+		significand: string(mantissa),
+		exponent:    exponent,
+	}, nil
+}
+
+func invalidStoredSourceObservation() error {
+	return &InvalidStoredPayloadError{
+		Kind:  sourceObservationPayloadKind,
+		Name:  redactedSourceObservationIdentity,
+		Issue: "payload does not match the observation envelope",
+	}
+}
+
+func sourceObservationIdentityMismatch() error {
+	return &IdentityMismatchError{
+		Kind:    sourceObservationPayloadKind,
+		Indexed: redactedSourceObservationIdentity,
+		Decoded: redactedSourceObservationIdentity,
+	}
+}
+
+func sourceObservationConflict() error {
+	return &StoredPayloadConflictError{
+		Kind:     sourceObservationPayloadKind,
+		Identity: redactedSourceObservationIdentity,
+	}
 }
 
 func (r *SourceRepository) lockJournalHead(ctx context.Context, db DBTX, scopeID string) error {
