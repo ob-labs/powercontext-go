@@ -19,6 +19,8 @@ package e2e_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -34,8 +36,6 @@ import (
 
 	"github.com/ob-labs/powercontext-go/server"
 )
-
-const workBuddyServiceChainScope = "project:workbuddy-service-chain"
 
 func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 	checkoutRoot, err := filepath.Abs(filepath.Join("..", ".."))
@@ -55,7 +55,7 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("WORKBUDDY_HOME", filepath.Join(home, "workbuddy"))
 			t.Setenv(server.PowerContextHomeEnv, filepath.Join(home, "powercontext"))
-			t.Setenv("POWERCONTEXT_WORKBUDDY_SCOPE_ID", workBuddyServiceChainScope)
+			t.Setenv("POWERCONTEXT_WORKBUDDY_SCOPE_ID", "")
 			t.Setenv("POWERCONTEXT_WORKBUDDY_FLUSH_ON_CAPTURE", "true")
 			t.Setenv("WORKBUDDY_SERVICE_TOKEN", "")
 
@@ -95,6 +95,7 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			service := httptest.NewServer(handler)
 			t.Cleanup(service.Close)
 			assertWorkBuddyServiceReady(t, service)
+			scope := seedWorkBuddyWorkspaceBinding(t, service, config.Auth.Token, releaseRoot)
 
 			setupWorkBuddy(t, service.URL, binary, releaseRoot)
 			assertWorkBuddyServerConfiguration(t, service.URL)
@@ -123,7 +124,7 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			result, callErr := session.CallTool(t.Context(), &mcp.CallToolParams{
 				Name: "search_memory",
 				Arguments: map[string]any{
-					"scope_id": workBuddyServiceChainScope,
+					"scope_id": scope,
 					"query":    "WorkBuddy service chain",
 				},
 			})
@@ -147,6 +148,45 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func seedWorkBuddyWorkspaceBinding(t *testing.T, service *httptest.Server, token, workspace string) string {
+	t.Helper()
+	authorization := ""
+	if token != "" {
+		authorization = "Bearer " + token
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "workbuddy-scope-seed", Version: "test"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint:             service.URL + "/mcp/",
+		HTTPClient:           &http.Client{Transport: workBuddyAuthorizationTransport{base: service.Client().Transport, authorization: authorization}},
+		DisableStandaloneSSE: true,
+		MaxRetries:           -1,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	resolved, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "scope_binding_resolve", Arguments: map[string]any{}})
+	if err != nil || resolved.IsError {
+		t.Fatalf("resolve default Scope binding = %#v, %v", resolved, err)
+	}
+	content, ok := resolved.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("resolved Scope structured content = %T", resolved.StructuredContent)
+	}
+	scope, ok := content["scope_id"].(string)
+	if !ok || scope == "" {
+		t.Fatalf("resolved Scope ID = %#v", content["scope_id"])
+	}
+	sum := sha256.Sum256([]byte(workspace))
+	set, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "scope_binding_set", Arguments: map[string]any{
+		"integration": "workbuddy", "kind": "workspace", "external_id": hex.EncodeToString(sum[:]), "scope_id": scope,
+	}})
+	if err != nil || set.IsError {
+		t.Fatalf("set WorkBuddy workspace binding = %#v, %v", set, err)
+	}
+	return scope
 }
 
 func assertWorkBuddyServiceReady(t *testing.T, service *httptest.Server) {

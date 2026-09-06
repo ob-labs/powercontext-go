@@ -25,13 +25,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/go-faster/jx"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
@@ -42,7 +42,7 @@ import (
 const (
 	workBuddyHookMaximumInputBytes  = 64 * 1024
 	workBuddyHookMaximumOutputBytes = 64 * 1024
-	workBuddyHookMaximumScopeBytes  = 256
+	workBuddyHookCloseTimeout       = 50 * time.Millisecond
 )
 
 var (
@@ -52,10 +52,7 @@ var (
 
 const (
 	workBuddyHookScopeEnvironment = "POWERCONTEXT_WORKBUDDY_SCOPE_ID"
-	workBuddyHookWorkspaceSchema  = "powercontext.codex-workspace.v1"
 )
-
-var workBuddyHookSCPRemote = regexp.MustCompile(`^(?:[^@/\s]+@)?([^:/\s]+):(.+)$`)
 
 type workBuddyHookPayload struct {
 	HookEventName string `json:"hook_event_name"`
@@ -77,8 +74,26 @@ type workBuddyHookResponse struct {
 type workBuddyHookRuntime struct {
 	configuration workBuddyConfiguration
 	getenv        func(string) string
+	lookupEnv     func(string) (string, bool)
 	httpClient    *http.Client
 	now           func() time.Time
+	scopeResolver workBuddyHookScopeResolver
+}
+
+type workBuddyHookScopeBindingKey struct {
+	Integration string `json:"integration"`
+	Kind        string `json:"kind"`
+	ExternalID  string `json:"external_id"`
+}
+
+type workBuddyHookScopeResolver interface {
+	Resolve(context.Context, *string, []workBuddyHookScopeBindingKey) (string, bool)
+}
+
+type workBuddyHookScopeResolverFunc func(context.Context, *string, []workBuddyHookScopeBindingKey) (string, bool)
+
+func (resolve workBuddyHookScopeResolverFunc) Resolve(ctx context.Context, explicit *string, keys []workBuddyHookScopeBindingKey) (string, bool) {
+	return resolve(ctx, explicit, keys)
 }
 
 func newHookCommand(state *commandState) *cobra.Command {
@@ -141,6 +156,10 @@ func runWorkBuddyHook(
 	if getenv == nil {
 		getenv = os.Getenv
 	}
+	lookupEnv := runtime.lookupEnv
+	if lookupEnv == nil {
+		lookupEnv = os.LookupEnv
+	}
 	now := runtime.now
 	if now == nil {
 		now = time.Now
@@ -149,11 +168,18 @@ func runWorkBuddyHook(
 	operationContext, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
-	scope, ok := resolveWorkBuddyHookScope(operationContext, payload.CWD, runtime.configuration.ScopeMode, getenv)
+	client, ok := newWorkBuddyHookClient(operationContext, runtime.configuration, getenv, runtime.httpClient, now)
 	if !ok {
 		return writeWorkBuddyHookResponse(output, "")
 	}
-	client, ok := newWorkBuddyHookClient(operationContext, runtime.configuration, getenv, runtime.httpClient, now)
+	resolver := runtime.scopeResolver
+	if resolver == nil {
+		resolver, ok = newWorkBuddyHookMCPScopeResolver(operationContext, runtime.configuration, getenv, runtime.httpClient, now)
+		if !ok {
+			return writeWorkBuddyHookResponse(output, "")
+		}
+	}
+	scope, ok := resolver.Resolve(operationContext, workBuddyHookExplicitScope(lookupEnv), workBuddyHookScopeBindingKeys(operationContext, payload))
 	if !ok {
 		return writeWorkBuddyHookResponse(output, "")
 	}
@@ -179,20 +205,104 @@ func recallWorkBuddyContext(ctx context.Context, client *pcclient.Client, payloa
 }
 
 func newWorkBuddyHookClient(ctx context.Context, configuration workBuddyConfiguration, getenv func(string) string, supplied *http.Client, now func() time.Time) (*pcclient.Client, bool) {
-	deadline, ok := ctx.Deadline()
+	timeout, ok := workBuddyHookRequestTimeout(ctx, configuration, now)
 	if !ok {
 		return nil, false
 	}
-	remaining := deadline.Sub(now())
-	if remaining <= 0 {
-		return nil, false
-	}
-	timeout := time.Duration(configuration.RequestTimeoutSeconds * float64(time.Second))
-	if remaining < timeout {
-		timeout = remaining
-	}
 	result, err := pcclient.New(configuration.ServerURL, pcclient.Options{BearerToken: workBuddyHookBearerToken(getenv(configuration.AuthorizationEnvironment)), Timeout: timeout, HTTPClient: workBuddyHookHTTPClient(supplied, workBuddyHookResponseLimit(configuration))})
 	return result, err == nil
+}
+
+func workBuddyHookRequestTimeout(ctx context.Context, configuration workBuddyConfiguration, now func() time.Time) (time.Duration, bool) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return 0, false
+	}
+	remaining := deadline.Sub(now())
+	if remaining <= 0 {
+		return 0, false
+	}
+	timeout := time.Duration(configuration.RequestTimeoutSeconds * float64(time.Second))
+	return min(timeout, remaining), true
+}
+
+type workBuddyHookMCPScopeResolver struct {
+	endpoint   string
+	client     *mcp.Client
+	httpClient *http.Client
+	now        func() time.Time
+}
+
+func newWorkBuddyHookMCPScopeResolver(ctx context.Context, configuration workBuddyConfiguration, getenv func(string) string, supplied *http.Client, now func() time.Time) (workBuddyHookScopeResolver, bool) {
+	timeout, ok := workBuddyHookRequestTimeout(ctx, configuration, now)
+	if !ok {
+		return nil, false
+	}
+	serverURL, err := normalizeWorkBuddyServerURL(configuration.ServerURL)
+	if err != nil {
+		return nil, false
+	}
+	httpClient := workBuddyHookHTTPClient(supplied, workBuddyHookMaximumOutputBytes)
+	httpClient.Timeout = timeout
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if token := workBuddyHookBearerToken(getenv(configuration.AuthorizationEnvironment)); token != "" {
+		httpClient.Transport = workBuddyHookAuthorizationTransport{next: httpClient.Transport, authorization: "Bearer " + token}
+	}
+	return workBuddyHookMCPScopeResolver{
+		endpoint: serverURL + "/mcp/", client: mcp.NewClient(&mcp.Implementation{Name: "powercontext-workbuddy-hook", Version: "1"}, nil),
+		httpClient: httpClient, now: now,
+	}, true
+}
+
+func (resolver workBuddyHookMCPScopeResolver) Resolve(ctx context.Context, explicit *string, keys []workBuddyHookScopeBindingKey) (string, bool) {
+	session, err := resolver.client.Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint: resolver.endpoint, HTTPClient: resolver.httpClient, DisableStandaloneSSE: true, MaxRetries: -1,
+	}, nil)
+	if err != nil {
+		return "", false
+	}
+	defer resolver.close(ctx, session)
+	arguments := map[string]any{"binding_keys": keys}
+	if explicit != nil {
+		arguments["explicit_scope_id"] = *explicit
+	}
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "scope_binding_resolve", Arguments: arguments})
+	if err != nil || result.IsError {
+		return "", false
+	}
+	content, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	scope, ok := content["scope_id"].(string)
+	if !ok || !validWorkBuddyHookScope(scope) {
+		return "", false
+	}
+	return scope, true
+}
+
+func (resolver workBuddyHookMCPScopeResolver) close(ctx context.Context, session *mcp.ClientSession) {
+	timeout := workBuddyHookCloseTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := deadline.Sub(resolver.now())
+		if remaining > 0 {
+			timeout = min(timeout, remaining)
+		}
+	}
+	resolver.httpClient.Timeout = timeout
+	_ = session.Close()
+}
+
+type workBuddyHookAuthorizationTransport struct {
+	next          http.RoundTripper
+	authorization string
+}
+
+func (transport workBuddyHookAuthorizationTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	clone := request.Clone(request.Context())
+	clone.Header = request.Header.Clone()
+	clone.Header.Set("Authorization", transport.authorization)
+	return transport.next.RoundTrip(clone)
 }
 
 func workBuddyHookBearerToken(authorization string) string {
@@ -291,127 +401,50 @@ func (body *workBuddyHookResponseBody) Close() error {
 	return body.body.Close()
 }
 
-func resolveWorkBuddyHookScope(ctx context.Context, cwd, mode string, getenv func(string) string) (string, bool) {
-	if explicit := strings.TrimSpace(getenv(workBuddyHookScopeEnvironment)); explicit != "" {
-		return boundedWorkBuddyScope("", explicit), true
+func workBuddyHookExplicitScope(lookupEnv func(string) (string, bool)) *string {
+	value, present := lookupEnv(workBuddyHookScopeEnvironment)
+	if !present {
+		return nil
 	}
-	if mode == "agent" {
-		return "workbuddy:agent", true
-	}
-	if mode != "project" {
-		return "", false
-	}
-	if gitDirectory := workBuddyHookGitValue(ctx, cwd, "rev-parse", "--absolute-git-dir"); gitDirectory != "" {
-		if scope, ok := readWorkBuddyHookBoundScope(filepath.Join(gitDirectory, "powercontext", "codex-workspace.json")); ok {
-			return scope, true
-		}
-	}
-	projectRoot := workBuddyHookProjectRoot(cwd)
-	if root := workBuddyHookGitValue(ctx, cwd, "rev-parse", "--show-toplevel"); root != "" {
-		projectRoot = workBuddyHookProjectRoot(root)
-	}
-	if remote := workBuddyHookGitValue(ctx, projectRoot, "config", "--get", "remote.origin.url"); remote != "" {
-		if normalized := normalizeWorkBuddyHookGitRemote(remote); normalized != "" {
-			return boundedWorkBuddyScope("git", normalized), true
-		}
-	}
-	sum := sha256.Sum256([]byte(projectRoot))
-	return "local:" + fmtHex(sum[:]), true
+	return &value
 }
 
-func boundedWorkBuddyScope(prefix, value string) string {
-	candidate := value
-	if prefix != "" {
-		candidate = prefix + ":" + value
+func workBuddyHookScopeBindingKeys(ctx context.Context, payload workBuddyHookPayload) []workBuddyHookScopeBindingKey {
+	keys := make([]workBuddyHookScopeBindingKey, 0, 2)
+	if session := strings.TrimSpace(payload.SessionID); session != "" {
+		keys = append(keys, workBuddyHookScopeBindingKey{Integration: "workbuddy", Kind: "session", ExternalID: session})
 	}
-	if len(candidate) <= workBuddyHookMaximumScopeBytes {
-		return candidate
-	}
-	sum := sha256.Sum256([]byte(value))
-	if prefix == "" {
-		return "sha256:" + fmtHex(sum[:])
-	}
-	return prefix + ":sha256:" + fmtHex(sum[:])
+	keys = append(keys, workBuddyHookScopeBindingKey{Integration: "workbuddy", Kind: "workspace", ExternalID: workBuddyHookWorkspaceHash(workBuddyHookGitRoot(ctx, payload.CWD))})
+	return keys
 }
 
-func readWorkBuddyHookBoundScope(path string) (string, bool) {
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
-	}
-	var state struct {
-		Schema  string `json:"schema"`
-		ScopeID string `json:"scope_id"`
-	}
-	if err := json.Unmarshal(payload, &state); err != nil || state.Schema != workBuddyHookWorkspaceSchema || strings.TrimSpace(state.ScopeID) != state.ScopeID || state.ScopeID == "" || len(state.ScopeID) > workBuddyHookMaximumScopeBytes {
-		return "", false
-	}
-	return state.ScopeID, true
-}
-
-func workBuddyHookGitValue(ctx context.Context, cwd string, arguments ...string) string {
+func workBuddyHookGitRoot(ctx context.Context, cwd string) string {
 	executable, err := exec.LookPath("git")
 	if err != nil {
-		return ""
+		return cwd
 	}
 	commandContext, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	command := exec.CommandContext(commandContext, executable, arguments...)
+	command := exec.CommandContext(commandContext, executable, "rev-parse", "--show-toplevel")
 	command.Dir = cwd
 	output, err := command.Output()
 	if err != nil {
-		return ""
+		return cwd
 	}
-	return strings.TrimSpace(string(output))
+	root := strings.TrimSuffix(strings.TrimSuffix(string(output), "\n"), "\r")
+	if root == "" {
+		return cwd
+	}
+	return root
 }
 
-func workBuddyHookProjectRoot(cwd string) string {
-	root, err := filepath.Abs(cwd)
-	if err != nil {
-		return filepath.Clean(cwd)
-	}
-	if resolved, err := filepath.EvalSymlinks(root); err == nil {
-		return resolved
-	}
-	return filepath.Clean(root)
+func workBuddyHookWorkspaceHash(workspace string) string {
+	sum := sha256.Sum256([]byte(workspace))
+	return fmtHex(sum[:])
 }
 
-func normalizeWorkBuddyHookGitRemote(remote string) string {
-	value := strings.TrimSpace(remote)
-	if value == "" {
-		return ""
-	}
-	if matched := workBuddyHookSCPRemote.FindStringSubmatch(value); matched != nil && !strings.Contains(value, "://") {
-		if path := normalizeWorkBuddyHookGitPath(matched[2]); path != "" {
-			return strings.ToLower(matched[1]) + "/" + path
-		}
-		return ""
-	}
-	parsed, err := url.Parse(value)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "ssh" && parsed.Scheme != "git") || parsed.Hostname() == "" {
-		return ""
-	}
-	path := normalizeWorkBuddyHookGitPath(parsed.Path)
-	if path == "" {
-		return ""
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if port := parsed.Port(); port != "" {
-		host += ":" + port
-	}
-	return host + "/" + path
-}
-
-func normalizeWorkBuddyHookGitPath(path string) string {
-	parts := strings.Split(strings.ReplaceAll(path, `\`, "/"), "/")
-	normalized := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part != "" {
-			normalized = append(normalized, part)
-		}
-	}
-	result := strings.Join(normalized, "/")
-	return strings.TrimSuffix(result, ".git")
+func validWorkBuddyHookScope(value string) bool {
+	return value != "" && value == strings.TrimSpace(value) && utf8.ValidString(value) && utf8.RuneCountInString(value) <= 256
 }
 
 func fmtHex(value []byte) string {
@@ -443,7 +476,7 @@ func captureWorkBuddyPrompt(ctx context.Context, client *pcclient.Client, payloa
 		promptID = strings.TrimSpace(payload.RequestID)
 	}
 	sum := sha256.Sum256([]byte(scope + "\x00" + session + "\x00" + promptID + "\x00" + prompt))
-	metadata, ok := workBuddyHookCaptureMetadata(payload.CWD, session, promptID)
+	metadata, ok := workBuddyHookCaptureMetadata(session, promptID)
 	if !ok {
 		return 0
 	}
@@ -458,11 +491,10 @@ func captureWorkBuddyPrompt(ctx context.Context, client *pcclient.Client, payloa
 	return value.Response.Position
 }
 
-func workBuddyHookCaptureMetadata(cwd, sessionID, promptID string) (v1.CaptureContentSourceRequestMetadata, bool) {
+func workBuddyHookCaptureMetadata(sessionID, promptID string) (v1.CaptureContentSourceRequestMetadata, bool) {
 	values := map[string]string{
 		"origin": "workbuddy",
 		"event":  "user_prompt_submit",
-		"cwd":    cwd,
 	}
 	if sessionID != "" {
 		values["session_id"] = sessionID
