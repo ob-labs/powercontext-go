@@ -209,8 +209,8 @@ func TestFrozenBaseToolNamesAreUnique(t *testing.T) {
 		}
 		seen[name] = struct{}{}
 	}
-	if len(seen) != 20 {
-		t.Fatalf("base MCP tools = %d, want 20", len(seen))
+	if len(seen) != 23 {
+		t.Fatalf("base MCP tools = %d, want 23", len(seen))
 	}
 }
 

@@ -19,11 +19,15 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
 )
@@ -137,6 +141,87 @@ func TestOpenApplicationBootstrapFailureRollsBackAndAllowsRetry(t *testing.T) {
 	}
 }
 
+func TestOpenApplicationMCPPersistsScopeBindingAndRequiresAuthentication(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "powercontext.db")
+	config := scopeApplicationTestConfig(t, databasePath)
+	config.MCP.Enabled = true
+	config.Auth.Enabled = true
+	config.Auth.Token = "scope-mcp-secret"
+
+	first, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstHandler, err := first.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthorized := httptest.NewRecorder()
+	firstHandler.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodPost, "/mcp/", nil))
+	if unauthorized.Code != http.StatusUnauthorized || unauthorized.Header().Get("WWW-Authenticate") != "Bearer" {
+		t.Fatalf("unauthorized MCP = %d %#v", unauthorized.Code, unauthorized.Header())
+	}
+	defaultScope, err := first.scopes.Resolve(t.Context(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstClient := connectScopeMCP(t, firstHandler, config.Auth.Token)
+	set, err := firstClient.CallTool(t.Context(), &mcp.CallToolParams{Name: "scope_binding_set", Arguments: map[string]any{
+		"integration": "codex", "kind": "project", "external_id": "repository", "scope_id": defaultScope.ID(),
+	}})
+	if err != nil || set.IsError {
+		t.Fatalf("set binding = %#v, %v", set, err)
+	}
+	set, err = firstClient.CallTool(t.Context(), &mcp.CallToolParams{Name: "scope_binding_set", Arguments: map[string]any{
+		"integration": "workbuddy", "kind": "session", "external_id": "session-1", "scope_id": defaultScope.ID(),
+	}})
+	if err != nil || set.IsError {
+		t.Fatalf("set WorkBuddy binding = %#v, %v", set, err)
+	}
+	if closeErr := first.Close(t.Context()); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	second, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { closeScopeTestApplication(t, second) })
+	secondHandler, err := second.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondClient := connectScopeMCP(t, secondHandler, config.Auth.Token)
+	for _, key := range []map[string]any{
+		{"integration": "codex", "kind": "project", "external_id": "repository"},
+		{"integration": "workbuddy", "kind": "session", "external_id": "session-1"},
+	} {
+		resolved, resolveErr := secondClient.CallTool(t.Context(), &mcp.CallToolParams{
+			Name: "scope_binding_resolve", Arguments: map[string]any{"binding_keys": []any{key}},
+		})
+		if resolveErr != nil || resolved.IsError {
+			t.Fatalf("resolve binding after restart = %#v, %v", resolved, resolveErr)
+		}
+		content := resolved.StructuredContent.(map[string]any)
+		if content["scope_id"] != defaultScope.ID() {
+			t.Fatalf("resolved scope_id = %#v, want %q", content["scope_id"], defaultScope.ID())
+		}
+	}
+	thirdParty, err := secondClient.CallTool(t.Context(), &mcp.CallToolParams{Name: "scope_binding_set", Arguments: map[string]any{
+		"integration": "claude-code", "kind": "session", "external_id": "session-1", "scope_id": defaultScope.ID(),
+	}})
+	if err != nil || !thirdParty.IsError {
+		t.Fatalf("non-target binding result = %#v, %v", thirdParty, err)
+	}
+	workBuddyKey := map[string]any{"integration": "workbuddy", "kind": "session", "external_id": "session-1"}
+	for _, want := range []bool{true, false} {
+		cleared, clearErr := secondClient.CallTool(t.Context(), &mcp.CallToolParams{Name: "scope_binding_clear", Arguments: workBuddyKey})
+		if clearErr != nil || cleared.IsError || cleared.StructuredContent.(map[string]any)["cleared"] != want {
+			t.Fatalf("clear WorkBuddy binding = %#v, %v, want %t", cleared, clearErr, want)
+		}
+	}
+}
+
 func scopeApplicationTestConfig(t *testing.T, databasePath string) ProcessConfig {
 	t.Helper()
 	config, err := DefaultConfig()
@@ -166,4 +251,24 @@ func closeScopeTestApplication(t *testing.T, application *Application) {
 	if closeErr := application.Close(ctx); closeErr != nil {
 		t.Error(closeErr)
 	}
+}
+
+func connectScopeMCP(t *testing.T, handler http.Handler, token string) *mcp.ClientSession {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "scope-binding-test", Version: "1"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint: "http://powercontext.test/mcp/",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			request.Header.Set("Authorization", "Bearer "+token)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			return response.Result(), nil
+		})},
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	return session
 }

@@ -66,6 +66,72 @@ func TestRuntimeScopeStoreOwnsScopeTransactions(t *testing.T) {
 	if err != nil || !bindingFound || binding.ScopeID() != created.ID() {
 		t.Fatalf("binding = %#v, %t, %v", binding, bindingFound, err)
 	}
+	cleared, err := store.ClearBinding(t.Context(), key)
+	if err != nil || !cleared {
+		t.Fatalf("clear binding = (%t, %v), want (true, nil)", cleared, err)
+	}
+	_, bindingFound, err = store.Binding(t.Context(), key)
+	if err != nil || bindingFound {
+		t.Fatalf("binding after clear = (found=%t, err=%v), want (false, nil)", bindingFound, err)
+	}
+	cleared, err = store.ClearBinding(t.Context(), key)
+	if err != nil || cleared {
+		t.Fatalf("repeated clear binding = (%t, %v), want (false, nil)", cleared, err)
+	}
+	if _, setErr := store.SetBinding(t.Context(), key, created.ID()); setErr != nil {
+		t.Fatal(setErr)
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	cleared, err = store.ClearBinding(cancelled, key)
+	if err == nil || cleared {
+		t.Fatalf("cancelled clear binding = (%t, %v), want (false, context error)", cleared, err)
+	}
+	_, bindingFound, err = store.Binding(t.Context(), key)
+	if err != nil || !bindingFound {
+		t.Fatalf("cancelled clear removed binding: found=%t err=%v", bindingFound, err)
+	}
+}
+
+func TestRuntimeScopeStoreClearBindingRollsBackInjectedDeleteFailure(t *testing.T) {
+	database := openTestDatabase(t)
+	store, err := sqlstore.NewRuntimeScopeStore(database, sqlstore.ScopeRepository{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := scope.NewDraft("title", "summary", "", nil, nil, "clear-failure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.Create(t.Context(), "scope-clear-failure", draft, func([]scope.Descriptor) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := scope.NewBindingKey("workbuddy", "session", "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetBinding(t.Context(), key, created.ID()); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		_, triggerErr := tx.ExecContext(t.Context(), `CREATE TRIGGER reject_scope_binding_delete
+			BEFORE DELETE ON pc_scope_bindings
+			BEGIN
+				SELECT RAISE(ABORT, 'scope binding delete blocked');
+			END`)
+		return triggerErr
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cleared, clearErr := store.ClearBinding(t.Context(), key)
+	if clearErr == nil || cleared {
+		t.Fatalf("injected delete failure = (%t, %v), want (false, error)", cleared, clearErr)
+	}
+	_, found, lookupErr := store.Binding(t.Context(), key)
+	if lookupErr != nil || !found {
+		t.Fatalf("failed clear removed binding: found=%t err=%v", found, lookupErr)
+	}
 }
 
 func TestScopeApplicationSQLiteValidatesRelationshipsBeforeMetadataCAS(t *testing.T) {

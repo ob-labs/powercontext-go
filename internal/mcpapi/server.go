@@ -52,6 +52,7 @@ var errUnexpectedEndpointResponse = errors.New("unexpected endpoint response")
 type Options struct {
 	Version              string
 	HandoffReportEnabled bool
+	ScopeBindings        ScopeBindingOperations
 	ReceivingMiddleware  []mcp.Middleware
 	ApplicationObserver  ApplicationObserver
 	ApplicationLogger    *slog.Logger
@@ -118,6 +119,9 @@ func NewServer(handler v1.Handler, options Options) (*mcp.Server, error) {
 	}
 	if options.HandoffReportEnabled {
 		registerHandoffWorkstreamPicker(server, handler, options)
+	}
+	if options.ScopeBindings != nil {
+		registerScopeBindingTools(server, options.ScopeBindings, options)
 	}
 	return server, nil
 }
@@ -520,6 +524,20 @@ func annotations(name string) *mcp.ToolAnnotations {
 		// pending-head CAS before another write can occur.
 		return &mcp.ToolAnnotations{
 			DestructiveHint: new(true),
+			IdempotentHint:  true,
+			OpenWorldHint:   &closedWorld,
+		}
+	case scopeBindingResolveToolName:
+		value := &mcp.ToolAnnotations{OpenWorldHint: &closedWorld}
+		value.ReadOnlyHint = true
+		nondestructive := false
+		value.DestructiveHint = &nondestructive
+		value.IdempotentHint = true
+		return value
+	case scopeBindingSetToolName, scopeBindingClearToolName:
+		destructive := true
+		return &mcp.ToolAnnotations{
+			DestructiveHint: &destructive,
 			IdempotentHint:  true,
 			OpenWorldHint:   &closedWorld,
 		}

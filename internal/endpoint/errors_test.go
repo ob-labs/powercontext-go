@@ -27,6 +27,7 @@ import (
 	"github.com/ob-labs/powercontext-go/internal/handoffreport"
 	"github.com/ob-labs/powercontext-go/internal/review"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/scope"
 )
 
 func TestMapErrorFrozenTaxonomy(t *testing.T) {
@@ -45,6 +46,9 @@ func TestMapErrorFrozenTaxonomy(t *testing.T) {
 		details map[string]any
 	}{
 		{name: "runtime", err: &runtime.StateError{Code: "closed"}, status: 503, code: "runtime_not_ready"},
+		{name: "scope missing", err: &scope.NotFoundError{}, status: 404, code: "scope_not_found"},
+		{name: "binding missing", err: &scope.BindingNotFoundError{}, status: 404, code: "scope_binding_not_found"},
+		{name: "scope validation", err: &scope.ValidationError{}, status: 422, code: "invalid_request"},
 		{name: "candidate missing", err: &review.CandidateNotFoundError{}, status: 404, code: "candidate_not_found"},
 		{name: "candidate CAS", err: &review.CandidateConflictError{ExpectedVersion: 2, CurrentVersion: 4}, status: 409, code: "candidate_conflict", details: map[string]any{"expected_version": int64(2), "current_version": int64(4)}},
 		{name: "artifact CAS", err: &review.ArtifactTargetConflictError{Current: current}, status: 409, code: "artifact_conflict", details: map[string]any{"current": map[string]any{"family": "experience", "artifact_id": "exp_1", "revision": int64(3)}}},

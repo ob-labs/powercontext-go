@@ -34,6 +34,7 @@ type ScopeStore interface {
 	SetDefault(context.Context, string) (scope.Descriptor, error)
 	Default(context.Context) (scope.Descriptor, bool, error)
 	SetBinding(context.Context, scope.BindingKey, string) (scope.Binding, error)
+	ClearBinding(context.Context, scope.BindingKey) (bool, error)
 	Binding(context.Context, scope.BindingKey) (scope.Binding, bool, error)
 }
 
@@ -126,6 +127,17 @@ func (a *ScopeApplication) Bind(ctx context.Context, key scope.BindingKey, id st
 		return bindErr
 	})
 	return result, err
+}
+
+// ClearBinding removes one durable external Scope binding. A missing binding is
+// an idempotent no-op and reports cleared=false.
+func (a *ScopeApplication) ClearBinding(ctx context.Context, key scope.BindingKey) (cleared bool, err error) {
+	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
+		var clearErr error
+		cleared, clearErr = a.store.ClearBinding(ctx, key)
+		return clearErr
+	})
+	return cleared, err
 }
 
 // Resolve treats nil as omitted and every explicit value, including an empty

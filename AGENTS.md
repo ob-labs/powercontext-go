@@ -513,3 +513,12 @@ source / artifact / trigger / inference
   load, provider run, or save, and an unknown scheduled scope acquires no lease
   or process callback while direct context references are all resolved before
   any recall begins.
+- When a host-native MCP command distinguishes a caller-provided Scope from a
+  durable resolved Scope, encode the former only as `explicit_scope_id` and
+  return the latter only as `scope_id`. Verify an explicit override reaches the
+  resolver, ordered binding keys remain a fallback, and no unvalidated local
+  Scope reaches capture, recall, or persistence.
+- When Application composition conditionally adds native MCP tools, update the
+  release process-smoke inventory independently from direct-handler tool tests.
+  Verify the configured production Server lists the exact additional tools and
+  the Handoff Report variant retains its own additive count.
