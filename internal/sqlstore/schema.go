@@ -48,6 +48,60 @@ func mysqlIdentityColumns(statement string) string {
 // and key orders are the Python v0.0.1 on-disk contract; Go-only state must not
 // be added to these tables.
 var builtinSchema = []string{
+	`CREATE TABLE IF NOT EXISTS pc_scopes (
+        scope_id VARCHAR(256) NOT NULL PRIMARY KEY,
+        title VARCHAR(256) NOT NULL,
+        summary VARCHAR(2000) NOT NULL,
+        parent_scope_id VARCHAR(256),
+        version INTEGER NOT NULL,
+        CONSTRAINT fk_pc_scopes_parent FOREIGN KEY (parent_scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT,
+        CONSTRAINT ck_pc_scopes_version_positive CHECK (version > 0)
+    )`,
+	`CREATE TABLE IF NOT EXISTS pc_scope_context_references (
+        scope_id VARCHAR(256) NOT NULL,
+        referenced_scope_id VARCHAR(256) NOT NULL,
+        PRIMARY KEY (scope_id, referenced_scope_id),
+        CONSTRAINT fk_pc_scope_context_references_scope FOREIGN KEY (scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE CASCADE,
+        CONSTRAINT fk_pc_scope_context_references_referenced FOREIGN KEY (referenced_scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT,
+        CONSTRAINT ck_pc_scope_context_references_not_self CHECK (scope_id <> referenced_scope_id)
+    )`,
+	`CREATE TABLE IF NOT EXISTS pc_scope_external_references (
+        scope_id VARCHAR(256) NOT NULL,
+        ordinal INTEGER NOT NULL,
+        kind VARCHAR(128) NOT NULL,
+        value VARCHAR(2000) NOT NULL,
+        value_digest VARCHAR(64) NOT NULL,
+        PRIMARY KEY (scope_id, ordinal),
+        CONSTRAINT uq_pc_scope_external_references_value UNIQUE (scope_id, kind, value_digest),
+        CONSTRAINT fk_pc_scope_external_references_scope FOREIGN KEY (scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE CASCADE,
+        CONSTRAINT ck_pc_scope_external_references_ordinal_nonnegative CHECK (ordinal >= 0)
+    )`,
+	`CREATE TABLE IF NOT EXISTS pc_scope_creation_requests (
+        idempotency_key VARCHAR(256) NOT NULL PRIMARY KEY,
+        request_digest VARCHAR(64) NOT NULL,
+        scope_id VARCHAR(256) NOT NULL,
+        CONSTRAINT fk_pc_scope_creation_requests_scope FOREIGN KEY (scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT
+    )`,
+	`CREATE TABLE IF NOT EXISTS pc_scope_settings (
+        name VARCHAR(64) NOT NULL PRIMARY KEY,
+        scope_id VARCHAR(256) NOT NULL,
+        CONSTRAINT fk_pc_scope_settings_scope FOREIGN KEY (scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT
+    )`,
+	`CREATE TABLE IF NOT EXISTS pc_scope_bindings (
+        integration VARCHAR(128) NOT NULL,
+        kind VARCHAR(64) NOT NULL,
+        external_id VARCHAR(256) NOT NULL,
+        scope_id VARCHAR(256) NOT NULL,
+        PRIMARY KEY (integration, kind, external_id),
+        CONSTRAINT fk_pc_scope_bindings_scope FOREIGN KEY (scope_id)
+            REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT
+    )`,
 	`CREATE TABLE IF NOT EXISTS pc_source_journal_heads (
         scope_id VARCHAR(256) NOT NULL,
         position BIGINT NOT NULL,

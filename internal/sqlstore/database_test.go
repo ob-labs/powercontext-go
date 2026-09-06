@@ -56,6 +56,12 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 	})
 
 	for _, name := range []string{
+		"pc_scopes",
+		"pc_scope_context_references",
+		"pc_scope_external_references",
+		"pc_scope_creation_requests",
+		"pc_scope_settings",
+		"pc_scope_bindings",
 		"pc_sources",
 		"pc_source_journal_heads",
 		"pc_artifacts",
