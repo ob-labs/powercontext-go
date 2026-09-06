@@ -475,6 +475,6 @@ source / artifact / trigger / inference
 - When a remote manifest restricts JSON Schema dialects, walk only the pinned
   draft's schema-bearing keyword paths when finding nested resource roots.
   Treat `examples` and unknown annotation values as opaque data. Verify both an
-  annotation mutant containing legacy `` and `` and a nested actual
+  annotation mutant containing legacy `$id` and `$schema` and a nested actual
   resource with a legacy dialect, so the former is accepted and the latter is
   rejected before persistence.
