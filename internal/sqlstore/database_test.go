@@ -62,6 +62,7 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 		"pc_scope_creation_requests",
 		"pc_scope_settings",
 		"pc_scope_bindings",
+		"pc_connector_checkpoints",
 		"pc_sources",
 		"pc_source_journal_heads",
 		"pc_artifacts",

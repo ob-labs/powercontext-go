@@ -459,3 +459,9 @@ source / artifact / trigger / inference
   the comparison in one dedicated CI job with full history and an exact external
   revision. Verify both the ordinary no-input path and the dedicated exact-input
   path.
+- When a cross-language Connector checkpoint persists an opaque JSON value,
+  encode and validate its exact envelope, preserve integer precision, compare
+  JSON value semantics before using the actual stored bytes for CAS, and let the
+  unique key decide an initial-create race. Verify real multi-connection
+  contention and that cancellation or non-constraint storage failures remain
+  distinguishable from a typed checkpoint conflict.

@@ -102,6 +102,14 @@ var builtinSchema = []string{
         CONSTRAINT fk_pc_scope_bindings_scope FOREIGN KEY (scope_id)
             REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT
     )`,
+	`CREATE TABLE IF NOT EXISTS pc_connector_checkpoints (
+        scope_id VARCHAR(256) NOT NULL,
+        binding_id VARCHAR(256) NOT NULL,
+        connector_name VARCHAR(128) NOT NULL,
+        connector_version VARCHAR(128) NOT NULL,
+        checkpoint BLOB NOT NULL,
+        PRIMARY KEY (scope_id, binding_id)
+    )`,
 	`CREATE TABLE IF NOT EXISTS pc_source_journal_heads (
         scope_id VARCHAR(256) NOT NULL,
         position BIGINT NOT NULL,
