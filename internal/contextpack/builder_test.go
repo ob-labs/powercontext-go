@@ -196,6 +196,50 @@ func TestBuilderRejectsHitFromDifferentMemoryHead(t *testing.T) {
 	}
 }
 
+func TestBuilderScopesPreservesReferencedProvenanceAndRoundRobinOrder(t *testing.T) {
+	currentRef := testMemoryRef(t, 1)
+	referencedRef := testMemoryRef(t, 2)
+	build, err := (Builder{}).BuildScopesResult(
+		testRequest(t, "scope", 0), "current",
+		[]MemoryCandidates{
+			{ScopeID: "current", MemoryRef: &currentRef, Hits: []memory.Hit{testHit(currentRef, "current-memory", "Current memory")}},
+			{ScopeID: "referenced", MemoryRef: &referencedRef, Hits: []memory.Hit{testHit(referencedRef, "referenced-memory", "Referenced memory")}},
+		},
+		[]ExperienceCandidates{
+			{ScopeID: "current", Hits: []experience.SearchHit{testExperienceHit(t, "current-experience", 1)}},
+			{ScopeID: "referenced", Hits: []experience.SearchHit{testExperienceHit(t, "referenced-experience", 1)}},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := renderedItems(t, build.Context)
+	if len(items) != 4 {
+		t.Fatalf("rendered item count = %d, want 4", len(items))
+	}
+	firstMemory := items[0]["citation"].(map[string]any)
+	if firstMemory["entry_id"] != "current-memory" || firstMemory["memory_ref"] == nil {
+		t.Fatalf("current memory citation = %#v", firstMemory)
+	}
+	firstExperience := items[1]["citation"].(map[string]any)
+	if firstExperience["artifact_ref"] == nil {
+		t.Fatalf("current Experience citation = %#v", firstExperience)
+	}
+	referencedMemory := items[2]["citation"].(map[string]any)
+	address, ok := referencedMemory["memory"].(map[string]any)
+	if !ok || address["scope_id"] != "referenced" {
+		t.Fatalf("referenced memory citation = %#v", referencedMemory)
+	}
+	referencedExperience := items[3]["citation"].(map[string]any)
+	experienceAddress, ok := referencedExperience["artifact"].(map[string]any)
+	if !ok || experienceAddress["scope_id"] != "referenced" {
+		t.Fatalf("referenced Experience citation = %#v", referencedExperience)
+	}
+	if len(build.Origins) != len(items) || build.Origins[2].ScopedMemory == nil || build.Origins[3].ScopedArtifact == nil {
+		t.Fatalf("origins do not preserve referenced Scope provenance: %#v", build.Origins)
+	}
+}
+
 func TestBuilderPreparesExperienceWithoutMemoryHead(t *testing.T) {
 	prepared, err := (Builder{}).Build(
 		testRequest(t, "Regenerate client contract tests", 0), nil, nil,

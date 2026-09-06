@@ -104,86 +104,133 @@ func (a *ContextApplication) Prepare(
 	if err := request.Validate(); err != nil {
 		return contextpack.Prepared{}, err
 	}
-	scope, err := ValidateScopeID(scopeID)
+	currentScopeID, err := ValidateScopeID(scopeID)
 	if err != nil {
 		return contextpack.Prepared{}, err
 	}
 	var build contextpack.Build
 	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
-		lease, releaseLease := a.runtime.scopes.lease(scope)
-		defer releaseLease()
-		if resolveErr := a.runtime.resolveScope(ctx); resolveErr != nil {
+		currentScope, resolveErr := a.runtime.resolveScope(ctx, currentScopeID)
+		if resolveErr != nil {
 			return resolveErr
 		}
-		var release func()
-		stageErr := a.runtime.runStage(ctx, "scope.lock", map[string]TraceAttribute{
-			"powercontext.scope.lock.contended": lease.contended(),
-		}, func(stageContext context.Context, _ StageSpan) error {
-			var acquireErr error
-			release, acquireErr = lease.acquire(stageContext)
-			return acquireErr
-		})
-		if stageErr != nil {
-			return stageErr
+		scopeIDs := append([]string{currentScopeID}, currentScope.ContextReferences()...)
+		for _, referencedScopeID := range scopeIDs[1:] {
+			if _, referenceErr := a.runtime.resolveScope(ctx, referencedScopeID); referenceErr != nil {
+				return referenceErr
+			}
 		}
-		ctx = a.runtime.withModelUsage(ctx, scope, "", stats.MemoryRecall)
-		build, err = func() (contextpack.Build, error) {
-			defer release()
-			return a.prepareLocked(ctx, scope, request)
-		}()
-		if err != nil {
-			return err
+		prepared, prepareErr := a.prepareScopes(ctx, scopeIDs, request)
+		if prepareErr != nil {
+			return prepareErr
 		}
-		a.observePreparedContext(ctx, scope, build)
+		build = prepared
+		a.observePreparedContext(ctx, currentScopeID, build)
 		return nil
 	})
 	return build.Context, err
 }
 
-func (a *ContextApplication) prepareLocked(
+func (a *ContextApplication) prepareScopes(
 	ctx context.Context,
-	scope string,
+	scopeIDs []string,
 	request contextpack.Request,
 ) (contextpack.Build, error) {
-	var memoryPage MemorySearchPage
-	var err error
-	if a.memory != nil {
-		memoryPage, err = a.memory.search(
-			ctx, scope, request.Query(), contextpack.MemoryCandidateLimit, memory.SearchAuto,
-		)
+	memoryCandidates := make([]contextpack.MemoryCandidates, 0, len(scopeIDs))
+	experienceCandidates := make([]contextpack.ExperienceCandidates, 0, len(scopeIDs))
+	for _, scopeID := range scopeIDs {
+		memoryValues, experienceValues, err := a.recallScope(ctx, scopeID, request)
 		if err != nil {
 			return contextpack.Build{}, err
 		}
+		memoryCandidates = append(memoryCandidates, memoryValues)
+		experienceCandidates = append(experienceCandidates, experienceValues)
 	}
-	experienceHits := []experience.SearchHit{}
-	err = a.runtime.runStage(ctx, "experience.search", map[string]TraceAttribute{
+	memoryCandidates = limitMemoryCandidates(memoryCandidates, contextpack.MemoryCandidateLimit)
+	experienceCandidates = limitExperienceCandidates(experienceCandidates, contextpack.ExperienceCandidateLimit)
+	return a.buildContext(ctx, scopeIDs[0], request, memoryCandidates, experienceCandidates)
+}
+
+func (a *ContextApplication) recallScope(
+	ctx context.Context,
+	scopeID string,
+	request contextpack.Request,
+) (contextpack.MemoryCandidates, contextpack.ExperienceCandidates, error) {
+	lease, releaseLease := a.runtime.scopes.lease(scopeID)
+	defer releaseLease()
+	var release func()
+	lockErr := a.runtime.runStage(ctx, "scope.lock", map[string]TraceAttribute{
+		"powercontext.scope.lock.contended": lease.contended(),
+	}, func(stageContext context.Context, _ StageSpan) error {
+		var acquireErr error
+		release, acquireErr = lease.acquire(stageContext)
+		return acquireErr
+	})
+	if lockErr != nil {
+		return contextpack.MemoryCandidates{}, contextpack.ExperienceCandidates{}, lockErr
+	}
+	defer release()
+	ctx = a.runtime.withModelUsage(ctx, scopeID, "", stats.MemoryRecall)
+	return a.recallScopeLocked(ctx, scopeID, request)
+}
+
+func (a *ContextApplication) recallScopeLocked(
+	ctx context.Context,
+	scopeID string,
+	request contextpack.Request,
+) (contextpack.MemoryCandidates, contextpack.ExperienceCandidates, error) {
+	resultMemory := contextpack.MemoryCandidates{ScopeID: scopeID}
+	resultExperience := contextpack.ExperienceCandidates{ScopeID: scopeID}
+	if a.memory != nil {
+		memoryPage, memoryErr := a.memory.search(
+			ctx, scopeID, request.Query(), contextpack.MemoryCandidateLimit, memory.SearchAuto,
+		)
+		if memoryErr != nil {
+			return contextpack.MemoryCandidates{}, contextpack.ExperienceCandidates{}, memoryErr
+		}
+		resultMemory.MemoryRef = memoryPage.MemoryRef
+		resultMemory.Hits = memoryPage.Hits
+	}
+	experienceErr := a.runtime.runStage(ctx, "experience.search", map[string]TraceAttribute{
 		"powercontext.experience.search.configured": a.experiences != nil,
 		"powercontext.experience.search.limit":      contextpack.ExperienceCandidateLimit,
 	}, func(stageContext context.Context, span StageSpan) error {
 		if a.experiences != nil {
-			var searchErr error
-			experienceHits, searchErr = a.experiences.Search(
-				stageContext, scope, request.Query(), contextpack.ExperienceCandidateLimit,
+			values, searchErr := a.experiences.Search(
+				stageContext, scopeID, request.Query(), contextpack.ExperienceCandidateLimit,
 			)
 			if searchErr != nil {
 				return searchErr
 			}
+			resultExperience.Hits = values
 		}
 		setStageAttributes(span, map[string]TraceAttribute{
-			"powercontext.experience.search.result_count": len(experienceHits),
+			"powercontext.experience.search.result_count": len(resultExperience.Hits),
 		})
 		return nil
 	})
-	if err != nil {
-		return contextpack.Build{}, err
+	if experienceErr != nil {
+		return contextpack.MemoryCandidates{}, contextpack.ExperienceCandidates{}, experienceErr
 	}
+	return resultMemory, resultExperience, nil
+}
+
+func (a *ContextApplication) buildContext(
+	ctx context.Context,
+	currentScopeID string,
+	request contextpack.Request,
+	memoryCandidates []contextpack.MemoryCandidates,
+	experienceCandidates []contextpack.ExperienceCandidates,
+) (contextpack.Build, error) {
+	memoryCount := contextpackMemoryCandidateCount(memoryCandidates)
+	experienceCount := contextpackExperienceCandidateCount(experienceCandidates)
 	var build contextpack.Build
-	err = a.runtime.runStage(ctx, "context.build", map[string]TraceAttribute{
-		"powercontext.context.build.memory_candidate_count":     len(memoryPage.Hits),
-		"powercontext.context.build.experience_candidate_count": len(experienceHits),
+	err := a.runtime.runStage(ctx, "context.build", map[string]TraceAttribute{
+		"powercontext.context.build.memory_candidate_count":     memoryCount,
+		"powercontext.context.build.experience_candidate_count": experienceCount,
 	}, func(_ context.Context, span StageSpan) error {
 		var buildErr error
-		build, buildErr = a.builder.BuildResult(request, memoryPage.MemoryRef, memoryPage.Hits, experienceHits)
+		build, buildErr = a.builder.BuildScopesResult(request, currentScopeID, memoryCandidates, experienceCandidates)
 		if buildErr == nil {
 			setStageAttributes(span, map[string]TraceAttribute{
 				"powercontext.context.build.selected_count": len(build.Origins),
@@ -194,6 +241,80 @@ func (a *ContextApplication) prepareLocked(
 		return buildErr
 	})
 	return build, err
+}
+
+func limitMemoryCandidates(values []contextpack.MemoryCandidates, limit int) []contextpack.MemoryCandidates {
+	counts := roundRobinCandidateCounts(memoryCandidateLengths(values), limit)
+	result := make([]contextpack.MemoryCandidates, len(values))
+	for index, value := range values {
+		result[index] = value
+		result[index].Hits = value.Hits[:counts[index]]
+	}
+	return result
+}
+
+func limitExperienceCandidates(values []contextpack.ExperienceCandidates, limit int) []contextpack.ExperienceCandidates {
+	counts := roundRobinCandidateCounts(experienceCandidateLengths(values), limit)
+	result := make([]contextpack.ExperienceCandidates, len(values))
+	for index, value := range values {
+		result[index] = value
+		result[index].Hits = value.Hits[:counts[index]]
+	}
+	return result
+}
+
+func memoryCandidateLengths(values []contextpack.MemoryCandidates) []int {
+	result := make([]int, len(values))
+	for index, value := range values {
+		result[index] = len(value.Hits)
+	}
+	return result
+}
+
+func experienceCandidateLengths(values []contextpack.ExperienceCandidates) []int {
+	result := make([]int, len(values))
+	for index, value := range values {
+		result[index] = len(value.Hits)
+	}
+	return result
+}
+
+func roundRobinCandidateCounts(lengths []int, limit int) []int {
+	counts := make([]int, len(lengths))
+	for remaining := limit; remaining > 0; {
+		advanced := false
+		for index, length := range lengths {
+			if counts[index] >= length {
+				continue
+			}
+			counts[index]++
+			remaining--
+			advanced = true
+			if remaining == 0 {
+				break
+			}
+		}
+		if !advanced {
+			return counts
+		}
+	}
+	return counts
+}
+
+func contextpackMemoryCandidateCount(values []contextpack.MemoryCandidates) int {
+	result := 0
+	for _, value := range values {
+		result += len(value.Hits)
+	}
+	return result
+}
+
+func contextpackExperienceCandidateCount(values []contextpack.ExperienceCandidates) int {
+	result := 0
+	for _, value := range values {
+		result += len(value.Hits)
+	}
+	return result
 }
 
 func (a *ContextApplication) observePreparedContext(

@@ -66,6 +66,12 @@ func (a *ConnectorLifecycleApplication) Run(
 	binding source.ConnectorBinding,
 ) (result source.ConnectorRunResult, err error) {
 	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
+		if bindingErr := binding.Validate(); bindingErr != nil {
+			return bindingErr
+		}
+		if _, scopeErr := a.runtime.resolveScope(ctx, binding.ScopeID()); scopeErr != nil {
+			return scopeErr
+		}
 		definitions, validationErr := source.ValidateConnector(connector, binding)
 		if validationErr != nil {
 			return validationErr

@@ -47,8 +47,10 @@ type InvariantError struct{ Code string }
 func (e *InvariantError) Error() string { return "Prepared Context invariant failed: " + e.Code }
 
 type Origin struct {
-	Memory   *memory.Citation
-	Artifact *artifact.Ref
+	Memory         *memory.Citation
+	Artifact       *artifact.Ref
+	ScopedMemory   *ScopedMemoryCitation
+	ScopedArtifact *ScopedArtifact
 }
 
 func (o Origin) Clone() Origin {
@@ -60,7 +62,41 @@ func (o Origin) Clone() Origin {
 		value := *o.Artifact
 		o.Artifact = &value
 	}
+	if o.ScopedMemory != nil {
+		value := *o.ScopedMemory
+		o.ScopedMemory = &value
+	}
+	if o.ScopedArtifact != nil {
+		value := *o.ScopedArtifact
+		o.ScopedArtifact = &value
+	}
 	return o
+}
+
+// ScopedArtifact identifies an Artifact owned by a directly referenced Scope.
+type ScopedArtifact struct {
+	ScopeID  string
+	Artifact artifact.Ref
+}
+
+// ScopedMemoryCitation identifies a Memory entry owned by a directly referenced Scope.
+type ScopedMemoryCitation struct {
+	Memory         ScopedArtifact
+	EntryID        string
+	EntryVersionID string
+}
+
+// MemoryCandidates contains one Scope's recalled Memory head and hits.
+type MemoryCandidates struct {
+	ScopeID   string
+	MemoryRef *artifact.Ref
+	Hits      []memory.Hit
+}
+
+// ExperienceCandidates contains one Scope's recalled Experience hits.
+type ExperienceCandidates struct {
+	ScopeID string
+	Hits    []experience.SearchHit
 }
 
 type Build struct {
@@ -92,32 +128,65 @@ func (b Builder) Build(
 	return result.Context, err
 }
 
-func (Builder) BuildResult(
+func (b Builder) BuildResult(
 	request Request,
 	memoryRef *artifact.Ref,
 	hits []memory.Hit,
 	experienceHits []experience.SearchHit,
 ) (Build, error) {
+	return b.BuildScopesResult(
+		request,
+		"",
+		[]MemoryCandidates{{MemoryRef: memoryRef, Hits: hits}},
+		[]ExperienceCandidates{{Hits: experienceHits}},
+	)
+}
+
+// BuildScopesResult selects a final Context from current-Scope and directly
+// referenced-Scope candidates while retaining referenced-Scope provenance.
+func (b Builder) BuildScopesResult(
+	request Request,
+	currentScopeID string,
+	memoryCandidates []MemoryCandidates,
+	experienceCandidates []ExperienceCandidates,
+) (Build, error) {
 	if err := request.Validate(); err != nil {
 		return Build{}, err
 	}
-	if len(hits) > MemoryCandidateLimit {
+	if memoryCandidateCount(memoryCandidates) > MemoryCandidateLimit {
 		return Build{}, &InvariantError{Code: "memory-candidate-limit"}
 	}
-	if len(experienceHits) > ExperienceCandidateLimit {
+	if experienceCandidateCount(experienceCandidates) > ExperienceCandidateLimit {
 		return Build{}, &InvariantError{Code: "experience-candidate-limit"}
 	}
-	if len(hits) > 0 && memoryRef == nil {
-		return Build{}, &InvariantError{Code: "memory-ref-missing"}
+	memoryGroups := make([][]entry, len(memoryCandidates))
+	for index, candidates := range memoryCandidates {
+		values, err := buildMemoryEntries(
+			candidates.MemoryRef,
+			candidates.Hits,
+			candidates.ScopeID,
+			candidates.ScopeID != "" && candidates.ScopeID != currentScopeID,
+		)
+		if err != nil {
+			return Build{}, err
+		}
+		memoryGroups[index] = values
 	}
-	memoryEntries, err := buildMemoryEntries(memoryRef, hits)
-	if err != nil {
-		return Build{}, err
+	experienceGroups := make([][]entry, len(experienceCandidates))
+	for index, candidates := range experienceCandidates {
+		values, err := buildExperienceEntries(
+			candidates.Hits,
+			candidates.ScopeID,
+			candidates.ScopeID != "" && candidates.ScopeID != currentScopeID,
+		)
+		if err != nil {
+			return Build{}, err
+		}
+		experienceGroups[index] = values
 	}
-	experienceEntries, err := buildExperienceEntries(experienceHits)
-	if err != nil {
-		return Build{}, err
-	}
+	memoryEntries := interleaveGroups(memoryGroups)
+	experienceEntries := interleaveGroups(experienceGroups)
+	experienceEntries = experienceEntries[:min(len(experienceEntries), ExperienceEntryLimit)]
 	entries, err := fitEntries(request.maxBytes, memoryEntries, experienceEntries)
 	if err != nil {
 		return Build{}, err
@@ -144,6 +213,22 @@ func (Builder) BuildResult(
 	return Build{Context: prepared, Origins: origins}, nil
 }
 
+func memoryCandidateCount(values []MemoryCandidates) int {
+	result := 0
+	for _, value := range values {
+		result += len(value.Hits)
+	}
+	return result
+}
+
+func experienceCandidateCount(values []ExperienceCandidates) int {
+	result := 0
+	for _, value := range values {
+		result += len(value.Hits)
+	}
+	return result
+}
+
 type entry struct {
 	origin    Origin
 	kind      string
@@ -152,7 +237,10 @@ type entry struct {
 	truncated bool
 }
 
-func buildMemoryEntries(memoryRef *artifact.Ref, hits []memory.Hit) ([]entry, error) {
+func buildMemoryEntries(memoryRef *artifact.Ref, hits []memory.Hit, scopeID string, referenced bool) ([]entry, error) {
+	if len(hits) > 0 && memoryRef == nil {
+		return nil, &InvariantError{Code: "memory-ref-missing"}
+	}
 	result := make([]entry, 0, min(len(hits), EntryLimit))
 	seen := make(map[[2]string]struct{}, len(hits))
 	for _, hit := range hits {
@@ -171,15 +259,22 @@ func buildMemoryEntries(memoryRef *artifact.Ref, hits []memory.Hit) ([]entry, er
 			break
 		}
 		citation := memory.Citation{MemoryRef: hit.MemoryRef, EntryID: hit.EntryID, EntryVersionID: hit.EntryVersionID}
+		origin := Origin{Memory: &citation}
+		encoded := memoryCitationJSON(citation)
+		if referenced {
+			address := ScopedArtifact{ScopeID: scopeID, Artifact: hit.MemoryRef}
+			value := ScopedMemoryCitation{Memory: address, EntryID: hit.EntryID, EntryVersionID: hit.EntryVersionID}
+			origin = Origin{ScopedMemory: &value}
+			encoded = scopedMemoryCitationJSON(value)
+		}
 		result = append(result, entry{
-			origin: Origin{Memory: &citation}, kind: "memory",
-			citation: memoryCitationJSON(citation), content: hit.Text,
+			origin: origin, kind: "memory", citation: encoded, content: hit.Text,
 		})
 	}
 	return result, nil
 }
 
-func buildExperienceEntries(hits []experience.SearchHit) ([]entry, error) {
+func buildExperienceEntries(hits []experience.SearchHit, scopeID string, referenced bool) ([]entry, error) {
 	result := make([]entry, 0, min(len(hits), ExperienceEntryLimit))
 	seen := make(map[artifact.Ref]struct{}, len(hits))
 	for _, hit := range hits {
@@ -194,12 +289,39 @@ func buildExperienceEntries(hits []experience.SearchHit) ([]entry, error) {
 			break
 		}
 		ref := hit.ArtifactRef
+		origin := Origin{Artifact: &ref}
+		encoded := artifactCitationJSON(ref)
+		if referenced {
+			address := ScopedArtifact{ScopeID: scopeID, Artifact: ref}
+			origin = Origin{ScopedArtifact: &address}
+			encoded = scopedArtifactCitationJSON(address)
+		}
 		result = append(result, entry{
-			origin: Origin{Artifact: &ref}, kind: "experience",
-			citation: artifactCitationJSON(ref), content: experience.Render(hit.Content),
+			origin: origin, kind: "experience", citation: encoded, content: experience.Render(hit.Content),
 		})
 	}
 	return result, nil
+}
+
+func interleaveGroups(groups [][]entry) []entry {
+	length := 0
+	for _, group := range groups {
+		length += len(group)
+	}
+	result := make([]entry, 0, length)
+	for index := 0; ; index++ {
+		added := false
+		for _, group := range groups {
+			if index >= len(group) {
+				continue
+			}
+			result = append(result, group[index])
+			added = true
+		}
+		if !added {
+			return result
+		}
+	}
 }
 
 func fitEntries(maxBytes int, memoryEntries, experienceEntries []entry) ([]entry, error) {
@@ -373,8 +495,10 @@ type entryJSON struct {
 }
 
 type citationJSON struct {
-	memory   *memoryCitationWire
-	artifact *artifactCitationWire
+	memory         *memoryCitationWire
+	artifact       *artifactCitationWire
+	scopedMemory   *scopedMemoryCitationWire
+	scopedArtifact *scopedArtifactWire
 }
 
 type artifactRefWire struct {
@@ -393,11 +517,30 @@ type artifactCitationWire struct {
 	ArtifactRef artifactRefWire `json:"artifact_ref"`
 }
 
+type scopedArtifactWire struct {
+	ScopeID  string          `json:"scope_id"`
+	Artifact artifactRefWire `json:"artifact"`
+}
+
+type scopedMemoryCitationWire struct {
+	Memory         scopedArtifactWire `json:"memory"`
+	EntryID        string             `json:"entry_id"`
+	EntryVersionID string             `json:"entry_version_id"`
+}
+
 func (c citationJSON) MarshalJSON() ([]byte, error) {
 	if c.memory != nil {
 		return json.Marshal(c.memory)
 	}
-	return json.Marshal(c.artifact)
+	if c.artifact != nil {
+		return json.Marshal(c.artifact)
+	}
+	if c.scopedMemory != nil {
+		return json.Marshal(c.scopedMemory)
+	}
+	return json.Marshal(struct {
+		Artifact scopedArtifactWire `json:"artifact"`
+	}{Artifact: *c.scopedArtifact})
 }
 
 func memoryCitationJSON(value memory.Citation) citationJSON {
@@ -408,6 +551,21 @@ func memoryCitationJSON(value memory.Citation) citationJSON {
 
 func artifactCitationJSON(value artifact.Ref) citationJSON {
 	return citationJSON{artifact: &artifactCitationWire{ArtifactRef: artifactRefJSON(value)}}
+}
+
+func scopedMemoryCitationJSON(value ScopedMemoryCitation) citationJSON {
+	return citationJSON{scopedMemory: &scopedMemoryCitationWire{
+		Memory: scopedArtifactJSON(value.Memory), EntryID: value.EntryID, EntryVersionID: value.EntryVersionID,
+	}}
+}
+
+func scopedArtifactCitationJSON(value ScopedArtifact) citationJSON {
+	encoded := scopedArtifactJSON(value)
+	return citationJSON{scopedArtifact: &encoded}
+}
+
+func scopedArtifactJSON(value ScopedArtifact) scopedArtifactWire {
+	return scopedArtifactWire{ScopeID: value.ScopeID, Artifact: artifactRefJSON(value.Artifact)}
 }
 
 func artifactRefJSON(value artifact.Ref) artifactRefWire {

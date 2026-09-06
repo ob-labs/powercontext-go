@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/ob-labs/powercontext-go/internal/scope"
 )
 
 // TraceAttribute values are validated by the tracing adapter before export.
@@ -52,8 +54,22 @@ func (f StageTracingFunc) StartStage(
 	return f(ctx, name, attributes)
 }
 
-func (r *Runtime) resolveScope(ctx context.Context) error {
-	return r.runStage(ctx, "scope.context", nil, func(context.Context, StageSpan) error { return nil })
+func (r *Runtime) resolveScope(ctx context.Context, id string) (result scope.Descriptor, returnErr error) {
+	returnErr = r.runStage(ctx, "scope.context", nil, func(stageContext context.Context, _ StageSpan) error {
+		if r.scopeReader == nil {
+			return nil
+		}
+		value, found, readErr := r.scopeReader.Get(stageContext, id)
+		if readErr != nil {
+			return readErr
+		}
+		if !found {
+			return &scope.NotFoundError{}
+		}
+		result = value
+		return nil
+	})
+	return result, returnErr
 }
 
 func (r *Runtime) runStage(

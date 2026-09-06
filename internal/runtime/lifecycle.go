@@ -71,9 +71,10 @@ type Runtime struct {
 	background semaphore
 	tracing    StageTracing
 
-	scheduler  SchedulerLifecycle
-	resources  []Resource
-	modelUsage ModelUsageRecorder
+	scheduler   SchedulerLifecycle
+	resources   []Resource
+	modelUsage  ModelUsageRecorder
+	scopeReader ScopeReader
 }
 
 // Resource is an explicitly owned Runtime dependency closed after scheduled
@@ -120,11 +121,12 @@ func NewConfigured(
 		return nil, errors.New("runtime: scope_cache_size must be positive")
 	}
 	return &Runtime{
-		background: newSemaphore(),
-		scopes:     newScopeCache(capacity, options.ScopeEvictor, options.ScopeObserver),
-		tracing:    options.Tracing,
-		resources:  append([]Resource(nil), resources...),
-		modelUsage: recorder,
+		background:  newSemaphore(),
+		scopes:      newScopeCache(capacity, options.ScopeEvictor, options.ScopeObserver),
+		tracing:     options.Tracing,
+		resources:   append([]Resource(nil), resources...),
+		modelUsage:  recorder,
+		scopeReader: options.ScopeReader,
 	}, nil
 }
 
@@ -170,11 +172,11 @@ func (r *Runtime) ScopedRead(ctx context.Context, scopeID string, fn func(contex
 		return err
 	}
 	return r.Operation(ctx, func(ctx context.Context) error {
-		_, release := r.scopes.lease(scope)
-		defer release()
-		if err := r.resolveScope(ctx); err != nil {
+		if _, err := r.resolveScope(ctx, scope); err != nil {
 			return err
 		}
+		_, release := r.scopes.lease(scope)
+		defer release()
 		return fn(ctx, scope)
 	})
 }
@@ -191,11 +193,11 @@ func (r *Runtime) ScopedWrite(ctx context.Context, scopeID string, fn func(conte
 		return err
 	}
 	return r.Operation(ctx, func(ctx context.Context) error {
-		lease, releaseLease := r.scopes.lease(scope)
-		defer releaseLease()
-		if err := r.resolveScope(ctx); err != nil {
+		if _, err := r.resolveScope(ctx, scope); err != nil {
 			return err
 		}
+		lease, releaseLease := r.scopes.lease(scope)
+		defer releaseLease()
 		var release func()
 		err := r.runStage(ctx, "scope.lock", map[string]TraceAttribute{
 			"powercontext.scope.lock.contended": lease.contended(),
