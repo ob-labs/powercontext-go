@@ -489,3 +489,21 @@ source / artifact / trigger / inference
   candidate pipeline, and that accepted observations project only their
   standard text evidence while raw observations return a typed refusal in
   generation evidence paths.
+- When a Connector lifecycle decides whether to CAS a checkpoint, name the
+  equality result explicitly and advance only when values differ. Verify
+  equivalent JSON, stored JSON null versus an absent checkpoint, a large
+  integer change, rejected or failed outcomes, cancellation, and a real stale
+  CAS conflict so no accepted Source is lost or checkpoint is advanced early.
+  Apply native Definition ownership checks to every accepted submission path
+  before persistence. When a public Connector session permits concurrent calls,
+  reserve each item under synchronization, perform external sink I/O outside
+  that lock, and snapshot outcomes by reservation order. Verify a shadowed
+  Definition writes no Source, marker, journal, or checkpoint and concurrent
+  duplicate submissions write once without a race or lock-held I/O deadlock.
+  Finalize a session and drain every claimed submission before evaluating
+  outcomes or a checkpoint; verify a Connector that returns while a submission
+  is blocked cannot write a checkpoint until that submission has settled.
+  After an external Connector returns without an error, make an in-flight
+  cancellation dominate any no-op or successful completion before producing a
+  result or saving a checkpoint; verify a connector that ignores cancellation
+  cannot report success or advance state.
