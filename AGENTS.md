@@ -465,3 +465,9 @@ source / artifact / trigger / inference
   unique key decide an initial-create race. Verify real multi-connection
   contention and that cancellation or non-constraint storage failures remain
   distinguishable from a typed checkpoint conflict.
+- When a hierarchy mutation validates graph relationships, acquire the database
+  write lock before reading its hierarchy snapshot and commit that validation
+  with metadata CAS in one transaction. Verify two independent SQLite Database
+  and Runtime instances cannot commit opposite parent edges or duplicate an
+  idempotent default bootstrap, and prove that an injected default-setting
+  failure rolls the Scope and its creation key back together.

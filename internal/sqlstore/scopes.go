@@ -29,25 +29,26 @@ import (
 // ScopeRepository persists Scope metadata and durable external bindings.
 type ScopeRepository struct{}
 
+// LockHierarchy obtains SQLite's write lock before any hierarchy snapshot is
+// read, including an empty hierarchy. The caller must own the transaction.
+func (ScopeRepository) LockHierarchy(ctx context.Context, db DBTX) error {
+	_, err := db.ExecContext(ctx, `UPDATE pc_scopes SET version = version WHERE 1 = 0`)
+	return err
+}
+
 func (ScopeRepository) Create(ctx context.Context, db DBTX, id string, draft scope.Draft) (scope.Descriptor, error) {
 	if _, err := scope.NewDescriptor(id, draft.Title(), draft.Summary(), draft.ParentScopeID(), draft.ContextReferences(), draft.ExternalReferences(), 1); err != nil {
 		return scope.Descriptor{}, err
+	}
+	if _, err := scope.NewDraft(draft.Title(), draft.Summary(), draft.ParentScopeID(), draft.ContextReferences(), draft.ExternalReferences(), draft.IdempotencyKey()); err != nil {
+		return scope.Descriptor{}, &scope.ValidationError{}
 	}
 	digest, err := draftDigest(draft)
 	if err != nil {
 		return scope.Descriptor{}, err
 	}
-	var existingDigest, existingID string
-	err = db.QueryRowContext(ctx, `SELECT request_digest, scope_id FROM pc_scope_creation_requests
-        WHERE idempotency_key = ?`, draft.IdempotencyKey()).Scan(&existingDigest, &existingID)
-	if err == nil {
-		if existingDigest != digest {
-			return scope.Descriptor{}, &scope.IdempotencyConflictError{}
-		}
-		return ScopeRepository{}.Get(ctx, db, existingID)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return scope.Descriptor{}, err
+	if existing, found, findErr := findScopeCreation(ctx, db, draft.IdempotencyKey(), digest); findErr != nil || found {
+		return existing, findErr
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO pc_scopes (scope_id, title, summary, parent_scope_id, version)
         VALUES (?, ?, ?, NULLIF(?, ''), 1)`, id, draft.Title(), draft.Summary(), draft.ParentScopeID()); err != nil {
@@ -61,6 +62,23 @@ func (ScopeRepository) Create(ctx context.Context, db DBTX, id string, draft sco
 		return scope.Descriptor{}, err
 	}
 	return ScopeRepository{}.Get(ctx, db, id)
+}
+
+func findScopeCreation(ctx context.Context, db DBTX, key, digest string) (scope.Descriptor, bool, error) {
+	var existingDigest, existingID string
+	err := db.QueryRowContext(ctx, `SELECT request_digest, scope_id FROM pc_scope_creation_requests
+        WHERE idempotency_key = ?`, key).Scan(&existingDigest, &existingID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return scope.Descriptor{}, false, nil
+	}
+	if err != nil {
+		return scope.Descriptor{}, false, err
+	}
+	if existingDigest != digest {
+		return scope.Descriptor{}, false, &scope.IdempotencyConflictError{}
+	}
+	value, getErr := ScopeRepository{}.Get(ctx, db, existingID)
+	return value, true, getErr
 }
 
 func (ScopeRepository) Update(ctx context.Context, db DBTX, id string, mutation scope.Mutation) (scope.Descriptor, error) {

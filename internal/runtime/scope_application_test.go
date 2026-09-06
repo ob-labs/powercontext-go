@@ -47,10 +47,10 @@ func TestScopeApplicationResolvesExplicitBindingAndDefaultInOrder(t *testing.T) 
 	}
 	for _, test := range []struct {
 		name     string
-		explicit string
+		explicit *string
 		keys     []scope.BindingKey
 	}{
-		{name: "explicit", explicit: created.ID()},
+		{name: "explicit", explicit: new(created.ID())},
 		{name: "binding", keys: []scope.BindingKey{key}},
 		{name: "default"},
 	} {
@@ -63,18 +63,91 @@ func TestScopeApplicationResolvesExplicitBindingAndDefaultInOrder(t *testing.T) 
 	}
 }
 
+func TestScopeApplicationRejectsInvalidRelationships(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		parent     string
+		references []string
+	}{
+		{name: "missing parent", parent: "missing-secret"},
+		{name: "self parent", parent: "scope-created"},
+		{name: "missing reference", references: []string{"missing-secret"}},
+		{name: "self reference", references: []string{"scope-created"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := &memoryScopeStore{scopes: map[string]scope.Descriptor{}}
+			application, err := NewScopeApplication(New(), store, func() string { return "scope-created" })
+			if err != nil {
+				t.Fatal(err)
+			}
+			draft, err := scope.NewDraft("title", "summary", test.parent, test.references, nil, "create")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, createErr := application.Create(t.Context(), draft); createErr == nil {
+				t.Fatal("invalid relationship was accepted")
+			}
+			if len(store.scopes) != 0 {
+				t.Fatal("rejected creation persisted a Scope")
+			}
+		})
+	}
+}
+
 type memoryScopeStore struct {
 	scopes    map[string]scope.Descriptor
 	defaultID string
 	bindings  map[scope.BindingKey]scope.Binding
 }
 
-func (s *memoryScopeStore) Create(_ context.Context, id string, draft scope.Draft) (scope.Descriptor, error) {
+func (s *memoryScopeStore) Create(ctx context.Context, id string, draft scope.Draft, validate func([]scope.Descriptor) error) (scope.Descriptor, error) {
+	scopes, _ := s.List(ctx)
+	if err := validate(scopes); err != nil {
+		return scope.Descriptor{}, err
+	}
 	created, err := scope.NewDescriptor(id, draft.Title(), draft.Summary(), draft.ParentScopeID(), draft.ContextReferences(), draft.ExternalReferences(), 1)
 	if err == nil {
 		s.scopes[id] = created
 	}
 	return created, err
+}
+
+func (s *memoryScopeStore) Update(ctx context.Context, id string, mutation scope.Mutation, validate func([]scope.Descriptor) error) (scope.Descriptor, error) {
+	current, found := s.scopes[id]
+	if !found {
+		return scope.Descriptor{}, &scope.NotFoundError{}
+	}
+	if current.Version() != mutation.ExpectedVersion() {
+		return scope.Descriptor{}, &scope.VersionConflictError{Expected: mutation.ExpectedVersion(), Actual: current.Version()}
+	}
+	scopes, _ := s.List(ctx)
+	if err := validate(scopes); err != nil {
+		return scope.Descriptor{}, err
+	}
+	updated, err := scope.NewDescriptor(id, mutation.Title(), mutation.Summary(), mutation.ParentScopeID(), mutation.ContextReferences(), mutation.ExternalReferences(), current.Version()+1)
+	if err == nil {
+		s.scopes[id] = updated
+	}
+	return updated, err
+}
+
+func (s *memoryScopeStore) BootstrapDefault(ctx context.Context, id string, draft scope.Draft) (scope.Descriptor, error) {
+	if existing, found := s.scopes[s.defaultID]; found {
+		return existing, nil
+	}
+	created, err := s.Create(ctx, id, draft, func([]scope.Descriptor) error { return nil })
+	if err == nil {
+		s.defaultID = created.ID()
+	}
+	return created, err
+}
+
+func (s *memoryScopeStore) List(_ context.Context) ([]scope.Descriptor, error) {
+	result := make([]scope.Descriptor, 0, len(s.scopes))
+	for _, value := range s.scopes {
+		result = append(result, value)
+	}
+	return result, nil
 }
 
 func (s *memoryScopeStore) Get(_ context.Context, id string) (scope.Descriptor, bool, error) {

@@ -35,6 +35,26 @@ const (
 	MaxBindingExternalIDLength      = 256
 )
 
+// NotFoundError reports a missing Scope without disclosing its identity.
+type NotFoundError struct{}
+
+func (*NotFoundError) Error() string { return "Scope was not found" }
+
+// BindingNotFoundError reports that no explicit, durable, or default Scope exists.
+type BindingNotFoundError struct{}
+
+func (*BindingNotFoundError) Error() string { return "no Scope binding is available" }
+
+// RelationshipError reports a self reference or a cyclic parent relationship.
+type RelationshipError struct{}
+
+func (*RelationshipError) Error() string { return "invalid Scope relationship" }
+
+// ValidationError reports invalid application input without retaining its value.
+type ValidationError struct{}
+
+func (*ValidationError) Error() string { return "invalid Scope input" }
+
 // IdempotencyConflictError reports a Scope creation key reused with different input.
 type IdempotencyConflictError struct{}
 
