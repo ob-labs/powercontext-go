@@ -45,6 +45,7 @@ type Application struct {
 	logger            *slog.Logger
 	review            *pcruntime.ReviewApplication
 	externalSkills    *pcruntime.ExternalSkillApplication
+	scopes            *pcruntime.ScopeApplication
 	agentSkillTargets []skill.AgentSkillTarget
 
 	readinessMu   sync.Mutex
@@ -90,7 +91,7 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 	application := &Application{
 		config: config, runtime: foundation.lifecycle, capabilities: capabilities,
 		readiness: readiness, metrics: foundation.metrics, tracing: foundation.tracing, logger: dependencies.Logger,
-		review: services.review, externalSkills: services.externalSkills,
+		review: services.review, externalSkills: services.externalSkills, scopes: services.scopes,
 		agentSkillTargets: foundation.assembled.agentSkillTargets,
 	}
 	application.endpoint = endpoint.NewHandler(endpoint.HandlerOptions{

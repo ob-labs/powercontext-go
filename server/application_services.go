@@ -17,7 +17,9 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 	"github.com/ob-labs/powercontext-go/artifact/handoff"
@@ -31,6 +33,7 @@ import (
 )
 
 type applicationServices struct {
+	scopes         *pcruntime.ScopeApplication
 	sources        *pcruntime.SourceApplication
 	memory         *pcruntime.MemoryApplication
 	context        *pcruntime.ContextApplication
@@ -53,6 +56,22 @@ func buildApplicationServices(
 	database := foundation.storage.database
 	lifecycle := foundation.lifecycle
 	assembled := foundation.assembled
+
+	scopeStore, err := sqlstore.NewRuntimeScopeStore(database, sqlstore.ScopeRepository{})
+	if err != nil {
+		return applicationServices{}, err
+	}
+	scopeApplication, err := pcruntime.NewScopeApplication(
+		lifecycle,
+		scopeStore,
+		func() string { return "scope_" + uuid.New().String() },
+	)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	if _, bootstrapErr := scopeApplication.BootstrapDefault(ctx); bootstrapErr != nil {
+		return applicationServices{}, fmt.Errorf("server: bootstrap default Scope: %w", bootstrapErr)
+	}
 
 	sourceBackend, err := sqlstore.NewRuntimeSourceBackend(database, repositories.sources)
 	if err != nil {
@@ -274,7 +293,7 @@ func buildApplicationServices(
 		return applicationServices{}, err
 	}
 	return applicationServices{
-		sources: sourceApplication, memory: memoryApplication, context: contextApplication,
+		scopes: scopeApplication, sources: sourceApplication, memory: memoryApplication, context: contextApplication,
 		review: reviewApplication, generation: generationApplication, externalSkills: externalApplication,
 		handoff: handoffApplication, work: workApplication, handoffReport: handoffReportApplication,
 		statistics: statisticsApplication,
