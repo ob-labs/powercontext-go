@@ -57,7 +57,7 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("WORKBUDDY_HOME", filepath.Join(home, "workbuddy"))
 			t.Setenv(server.PowerContextHomeEnv, filepath.Join(home, "powercontext"))
-			t.Setenv("POWERCONTEXT_WORKBUDDY_SCOPE_ID", "")
+			unsetWorkBuddyScopeOverride(t)
 			t.Setenv("POWERCONTEXT_WORKBUDDY_FLUSH_ON_CAPTURE", "true")
 			t.Setenv("WORKBUDDY_SERVICE_TOKEN", "")
 
@@ -156,6 +156,22 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func unsetWorkBuddyScopeOverride(t *testing.T) {
+	t.Helper()
+	const name = "POWERCONTEXT_WORKBUDDY_SCOPE_ID"
+	value, present := os.LookupEnv(name)
+	if err := os.Unsetenv(name); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if present {
+			_ = os.Setenv(name, value)
+			return
+		}
+		_ = os.Unsetenv(name)
+	})
 }
 
 type workBuddyServiceTrace struct {
