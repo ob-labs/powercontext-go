@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact/experience"
+	"github.com/ob-labs/powercontext-go/inference"
+	"github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -82,6 +84,182 @@ func TestExperienceCandidatesAndCursorCASAreOneTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertIncubationState(t, database, 1, 1, 2)
+}
+
+func TestExperienceIncubationRejectsRawObservationCitationFromMixedWindow(t *testing.T) {
+	ctx := t.Context()
+	database := openTestDatabase(t)
+	sources, _ := repositories(t)
+	stored := addFlushSource(t, database, sources, "scope-filtered-window", "task-1", "safe task outcome")
+	raw := observationSource(t, "worker.raw", "item-1", `{"name":"item-1","definition_version":"1","materialization":"captured"}`)
+	payload, err := observationEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, insertErr := database.SQLDB().ExecContext(ctx, `INSERT INTO pc_sources
+        (scope_id, source_type, source_id, payload, journal_position) VALUES (?, ?, ?, ?, ?)`,
+		"scope-filtered-window", raw.Ref().Type(), raw.Ref().ID(), payload, 2,
+	); insertErr != nil {
+		t.Fatal(insertErr)
+	}
+	candidates, err := sqlstore.NewCandidateRepository(sqlstore.SQLiteDialect, sqlstore.ExperienceArtifactCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlstore.NewExperienceIncubationStore(database, "scope-filtered-window", sources, candidates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen []source.Value
+	application, err := runtime.NewExperienceIncubationApplication(
+		runtime.New(), func(string) (runtime.ExperienceIncubationBackend, error) { return store, nil },
+		experiencePipelineFunc(func(_ context.Context, values []source.Value) ([]experience.CandidateInput, error) {
+			seen = append([]source.Value(nil), values...)
+			content, contentErr := experience.NewContent("situation", "action", "outcome", "lesson")
+			if contentErr != nil {
+				return nil, contentErr
+			}
+			plan, planErr := experience.NewCandidateInput(content, []source.Ref{raw.Ref()})
+			return []experience.CandidateInput{plan}, planErr
+		}),
+		func(string) (string, error) { return "candidate-raw", nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := application.Incubate(ctx, "scope-filtered-window", experience.IncubationWindowLimit)
+	var invalid *inference.InvalidOutputError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("Incubate() error = %T %v", err, err)
+	}
+	if result.CurrentCursor != 2 || result.HighWatermark != 2 || result.ProcessedSourceCount != 1 || len(seen) != 1 {
+		t.Fatalf("result=%#v pipeline values=%#v", result, seen)
+	}
+	if value, ok := seen[0].(source.ContentSource); !ok || value.SourceName() != stored.Ref.ID() {
+		t.Fatalf("pipeline received %T %#v, want captured ContentSource", seen[0], seen[0])
+	}
+	var candidateCount, cursorCount int
+	if queryErr := database.SQLDB().QueryRowContext(ctx, `SELECT
+        (SELECT COUNT(*) FROM pc_artifact_candidate_heads WHERE scope_id = ?),
+        (SELECT COUNT(*) FROM pc_source_cursors WHERE scope_id = ? AND binding_name = ?)`,
+		"scope-filtered-window", "scope-filtered-window", experience.IncubationCursorName,
+	).Scan(&candidateCount, &cursorCount); queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	if candidateCount != 0 || cursorCount != 0 {
+		t.Fatalf("rejected raw citation persisted candidates=%d cursors=%d", candidateCount, cursorCount)
+	}
+}
+
+func TestExperienceIncubationConsumesRawOnlyWindowWithoutPipeline(t *testing.T) {
+	ctx := t.Context()
+	database := openTestDatabase(t)
+	sources, _ := repositories(t)
+	raw := observationSource(t, "worker.raw", "item-1", `{"name":"item-1","definition_version":"1","materialization":"captured"}`)
+	payload, err := observationEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, insertErr := database.SQLDB().ExecContext(ctx, `INSERT INTO pc_sources
+        (scope_id, source_type, source_id, payload, journal_position) VALUES (?, ?, ?, ?, ?)`,
+		"scope-raw-only", raw.Ref().Type(), raw.Ref().ID(), payload, 1,
+	); insertErr != nil {
+		t.Fatal(insertErr)
+	}
+	candidates, err := sqlstore.NewCandidateRepository(sqlstore.SQLiteDialect, sqlstore.ExperienceArtifactCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlstore.NewExperienceIncubationStore(database, "scope-raw-only", sources, candidates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	application, err := runtime.NewExperienceIncubationApplication(
+		runtime.New(), func(string) (runtime.ExperienceIncubationBackend, error) { return store, nil },
+		experiencePipelineFunc(func(context.Context, []source.Value) ([]experience.CandidateInput, error) {
+			t.Fatal("raw-only window invoked the Experience candidate pipeline")
+			return nil, nil
+		}),
+		func(string) (string, error) { return "unused", nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := application.Incubate(ctx, "scope-raw-only", experience.IncubationWindowLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CurrentCursor != 1 || result.HighWatermark != 1 || result.ProcessedSourceCount != 0 || result.CandidateCount != 0 {
+		t.Fatalf("result=%#v", result)
+	}
+	assertIncubationCursor(t, database, "scope-raw-only", 1)
+}
+
+func TestExperienceIncubationApplyWindowRejectsRawCitationAndRollsBack(t *testing.T) {
+	ctx := t.Context()
+	database := openTestDatabase(t)
+	sources, _ := repositories(t)
+	raw := observationSource(t, "worker.raw", "item-apply", `{"name":"item-apply","definition_version":"1","materialization":"captured"}`)
+	payload, err := observationEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, insertErr := database.SQLDB().ExecContext(ctx, `INSERT INTO pc_sources
+        (scope_id, source_type, source_id, payload, journal_position) VALUES (?, ?, ?, ?, ?)`,
+		"scope-raw-apply", raw.Ref().Type(), raw.Ref().ID(), payload, 1,
+	); insertErr != nil {
+		t.Fatal(insertErr)
+	}
+	candidates, err := sqlstore.NewCandidateRepository(sqlstore.SQLiteDialect, sqlstore.ExperienceArtifactCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlstore.NewExperienceIncubationStore(database, "scope-raw-apply", sources, candidates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := experience.NewContent("situation", "action", "outcome", "lesson")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := experience.NewCandidateInput(content, []source.Ref{raw.Ref()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = store.ApplyWindow(ctx, experience.IncubationCursorName, []string{"candidate-raw"}, []experience.CandidateInput{plan}, source.NewCursor(1), nil)
+	if _, ok := errors.AsType[*source.UnacceptedObservationError](err); !ok {
+		t.Fatalf("ApplyWindow() error = %T %v", err, err)
+	}
+	var candidateCount, cursorCount int
+	if err := database.SQLDB().QueryRowContext(ctx, `SELECT
+        (SELECT COUNT(*) FROM pc_artifact_candidate_heads WHERE scope_id = ?),
+        (SELECT COUNT(*) FROM pc_source_cursors WHERE scope_id = ? AND binding_name = ?)`,
+		"scope-raw-apply", "scope-raw-apply", experience.IncubationCursorName,
+	).Scan(&candidateCount, &cursorCount); err != nil {
+		t.Fatal(err)
+	}
+	if candidateCount != 0 || cursorCount != 0 {
+		t.Fatalf("raw candidate changed state: candidates=%d cursors=%d", candidateCount, cursorCount)
+	}
+}
+
+type experiencePipelineFunc func(context.Context, []source.Value) ([]experience.CandidateInput, error)
+
+func (f experiencePipelineFunc) Incubate(ctx context.Context, values []source.Value) ([]experience.CandidateInput, error) {
+	return f(ctx, values)
+}
+
+func assertIncubationCursor(t *testing.T, database *sqlstore.Database, scopeID string, sequence int64) {
+	t.Helper()
+	var cursor []byte
+	if err := database.SQLDB().QueryRowContext(t.Context(), `SELECT cursor FROM pc_source_cursors
+        WHERE scope_id = ? AND binding_name = ?`, scopeID, experience.IncubationCursorName).Scan(&cursor); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf(`{"sequence":%d}`, sequence)
+	if string(cursor) != want {
+		t.Fatalf("cursor=%s, want %s", cursor, want)
+	}
 }
 
 func assertIncubationState(t *testing.T, database *sqlstore.Database, candidates, sequence, generation int64) {

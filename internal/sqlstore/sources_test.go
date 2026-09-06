@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -365,6 +366,8 @@ func TestSourceRepositoryPersistsObservationEnvelopeAlongsideNativeSources(t *te
 		t.Fatal(err)
 	}
 	observation := observationSource(t, "worker.capture", "worker-item", `{"name":"worker-item","definition_version":"1","materialization":"captured","payload":{"nested":true}}`)
+	accepted := acceptedObservationSource(t, observation)
+	registerObservationDefinition(t, database, observation)
 
 	ref, err := repository.Ref(observation)
 	if err != nil {
@@ -381,7 +384,7 @@ func TestSourceRepositoryPersistsObservationEnvelopeAlongsideNativeSources(t *te
 		if addErr != nil {
 			return addErr
 		}
-		stored, addErr = repository.Add(ctx, tx, "scope-observation", observation)
+		stored, addErr = repository.AddAccepted(ctx, tx, "scope-observation", accepted)
 		return addErr
 	}); err != nil {
 		t.Fatal(err)
@@ -389,8 +392,8 @@ func TestSourceRepositoryPersistsObservationEnvelopeAlongsideNativeSources(t *te
 	if native.JournalPosition != 1 || stored.JournalPosition != 2 {
 		t.Fatalf("journal positions = %d/%d, want 1/2", native.JournalPosition, stored.JournalPosition)
 	}
-	decoded, ok := stored.Value.(source.SourceObservation)
-	if !ok || decoded.Ref() != observation.Ref() || string(decoded.Payload()) != string(observation.Payload()) {
+	decoded, ok := stored.Value.(sourceevidence.AcceptedObservation)
+	if !ok || decoded.Ref() != observation.Ref() || string(decoded.Observation().Payload()) != string(observation.Payload()) {
 		t.Fatalf("stored observation = %#v", stored.Value)
 	}
 
@@ -435,9 +438,107 @@ func TestSourceRepositoryPersistsObservationEnvelopeAlongsideNativeSources(t *te
 		if len(listed) != 2 {
 			t.Fatalf("List() returned %d Sources, want 2", len(listed))
 		}
-		_, observationFound := listed[1].Value.(source.SourceObservation)
+		_, observationFound := listed[1].Value.(sourceevidence.AcceptedObservation)
 		if !observationFound {
 			t.Fatalf("List() observation type = %T", listed[1].Value)
+		}
+		return nil
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
+}
+
+func TestSourceRepositoryAcceptsOnlyRuntimeAdmittedObservations(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	database := openTestDatabase(t)
+	repository, err := sqlstore.NewSourceRepository(sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := observationSource(t, "worker.audit", "item-1", `{"name":"item-1","definition_version":"1","materialization":"captured"}`)
+	registerObservationDefinition(t, database, raw)
+
+	err = database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		_, addErr := repository.Add(ctx, tx, "scope-admission", raw)
+		return addErr
+	})
+	if _, ok := errors.AsType[*source.UnacceptedObservationError](err); !ok {
+		t.Fatalf("raw Add() error = %T %v", err, err)
+	}
+	assertAcceptedObservationRows(t, database, "scope-admission", 0, 0)
+
+	accepted := acceptedObservationSource(t, raw)
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		_, addErr := repository.AddAccepted(ctx, tx, "scope-admission", accepted)
+		return addErr
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
+	assertAcceptedObservationRows(t, database, "scope-admission", 1, 1)
+
+	legacy := observationSource(t, "worker.audit", "legacy", `{"name":"legacy","definition_version":"1","materialization":"captured"}`)
+	payload, err := observationEnvelope(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, insertErr := database.SQLDB().ExecContext(ctx, `INSERT INTO pc_sources
+        (scope_id, source_type, source_id, payload, journal_position) VALUES (?, ?, ?, ?, ?)`,
+		"scope-admission", legacy.Ref().Type(), legacy.Ref().ID(), payload, 2,
+	); insertErr != nil {
+		t.Fatal(insertErr)
+	}
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		stored, getErr := repository.Get(ctx, tx, "scope-admission", legacy.Ref())
+		if getErr != nil {
+			return getErr
+		}
+		if _, raw := stored.Value.(source.SourceObservation); !raw {
+			t.Fatalf("legacy value = %T, want raw SourceObservation", stored.Value)
+		}
+		return nil
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
+	err = database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		_, addErr := repository.AddAccepted(ctx, tx, "scope-admission", acceptedObservationSource(t, legacy))
+		return addErr
+	})
+	if _, ok := errors.AsType[*sqlstore.StoredPayloadConflictError](err); !ok {
+		t.Fatalf("legacy admission replay error = %T %v", err, err)
+	}
+	assertAcceptedObservationRows(t, database, "scope-admission", 2, 1)
+}
+
+func TestSourceRepositoryRollsBackObservationWhenAcceptanceMarkerFails(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	database := openTestDatabase(t)
+	repository, err := sqlstore.NewSourceRepository(sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, triggerErr := database.SQLDB().ExecContext(ctx, `CREATE TRIGGER reject_observation_acceptance
+	        BEFORE INSERT ON pc_source_observation_acceptances BEGIN SELECT RAISE(ABORT, 'rejected'); END`); triggerErr != nil {
+		t.Fatal(triggerErr)
+	}
+	raw := observationSource(t, "worker.atomic", "item-1", `{"name":"item-1","definition_version":"1","materialization":"captured"}`)
+	registerObservationDefinition(t, database, raw)
+	err = database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		_, addErr := repository.AddAccepted(ctx, tx, "scope-atomic", acceptedObservationSource(t, raw))
+		return addErr
+	})
+	if err == nil {
+		t.Fatal("accepted Add() succeeded despite marker trigger")
+	}
+	assertAcceptedObservationRows(t, database, "scope-atomic", 0, 0)
+	if transactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
+		position, positionErr := repository.JournalPosition(ctx, tx, "scope-atomic")
+		if positionErr != nil {
+			return positionErr
+		}
+		if position != 0 {
+			t.Fatalf("rolled-back journal position = %d, want 0", position)
 		}
 		return nil
 	}); transactionErr != nil {
@@ -454,17 +555,19 @@ func TestSourceRepositoryObservationEnvelopeWinsOverCollidingContentCodec(t *tes
 		t.Fatal(err)
 	}
 	observation := observationSource(t, source.ContentType, "observation-item", `{"name":"observation-item","definition_version":"1","materialization":"captured","payload":{"content":"worker-owned"}}`)
+	accepted := acceptedObservationSource(t, observation)
+	registerObservationDefinition(t, database, observation)
 
 	var added sqlstore.StoredSource
 	if err := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var addErr error
-		added, addErr = repository.Add(ctx, tx, "scope-observation-content", observation)
+		added, addErr = repository.AddAccepted(ctx, tx, "scope-observation-content", accepted)
 		return addErr
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := added.Value.(source.SourceObservation); !ok {
-		t.Fatalf("Add() value type = %T, want source.SourceObservation", added.Value)
+	if _, ok := added.Value.(sourceevidence.AcceptedObservation); !ok {
+		t.Fatalf("AddAccepted() value type = %T, want sourceevidence.AcceptedObservation", added.Value)
 	}
 
 	var payload []byte
@@ -489,8 +592,8 @@ func TestSourceRepositoryObservationEnvelopeWinsOverCollidingContentCodec(t *tes
 		if getErr != nil {
 			return getErr
 		}
-		if _, ok := stored.Value.(source.SourceObservation); !ok {
-			t.Fatalf("Get() value type = %T, want source.SourceObservation", stored.Value)
+		if _, ok := stored.Value.(sourceevidence.AcceptedObservation); !ok {
+			t.Fatalf("Get() value type = %T, want sourceevidence.AcceptedObservation", stored.Value)
 		}
 		listed, listErr := repository.List(ctx, tx, "scope-observation-content", 0, nil)
 		if listErr != nil {
@@ -499,8 +602,8 @@ func TestSourceRepositoryObservationEnvelopeWinsOverCollidingContentCodec(t *tes
 		if len(listed) != 1 {
 			t.Fatalf("List() returned %d Sources, want 1", len(listed))
 		}
-		if _, ok := listed[0].Value.(source.SourceObservation); !ok {
-			t.Fatalf("List() value type = %T, want source.SourceObservation", listed[0].Value)
+		if _, ok := listed[0].Value.(sourceevidence.AcceptedObservation); !ok {
+			t.Fatalf("List() value type = %T, want sourceevidence.AcceptedObservation", listed[0].Value)
 		}
 		return nil
 	}); err != nil {
@@ -519,15 +622,16 @@ func TestSourceRepositoryObservationUsesJSONSemanticIdempotence(t *testing.T) {
 	first := observationSource(t, "worker.capture", "item", `{"name":"item","definition_version":"1","materialization":"captured","payload":{"\u0061":1.0,"b":[true,null],"large":123456789012345678901234567890}}`)
 	reordered := observationSource(t, "worker.capture", "item", `{"payload":{"large":123456789012345678901234567890,"b":[true,null],"a":1e0},"materialization":"captured","definition_version":"1","name":"item"}`)
 	conflicting := observationSource(t, "worker.capture", "item", `{"name":"item","definition_version":"1","materialization":"captured","payload":{"a":2,"b":[true,null],"large":123456789012345678901234567890}}`)
+	registerObservationDefinition(t, database, first)
 
 	var initial, replay sqlstore.StoredSource
 	if initialTransactionErr := database.Transaction(ctx, func(tx sqlstore.DBTX) error {
 		var addErr error
-		initial, addErr = repository.Add(ctx, tx, "scope-observation", first)
+		initial, addErr = repository.AddAccepted(ctx, tx, "scope-observation", acceptedObservationSource(t, first))
 		if addErr != nil {
 			return addErr
 		}
-		replay, addErr = repository.Add(ctx, tx, "scope-observation", reordered)
+		replay, addErr = repository.AddAccepted(ctx, tx, "scope-observation", acceptedObservationSource(t, reordered))
 		return addErr
 	}); initialTransactionErr != nil {
 		t.Fatal(initialTransactionErr)
@@ -537,7 +641,7 @@ func TestSourceRepositoryObservationUsesJSONSemanticIdempotence(t *testing.T) {
 	}
 	largeIntegerConflict := observationSource(t, "worker.capture", "item", `{"name":"item","definition_version":"1","materialization":"captured","payload":{"a":1e0,"b":[true,null],"large":123456789012345678901234567891}}`)
 	err = database.Transaction(ctx, func(tx sqlstore.DBTX) error {
-		_, addErr := repository.Add(ctx, tx, "scope-observation", largeIntegerConflict)
+		_, addErr := repository.AddAccepted(ctx, tx, "scope-observation", acceptedObservationSource(t, largeIntegerConflict))
 		return addErr
 	})
 	if _, ok := errors.AsType[*sqlstore.StoredPayloadConflictError](err); !ok {
@@ -545,7 +649,7 @@ func TestSourceRepositoryObservationUsesJSONSemanticIdempotence(t *testing.T) {
 	}
 	assertObservationRepositoryErrorRedacted(t, err, "worker.capture", "item", "fingerprint-secret")
 	err = database.Transaction(ctx, func(tx sqlstore.DBTX) error {
-		_, addErr := repository.Add(ctx, tx, "scope-observation", conflicting)
+		_, addErr := repository.AddAccepted(ctx, tx, "scope-observation", acceptedObservationSource(t, conflicting))
 		return addErr
 	})
 	if _, ok := errors.AsType[*sqlstore.StoredPayloadConflictError](err); !ok {
@@ -780,15 +884,49 @@ func contentSource(t *testing.T, id, content string, metadata map[string]any) so
 
 func observationSource(t *testing.T, sourceType, sourceID, payload string) source.SourceObservation {
 	t.Helper()
+	manifest := observationManifest(t, sourceType)
 	ref, err := source.NewRef(sourceType, sourceID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	observation, err := source.NewSourceObservation(ref, "1", "fingerprint-secret", nil, jsontext.Value(payload), nil)
+	observation, err := source.NewSourceObservation(ref, manifest.Version(), manifest.Fingerprint(), nil, jsontext.Value(payload), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return observation
+}
+
+func acceptedObservationSource(t *testing.T, observation source.SourceObservation) *source.AdmittedObservation {
+	t.Helper()
+	accepted, err := source.AdmitObservation(observationManifest(t, observation.Ref().Type()), observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return accepted
+}
+
+func observationManifest(t *testing.T, name string) source.DefinitionManifest {
+	t.Helper()
+	identity, err := source.NewDefinitionIdentity(name, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := source.NewDefinitionManifest(identity, jsontext.Value(`{"type":"object"}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manifest
+}
+
+func registerObservationDefinition(t *testing.T, database *sqlstore.Database, observation source.SourceObservation) {
+	t.Helper()
+	manifest := observationManifest(t, observation.Ref().Type())
+	if transactionErr := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		_, err := (sqlstore.DefinitionManifestRepository{}).Register(t.Context(), tx, manifest)
+		return err
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
 }
 
 func observationEnvelope(observation source.SourceObservation) ([]byte, error) {
@@ -808,5 +946,19 @@ func assertObservationRepositoryErrorRedacted(t *testing.T, err error, secrets .
 		if strings.Contains(err.Error(), secret) {
 			t.Fatalf("observation repository error exposed %q: %v", secret, err)
 		}
+	}
+}
+
+func assertAcceptedObservationRows(t *testing.T, database *sqlstore.Database, scopeID string, sources, acceptances int) {
+	t.Helper()
+	var sourceCount, acceptanceCount int
+	if err := database.SQLDB().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM pc_sources WHERE scope_id = ?`, scopeID).Scan(&sourceCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SQLDB().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM pc_source_observation_acceptances WHERE scope_id = ?`, scopeID).Scan(&acceptanceCount); err != nil {
+		t.Fatal(err)
+	}
+	if sourceCount != sources || acceptanceCount != acceptances {
+		t.Fatalf("acceptance rows = sources:%d markers:%d, want %d/%d", sourceCount, acceptanceCount, sources, acceptances)
 	}
 }

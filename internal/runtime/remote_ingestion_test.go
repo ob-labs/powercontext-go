@@ -208,8 +208,8 @@ func TestRemoteIngestionApplicationValidatesObservationBeforeStore(t *testing.T)
 	if receipt.Ref != valid.Ref() || receipt.Sequence != 1 || backend.added != 1 {
 		t.Fatalf("Submit() = %#v after %d stores", receipt, backend.added)
 	}
-	if !strings.Contains(string(backend.last.Payload()), "9007199254740993") {
-		t.Fatalf("Submit() lost the large JSON integer: %s", backend.last.Payload())
+	if backend.last == nil || !strings.Contains(string(backend.last.Observation().Payload()), "9007199254740993") {
+		t.Fatalf("Submit() lost the large JSON integer: %#v", backend.last)
 	}
 
 	for _, test := range []struct {
@@ -362,7 +362,7 @@ type remoteIngestionBackend struct {
 	registered int
 	finds      int
 	added      int
-	last       source.SourceObservation
+	last       *source.AdmittedObservation
 }
 
 func newRemoteIngestionBackend() *remoteIngestionBackend {
@@ -384,10 +384,10 @@ func (b *remoteIngestionBackend) Find(_ context.Context, identity source.Definit
 	return manifest, found, nil
 }
 
-func (b *remoteIngestionBackend) Add(_ context.Context, _ string, observation source.SourceObservation) (source.Ref, int64, error) {
+func (b *remoteIngestionBackend) Add(_ context.Context, _ string, observation *source.AdmittedObservation) (source.Ref, int64, error) {
 	b.added++
 	b.last = observation
-	return observation.Ref(), int64(b.added), nil
+	return observation.Observation().Ref(), int64(b.added), nil
 }
 
 func (b *remoteIngestionBackend) HasNativeDefinition(name string) bool { return b.native[name] }

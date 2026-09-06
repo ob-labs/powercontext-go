@@ -26,6 +26,7 @@ import (
 	"github.com/ob-labs/powercontext-go/artifact/skill"
 	"github.com/ob-labs/powercontext-go/inference"
 	"github.com/ob-labs/powercontext-go/internal/contextpack"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/internal/stats"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -250,6 +251,14 @@ func (e *RelationalRecallTokenEstimator) memoryEntry(
 
 func recallSourceText(ref source.Ref, value source.Value) (string, error) {
 	switch typed := value.(type) {
+	case sourceevidence.AcceptedObservation:
+		evidence, err := typed.TextEvidence()
+		if err != nil {
+			return "", &RecallTokenProjectionError{SourceType: ref.Type()}
+		}
+		return evidence.Content(), nil
+	case source.SourceObservation:
+		return "", &RecallTokenProjectionError{SourceType: ref.Type()}
 	case source.ContentSource:
 		return typed.Content(), nil
 	case skill.SnapshotSource:

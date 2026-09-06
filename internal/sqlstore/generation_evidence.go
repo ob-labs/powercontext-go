@@ -16,6 +16,7 @@ package sqlstore
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"reflect"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/internal/review"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
@@ -60,11 +62,10 @@ func (r *GenerationEvidenceReader) Read(
 			if err != nil {
 				return generationEvidenceError(err)
 			}
-			codec, ok := r.sources.bySource[sourceType(stored.Value)]
-			if !ok {
-				return &RepositoryNotFoundError{Kind: "source-adapter", Identity: sourceType(stored.Value)}
+			if evidenceErr := sourceevidence.Require(stored.Value); evidenceErr != nil {
+				return evidenceErr
 			}
-			payload, err := codec.encode(stored.Value)
+			payload, err := r.encodeSource(stored.Value)
 			if err != nil {
 				return err
 			}
@@ -104,6 +105,21 @@ func (r *GenerationEvidenceReader) Read(
 		return nil, &review.InvalidCandidateError{Field: "evidence", Detail: "at least one exact reference is required"}
 	}
 	return result, nil
+}
+
+func (r *GenerationEvidenceReader) encodeSource(value source.Value) ([]byte, error) {
+	if accepted, ok := value.(sourceevidence.AcceptedObservation); ok {
+		evidence, err := accepted.TextEvidence()
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(evidence)
+	}
+	codec, ok := r.sources.bySource[sourceType(value)]
+	if !ok {
+		return nil, &RepositoryNotFoundError{Kind: "source-adapter", Identity: sourceType(value)}
+	}
+	return codec.encode(value)
 }
 
 func (r *GenerationEvidenceReader) encodeArtifact(value artifact.Snapshot) ([]byte, error) {

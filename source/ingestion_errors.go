@@ -35,3 +35,12 @@ type ObservationConflictError struct{}
 func (*ObservationConflictError) Error() string {
 	return "Source observation already stores a different payload"
 }
+
+// UnacceptedObservationError reports a worker payload which has not passed
+// durable runtime admission. It deliberately contains no Source identity or
+// worker content because callers may surface it at public evidence boundaries.
+type UnacceptedObservationError struct{}
+
+func (*UnacceptedObservationError) Error() string {
+	return "Source observation has not been accepted as evidence"
+}

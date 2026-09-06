@@ -32,6 +32,59 @@ type InvalidTextEvidenceError struct {
 	Detail string
 }
 
+// TextEvidence is the stable standard projection consumed by textual evidence
+// projectors. It owns immutable copies of the declared source identity and
+// metadata without coercing worker JSON numbers.
+type TextEvidence struct {
+	ref      Ref
+	content  string
+	metadata jsontext.Value
+}
+
+// ParseTextEvidence validates and freezes one standard projection value.
+func ParseTextEvidence(value jsontext.Value, ref Ref) (TextEvidence, error) {
+	if err := ValidateTextEvidence(value, ref); err != nil {
+		return TextEvidence{}, err
+	}
+	var fields map[string]jsontext.Value
+	if err := json.Unmarshal(value, &fields); err != nil {
+		return TextEvidence{}, textEvidenceError("value", "must be valid JSON")
+	}
+	content, _ := textEvidenceString(fields["content"])
+	metadata := jsontext.Value(`{}`)
+	if value, exists := fields["metadata"]; exists {
+		metadata = value.Clone()
+	}
+	return TextEvidence{ref: ref, content: content, metadata: metadata}, nil
+}
+
+func (e TextEvidence) SourceRef() Ref           { return e.ref }
+func (e TextEvidence) Content() string          { return e.content }
+func (e TextEvidence) Metadata() jsontext.Value { return e.metadata.Clone() }
+
+// MarshalJSON emits the Python-compatible standard projection shape.
+func (e TextEvidence) MarshalJSON() ([]byte, error) {
+	if _, err := NewRef(e.ref.Type(), e.ref.ID()); err != nil {
+		return nil, textEvidenceError("source", "must have a valid observation identity")
+	}
+	if !e.metadata.IsValid() || e.metadata.Kind() != '{' {
+		return nil, textEvidenceError("metadata", "must be a JSON object")
+	}
+	payload, err := json.Marshal(struct {
+		SourceType string         `json:"source_type"`
+		SourceID   string         `json:"source_id"`
+		Content    string         `json:"content"`
+		Metadata   jsontext.Value `json:"metadata"`
+	}{e.ref.Type(), e.ref.ID(), e.content, e.metadata})
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateTextEvidence(jsontext.Value(payload), e.ref); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 func (e *InvalidTextEvidenceError) Error() string {
 	return "invalid Source text evidence " + e.Field + ": " + e.Detail
 }

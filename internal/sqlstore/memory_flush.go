@@ -19,6 +19,7 @@ import (
 	"errors"
 
 	"github.com/ob-labs/powercontext-go/artifact/memory"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 	"github.com/ob-labs/powercontext-go/trigger"
 )
@@ -103,6 +104,17 @@ func (s *MemoryFlushStore) ObserveWindow(
 		for _, row := range rows {
 			if row.JournalPosition > actions[0].Through() {
 				break
+			}
+			// Legacy raw observations remain auditable journal rows, but their
+			// cursor range is consumed without exposing their worker payload to
+			// Memory extraction.
+			if _, raw := row.Value.(source.SourceObservation); raw {
+				continue
+			}
+			if accepted, ok := row.Value.(sourceevidence.AcceptedObservation); ok {
+				if _, evidenceErr := accepted.TextEvidence(); evidenceErr != nil {
+					continue
+				}
 			}
 			values = append(values, row.Value)
 		}

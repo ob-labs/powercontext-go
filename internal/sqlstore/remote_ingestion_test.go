@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -48,7 +49,7 @@ func TestRuntimeRemoteIngestionBackendOwnsSQLiteTransactions(t *testing.T) {
 		t.Fatalf("Find() = %#v, %t, %v", found, exists, err)
 	}
 	observation := remoteStoredObservation(t, manifest, `{"name":"item-1","definition_version":"1","materialization":"captured","large":9007199254740993}`)
-	ref, sequence, err := backend.Add(t.Context(), "scope-remote", observation)
+	ref, sequence, err := backend.Add(t.Context(), "scope-remote", acceptedStoredObservation(t, manifest, observation))
 	if err != nil || ref != observation.Ref() || sequence != 1 {
 		t.Fatalf("Add() = %s, %d, %v", ref, sequence, err)
 	}
@@ -77,14 +78,57 @@ func TestRuntimeRemoteIngestionBackendReturnsTypedRedactedConflicts(t *testing.T
 
 	firstObservation := remoteStoredObservation(t, first, `{"name":"item-1","definition_version":"1","materialization":"captured","large":1}`)
 	secondObservation := remoteStoredObservation(t, first, `{"name":"item-1","definition_version":"1","materialization":"captured","large":2}`)
-	if _, _, addErr := backend.Add(t.Context(), "scope-remote", firstObservation); addErr != nil {
+	if _, _, addErr := backend.Add(t.Context(), "scope-remote", acceptedStoredObservation(t, first, firstObservation)); addErr != nil {
 		t.Fatal(addErr)
 	}
-	_, _, err = backend.Add(t.Context(), "scope-remote", secondObservation)
+	_, _, err = backend.Add(t.Context(), "scope-remote", acceptedStoredObservation(t, first, secondObservation))
 	if _, ok := errors.AsType[*source.ObservationConflictError](err); !ok {
 		t.Fatalf("observation conflict = %T %v", err, err)
 	}
 	assertRemoteIngestionErrorRedacted(t, err, "remote.secret", "item-1", first.Fingerprint())
+}
+
+func TestRuntimeRemoteIngestionBackendRequiresPersistedManifestForAcceptedMarker(t *testing.T) {
+	database := openTestDatabase(t)
+	repository, err := sqlstore.NewSourceRepository(sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err := sqlstore.NewRuntimeRemoteIngestionBackend(database, sqlstore.DefinitionManifestRepository{}, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := remoteStoredManifest(t, "remote.unregistered", jsontext.Value(`{"type":"object"}`))
+	observation := remoteStoredObservation(t, fake, `{"name":"item-1","definition_version":"1","materialization":"captured","large":1}`)
+	accepted := acceptedStoredObservation(t, fake, observation)
+
+	_, _, err = backend.Add(t.Context(), "scope-unregistered", accepted)
+	if _, ok := errors.AsType[*source.DefinitionNotFoundError](err); !ok {
+		t.Fatalf("unregistered accepted Add() error = %T %v", err, err)
+	}
+	assertAcceptedObservationRows(t, database, "scope-unregistered", 0, 0)
+	if transactionErr := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		position, positionErr := repository.JournalPosition(t.Context(), tx, "scope-unregistered")
+		if positionErr != nil {
+			return positionErr
+		}
+		if position != 0 {
+			t.Fatalf("unregistered accepted journal position = %d, want 0", position)
+		}
+		return nil
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
+
+	persisted := remoteStoredManifest(t, "remote.unregistered", jsontext.Value(`{"type":"object","properties":{"large":{"type":"integer"}}}`))
+	if _, registerErr := backend.Register(t.Context(), persisted); registerErr != nil {
+		t.Fatal(registerErr)
+	}
+	_, _, err = backend.Add(t.Context(), "scope-unregistered", accepted)
+	if _, ok := errors.AsType[*source.InvalidSourceObservationError](err); !ok {
+		t.Fatalf("mismatched accepted Add() error = %T %v", err, err)
+	}
+	assertAcceptedObservationRows(t, database, "scope-unregistered", 0, 0)
 }
 
 func TestRemoteIngestionApplicationUsesSQLiteAdapterAfterValidation(t *testing.T) {
@@ -143,9 +187,9 @@ func TestRemoteIngestionApplicationUsesSQLiteAdapterAfterValidation(t *testing.T
 		if stored.JournalPosition != receipt.Sequence {
 			t.Fatalf("stored sequence = %d, want %d", stored.JournalPosition, receipt.Sequence)
 		}
-		_, ok := stored.Value.(source.SourceObservation)
+		_, ok := stored.Value.(sourceevidence.AcceptedObservation)
 		if !ok {
-			t.Fatalf("stored value = %T, want SourceObservation", stored.Value)
+			t.Fatalf("stored value = %T, want sourceevidence.AcceptedObservation", stored.Value)
 		}
 		return nil
 	}); transactionErr != nil {
@@ -209,6 +253,19 @@ func remoteStoredObservation(t *testing.T, manifest source.DefinitionManifest, p
 		t.Fatal(err)
 	}
 	return observation
+}
+
+func acceptedStoredObservation(
+	t *testing.T,
+	manifest source.DefinitionManifest,
+	observation source.SourceObservation,
+) *source.AdmittedObservation {
+	t.Helper()
+	accepted, err := source.AdmitObservation(manifest, observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return accepted
 }
 
 func assertRemoteIngestionErrorRedacted(t *testing.T, err error, secrets ...string) {

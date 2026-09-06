@@ -22,6 +22,7 @@ import (
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/handoff"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
+	"github.com/ob-labs/powercontext-go/source"
 )
 
 // HandoffEvidenceResolver resolves exact immutable citations inside one Scope.
@@ -109,8 +110,11 @@ func unavailableHandoffEvidence(err error) bool {
 	var artifactMissing *artifact.NotFoundError
 	var invalidMemory *memory.InvalidCitationError
 	var entryMissing *memory.EntryNotFoundError
+	var rawObservation *source.UnacceptedObservationError
+	var invalidTextEvidence *source.InvalidTextEvidenceError
 	return errors.As(err, &repositoryMissing) || errors.As(err, &artifactMissing) ||
-		errors.As(err, &invalidMemory) || errors.As(err, &entryMissing)
+		errors.As(err, &invalidMemory) || errors.As(err, &entryMissing) ||
+		errors.As(err, &rawObservation) || errors.As(err, &invalidTextEvidence)
 }
 
 var _ handoff.EvidenceResolver = (*HandoffEvidenceResolver)(nil)

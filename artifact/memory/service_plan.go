@@ -20,6 +20,7 @@ import (
 	"slices"
 
 	"github.com/ob-labs/powercontext-go/artifact"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
@@ -101,6 +102,9 @@ func (s *Service) canonicalOperationEvidence(
 ) (operationEvidence, error) {
 	result := operationEvidence{}
 	for _, value := range sources {
+		if err := sourceevidence.Require(value); err != nil {
+			return operationEvidence{}, err
+		}
 		if s.sourceResolver == nil || isNilInterface(s.sourceResolver) {
 			return operationEvidence{}, &InvalidEvidenceError{Code: "source-resolver"}
 		}
