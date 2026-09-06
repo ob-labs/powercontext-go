@@ -1,6 +1,6 @@
 # PowerContext Go
 
-PowerContext Go is the Go 1.25 implementation of PowerContext. It preserves the public HTTP, MCP, persistence, CLI,
+PowerContext Go is the Go 1.27.0 implementation of PowerContext. It preserves the public HTTP, MCP, persistence, CLI,
 Dashboard, integration, and release contracts while using Go-native domain and runtime boundaries.
 
 Start with the [architecture overview](architecture/README.md), then use the

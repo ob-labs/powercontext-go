@@ -471,6 +471,10 @@ source / artifact / trigger / inference
   and Runtime instances cannot commit opposite parent edges or duplicate an
   idempotent default bootstrap, and prove that an injected default-setting
   failure rolls the Scope and its creation key back together.
+- When maintained documentation states the supported Go version, validate it
+  against the authoritative `go.mod` directive and reject unresolved Git
+  conflict boundaries before rendering. Verify a version-mismatch fixture and
+  a conflict-marker fixture fail while the current documentation tree passes.
 
 - When a remote manifest restricts JSON Schema dialects, walk only the pinned
   draft's schema-bearing keyword paths when finding nested resource roots.
