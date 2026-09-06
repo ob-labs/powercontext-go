@@ -112,6 +112,49 @@ func (a *RemoteIngestionApplication) Submit(
 	return result, err
 }
 
+// SubmitAccepted persists an observation already admitted by the Connector
+// boundary. The persistence adapter repeats durable Definition admission in
+// its own short transaction before writing the evidence marker. This method
+// checks durable Definition existence and native ownership, but does not
+// repeat schema admission while a Connector is running; that happens in the
+// persistence transaction before the immutable AdmittedObservation is stored.
+func (a *RemoteIngestionApplication) SubmitAccepted(
+	ctx context.Context,
+	scopeID string,
+	accepted *source.AdmittedObservation,
+) (result SourceReceipt, err error) {
+	err = a.runtime.ScopedWrite(ctx, scopeID, func(ctx context.Context, scope string) error {
+		if validationErr := accepted.Validate(); validationErr != nil {
+			return validationErr
+		}
+		if envelopeErr := validateRemoteObservationEnvelope(accepted.Observation()); envelopeErr != nil {
+			return envelopeErr
+		}
+		observation := accepted.Observation()
+		identity, identityErr := source.NewDefinitionIdentity(observation.Ref().Type(), observation.DefinitionVersion())
+		if identityErr != nil {
+			return sourceObservationError("definition", "must identify a valid Source Definition")
+		}
+		_, found, findErr := a.backend.Find(ctx, identity)
+		if findErr != nil {
+			return findErr
+		}
+		if !found {
+			return &source.DefinitionNotFoundError{}
+		}
+		if a.backend.HasNativeDefinition(observation.Ref().Type()) {
+			return &source.DefinitionConflictError{}
+		}
+		ref, sequence, addErr := a.backend.Add(ctx, scope, accepted)
+		if addErr != nil {
+			return addErr
+		}
+		result = SourceReceipt{Ref: ref, Sequence: sequence}
+		return nil
+	})
+	return result, err
+}
+
 func validateRemoteDefinition(manifest source.DefinitionManifest, backend RemoteIngestionBackend) error {
 	if err := manifest.Validate(); err != nil {
 		return err

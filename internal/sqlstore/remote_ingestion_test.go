@@ -131,6 +131,48 @@ func TestRuntimeRemoteIngestionBackendRequiresPersistedManifestForAcceptedMarker
 	assertAcceptedObservationRows(t, database, "scope-unregistered", 0, 0)
 }
 
+func TestRuntimeRemoteIngestionApplicationSubmitAcceptedRejectsNativeDefinitionBeforeSQLiteWrite(t *testing.T) {
+	database := openTestDatabase(t)
+	repository, err := sqlstore.NewSourceRepository(sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err := sqlstore.NewRuntimeRemoteIngestionBackend(database, sqlstore.DefinitionManifestRepository{}, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Model an old remote registration that predated the active content codec.
+	manifest := remoteStoredManifest(t, source.ContentType, jsontext.Value(`{"type":"object"}`))
+	if _, registerErr := backend.Register(t.Context(), manifest); registerErr != nil {
+		t.Fatal(registerErr)
+	}
+	accepted := acceptedStoredObservation(t, manifest, remoteStoredObservation(t, manifest,
+		`{"name":"item-1","definition_version":"1","materialization":"captured"}`))
+	application, err := pcruntime.NewRemoteIngestionApplication(pcruntime.New(), backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = application.SubmitAccepted(t.Context(), "scope-shadowed-native", accepted)
+	if _, ok := errors.AsType[*source.DefinitionConflictError](err); !ok {
+		t.Fatalf("SubmitAccepted() error = %T %v", err, err)
+	}
+	assertRemoteIngestionErrorRedacted(t, err, source.ContentType, "item-1", manifest.Fingerprint())
+	assertAcceptedObservationRows(t, database, "scope-shadowed-native", 0, 0)
+	if transactionErr := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		position, positionErr := repository.JournalPosition(t.Context(), tx, "scope-shadowed-native")
+		if positionErr != nil {
+			return positionErr
+		}
+		if position != 0 {
+			t.Fatalf("shadowed SubmitAccepted() journal position = %d, want 0", position)
+		}
+		return nil
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
+}
+
 func TestRemoteIngestionApplicationUsesSQLiteAdapterAfterValidation(t *testing.T) {
 	database := openTestDatabase(t)
 	repository, err := sqlstore.NewSourceRepository(sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec())

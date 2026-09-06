@@ -252,6 +252,74 @@ func TestRemoteIngestionApplicationValidatesObservationBeforeStore(t *testing.T)
 	}
 }
 
+func TestRemoteIngestionApplicationSubmitAcceptedUsesDurableDefinitionBeforeAdd(t *testing.T) {
+	manifest := remoteManifest(t, "remote.connector", remoteObservationSchema, nil)
+	observation := remoteObservation(t, manifest,
+		`{"name":"item-1","definition_version":"1","materialization":"captured","large":1}`,
+		"", false,
+	)
+	accepted, err := source.AdmitObservation(manifest, observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := newRemoteIngestionBackend()
+	backend.manifests[manifest.Identity()] = manifest
+	application, err := NewRemoteIngestionApplication(New(), backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := application.SubmitAccepted(t.Context(), "scope-connector", accepted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.Ref != observation.Ref() || receipt.Sequence != 1 || backend.added != 1 || backend.finds != 1 {
+		t.Fatalf("SubmitAccepted() = %#v after added=%d finds=%d", receipt, backend.added, backend.finds)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = application.SubmitAccepted(ctx, "scope-connector", accepted)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled SubmitAccepted() = %T %v", err, err)
+	}
+	if backend.added != 1 {
+		t.Fatalf("canceled SubmitAccepted() reached storage %d times", backend.added)
+	}
+}
+
+func TestRemoteIngestionApplicationSubmitAcceptedRejectsPersistedManifestShadowedByNativeDefinition(t *testing.T) {
+	manifest := remoteManifest(t, source.ContentType, remoteObservationSchema, nil)
+	observation := remoteObservation(t, manifest,
+		`{"name":"item-1","definition_version":"1","materialization":"captured","large":1}`,
+		"", false,
+	)
+	accepted, err := source.AdmitObservation(manifest, observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := newRemoteIngestionBackend()
+	// Model a remote manifest persisted before a local codec acquired this name.
+	backend.manifests[manifest.Identity()] = manifest
+	backend.native[source.ContentType] = true
+	application, err := NewRemoteIngestionApplication(New(), backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = application.SubmitAccepted(t.Context(), "scope-connector", accepted)
+	if _, ok := errors.AsType[*source.DefinitionConflictError](err); !ok {
+		t.Fatalf("SubmitAccepted() error = %T %v", err, err)
+	}
+	if backend.finds != 1 || backend.added != 0 {
+		t.Fatalf("SubmitAccepted() performed %d manifest reads and %d Source writes", backend.finds, backend.added)
+	}
+	for _, secret := range []string{source.ContentType, "item-1", manifest.Fingerprint()} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("SubmitAccepted() error exposed %q: %v", secret, err)
+		}
+	}
+}
+
 func TestRemoteIngestionApplicationRejectsPersistedManifestShadowedByNativeDefinition(t *testing.T) {
 	manifest := remoteManifest(t, source.ContentType, remoteObservationSchema, []source.ProjectionManifest{
 		remoteProjection(t, source.TextEvidenceProjectionKey(), source.TextEvidenceSchema()),
