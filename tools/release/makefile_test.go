@@ -207,6 +207,26 @@ func TestE2ERunnerRejectsUnsupportedDatabaseBeforeCommands(t *testing.T) {
 	}
 }
 
+func TestHarnessComposeCheckUsesOnlySQLite(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	contents, err := os.ReadFile(filepath.Join(repository, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := strings.Index(string(contents), "harness-compose-check:")
+	end := strings.Index(string(contents), "\nharness-compose-acceptance:")
+	if start < 0 || end <= start {
+		t.Fatal("Makefile has no bounded harness-compose-check target")
+	}
+	target := string(contents[start:end])
+	if !strings.Contains(target, "POWERCONTEXT_E2E_DATABASE=sqlite test/e2e/run.sh check") {
+		t.Fatalf("harness-compose-check does not validate SQLite: %s", target)
+	}
+	if strings.Contains(strings.ToLower(target), "oceanbase") {
+		t.Fatalf("harness-compose-check retains unsupported OceanBase evidence: %s", target)
+	}
+}
+
 func TestDependencySecurityScansAnUnstrippedStandardServerBuild(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	temporary := t.TempDir()

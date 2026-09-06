@@ -377,9 +377,8 @@ harness-check: ## Validate E2E harness scripts and compile the test package.
 	sh -n test/e2e/run.sh
 	CGO_ENABLED=1 $(GO) test -run '^$$' -tags '$(STANDARD_TAGS)' ./test/e2e
 
-harness-compose-check: ## Validate SQLite and OceanBase harness definitions.
+harness-compose-check: ## Validate the supported SQLite harness definition.
 	POWERCONTEXT_E2E_DATABASE=sqlite test/e2e/run.sh check
-	POWERCONTEXT_E2E_DATABASE=oceanbase test/e2e/run.sh check
 
 harness-compose-acceptance: ## Run the containerized E2E acceptance harness.
 	test/e2e/run.sh acceptance
