@@ -23,12 +23,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,10 +94,12 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			if handlerErr != nil {
 				t.Fatal(handlerErr)
 			}
-			service := httptest.NewServer(handler)
+			trace := &workBuddyServiceTrace{handler: handler}
+			service := httptest.NewServer(trace)
 			t.Cleanup(service.Close)
 			assertWorkBuddyServiceReady(t, service)
 			scope := seedWorkBuddyWorkspaceBinding(t, service, config.Auth.Token, releaseRoot)
+			trace.reset(scope)
 
 			setupWorkBuddy(t, service.URL, binary, releaseRoot)
 			assertWorkBuddyServerConfiguration(t, service.URL)
@@ -105,7 +109,11 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 			if first != "" {
 				t.Fatalf("first hook context = %q, want empty before capture", first)
 			}
+			trace.assertFirstHook(t)
+			assertWorkBuddyMemorySearch(t, service, config.Auth.Token, scope)
+			trace.reset(scope)
 			second := runWorkBuddyHook(t, binary, releaseRoot, "Which WorkBuddy service chain should I use?", "prompt-2")
+			trace.assertSecondHook(t)
 			if !strings.Contains(second, "Remember this WorkBuddy service chain.") {
 				t.Fatalf("recalled context = %q, want captured WorkBuddy content", second)
 			}
@@ -150,6 +158,74 @@ func TestWorkBuddyHookAndMCPShareOneGoServiceConfiguration(t *testing.T) {
 	}
 }
 
+type workBuddyServiceTrace struct {
+	handler  http.Handler
+	mu       sync.Mutex
+	scope    string
+	resolve  int
+	prepare  int
+	capture  int
+	flush    int
+	mismatch bool
+}
+
+func (trace *workBuddyServiceTrace) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	body, _ := io.ReadAll(request.Body)
+	request.Body = io.NopCloser(bytes.NewReader(body))
+	trace.record(request.URL.Path, body)
+	trace.handler.ServeHTTP(writer, request)
+}
+
+func (trace *workBuddyServiceTrace) record(path string, body []byte) {
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	if path == "/mcp/" && bytes.Contains(body, []byte(`"scope_binding_resolve"`)) {
+		trace.resolve++
+		return
+	}
+	if path != "/v1/context/prepare" && path != "/v1/sources/content" && path != "/v1/memory/flush" {
+		return
+	}
+	var value struct {
+		ScopeID string `json:"scope_id"`
+	}
+	if json.Unmarshal(body, &value) != nil || value.ScopeID != trace.scope {
+		trace.mismatch = true
+	}
+	switch path {
+	case "/v1/context/prepare":
+		trace.prepare++
+	case "/v1/sources/content":
+		trace.capture++
+	case "/v1/memory/flush":
+		trace.flush++
+	}
+}
+
+func (trace *workBuddyServiceTrace) reset(scope string) {
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	trace.scope, trace.resolve, trace.prepare, trace.capture, trace.flush, trace.mismatch = scope, 0, 0, 0, 0, false
+}
+
+func (trace *workBuddyServiceTrace) assertFirstHook(t *testing.T) {
+	t.Helper()
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	if trace.resolve != 1 || trace.prepare != 1 || trace.capture != 1 || trace.flush < 1 || trace.mismatch {
+		t.Fatalf("first hook stages resolver=%d prepare=%d capture=%d flush=%d scope_mismatch=%t", trace.resolve, trace.prepare, trace.capture, trace.flush, trace.mismatch)
+	}
+}
+
+func (trace *workBuddyServiceTrace) assertSecondHook(t *testing.T) {
+	t.Helper()
+	trace.mu.Lock()
+	defer trace.mu.Unlock()
+	if trace.resolve != 1 || trace.prepare != 1 || trace.capture != 1 || trace.flush < 1 || trace.mismatch {
+		t.Fatalf("second hook stages resolver=%d prepare=%d capture=%d flush=%d scope_mismatch=%t", trace.resolve, trace.prepare, trace.capture, trace.flush, trace.mismatch)
+	}
+}
+
 func seedWorkBuddyWorkspaceBinding(t *testing.T, service *httptest.Server, token, workspace string) string {
 	t.Helper()
 	authorization := ""
@@ -187,6 +263,39 @@ func seedWorkBuddyWorkspaceBinding(t *testing.T, service *httptest.Server, token
 		t.Fatalf("set WorkBuddy workspace binding = %#v, %v", set, err)
 	}
 	return scope
+}
+
+func assertWorkBuddyMemorySearch(t *testing.T, service *httptest.Server, token, scope string) {
+	t.Helper()
+	authorization := ""
+	if token != "" {
+		authorization = "Bearer " + token
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "workbuddy-memory-check", Version: "test"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint:             service.URL + "/mcp/",
+		HTTPClient:           &http.Client{Transport: workBuddyAuthorizationTransport{base: service.Client().Transport, authorization: authorization}},
+		DisableStandaloneSSE: true,
+		MaxRetries:           -1,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "search_memory", Arguments: map[string]any{
+		"scope_id": scope, "query": "WorkBuddy service chain",
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("first-hook memory search failed: result_error=%t call_error=%t", result.IsError, err != nil)
+	}
+	content, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("first-hook memory search structured result is invalid")
+	}
+	hits, ok := content["hits"].([]any)
+	if !ok || len(hits) == 0 {
+		t.Fatalf("first hook did not materialize searchable Memory")
+	}
 }
 
 func assertWorkBuddyServiceReady(t *testing.T, service *httptest.Server) {
