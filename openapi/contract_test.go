@@ -27,7 +27,7 @@ import (
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
-const activeOpenAPISHA256 = "ab78caf229a61568675dbc9176ad0e1a48d6d48aa860fc7f3b5993ea69268ccb"
+const activeOpenAPISHA256 = "e407d09a1267fc2d322370504f9756e4a48fc4d9981387c917f410bf6cb59a07"
 
 func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	t.Parallel()
@@ -61,8 +61,8 @@ func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(operationIDs); got != 53 {
-		t.Fatalf("OpenAPI operations = %d, want 53", got)
+	if got := len(operationIDs); got != 56 {
+		t.Fatalf("OpenAPI operations = %d, want 56", got)
 	}
 	handler := reflect.TypeOf((*v1.Handler)(nil)).Elem()
 	if got := handler.NumMethod(); got != len(operationIDs) {

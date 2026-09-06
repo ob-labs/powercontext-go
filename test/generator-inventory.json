@@ -22,12 +22,15 @@
         "api/v1/oas_response_encoders_gen.go",
         "api/v1/oas_router_gen.go",
         "api/v1/oas_schemas_gen.go",
+        "api/v1/oas_scope_external_reference_equal_gen.go",
+        "api/v1/oas_scope_external_reference_hash_gen.go",
         "api/v1/oas_security_gen.go",
         "api/v1/oas_server_gen.go",
         "api/v1/oas_unimplemented_gen.go",
         "api/v1/oas_validators_gen.go",
         "api/v1/powercontext_contract_validation_gen.go",
         "api/v1/time.go",
+        "api/v1/v1_validators_unique_gen.go",
         "client/invoker_gen.go"
       ],
       "evidence": ["tools/generated-consumers/main_test.go#func TestOpenAPIGeneratorProducesGoldenBuildableConsumer("]
