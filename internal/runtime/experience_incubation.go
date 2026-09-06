@@ -143,7 +143,15 @@ func (a *ExperienceIncubationApplication) incubateWindow(
 	if previous.Sequence() == next.Sequence() {
 		return result, nil
 	}
-
+	// The durable window can contain audit-only Sources which are deliberately
+	// not evidence-capable. Consume that cursor range without invoking an
+	// arbitrary candidate pipeline with an empty input.
+	if len(values) == 0 {
+		if applyErr := backend.ApplyWindow(ctx, experience.IncubationCursorName, nil, nil, next, generation); applyErr != nil {
+			return result, applyErr
+		}
+		return result, nil
+	}
 	plans, err := a.pipeline.Incubate(ctx, values)
 	if err != nil {
 		return result, err

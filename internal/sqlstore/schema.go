@@ -133,6 +133,15 @@ var builtinSchema = []string{
         PRIMARY KEY (scope_id, source_type, source_id),
         CONSTRAINT uq_pc_sources_scope_journal_position UNIQUE (scope_id, journal_position)
     )`,
+	`CREATE TABLE IF NOT EXISTS pc_source_observation_acceptances (
+	    scope_id VARCHAR(256) NOT NULL,
+	    source_type VARCHAR(128) NOT NULL,
+	    source_id VARCHAR(256) NOT NULL,
+	    PRIMARY KEY (scope_id, source_type, source_id),
+	    CONSTRAINT fk_pc_source_observation_acceptances_source
+	        FOREIGN KEY (scope_id, source_type, source_id)
+	        REFERENCES pc_sources (scope_id, source_type, source_id) ON DELETE RESTRICT
+	)`,
 	`CREATE TABLE IF NOT EXISTS pc_artifacts (
         scope_id VARCHAR(256) NOT NULL,
         family VARCHAR(128) NOT NULL,

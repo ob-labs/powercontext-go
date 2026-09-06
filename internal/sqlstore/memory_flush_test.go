@@ -153,6 +153,72 @@ func TestMemoryFlushPlanningDoesNotHoldDatabaseTransaction(t *testing.T) {
 	}
 }
 
+func TestMemoryFlushSkipsLegacyRawObservationsAndAdvancesTheirCursor(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	database := openTestDatabase(t)
+	sources, artifacts := repositories(t)
+	addFlushSource(t, database, sources, "scope-raw-window", "native-1", "accepted native evidence")
+	raw := observationSource(t, "worker.legacy", "raw-1", `{"name":"raw-1","definition_version":"1","materialization":"captured"}`)
+	payload, err := observationEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, insertErr := database.SQLDB().ExecContext(ctx, `INSERT INTO pc_sources
+        (scope_id, source_type, source_id, payload, journal_position) VALUES (?, ?, ?, ?, ?)`,
+		"scope-raw-window", raw.Ref().Type(), raw.Ref().ID(), payload, 2,
+	); insertErr != nil {
+		t.Fatal(insertErr)
+	}
+	repository, err := sqlstore.NewMemoryRepository(database, "scope-raw-window", artifacts, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := sqlstore.NewMemorySourceResolver(database, "scope-raw-window", sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := memory.NewService(repository, memory.ServiceOptions{
+		CandidatePipeline: echoMemoryPipeline{}, SourceResolver: resolver, IDFactory: sequentialMemoryIDs(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlstore.NewMemoryFlushStore(database, "scope-raw-window", sources, repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, next, generation, high, values, err := store.ObserveWindow(ctx, trigger.SourceWindowName, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if previous.Sequence() != 0 || next.Sequence() != 2 || high != 2 || generation != nil {
+		t.Fatalf("raw window = previous:%d next:%d high:%d generation:%v", previous.Sequence(), next.Sequence(), high, generation)
+	}
+	if len(values) != 1 {
+		t.Fatalf("window values = %d, want only the accepted native Source", len(values))
+	}
+	if _, raw := values[0].(source.SourceObservation); raw {
+		t.Fatalf("raw observation reached Memory planning: %#v", values[0])
+	}
+	plan, err := service.PlanRemember(ctx, nil, values, nil, nil, memory.RememberExtract)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ApplyWindow(ctx, trigger.SourceWindowName, plan, next, generation); err != nil {
+		t.Fatal(err)
+	}
+	var cursor []byte
+	if err := database.SQLDB().QueryRowContext(ctx, `SELECT cursor FROM pc_source_cursors WHERE scope_id = ? AND binding_name = ?`,
+		"scope-raw-window", trigger.SourceWindowName,
+	).Scan(&cursor); err != nil {
+		t.Fatal(err)
+	}
+	if string(cursor) != `{"sequence":2}` {
+		t.Fatalf("raw observation did not advance Memory cursor: %s", cursor)
+	}
+}
+
 type echoMemoryPipeline struct{}
 
 func (echoMemoryPipeline) Extract(_ context.Context, request memory.CandidateRequest) ([]memory.EntryInput, error) {

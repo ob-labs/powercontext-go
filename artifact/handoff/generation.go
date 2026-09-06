@@ -26,6 +26,7 @@ import (
 	"github.com/ob-labs/powercontext-go/artifact/handoff/prompts"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 	"github.com/ob-labs/powercontext-go/inference"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
@@ -38,6 +39,9 @@ type EvidenceProjector interface {
 type DefaultEvidenceProjector struct{}
 
 func (DefaultEvidenceProjector) ProjectSource(value source.Value) (any, error) {
+	if err := sourceevidence.Require(value); err != nil {
+		return nil, err
+	}
 	description, hasDescription := value.SourceDescription()
 	var projectedDescription *string
 	if hasDescription {
@@ -79,6 +83,12 @@ func NewContentEvidenceProjector(fallback EvidenceProjector) ContentEvidenceProj
 }
 
 func (p ContentEvidenceProjector) ProjectSource(value source.Value) (any, error) {
+	if err := sourceevidence.Require(value); err != nil {
+		return nil, err
+	}
+	if accepted, ok := value.(sourceevidence.AcceptedObservation); ok {
+		return accepted.TextEvidence()
+	}
 	if content, ok := value.(source.ContentSource); ok {
 		return struct {
 			SourceType string         `json:"source_type"`

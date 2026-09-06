@@ -478,3 +478,14 @@ source / artifact / trigger / inference
   annotation mutant containing legacy `$id` and `$schema` and a nested actual
   resource with a legacy dialect, so the former is accepted and the latter is
   rejected before persistence.
+- When observation evidence becomes model-capable, source-level admission must
+  return a non-evidence staging value. Only a transaction that revalidates the
+  persisted Definition before writing the Source and its acceptance marker may
+  mint a durable evidence capability. Verify forged, unregistered, mismatched,
+  raw, pointer, or wrapper observations cannot reach model evidence or create a
+  Source, marker, or journal position. Every model-facing source window and its
+  candidate-reference set must pass only explicit durable evidence values.
+  Verify a raw-only window still advances its cursor without invoking a
+  candidate pipeline, and that accepted observations project only their
+  standard text evidence while raw observations return a typed refusal in
+  generation evidence paths.

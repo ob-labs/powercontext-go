@@ -70,6 +70,7 @@ func (s ContentSource) SourceDescription() (string, bool) {
 	}
 	return *s.description, true
 }
+
 func (s ContentSource) Content() string { return s.content }
 func (s ContentSource) Metadata() map[string]any {
 	value, _ := cloneJSONObject(s.metadata)

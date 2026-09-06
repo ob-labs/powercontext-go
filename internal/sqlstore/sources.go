@@ -26,6 +26,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
@@ -64,6 +65,12 @@ func (r *SourceRepository) Ref(value source.Value) (source.Ref, error) {
 			return source.Ref{}, err
 		}
 		return observation.Ref(), nil
+	}
+	if accepted, ok := value.(sourceevidence.AcceptedObservation); ok {
+		if err := accepted.Validate(); err != nil {
+			return source.Ref{}, err
+		}
+		return accepted.Ref(), nil
 	}
 	codec, ok := r.bySource[reflect.TypeOf(value)]
 	if !ok {
@@ -110,7 +117,7 @@ func (r *SourceRepository) Add(
 	if err := requireScope(scopeID); err != nil {
 		return StoredSource{}, err
 	}
-	ref, payload, observation, err := r.encode(value)
+	ref, payload, err := r.encode(value)
 	if err != nil {
 		return StoredSource{}, err
 	}
@@ -122,17 +129,14 @@ func (r *SourceRepository) Add(
 		return StoredSource{}, err
 	}
 	if found {
-		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, observation)
+		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, false)
 		if equalErr != nil {
 			return StoredSource{}, invalidStoredSourceObservation()
 		}
 		if !equal {
-			if observation {
-				return StoredSource{}, sourceObservationConflict()
-			}
 			return StoredSource{}, &StoredPayloadConflictError{Kind: "source", Identity: sourceIdentity(scopeID, ref)}
 		}
-		return r.decode(existing)
+		return r.decode(ctx, db, existing)
 	}
 
 	position, err := nextJournalPosition(ctx, db, scopeID)
@@ -150,45 +154,138 @@ func (r *SourceRepository) Add(
 		if !found {
 			return StoredSource{}, err
 		}
-		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, observation)
+		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, false)
 		if equalErr != nil {
 			return StoredSource{}, invalidStoredSourceObservation()
 		}
 		if !equal {
-			if observation {
-				return StoredSource{}, sourceObservationConflict()
-			}
 			return StoredSource{}, &StoredPayloadConflictError{Kind: "source", Identity: sourceIdentity(scopeID, ref)}
 		}
-		return r.decode(existing)
+		return r.decode(ctx, db, existing)
 	}
 	return StoredSource{Ref: ref, Value: value, JournalPosition: position}, nil
 }
 
-func (r *SourceRepository) encode(value source.Value) (source.Ref, []byte, bool, error) {
-	if observation, ok := value.(source.SourceObservation); ok {
-		if err := observation.Validate(); err != nil {
-			return source.Ref{}, nil, true, err
+// AddAccepted persists an already schema-admitted worker observation. It
+// repeats Definition admission against the Definition visible in this write
+// transaction, then writes the Source and durable acceptance marker atomically
+// before exposing an evidence-capable value.
+func (r *SourceRepository) AddAccepted(
+	ctx context.Context,
+	db DBTX,
+	scopeID string,
+	admitted *source.AdmittedObservation,
+) (StoredSource, error) {
+	if err := requireScope(scopeID); err != nil {
+		return StoredSource{}, err
+	}
+	if err := admitted.Validate(); err != nil {
+		return StoredSource{}, err
+	}
+	persisted, err := r.admitPersistedObservation(ctx, db, admitted.Observation())
+	if err != nil {
+		return StoredSource{}, err
+	}
+	observation := persisted.Observation()
+	payload, err := encodeSourceObservation(observation)
+	if err != nil {
+		return StoredSource{}, err
+	}
+	ref := observation.Ref()
+	if lockErr := r.lockJournalHead(ctx, db, scopeID); lockErr != nil {
+		return StoredSource{}, lockErr
+	}
+	existing, found, err := r.find(ctx, db, scopeID, ref)
+	if err != nil {
+		return StoredSource{}, err
+	}
+	if found {
+		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, true)
+		if equalErr != nil {
+			return StoredSource{}, invalidStoredSourceObservation()
 		}
-		payload, err := encodeSourceObservation(observation)
-		if err != nil {
-			return source.Ref{}, nil, true, err
+		if !equal || !existing.accepted {
+			return StoredSource{}, sourceObservationConflict()
 		}
-		return observation.Ref(), payload, true, nil
+		return r.decode(ctx, db, existing)
+	}
+	position, err := nextJournalPosition(ctx, db, scopeID)
+	if err != nil {
+		return StoredSource{}, err
+	}
+	if _, insertErr := db.ExecContext(ctx, `INSERT INTO pc_sources
+        (scope_id, source_type, source_id, payload, journal_position)
+		VALUES (?, ?, ?, ?, ?)`, scopeID, ref.Type(), ref.ID(), payload, position); insertErr != nil {
+		existing, found, findErr := r.find(ctx, db, scopeID, ref)
+		if findErr != nil {
+			return StoredSource{}, errors.Join(insertErr, findErr)
+		}
+		if !found {
+			return StoredSource{}, insertErr
+		}
+		equal, equalErr := sameStoredSourcePayload(existing.payload, payload, true)
+		if equalErr != nil {
+			return StoredSource{}, invalidStoredSourceObservation()
+		}
+		if !equal || !existing.accepted {
+			return StoredSource{}, sourceObservationConflict()
+		}
+		return r.decode(ctx, db, existing)
+	}
+	if markErr := markAcceptedObservation(ctx, db, scopeID, ref); markErr != nil {
+		return StoredSource{}, markErr
+	}
+	value, err := sourceevidence.NewAcceptedObservation(observation)
+	if err != nil {
+		return StoredSource{}, err
+	}
+	return StoredSource{Ref: ref, Value: value, JournalPosition: position}, nil
+}
+
+func (r *SourceRepository) encode(value source.Value) (source.Ref, []byte, error) {
+	if _, raw := value.(source.SourceObservation); raw {
+		return source.Ref{}, nil, &source.UnacceptedObservationError{}
 	}
 	codec, ok := r.bySource[reflect.TypeOf(value)]
 	if !ok {
-		return source.Ref{}, nil, false, &RepositoryNotFoundError{Kind: "source-adapter", Identity: reflect.TypeOf(value)}
+		return source.Ref{}, nil, &RepositoryNotFoundError{Kind: "source-adapter", Identity: reflect.TypeOf(value)}
 	}
 	ref, err := r.Ref(value)
 	if err != nil {
-		return source.Ref{}, nil, false, err
+		return source.Ref{}, nil, err
 	}
 	payload, err := codec.encode(value)
 	if err != nil {
-		return source.Ref{}, nil, false, &InvalidStoredPayloadError{Kind: "source", Name: codec.name, Issue: "value is not JSON serializable"}
+		return source.Ref{}, nil, &InvalidStoredPayloadError{Kind: "source", Name: codec.name, Issue: "value is not JSON serializable"}
 	}
-	return ref, payload, false, nil
+	return ref, payload, nil
+}
+
+// admitPersistedObservation rechecks a worker observation against the
+// Definition stored in this transaction. An in-memory Definition is not
+// sufficient because this method guards the durable acceptance marker.
+func (*SourceRepository) admitPersistedObservation(
+	ctx context.Context,
+	db DBTX,
+	observation source.SourceObservation,
+) (*source.AdmittedObservation, error) {
+	if err := observation.Validate(); err != nil {
+		return nil, err
+	}
+	identity, err := source.NewDefinitionIdentity(observation.Ref().Type(), observation.DefinitionVersion())
+	if err != nil {
+		return nil, &source.InvalidSourceObservationError{
+			Field: "definition", Detail: "must identify a valid Source Definition",
+		}
+	}
+	manifest, found, err := (DefinitionManifestRepository{}).Find(ctx, db, identity.Name(), identity.Version())
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, &source.DefinitionNotFoundError{}
+	}
+	return source.AdmitObservation(manifest, observation)
 }
 
 func (r *SourceRepository) Get(
@@ -210,7 +307,7 @@ func (r *SourceRepository) Get(
 	if !found {
 		return StoredSource{}, &RepositoryNotFoundError{Kind: "source", Identity: sourceIdentity(scopeID, ref)}
 	}
-	return r.decode(row)
+	return r.decode(ctx, db, row)
 }
 
 func (r *SourceRepository) List(
@@ -229,8 +326,12 @@ func (r *SourceRepository) List(
 	if limit != nil && *limit < 1 {
 		return nil, &InvalidRepositoryArgumentError{Field: "limit", Detail: "must be positive"}
 	}
-	query := `SELECT scope_id, source_type, source_id, payload, journal_position
-        FROM pc_sources WHERE scope_id = ? AND journal_position > ? ORDER BY journal_position`
+	query := `SELECT s.scope_id, s.source_type, s.source_id, s.payload, s.journal_position,
+        a.source_id IS NOT NULL
+        FROM pc_sources AS s
+        LEFT JOIN pc_source_observation_acceptances AS a
+          ON a.scope_id = s.scope_id AND a.source_type = s.source_type AND a.source_id = s.source_id
+        WHERE s.scope_id = ? AND s.journal_position > ? ORDER BY s.journal_position`
 	arguments := []any{scopeID, after}
 	if limit != nil {
 		query += " LIMIT ?"
@@ -240,21 +341,34 @@ func (r *SourceRepository) List(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
-	result = make([]StoredSource, 0)
+	rowsClosed := false
+	defer func() {
+		if !rowsClosed {
+			returnErr = errors.Join(returnErr, rows.Close())
+		}
+	}()
+	stored := make([]storedSourceRow, 0)
 	for rows.Next() {
 		row, err := scanSource(rows)
 		if err != nil {
 			return nil, err
 		}
-		decoded, err := r.decode(row)
+		stored = append(stored, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rowsClosed = true
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	result = make([]StoredSource, 0, len(stored))
+	for _, row := range stored {
+		decoded, err := r.decode(ctx, db, row)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, decoded)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	return result, nil
 }
@@ -286,6 +400,7 @@ type storedSourceRow struct {
 	sourceID string
 	payload  []byte
 	position int64
+	accepted bool
 }
 
 func (r *SourceRepository) find(
@@ -294,8 +409,12 @@ func (r *SourceRepository) find(
 	scopeID string,
 	ref source.Ref,
 ) (storedSourceRow, bool, error) {
-	row, err := scanSource(db.QueryRowContext(ctx, `SELECT scope_id, source_type, source_id, payload, journal_position
-        FROM pc_sources WHERE scope_id = ? AND source_type = ? AND source_id = ?`,
+	row, err := scanSource(db.QueryRowContext(ctx, `SELECT s.scope_id, s.source_type, s.source_id, s.payload, s.journal_position,
+        a.source_id IS NOT NULL
+        FROM pc_sources AS s
+        LEFT JOIN pc_source_observation_acceptances AS a
+          ON a.scope_id = s.scope_id AND a.source_type = s.source_type AND a.source_id = s.source_id
+        WHERE s.scope_id = ? AND s.source_type = ? AND s.source_id = ?`,
 		scopeID, ref.Type(), ref.ID()))
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedSourceRow{}, false, nil
@@ -309,7 +428,8 @@ func scanSource(value scanner) (storedSourceRow, error) {
 	var row storedSourceRow
 	var payload any
 	var position any
-	if err := value.Scan(&row.scopeID, &row.typeName, &row.sourceID, &payload, &position); err != nil {
+	var accepted any
+	if err := value.Scan(&row.scopeID, &row.typeName, &row.sourceID, &payload, &position, &accepted); err != nil {
 		return storedSourceRow{}, err
 	}
 	decodedPayload, err := storedBytes(payload, "payload")
@@ -322,10 +442,15 @@ func scanSource(value scanner) (storedSourceRow, error) {
 	}
 	row.payload = decodedPayload
 	row.position = decodedPosition
+	acceptedValue, ok := integer(accepted)
+	if !ok || acceptedValue < 0 || acceptedValue > 1 {
+		return storedSourceRow{}, &InvalidStoredColumnError{Column: "observation_acceptance", Expected: "a boolean join marker"}
+	}
+	row.accepted = acceptedValue == 1
 	return row, nil
 }
 
-func (r *SourceRepository) decode(row storedSourceRow) (StoredSource, error) {
+func (r *SourceRepository) decode(ctx context.Context, db DBTX, row storedSourceRow) (StoredSource, error) {
 	envelope, recognized, envelopeErr := parseSourceEnvelope(row.payload)
 	if recognized {
 		if envelopeErr != nil {
@@ -340,6 +465,17 @@ func (r *SourceRepository) decode(row storedSourceRow) (StoredSource, error) {
 			if indexed != envelope.observation.Ref() {
 				return StoredSource{}, sourceObservationIdentityMismatch()
 			}
+			if row.accepted {
+				admitted, admittedErr := r.admitPersistedObservation(ctx, db, envelope.observation)
+				if admittedErr != nil {
+					return StoredSource{}, invalidStoredSourceObservation()
+				}
+				accepted, acceptedErr := sourceevidence.NewAcceptedObservation(admitted.Observation())
+				if acceptedErr != nil {
+					return StoredSource{}, invalidStoredSourceObservation()
+				}
+				return StoredSource{Ref: indexed, Value: accepted, JournalPosition: row.position}, nil
+			}
 			return StoredSource{Ref: indexed, Value: envelope.observation, JournalPosition: row.position}, nil
 		case sourceNativeRepresentation:
 			return r.decodeNative(row, envelope.value)
@@ -349,6 +485,9 @@ func (r *SourceRepository) decode(row storedSourceRow) (StoredSource, error) {
 }
 
 func (r *SourceRepository) decodeNative(row storedSourceRow, payload []byte) (StoredSource, error) {
+	if row.accepted {
+		return StoredSource{}, invalidStoredSourceObservation()
+	}
 	codec, ok := r.byName[row.typeName]
 	if !ok {
 		return StoredSource{}, &RepositoryNotFoundError{Kind: "source-adapter", Identity: row.typeName}
@@ -369,6 +508,22 @@ func (r *SourceRepository) decodeNative(row storedSourceRow, payload []byte) (St
 		return StoredSource{}, &IdentityMismatchError{Kind: "source", Indexed: indexed, Decoded: decoded}
 	}
 	return StoredSource{Ref: indexed, Value: value, JournalPosition: row.position}, nil
+}
+
+func markAcceptedObservation(ctx context.Context, db DBTX, scopeID string, ref source.Ref) error {
+	result, err := db.ExecContext(ctx, `INSERT INTO pc_source_observation_acceptances
+        (scope_id, source_type, source_id) VALUES (?, ?, ?)`, scopeID, ref.Type(), ref.ID())
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return &InvalidStoredColumnError{Column: "observation_acceptance", Expected: "one durable admission marker"}
+	}
+	return nil
 }
 
 func sameStoredSourcePayload(stored, expected []byte, observation bool) (bool, error) {

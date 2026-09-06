@@ -20,6 +20,7 @@ import (
 
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 	"github.com/ob-labs/powercontext-go/internal/review"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 	"github.com/ob-labs/powercontext-go/trigger"
 )
@@ -100,11 +101,16 @@ func (s *ExperienceIncubationStore) ObserveWindow(
 		if listErr != nil {
 			return listErr
 		}
-		values = make([]source.Value, len(rows))
-		available = make([]source.Ref, len(rows))
-		for index, row := range rows {
-			values[index] = row.Value
-			available[index] = row.Ref
+		values = make([]source.Value, 0, len(rows))
+		available = make([]source.Ref, 0, len(rows))
+		for _, row := range rows {
+			// Unaccepted worker observations stay in the journal and consume the
+			// window range, but never become arbitrary pipeline input.
+			if !sourceevidence.Allows(row.Value) {
+				continue
+			}
+			values = append(values, row.Value)
+			available = append(available, row.Ref)
 		}
 		return nil
 	})
@@ -128,10 +134,14 @@ func (s *ExperienceIncubationStore) ApplyWindow(
 		for index, plan := range plans {
 			refs := plan.Sources()
 			for _, ref := range refs {
-				if _, err := s.sources.Get(ctx, tx, s.scopeID, ref); err != nil {
+				stored, err := s.sources.Get(ctx, tx, s.scopeID, ref)
+				if err != nil {
 					return &review.InvalidCandidateError{
 						Field: "evidence", Detail: "reference is not available in this scope",
 					}
+				}
+				if err := sourceevidence.Require(stored.Value); err != nil {
+					return err
 				}
 			}
 			reason := plan.Reason()

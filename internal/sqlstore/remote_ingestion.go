@@ -82,10 +82,10 @@ func (b *RuntimeRemoteIngestionBackend) Find(
 func (b *RuntimeRemoteIngestionBackend) Add(
 	ctx context.Context,
 	scopeID string,
-	observation source.SourceObservation,
+	observation *source.AdmittedObservation,
 ) (ref source.Ref, sequence int64, err error) {
 	err = b.database.Transaction(ctx, func(tx DBTX) error {
-		stored, addErr := b.sources.Add(ctx, tx, scopeID, observation)
+		stored, addErr := b.sources.AddAccepted(ctx, tx, scopeID, observation)
 		if addErr != nil {
 			return addErr
 		}

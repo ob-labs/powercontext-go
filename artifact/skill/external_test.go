@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 )
 
 func TestCodexProviderDiscoversAndExactlyResolvesLocalPackage(t *testing.T) {
@@ -65,6 +66,30 @@ func TestAgentSkillTargetsAcceptOnlySupportedProductAgents(t *testing.T) {
 		if err == nil || strings.Contains(err.Error(), string(agent)) || !strings.Contains(err.Error(), "Codex and WorkBuddy") {
 			t.Fatalf("unsupported Agent Skill error is not stable and redacted: %v", err)
 		}
+	}
+}
+
+func TestSnapshotSourcePassesClosedProductEvidenceGate(t *testing.T) {
+	registration, err := skill.NewRegistration(
+		"codex:project:repository/evidence-skill", "codex", "codex", "workstation-1",
+		skill.ProjectScope, "/workspace/.agents/skills/evidence-skill", strings.Repeat("a", 64),
+		"evidence-skill", "Provides an immutable test snapshot.",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := skill.NewSnapshot(registration, "---\nname: evidence-skill\n---\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, err := (skill.SnapshotSourceAdapter{}).Resolve(t.Context(), skill.SnapshotCapture{
+		Snapshot: snapshot, Mode: skill.ImportModeImport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sourceevidence.Require(value); err != nil {
+		t.Fatalf("sourceevidence.Require(SnapshotSource) = %v", err)
 	}
 }
 

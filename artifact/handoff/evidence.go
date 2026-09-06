@@ -19,6 +19,7 @@ import (
 
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
+	"github.com/ob-labs/powercontext-go/internal/sourceevidence"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
@@ -44,6 +45,9 @@ func (SourceEvidence) evidenceValue()         {}
 func (e SourceEvidence) Source() source.Value { return e.source }
 func (e SourceEvidence) Validate() error {
 	if err := e.citation.Validate(); err != nil {
+		return err
+	}
+	if err := sourceevidence.Require(e.source); err != nil {
 		return err
 	}
 	if isNilInterface(e.source) || e.source.SourceName() != e.citation.ref.ID() {

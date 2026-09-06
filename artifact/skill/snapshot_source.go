@@ -51,6 +51,7 @@ func (SnapshotSource) SourceMaterialization() source.Materialization {
 func (SnapshotSource) SourceDescription() (string, bool) {
 	return "Exact external Skill snapshot captured by an explicit managed import or fork.", true
 }
+
 func (s SnapshotSource) Snapshot() Snapshot { return s.snapshot }
 func (s SnapshotSource) Mode() ImportMode   { return s.mode }
 
