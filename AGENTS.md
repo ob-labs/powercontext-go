@@ -471,3 +471,10 @@ source / artifact / trigger / inference
   and Runtime instances cannot commit opposite parent edges or duplicate an
   idempotent default bootstrap, and prove that an injected default-setting
   failure rolls the Scope and its creation key back together.
+
+- When a remote manifest restricts JSON Schema dialects, walk only the pinned
+  draft's schema-bearing keyword paths when finding nested resource roots.
+  Treat `examples` and unknown annotation values as opaque data. Verify both an
+  annotation mutant containing legacy `` and `` and a nested actual
+  resource with a legacy dialect, so the former is accepted and the latter is
+  rejected before persistence.

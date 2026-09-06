@@ -94,6 +94,13 @@ func NewSourceRepository(dialect Dialect, codecs ...SourceCodec) (*SourceReposit
 	return repository, nil
 }
 
+// HasNativeDefinition reports whether name is owned by a concrete Source codec.
+// Remote Definition manifests must not replace these local runtime contracts.
+func (r *SourceRepository) HasNativeDefinition(name string) bool {
+	_, exists := r.byName[name]
+	return exists
+}
+
 func (r *SourceRepository) Add(
 	ctx context.Context,
 	db DBTX,

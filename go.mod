@@ -23,6 +23,7 @@ require (
 	github.com/ogen-go/ogen v1.23.0
 	github.com/openai/openai-go/v3 v3.51.0
 	github.com/prometheus/client_golang v1.24.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/spf13/cobra v1.10.2
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0
