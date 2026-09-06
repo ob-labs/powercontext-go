@@ -34,7 +34,7 @@ func TestRuntimeScopeReaderAdmitsOnlyPersistedScopesBeforeWriteCallback(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, createErr := store.Create(t.Context(), "persisted-scope", draft); createErr != nil {
+	if _, createErr := store.Create(t.Context(), "persisted-scope", draft, nil); createErr != nil {
 		t.Fatal(createErr)
 	}
 	reader, err := sqlstore.NewRuntimeScopeReader(database, sqlstore.ScopeRepository{})
