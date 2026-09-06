@@ -518,3 +518,7 @@ source / artifact / trigger / inference
   return the latter only as `scope_id`. Verify an explicit override reaches the
   resolver, ordered binding keys remain a fallback, and no unvalidated local
   Scope reaches capture, recall, or persistence.
+- When Application composition conditionally adds native MCP tools, update the
+  release process-smoke inventory independently from direct-handler tool tests.
+  Verify the configured production Server lists the exact additional tools and
+  the Handoff Report variant retains its own additive count.
