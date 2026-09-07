@@ -200,6 +200,7 @@ func configuredReadiness(
 	}{
 		{name: "inference.generation", operation: dependencies.generationReadiness},
 		{name: "inference.embedding", operation: dependencies.embeddingReadiness},
+		{name: "inference.rerank", operation: dependencies.rerankReadiness},
 	} {
 		if configured.operation == nil {
 			continue

@@ -106,7 +106,8 @@ func (c ProcessConfig) Validate() error {
 	if err := c.Inference.validate(); err != nil {
 		return err
 	}
-	if c.Runtime.MemoryRerankEnabled && c.Inference.GenerationModel == "" {
+	if c.Runtime.MemoryRerankEnabled && c.Inference.GenerationModel == "" &&
+		(c.Inference.Rerank == nil || c.Inference.Rerank.Model == "") {
 		return errors.New("server: Memory reranking requires a generation model")
 	}
 	if c.Runtime.SourceWindowInterval != nil && c.Inference.GenerationModel == "" {

@@ -82,6 +82,35 @@ func TestConfiguredReadinessIncludesRuntimeAndConfiguredInference(t *testing.T) 
 	}
 }
 
+func TestConfiguredReadinessAddsRerankOnlyForIndependentRerank(t *testing.T) {
+	withoutRerank, err := configuredReadiness(func(context.Context) error { return nil }, assembledDependencies{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := withoutRerank.Run(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := status.Checks()["inference.rerank"]; found {
+		t.Fatalf("unconfigured checks = %#v", status.Checks())
+	}
+	withRerank, err := configuredReadiness(
+		func(context.Context) error { return nil },
+		assembledDependencies{rerankReadiness: func(context.Context) error { return nil }},
+		time.Now,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err = withRerank.Run(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Checks()["inference.rerank"] != runtime.CheckReady {
+		t.Fatalf("configured checks = %#v", status.Checks())
+	}
+}
+
 func TestGenerationReadinessUsesRawMinimalProviderRequest(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", "https://provider.test/v1")

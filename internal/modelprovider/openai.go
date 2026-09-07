@@ -17,6 +17,7 @@ package modelprovider
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -49,6 +50,7 @@ type OpenAIConfig struct {
 	HTTPClient                *http.Client
 	Headers                   http.Header
 	Query                     url.Values
+	ModelSettings             map[string]any
 	SupportsJSONObject        *bool
 	UseLegacyMaxTokens        *bool
 	DropSampling              *bool
@@ -109,7 +111,7 @@ func (m *OpenAITextModel) completeChat(ctx context.Context, request inference.Te
 			params.MaxCompletionTokens = openai.Int(*value)
 		}
 	}
-	response, err := m.shared.client.Chat.Completions.New(ctx, params, option.WithJSONSet("stream", false))
+	response, err := m.shared.client.Chat.Completions.New(ctx, params, m.shared.textOptions()...)
 	if err != nil {
 		return inference.TextResponse{}, mapOpenAIError(err, "generate")
 	}
@@ -147,7 +149,7 @@ func (m *OpenAITextModel) completeResponses(ctx context.Context, request inferen
 	if value := settings.MaxTokens(); value != nil {
 		params.MaxOutputTokens = openai.Int(*value)
 	}
-	response, err := m.shared.client.Responses.New(ctx, params, option.WithJSONSet("stream", false))
+	response, err := m.shared.client.Responses.New(ctx, params, m.shared.textOptions()...)
 	if err != nil {
 		return inference.TextResponse{}, mapOpenAIError(err, "generate")
 	}
@@ -284,7 +286,7 @@ func (t *OpenAIEmbeddingTransport) Embed(
 		Model:      t.shared.route.model,
 		Input:      openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: slices.Clone(inputs)},
 		Dimensions: param.NewOpt(int64(request.DimensionCount())),
-	})
+	}, t.shared.embeddingOptions(request)...)
 	if err != nil {
 		return inference.ProviderEmbeddingResult{}, mapOpenAIError(err, "embed")
 	}
@@ -316,6 +318,11 @@ func newOpenAIClient(route Route, config OpenAIConfig) (openAIClient, error) {
 	}
 	config.Headers = config.Headers.Clone()
 	config.Query = cloneURLValues(config.Query)
+	workload, workloadErr := cloneWorkloadConfig(WorkloadConfig{ModelSettings: config.ModelSettings})
+	if workloadErr != nil {
+		return openAIClient{}, workloadErr
+	}
+	config.ModelSettings = workload.ModelSettings
 	opts := []option.RequestOption{
 		option.WithBaseURL(config.BaseURL),
 		option.WithAPIKey(config.APIKey),
@@ -347,6 +354,33 @@ func newOpenAIClient(route Route, config OpenAIConfig) (openAIClient, error) {
 		}
 	}
 	return openAIClient{client: openai.NewClient(opts...), route: route, config: config}, nil
+}
+
+func (c openAIClient) textOptions() []option.RequestOption {
+	options := c.modelSettingOptions()
+	return append(
+		options,
+		option.WithJSONSet("stream", false),
+		option.WithJSONSet("model", c.route.model),
+	)
+}
+
+func (c openAIClient) embeddingOptions(request inference.EmbeddingRequest) []option.RequestOption {
+	options := c.modelSettingOptions()
+	return append(
+		options,
+		option.WithJSONSet("model", c.route.model),
+		option.WithJSONSet("dimensions", request.DimensionCount()),
+	)
+}
+
+func (c openAIClient) modelSettingOptions() []option.RequestOption {
+	keys := slices.Sorted(maps.Keys(c.config.ModelSettings))
+	options := make([]option.RequestOption, 0, len(keys))
+	for _, key := range keys {
+		options = append(options, option.WithJSONSet(key, c.config.ModelSettings[key]))
+	}
+	return options
 }
 
 func mapOpenAIError(err error, operation string) error {

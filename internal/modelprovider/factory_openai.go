@@ -111,6 +111,29 @@ func (f *Factory) openAIConfig(route Route) (OpenAIConfig, error) {
 	}
 }
 
+func (c OpenAIConfig) withWorkload(workload WorkloadConfig) OpenAIConfig {
+	if workload.BaseURL != "" {
+		c.BaseURL = workload.BaseURL
+	}
+	if len(workload.Headers) > 0 {
+		if c.Headers == nil {
+			c.Headers = make(http.Header)
+		} else {
+			c.Headers = c.Headers.Clone()
+		}
+		for name, values := range workload.Headers {
+			for existing := range c.Headers {
+				if strings.EqualFold(existing, name) {
+					delete(c.Headers, existing)
+				}
+			}
+			c.Headers[name] = append([]string(nil), values...)
+		}
+	}
+	c.ModelSettings = workload.ModelSettings
+	return c
+}
+
 func (f *Factory) openAIProviderConfig() (OpenAIConfig, error) {
 	baseURL, hasBaseURL := f.nonEmpty("OPENAI_BASE_URL")
 	if !hasBaseURL {
