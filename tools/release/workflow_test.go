@@ -1424,6 +1424,7 @@ func TestLintExclusionsAreLimitedToOwnedGeneratedGoPaths(t *testing.T) {
 	wantPaths := map[string]bool{
 		"^api/v1/":                           true,
 		"^api/canonical/scopes/":             true,
+		"^api/canonical/sources/":            true,
 		"^client/invoker_gen\\.go$":          true,
 		"^internal/mcpapi/schemas_gen\\.go$": true,
 	}

@@ -34,6 +34,7 @@ func main() {
 	var clientInvoker string
 	var compatibility string
 	var scopeSidecarManifest string
+	var sourceSidecarManifest string
 	var legacySpecification string
 	flag.StringVar(&specification, "spec", "powercontext.yaml", "canonical OpenAPI document")
 	flag.StringVar(&target, "target", "../api/v1", "generated package directory")
@@ -41,10 +42,15 @@ func main() {
 	flag.StringVar(&clientInvoker, "client-invoker", "", "optional normalized Client Invoker output")
 	flag.StringVar(&compatibility, "compatibility", "", "optional legacy/canonical compatibility surface")
 	flag.StringVar(&scopeSidecarManifest, "scope-sidecar-manifest", "", "optional Scope sidecar projection manifest")
+	flag.StringVar(&sourceSidecarManifest, "source-sidecar-manifest", "", "optional Source sidecar projection manifest")
 	flag.StringVar(&legacySpecification, "legacy-spec", "", "legacy OpenAPI document required for Scope sidecar generation")
 	flag.Parse()
 	var err error
-	if scopeSidecarManifest == "" {
+	if scopeSidecarManifest != "" && sourceSidecarManifest != "" {
+		err = errors.New("select exactly one sidecar manifest")
+	} else if sourceSidecarManifest != "" {
+		err = runSourceSidecar(specification, sourceSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
+	} else if scopeSidecarManifest == "" {
 		err = run(specification, target, packageName, clientInvoker, compatibility)
 	} else {
 		err = runScopeSidecar(

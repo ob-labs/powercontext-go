@@ -441,6 +441,12 @@ source / artifact / trigger / inference
   context while explicitly clearing the ambient trace parent before later
   stages begin. Verify an injected root-start failure leaves child spans
   unparented and on a different trace ID from the ambient operation.
+- When generated transports record errors, intercept `trace.Span.RecordError`
+  in the installed tracer wrapper and replace raw errors with a fixed,
+  content-free class and message while forwarding event options. Verify with
+  an always-sampled span recorder that exception events and options survive,
+  status semantics remain intact, and protected request values or storage
+  diagnostics appear in no span attributes, events, or status descriptions.
 - When transport middleware buffers a request body before routing, bound the
   read with `http.MaxBytesReader` and map `*http.MaxBytesError` to an
   explicit over-limit response before any downstream decoding. When an

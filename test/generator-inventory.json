@@ -78,6 +78,43 @@
       "evidence": ["tools/api-generate/canonical_scopes_test.go#func TestScopeSidecarGenerationIsIsolatedAndFreshConsumerBuilds("]
     },
     {
+      "name": "canonical-source-sidecar",
+      "command": "go run ./tools/api-generate -source-sidecar-manifest openapi/canonical/sources-manifest.json",
+      "inputs": [
+        "openapi/canonical/upstream-powercontext.yaml",
+        "openapi/canonical/sources-manifest.json",
+        "openapi/compatibility-surface.json",
+        "openapi/powercontext.yaml"
+      ],
+      "outputs": [
+        "openapi/canonical/sources.json",
+        "api/canonical/sources/oas_cfg_gen.go",
+        "api/canonical/sources/oas_client_gen.go",
+        "api/canonical/sources/oas_defaults_gen.go",
+        "api/canonical/sources/oas_handlers_gen.go",
+        "api/canonical/sources/oas_interfaces_gen.go",
+        "api/canonical/sources/oas_json_gen.go",
+        "api/canonical/sources/oas_labeler_gen.go",
+        "api/canonical/sources/oas_middleware_gen.go",
+        "api/canonical/sources/oas_operations_gen.go",
+        "api/canonical/sources/oas_parameters_gen.go",
+        "api/canonical/sources/oas_request_decoders_gen.go",
+        "api/canonical/sources/oas_request_encoders_gen.go",
+        "api/canonical/sources/oas_response_decoders_gen.go",
+        "api/canonical/sources/oas_response_encoders_gen.go",
+        "api/canonical/sources/oas_router_gen.go",
+        "api/canonical/sources/oas_schemas_gen.go",
+        "api/canonical/sources/oas_security_gen.go",
+        "api/canonical/sources/oas_server_gen.go",
+        "api/canonical/sources/oas_unimplemented_gen.go",
+        "api/canonical/sources/oas_validators_gen.go",
+        "api/canonical/sources/time.go"
+      ],
+      "evidence": [
+        "tools/api-generate/canonical_sources_test.go#func TestSourceSidecarGenerationIsIsolatedAndFreshConsumerBuilds("
+      ]
+    },
+    {
       "name": "traceability",
       "command": "go run ./tools/traceability-generate",
       "inputs": ["test/conformance/testdata/python-v0.0.2/manifest.json", "test/conformance/traceability-rules.json"],

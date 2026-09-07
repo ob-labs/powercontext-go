@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	canonicalscopec "github.com/ob-labs/powercontext-go/api/canonical/scopes"
+	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	"github.com/ob-labs/powercontext-go/internal/httpapi"
@@ -50,6 +51,7 @@ type HTTPOptions struct {
 	webUI               *webui.Options
 	scopeBindings       mcpapi.ScopeBindingOperations
 	canonicalScopes     canonicalscopec.Handler
+	canonicalSources    canonicalsource.Handler
 }
 
 // MCPOptions controls the optional MCP Streamable HTTP route. Path defaults to
@@ -127,6 +129,21 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 			return nil, err
 		}
 	}
+	var sourceGenerated *canonicalsource.Server
+	if options.canonicalSources != nil {
+		sourceOptions := []canonicalsource.ServerOption{
+			canonicalsource.WithTracerProvider(httpapi.TracerProvider(options.TracerProvider)),
+			canonicalsource.WithMiddleware(middlewares...),
+			canonicalsource.WithErrorHandler(httpapi.ErrorHandler(mapApplicationError)),
+		}
+		if options.MeterProvider != nil {
+			sourceOptions = append(sourceOptions, canonicalsource.WithMeterProvider(options.MeterProvider))
+		}
+		sourceGenerated, err = canonicalsource.NewServer(options.canonicalSources, canonicalSourceSecurity{}, sourceOptions...)
+		if err != nil {
+			return nil, err
+		}
+	}
 	mcpPath := ""
 	if options.MCP.Enabled {
 		mcpPath, err = normalizeMCPPath(options.MCP.Path)
@@ -137,6 +154,9 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 	var openAPI http.Handler = generated
 	if canonicalGenerated != nil {
 		openAPI = canonicalScopeSidecar{legacy: generated, canonical: canonicalGenerated}
+	}
+	if sourceGenerated != nil {
+		openAPI = canonicalSourceSidecar{next: openAPI, sources: sourceGenerated}
 	}
 	validatedOpenAPI := httpapi.ValidateJSONUnicode(openAPI)
 	var application http.Handler = validatedOpenAPI
@@ -189,6 +209,11 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		access = &httpapi.AccessLogOptions{
 			Logger: accessLogger,
 			ResolveOperation: func(request *http.Request) string {
+				if sourceGenerated != nil {
+					if route, found := sourceGenerated.FindPath(request.Method, request.URL); found {
+						return route.OperationID()
+					}
+				}
 				if !options.HandoffReportRoutes && strings.HasPrefix(request.URL.Path, "/v1/handoff-reports/") {
 					return "unmatched"
 				}
