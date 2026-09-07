@@ -67,6 +67,7 @@ func TestOpenSQLiteInitializesSchemaAndEveryConnection(t *testing.T) {
 		"pc_sources",
 		"pc_source_observation_acceptances",
 		"pc_source_journal_heads",
+		"pc_skill_packages",
 		"pc_artifacts",
 		"pc_artifact_heads",
 		"pc_artifact_lineage_sources",
