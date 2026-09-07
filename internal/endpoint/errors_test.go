@@ -49,6 +49,8 @@ func TestMapErrorFrozenTaxonomy(t *testing.T) {
 		{name: "scope missing", err: &scope.NotFoundError{}, status: 404, code: "scope_not_found"},
 		{name: "binding missing", err: &scope.BindingNotFoundError{}, status: 404, code: "scope_binding_not_found"},
 		{name: "scope validation", err: &scope.ValidationError{}, status: 422, code: "invalid_request"},
+		{name: "scope version conflict", err: &scope.VersionConflictError{Expected: 2, Actual: 4}, status: 409, code: "scope_version_conflict", details: map[string]any{"expected_version": int64(2), "current_version": int64(4)}},
+		{name: "scope idempotency conflict", err: &scope.IdempotencyConflictError{}, status: 409, code: "scope_idempotency_conflict"},
 		{name: "candidate missing", err: &review.CandidateNotFoundError{}, status: 404, code: "candidate_not_found"},
 		{name: "candidate CAS", err: &review.CandidateConflictError{ExpectedVersion: 2, CurrentVersion: 4}, status: 409, code: "candidate_conflict", details: map[string]any{"expected_version": int64(2), "current_version": int64(4)}},
 		{name: "artifact CAS", err: &review.ArtifactTargetConflictError{Current: current}, status: 409, code: "artifact_conflict", details: map[string]any{"current": map[string]any{"family": "experience", "artifact_id": "exp_1", "revision": int64(3)}}},

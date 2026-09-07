@@ -14,17 +14,20 @@ var (
 	rn6AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
-	rn4AllowedHeaders = map[string]string{
-		"GET": "Authorization",
-	}
 	rn1AllowedHeaders = map[string]string{
+		"GET":  "Authorization",
+		"POST": "Authorization,Content-Type",
+	}
+	rn2AllowedHeaders = map[string]string{
 		"GET": "Authorization",
+		"PUT": "Authorization,Content-Type",
 	}
 	rn7AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
-	rn3AllowedHeaders = map[string]string{
+	rn4AllowedHeaders = map[string]string{
 		"GET": "Authorization",
+		"PUT": "Authorization,Content-Type",
 	}
 )
 
@@ -116,11 +119,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					switch r.Method {
 					case "GET":
 						s.handleListScopesRequest([0]string{}, elemIsEscaped, w, r)
+					case "POST":
+						s.handleCreateScopeRequest([0]string{}, elemIsEscaped, w, r)
 					default:
 						s.notAllowed(w, r, notAllowedParams{
-							allowedMethods: "GET",
-							allowedHeaders: rn4AllowedHeaders,
-							acceptPost:     "",
+							allowedMethods: "GET,POST",
+							allowedHeaders: rn1AllowedHeaders,
+							acceptPost:     "application/json",
 							acceptPatch:    "",
 						})
 					}
@@ -153,10 +158,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							switch r.Method {
 							case "GET":
 								s.handleGetDefaultScopeRequest([0]string{}, elemIsEscaped, w, r)
+							case "PUT":
+								s.handleSetDefaultScopeRequest([0]string{}, elemIsEscaped, w, r)
 							default:
 								s.notAllowed(w, r, notAllowedParams{
-									allowedMethods: "GET",
-									allowedHeaders: rn1AllowedHeaders,
+									allowedMethods: "GET,PUT",
+									allowedHeaders: rn2AllowedHeaders,
 									acceptPost:     "",
 									acceptPatch:    "",
 								})
@@ -209,10 +216,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							s.handleGetScopeRequest([1]string{
 								args[0],
 							}, elemIsEscaped, w, r)
+						case "PUT":
+							s.handleUpdateScopeRequest([1]string{
+								args[0],
+							}, elemIsEscaped, w, r)
 						default:
 							s.notAllowed(w, r, notAllowedParams{
-								allowedMethods: "GET",
-								allowedHeaders: rn3AllowedHeaders,
+								allowedMethods: "GET,PUT",
+								allowedHeaders: rn4AllowedHeaders,
 								acceptPost:     "",
 								acceptPatch:    "",
 							})
@@ -367,6 +378,15 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 						r.args = args
 						r.count = 0
 						return r, true
+					case "POST":
+						r.name = CreateScopeOperation
+						r.summary = "Create an independent Scope boundary"
+						r.operationID = "create_scope"
+						r.operationGroup = ""
+						r.pathPattern = "/v1/scopes"
+						r.args = args
+						r.count = 0
+						return r, true
 					default:
 						return
 					}
@@ -399,6 +419,15 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 								r.name = GetDefaultScopeOperation
 								r.summary = "Get the default Scope binding target"
 								r.operationID = "get_default_scope"
+								r.operationGroup = ""
+								r.pathPattern = "/v1/scopes/default"
+								r.args = args
+								r.count = 0
+								return r, true
+							case "PUT":
+								r.name = SetDefaultScopeOperation
+								r.summary = "Change the default Scope binding target"
+								r.operationID = "set_default_scope"
 								r.operationGroup = ""
 								r.pathPattern = "/v1/scopes/default"
 								r.args = args
@@ -453,6 +482,15 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 							r.name = GetScopeOperation
 							r.summary = "Get one Scope descriptor"
 							r.operationID = "get_scope"
+							r.operationGroup = ""
+							r.pathPattern = "/v1/scopes/{scope_id}"
+							r.args = args
+							r.count = 1
+							return r, true
+						case "PUT":
+							r.name = UpdateScopeOperation
+							r.summary = "Replace mutable Scope metadata and relationships"
+							r.operationID = "update_scope"
 							r.operationGroup = ""
 							r.pathPattern = "/v1/scopes/{scope_id}"
 							r.args = args

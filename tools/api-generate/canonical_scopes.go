@@ -36,8 +36,11 @@ const (
 
 var scopeSidecarOperations = []scopeSidecarOperation{
 	{OperationID: "list_scopes", Method: "get", Path: "/v1/scopes"},
+	{OperationID: "create_scope", Method: "post", Path: "/v1/scopes"},
 	{OperationID: "get_scope", Method: "get", Path: "/v1/scopes/{scope_id}"},
+	{OperationID: "update_scope", Method: "put", Path: "/v1/scopes/{scope_id}"},
 	{OperationID: "get_default_scope", Method: "get", Path: "/v1/scopes/default"},
+	{OperationID: "set_default_scope", Method: "put", Path: "/v1/scopes/default"},
 	{OperationID: "resolve_scope_selection", Method: "post", Path: "/v1/scopes/selection/resolve"},
 	{OperationID: "resolve_scope_binding", Method: "post", Path: "/v1/scope-bindings/resolve"},
 }
@@ -127,7 +130,7 @@ func projectScopeSidecar(
 	if scopeSidecarSHA256(source) != manifest.Upstream.SHA256 {
 		return nil, errors.New("pinned Scope sidecar upstream OpenAPI digest differs")
 	}
-	if err := validatePinnedScopeSidecarSource(source, legacySpecification, compatibilityContents); err != nil {
+	if err := validatePinnedScopeSidecarSource(source, manifest.Operations, legacySpecification, compatibilityContents); err != nil {
 		return nil, err
 	}
 	document, err := decodeScopeSidecarDocument(source)
@@ -169,7 +172,11 @@ func projectScopeSidecar(
 	return encoded, nil
 }
 
-func validatePinnedScopeSidecarSource(source, legacySpecification, compatibilityContents []byte) error {
+func validatePinnedScopeSidecarSource(
+	source []byte,
+	operations []scopeSidecarOperation,
+	legacySpecification, compatibilityContents []byte,
+) error {
 	surface, err := decodeCompatibilitySurface(compatibilityContents)
 	if err != nil {
 		return err
@@ -180,6 +187,19 @@ func validatePinnedScopeSidecarSource(source, legacySpecification, compatibility
 	}
 	if validateErr := surface.validate(legacy); validateErr != nil {
 		return fmt.Errorf("validate compatibility surface: %w", validateErr)
+	}
+	staged := make(map[string]compatibilityStagedOperation, len(surface.Canonical.UpstreamOnlyOperations))
+	for _, operation := range surface.Canonical.UpstreamOnlyOperations {
+		staged[operation.OperationID] = operation
+	}
+	for _, operation := range operations {
+		entry, found := staged[operation.OperationID]
+		if !found || entry.Method != operation.Method || entry.Path != operation.Path {
+			return fmt.Errorf("Scope sidecar operation %q does not match the compatibility surface", operation.OperationID)
+		}
+		if entry.Status != compatibilityStatusImplementedCanonical {
+			return fmt.Errorf("Scope sidecar operation %q status = %q, want %q", operation.OperationID, entry.Status, compatibilityStatusImplementedCanonical)
+		}
 	}
 	want, err := surface.projectCanonical(legacy)
 	if err != nil {

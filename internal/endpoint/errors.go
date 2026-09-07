@@ -263,6 +263,15 @@ func mapDomainError(err error) ErrorMapping {
 	if errors.As(err, &bindingMissing) {
 		return mapping(http.StatusNotFound, "scope_binding_not_found", "No Scope binding is available.", nil)
 	}
+	if conflict, ok := errors.AsType[*scope.VersionConflictError](err); ok {
+		return mapping(http.StatusConflict, "scope_version_conflict", "The Scope version is stale.", map[string]any{
+			"expected_version": conflict.Expected,
+			"current_version":  conflict.Actual,
+		})
+	}
+	if _, ok := errors.AsType[*scope.IdempotencyConflictError](err); ok {
+		return mapping(http.StatusConflict, "scope_idempotency_conflict", "The Scope creation key identifies different metadata.", nil)
+	}
 	var artifactMissing *artifact.NotFoundError
 	if errors.As(err, &artifactMissing) {
 		return mapping(http.StatusNotFound, "artifact_not_found", "The requested Artifact was not found.", nil)
