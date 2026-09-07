@@ -325,6 +325,10 @@ source / artifact / trigger / inference
   that no remaining test calls. Verify the affected packages with both their
   focused tests and the pinned lint policy so dead integration residue cannot
   survive a green test run.
+- When rebasing a Go test into a package that has since gained a same-named
+  helper, reuse or deliberately rename the helper before pushing. Verify the
+  exact package compiles with its supported build tags so duplicate declarations
+  cannot escape a clean rebase.
 - When a Go function retains an outer error value, do not redeclare `err` in a
   nested short declaration. Use operation-specific names and verify the change
   with the pinned `make lint` policy, including `govet` shadow analysis.
