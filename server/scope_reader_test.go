@@ -209,11 +209,6 @@ type persistedScope struct {
 func (s persistedScope) ID() string     { return s.id }
 func (s persistedScope) Version() int64 { return s.version }
 
-func applicationDefaultScopeID(t *testing.T, application *Application) string {
-	t.Helper()
-	return applicationDefaultScope(t, application).ID()
-}
-
 func applicationDefaultScope(t *testing.T, application *Application) persistedScope {
 	t.Helper()
 	if application == nil {
