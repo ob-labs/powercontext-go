@@ -267,6 +267,45 @@ func TestTaskSchedulerExecutionErrorDoesNotRevealCommandInputs(t *testing.T) {
 	assertTaskSchedulerErrorRedacted(t, createErr)
 }
 
+func TestTaskSchedulerZeroValueFailsClosed(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		invoke func(personalsvc.TaskScheduler) error
+	}{
+		{
+			name: "create",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				return scheduler.Create(t.Context(), `C:\Users\person\AppData\Local\Temp\powercontext-task.xml`)
+			},
+		},
+		{
+			name: "query",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				_, err := scheduler.Query(t.Context())
+				return err
+			},
+		},
+		{
+			name: "delete",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				return scheduler.Delete(t.Context())
+			},
+		},
+		{
+			name: "run",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				return scheduler.Run(t.Context())
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.invoke(personalsvc.TaskScheduler{})
+			assertTaskSchedulerError(t, err, personalsvc.TaskSchedulerExecution)
+			assertTaskSchedulerErrorRedacted(t, err)
+		})
+	}
+}
+
 func taskSchedulerSpec(t *testing.T, startOnLogin bool) personalsvc.TaskSchedulerSpec {
 	t.Helper()
 	definition, err := personalsvc.NewDefinition(personalsvc.DefinitionInput{

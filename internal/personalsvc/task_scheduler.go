@@ -708,8 +708,8 @@ const (
 )
 
 // TaskScheduler constructs fixed, shell-free schtasks.exe invocations. It
-// does not register a task by itself; an injected process boundary owns that
-// native side effect.
+// must be constructed with NewTaskScheduler. It does not register a task by
+// itself; an injected process boundary owns that native side effect.
 type TaskScheduler struct{ executor TaskSchedulerExecutor }
 
 // NewTaskScheduler validates the native process boundary.
@@ -771,6 +771,9 @@ func (s TaskScheduler) execute(ctx context.Context, arguments []string) (TaskSch
 }
 
 func (s TaskScheduler) executeRaw(ctx context.Context, arguments []string) (TaskSchedulerResult, error) {
+	if s.executor == nil {
+		return TaskSchedulerResult{}, taskSchedulerError(TaskSchedulerExecution)
+	}
 	result, err := s.executor.Execute(ctx, taskSchedulerProgram, slices.Clone(arguments))
 	if err != nil {
 		return TaskSchedulerResult{}, taskSchedulerError(TaskSchedulerExecution)
