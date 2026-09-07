@@ -497,16 +497,52 @@ func TestProcessConfigEnforcesTrustAndInferenceBoundariesWithoutSecrets(t *testi
 }
 
 func TestScheduledExperienceIncubationRequiresGenerationModel(t *testing.T) {
+	interval := time.Minute
+	assertGenerationModelRequired(t, func(config *ProcessConfig) {
+		config.Runtime.ExperienceIncubationInterval = &interval
+	}, "server: scheduled Experience incubation requires a generation model")
+}
+
+func TestProcessConfigRejectsOtherGenerationDependentFeaturesWithoutGenerationModel(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		configure func(*ProcessConfig)
+		want      string
+	}{
+		{
+			name: "Memory reranking",
+			configure: func(config *ProcessConfig) {
+				config.Runtime.MemoryRerankEnabled = true
+			},
+			want: "server: Memory reranking requires a generation model",
+		},
+		{
+			name: "Source scheduler",
+			configure: func(config *ProcessConfig) {
+				interval := time.Minute
+				config.Runtime.SourceWindowInterval = &interval
+			},
+			want: "server: scheduled Source processing requires a generation model",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assertGenerationModelRequired(t, test.configure, test.want)
+		})
+	}
+}
+
+func assertGenerationModelRequired(t *testing.T, configure func(*ProcessConfig), want string) {
+	t.Helper()
 	config, err := DefaultConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
-	interval := time.Minute
-	config.Runtime.ExperienceIncubationInterval = &interval
 	config.Inference.GenerationModel = ""
-	err = config.Validate()
-	if err == nil || !strings.Contains(err.Error(), "scheduled Experience incubation requires a generation model") {
-		t.Fatalf("validation error = %v", err)
+	configure(&config)
+
+	if err := config.Validate(); err == nil || err.Error() != want {
+		t.Fatalf("validation error = %v, want %q", err, want)
 	}
 }
 
