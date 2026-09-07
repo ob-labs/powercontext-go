@@ -74,6 +74,7 @@ linters:
       - ^api/v1/
       - ^api/canonical/scopes/
       - ^api/canonical/sources/
+      - ^api/canonical/artifacts/
       - ^client/invoker_gen\.go$
       - ^internal/mcpapi/schemas_gen\.go$
     warn-unused: true
@@ -113,5 +114,6 @@ formatters:
       - ^api/v1/
       - ^api/canonical/scopes/
       - ^api/canonical/sources/
+      - ^api/canonical/artifacts/
       - ^client/invoker_gen\.go$
       - ^internal/mcpapi/schemas_gen\.go$

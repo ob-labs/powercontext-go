@@ -169,6 +169,14 @@ source / artifact / trigger / inference
 - Merge with an existing rule when the lesson is already covered. Keep the
   stronger wording and remove duplication so this file remains a practical
   engineering contract rather than an append-only incident log.
+- When Server composition mounts an independently generated HTTP sidecar,
+  include its exact method-and-path resolver in access-log operation lookup.
+  Verify real handler requests log the generated operation ID and correlated
+  request ID without exposing resource identifiers, content, or credentials.
+- When adding an owned generated output root, synchronize its explicit license
+  and lint exclusions, generator inventory, generated-output checks, and release
+  contracts. Verify the actual license-header check and affected generator and
+  release contract tests without broadening path-based exemptions.
 - When a generator rewrites generated code to call project-specific support,
   emit that support as a declared generated artifact and verify a fresh
   temporary module can tidy, verify, and test the complete output.

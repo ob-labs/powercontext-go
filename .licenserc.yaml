@@ -61,6 +61,7 @@ header:
     - 'api/v1/**'
     - 'api/canonical/scopes/**'
     - 'api/canonical/sources/**'
+    - 'api/canonical/artifacts/**'
     - 'client/invoker_gen.go'
     - 'internal/mcpapi/schemas_gen.go'
 
