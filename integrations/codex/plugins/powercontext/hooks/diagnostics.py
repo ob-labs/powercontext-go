@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -109,7 +110,7 @@ def should_emit(outcome: str) -> bool:
 
             state[outcome] = now
             temporary_path = state_path.with_name(
-                f".{state_path.name}.{os.getpid()}.tmp"
+                f".{state_path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
             )
             temporary_path.write_text(
                 json.dumps(state, separators=(",", ":")), encoding="utf-8"

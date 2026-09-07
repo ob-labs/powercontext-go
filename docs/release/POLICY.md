@@ -46,6 +46,20 @@ Do not assume every tool shares the root-module version. Release verification mu
 commit, exercise the published binary and image surfaces, and include migration and backport notes for
 compatibility-affecting fixes.
 
+## Signed Build Provenance
+
+Every downloadable release artifact and immutable artifact digest must have signed build provenance created by the job
+that produced its final bytes or digest. The binary producer jobs sign archives, SPDX documents, and platform checksum
+manifests. The image producer signs the exact standard and Full OCI digests while retaining the BuildKit SBOM and
+maximum-provenance attestations. The draft producer signs the final aggregate checksum and image-digest records before
+it creates or updates the GitHub Release.
+
+Tag pushes already run on the released tag. A manual draft refresh or publication must also dispatch `release.yml` from
+the exact tag named by `release_tag`; the workflow rejects a branch ref or a different tag before building. Consumers
+must verify the attestation before execution or extraction, bind verification to `ob-labs/powercontext-go` and
+`.github/workflows/release.yml`, and then validate checksums, embedded build metadata, SPDX evidence, and runtime
+behavior. A checksum without the signed repository and workflow identity is not release provenance.
+
 ## DCO
 
 DCO sign-off is not required for PowerContext Go pull requests. If the project later adopts DCO, documentation and CI

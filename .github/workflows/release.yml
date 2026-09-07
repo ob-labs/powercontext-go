@@ -51,7 +51,17 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          WORKFLOW_REF_NAME: ${{ github.ref_name }}
+          WORKFLOW_REF_TYPE: ${{ github.ref_type }}
         run: |
+          test "$WORKFLOW_REF_TYPE" = tag || {
+            echo "release workflow must run from the release tag ref" >&2
+            exit 2
+          }
+          test "$WORKFLOW_REF_NAME" = "$RELEASE_TAG" || {
+            echo "release workflow ref must match release_tag" >&2
+            exit 2
+          }
           version="${RELEASE_TAG#powercontext-v}"
           version="${version#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
@@ -99,6 +109,10 @@ jobs:
             runner: macos-15
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
     steps:
       - name: Check out the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -158,6 +172,11 @@ jobs:
             -output "dist/SHA256SUMS-${{ steps.platform.outputs.target }}" \
             dist/*.tar.gz dist/*.spdx.json
 
+      - name: Attest platform release assets
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+
       - name: Upload platform release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -172,7 +191,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
+      attestations: write
       contents: read
+      id-token: write
       packages: write
     steps:
       - name: Check out the released commit
@@ -206,6 +227,8 @@ jobs:
         run: |
           image_owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           {
+            echo "standard_subject=ghcr.io/$image_owner/powercontext"
+            echo "full_subject=ghcr.io/$image_owner/powercontext-full"
             echo "standard=ghcr.io/$image_owner/powercontext:$IMAGE_TAG"
             echo "full=ghcr.io/$image_owner/powercontext-full:$IMAGE_TAG"
           } >> "$GITHUB_OUTPUT"
@@ -229,6 +252,13 @@ jobs:
           cache-from: type=gha,scope=powercontext-standard
           cache-to: type=gha,mode=max,scope=powercontext-standard
 
+      - name: Attest standard image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.metadata.outputs.standard_subject }}
+          subject-digest: ${{ steps.standard.outputs.digest }}
+          push-to-registry: true
+
       - name: Build and push the Full image
         id: full
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -248,6 +278,13 @@ jobs:
           cache-from: type=gha,scope=powercontext-full
           cache-to: type=gha,mode=max,scope=powercontext-full
 
+      - name: Attest Full image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.metadata.outputs.full_subject }}
+          subject-digest: ${{ steps.full.outputs.digest }}
+          push-to-registry: true
+
       - name: Record immutable image digests
         env:
           FULL_DIGEST: ${{ steps.full.outputs.digest }}
@@ -259,7 +296,7 @@ jobs:
           jq -n \
             --arg standard "$STANDARD_IMAGE@$STANDARD_DIGEST" \
             --arg full "$FULL_IMAGE@$FULL_DIGEST" \
-            '{schema_version: 1, sbom_attestations: true, images: {standard: $standard, full: $full}}' \
+            '{schema_version: 1, sbom_attestations: true, github_provenance_attestations: true, images: {standard: $standard, full: $full}}' \
             > image-release/IMAGE-DIGESTS.json
 
       - name: Upload image digest manifest
@@ -276,7 +313,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     steps:
       - name: Check out the released commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -296,10 +335,18 @@ jobs:
       - name: Build the release-level checksum manifest
         run: |
           go run ./tools/release checksum -output dist/SHA256SUMS \
-            dist/*.tar.gz dist/*.spdx.json dist/IMAGE-DIGESTS.json
+            dist/*.tar.gz dist/*.spdx.json dist/SHA256SUMS-* dist/IMAGE-DIGESTS.json
           test "$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')" = 8
           test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 8
-          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 17
+          test "$(find dist -name 'SHA256SUMS-*' | wc -l | tr -d ' ')" = 4
+          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 21
+
+      - name: Attest release metadata
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/SHA256SUMS
+            dist/IMAGE-DIGESTS.json
 
       - name: Generate or refresh the reviewed release draft
         shell: bash
@@ -310,7 +357,7 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              dist/*.tar.gz dist/*.spdx.json dist/IMAGE-DIGESTS.json dist/SHA256SUMS
+              dist/*.tar.gz dist/*.spdx.json dist/SHA256SUMS-* dist/IMAGE-DIGESTS.json dist/SHA256SUMS
             exit 0
           fi
           args=(--repo "$GITHUB_REPOSITORY" --draft --generate-notes --verify-tag)
@@ -318,7 +365,7 @@ jobs:
             args+=(--notes-start-tag "$PREVIOUS_TAG")
           fi
           gh release create "$RELEASE_TAG" "${args[@]}" \
-            dist/*.tar.gz dist/*.spdx.json dist/IMAGE-DIGESTS.json dist/SHA256SUMS
+            dist/*.tar.gz dist/*.spdx.json dist/SHA256SUMS-* dist/IMAGE-DIGESTS.json dist/SHA256SUMS
 
   publish:
     name: Publish reviewed release draft
@@ -343,6 +390,7 @@ jobs:
     if: needs.publish.result == 'success'
     needs: [prepare, publish]
     permissions:
+      attestations: read
       contents: read
       packages: read
     uses: ./.github/workflows/release-verify.yml

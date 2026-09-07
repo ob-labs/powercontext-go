@@ -15,7 +15,9 @@
 version: 2
 updates:
   - package-ecosystem: "gomod"
-    directory: "/"
+    directories:
+      - "/"
+      - "/test/downstream"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -35,6 +37,57 @@ updates:
     open-pull-requests-limit: 4
     groups:
       actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "uv"
+    directories:
+      - "/evaluation"
+      - "/integrations/bub"
+      - "/integrations/codex/plugins/powercontext"
+      - "/integrations/langchain"
+      - "/integrations/langgraph"
+      - "/integrations/pydantic-ai"
+      - "/tools/docs"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+    open-pull-requests-limit: 4
+    groups:
+      uv-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "npm"
+    directories:
+      - "/evaluation/web"
+      - "/integrations/dsh/plugins/powercontext"
+      - "/integrations/openclaw/plugins/memory-powercontext"
+      - "/integrations/opencode/plugins/powercontext"
+      - "/integrations/pi/plugins/powercontext"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 4
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+    open-pull-requests-limit: 4
+    groups:
+      docker-minor-patch:
         patterns:
           - "*"
         update-types:

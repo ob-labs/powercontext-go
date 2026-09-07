@@ -1,0 +1,167 @@
+# Copyright (c) 2026 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Nightly reliability
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-reliability
+  cancel-in-progress: false
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: ./internal/jcs
+            target: FuzzMarshalCanonicalJSONIsIdempotent
+          - package: ./internal/scheduler
+            target: FuzzRestrictedPickleJobDecoder
+          - package: ./artifact/skill
+            target: FuzzAgentSkillFrontmatterParser
+          - package: ./internal/contextpack
+            target: FuzzTruncateUTF8PreservesRuneBoundariesAndBudget
+          - package: ./internal/httpapi
+            target: FuzzValidJSONUnicodeNeverPanics
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Run the fuzz target
+        env:
+          FUZZ_PACKAGE: ${{ matrix.package }}
+          FUZZ_TARGET: ${{ matrix.target }}
+        run: go test -run '^$' -fuzz "^${FUZZ_TARGET}$" -fuzztime=4m "$FUZZ_PACKAGE"
+
+      - name: Upload failing fuzz corpus
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ matrix.package }}/testdata/fuzz/${{ matrix.target }}
+          if-no-files-found: warn
+          retention-days: 14
+
+  fuzzing-status:
+    name: Fuzzing
+    needs: [fuzz]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every fuzz target to succeed
+        env:
+          FUZZ_RESULT: ${{ needs.fuzz.result }}
+        run: test "$FUZZ_RESULT" = success
+
+  stability:
+    name: Repeated race and flaky-test statistics
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install SQLite development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Run repeated race tests and write bounded statistics
+        id: repeated
+        shell: bash
+        env:
+          BOUNDED_RESULTS: ${{ runner.temp }}/nightly-stability-bounded.jsonl
+          RESULTS: ${{ runner.temp }}/nightly-stability.jsonl
+          SUMMARY: ${{ runner.temp }}/nightly-stability.md
+        run: |
+          set +e
+          go test -json -race -shuffle=on -count=25 \
+            ./internal/runtime ./internal/sqlstore ./source ./server | tee "$RESULTS"
+          test_status="${PIPESTATUS[0]}"
+          set -e
+
+          statistics="$RUNNER_TEMP/nightly-stability-statistics.json"
+          jq -rs '
+            [ .[] | select(.Test != null and (.Action == "pass" or .Action == "fail")) ]
+            | group_by([.Package, .Test])
+            | map({
+                package: .[0].Package,
+                test: .[0].Test,
+                passes: (map(select(.Action == "pass")) | length),
+                failures: (map(select(.Action == "fail")) | length)
+              })
+            | sort_by(-.failures, .package, .test)
+          ' "$RESULTS" > "$statistics"
+          row_count="$(jq 'length' "$statistics")"
+          omitted_count="$((row_count > 200 ? row_count - 200 : 0))"
+          {
+            echo "## Nightly stability"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Go: \`$(go env GOVERSION)\`"
+            echo "- Platform: \`$(go env GOOS)/$(go env GOARCH)\`"
+            echo "- Test exit status: \`$test_status\`"
+            echo "- Test rows: \`$row_count\`"
+            echo "- Omitted rows: \`$omitted_count\`"
+            echo
+            echo "| Package | Test | Passes | Failures |"
+            echo "| --- | --- | ---: | ---: |"
+            jq -r '.[0:200][] | "| `\(.package)` | `\(.test)` | \(.passes) | \(.failures) |"' "$statistics"
+          } > "$SUMMARY"
+          cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          tail -c 1048576 "$RESULTS" | sed \
+            -e "s|$RUNNER_TEMP|[runner-temp]|g" \
+            -e "s|$GITHUB_WORKSPACE|[workspace]|g" \
+            -e "s|$HOME|[home]|g" \
+            > "$BOUNDED_RESULTS"
+          exit "$test_status"
+
+      - name: Upload bounded stability summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: nightly-stability-summary-${{ github.sha }}
+          path: ${{ runner.temp }}/nightly-stability.md
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload bounded failing test output
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: nightly-stability-failure-${{ github.sha }}
+          path: ${{ runner.temp }}/nightly-stability-bounded.jsonl
+          if-no-files-found: error
+          retention-days: 14

@@ -30,6 +30,107 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+func TestScorecardWorkflowContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "scorecard.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkScorecardWorkflow(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNightlyReliabilityWorkflowContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "nightly-reliability.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkNightlyReliabilityWorkflow(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSupplyChainWorkflowsRejectContractMutants(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	tests := []struct {
+		name        string
+		workflow    string
+		old         string
+		replacement string
+		check       func([]byte) error
+	}{
+		{name: "Scorecard token permission", workflow: "scorecard.yml", old: "      id-token: write\n", check: checkScorecardWorkflow},
+		{name: "Scorecard immutable action", workflow: "scorecard.yml", old: "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc", replacement: "ossf/scorecard-action@v2.4.4", check: checkScorecardWorkflow},
+		{name: "Scorecard SARIF upload", workflow: "scorecard.yml", old: "github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938", replacement: "github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938", check: checkScorecardWorkflow},
+		{name: "Scorecard result publication", workflow: "scorecard.yml", old: "publish_results: true", replacement: "publish_results: false", check: checkScorecardWorkflow},
+		{name: "nightly fuzz inventory", workflow: "nightly-reliability.yml", old: "          - package: ./internal/httpapi\n            target: FuzzValidJSONUnicodeNeverPanics\n", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly fuzz duration", workflow: "nightly-reliability.yml", old: "-fuzztime=4m", replacement: "-fuzztime=3s", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly non-fail-fast matrix", workflow: "nightly-reliability.yml", old: "fail-fast: false", replacement: "fail-fast: true", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly race detector", workflow: "nightly-reliability.yml", old: "go test -json -race -shuffle=on -count=25", replacement: "go test -json -shuffle=on -count=25", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly repetition count", workflow: "nightly-reliability.yml", old: "go test -json -race -shuffle=on -count=25", replacement: "go test -json -race -shuffle=on", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly pipeline status", workflow: "nightly-reliability.yml", old: "test_status=\"${PIPESTATUS[0]}\"", replacement: "test_status=\"$?\"", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly bounded output", workflow: "nightly-reliability.yml", old: "tail -c 1048576", replacement: "cp", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly failure-only output", workflow: "nightly-reliability.yml", old: "- name: Upload bounded failing test output\n        if: failure()", replacement: "- name: Upload bounded failing test output\n        if: always()", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly aggregate cancellation", workflow: "nightly-reliability.yml", old: "test \"$FUZZ_RESULT\" = success", replacement: "test \"$FUZZ_RESULT\" != failure", check: checkNightlyReliabilityWorkflow},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", test.workflow))
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutant := strings.Replace(string(payload), test.old, test.replacement, 1)
+			if mutant == string(payload) {
+				t.Fatalf("mutant did not change %s", test.workflow)
+			}
+			if err := test.check([]byte(mutant)); err == nil {
+				t.Fatalf("contract accepted %s mutant", test.name)
+			}
+		})
+	}
+}
+
+func checkScorecardWorkflow(payload []byte) error {
+	return checkWorkflowPhrases(payload, "scorecard.yml", []string{
+		"name: Scorecard supply-chain security", "branch_protection_rule:", "branches: [main]", "schedule:", "workflow_dispatch:",
+		"permissions: {}", "timeout-minutes: 15", "contents: read", "security-events: write", "id-token: write",
+		"ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc", "results_file: results.sarif",
+		"results_format: sarif", "publish_results: true", "retention-days: 5",
+		"github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938", "sarif_file: results.sarif",
+	})
+}
+
+func checkNightlyReliabilityWorkflow(payload []byte) error {
+	return checkWorkflowPhrases(payload, "nightly-reliability.yml", []string{
+		"name: Nightly reliability", "schedule:", "workflow_dispatch:", "contents: read", "fail-fast: false",
+		"FuzzMarshalCanonicalJSONIsIdempotent", "FuzzRestrictedPickleJobDecoder", "FuzzAgentSkillFrontmatterParser",
+		"FuzzTruncateUTF8PreservesRuneBoundariesAndBudget", "FuzzValidJSONUnicodeNeverPanics", "-fuzztime=4m",
+		"- name: Upload failing fuzz corpus\n        if: failure()", "if-no-files-found: warn",
+		"fuzzing-status:", "needs: [fuzz]", "if: always()", "test \"$FUZZ_RESULT\" = success",
+		"go test -json -race -shuffle=on -count=25", "./internal/runtime ./internal/sqlstore ./source ./server",
+		"test_status=\"${PIPESTATUS[0]}\"", "GITHUB_STEP_SUMMARY", "tail -c 1048576",
+		`s|$RUNNER_TEMP|[runner-temp]|g`, `s|$GITHUB_WORKSPACE|[workspace]|g`, `s|$HOME|[home]|g`,
+		"- name: Upload bounded stability summary\n        if: always()",
+		"- name: Upload bounded failing test output\n        if: failure()", "retention-days: 14",
+	})
+}
+
+func checkWorkflowPhrases(payload []byte, name string, required []string) error {
+	var document any
+	if err := yaml.Unmarshal(payload, &document); err != nil {
+		return fmt.Errorf("%s is invalid YAML: %w", name, err)
+	}
+	contents := string(payload)
+	for _, phrase := range required {
+		if !strings.Contains(contents, phrase) {
+			return fmt.Errorf("%s is missing %q", name, phrase)
+		}
+	}
+	return nil
+}
+
 func TestGoPrimaryMonorepoLinguistPolicy(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".gitattributes"))
@@ -82,10 +183,12 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
-		"codeql.yml":           true,
-		"migration-gates.yml":  true,
-		"provider-smoke.yml":   true,
-		"windows-contract.yml": true,
+		"codeql.yml":              true,
+		"migration-gates.yml":     true,
+		"nightly-reliability.yml": true,
+		"provider-smoke.yml":      true,
+		"scorecard.yml":           true,
+		"windows-contract.yml":    true,
 	}
 	paths, err := filepath.Glob(filepath.Join(workflows, "*.yml"))
 	if err != nil {
@@ -130,6 +233,14 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
 			"TestRealProviderSmoke", "timeout-minutes: 10",
+		},
+		"scorecard.yml": {
+			"name: Scorecard supply-chain security", "branch_protection_rule:", "schedule:", "workflow_dispatch:",
+			"ossf/scorecard-action@", "github/codeql-action/upload-sarif@",
+		},
+		"nightly-reliability.yml": {
+			"name: Nightly reliability", "schedule:", "workflow_dispatch:", "Fuzzing", "-fuzztime=4m",
+			"go test -json -race -shuffle=on -count=25",
 		},
 		"windows-contract.yml": {
 			"name: Windows contract checkout", "runs-on: windows-2025", "timeout-minutes: 10",
@@ -1685,6 +1796,297 @@ func TestReleaseVerificationRechecksPublishedSurfaces(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowAttestsFinalArtifactsAndImages(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateReleaseProvenanceWorkflow(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReleaseVerificationConsumesSignedProvenanceBeforeExecution(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateReleaseProvenanceVerification(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReleaseProvenanceContractsRejectMutants(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	releasePayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verificationPayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		payload []byte
+		mutate  func(string) string
+		check   func([]byte) error
+	}{
+		{
+			name: "binary attestation permission", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: replaceWorkflowContractText("      id-token: write\n", ""),
+		},
+		{
+			name: "binary attestation subject", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: replaceWorkflowContractText("subject-path: dist/*", "subject-path: dist/*.tar.gz"),
+		},
+		{
+			name: "image attestation digest", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: replaceWorkflowContractText("subject-digest: ${{ steps.standard.outputs.digest }}", "subject-digest: ${{ steps.full.outputs.digest }}"),
+		},
+		{
+			name: "image attestation mutable subject", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: replaceWorkflowContractText("subject-name: ${{ steps.metadata.outputs.standard_subject }}", "subject-name: ${{ steps.metadata.outputs.standard }}"),
+		},
+		{
+			name: "image attestation registry publication", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: replaceWorkflowContractText("push-to-registry: true", "push-to-registry: false"),
+		},
+		{
+			name: "image provenance declaration", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: replaceWorkflowContractText("github_provenance_attestations: true", "github_provenance_attestations: false"),
+		},
+		{
+			name: "draft attestation order", payload: releasePayload, check: validateReleaseProvenanceWorkflow,
+			mutate: func(contents string) string {
+				return swapAdjacentWorkflowBlocks(contents, "      - name: Attest release metadata\n", "      - name: Generate or refresh the reviewed release draft\n", "\n  publish:\n")
+			},
+		},
+		{
+			name: "verification attestation permission", payload: verificationPayload, check: validateReleaseProvenanceVerification,
+			mutate: replaceWorkflowContractText("  attestations: read\n", ""),
+		},
+		{
+			name: "verification repository binding", payload: verificationPayload, check: validateReleaseProvenanceVerification,
+			mutate: replaceWorkflowContractText(
+				`gh attestation verify "$ASSET_DIR/$subject" \
+              --repo "$GITHUB_REPOSITORY"`,
+				`gh attestation verify "$ASSET_DIR/$subject" \
+              --owner "$GITHUB_REPOSITORY_OWNER"`,
+			),
+		},
+		{
+			name: "verification signer binding", payload: verificationPayload, check: validateReleaseProvenanceVerification,
+			mutate: replaceWorkflowContractText(`--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"`, ""),
+		},
+		{
+			name: "artifact verification order", payload: verificationPayload, check: validateReleaseProvenanceVerification,
+			mutate: func(contents string) string {
+				return swapAdjacentWorkflowBlocks(contents, "      - name: Verify signed GitHub Release provenance\n", "      - name: Verify extracted Linux release contracts\n", "      - name: Verify Standard and Full integration inventory parity\n")
+			},
+		},
+		{
+			name: "OCI verification order", payload: verificationPayload, check: validateReleaseProvenanceVerification,
+			mutate: replaceWorkflowContractText(
+				`            gh attestation verify "oci://$value" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+            docker buildx imagetools inspect "$value" >/dev/null`,
+				`            docker buildx imagetools inspect "$value" >/dev/null
+            gh attestation verify "oci://$value" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"`,
+			),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mutant := test.mutate(string(test.payload))
+			if mutant == string(test.payload) {
+				t.Fatal("mutant did not change workflow")
+			}
+			if err := test.check([]byte(mutant)); err == nil {
+				t.Fatal("release provenance contract accepted mutant")
+			}
+		})
+	}
+}
+
+func replaceWorkflowContractText(old, replacement string) func(string) string {
+	return func(contents string) string {
+		return strings.Replace(contents, old, replacement, 1)
+	}
+}
+
+func swapAdjacentWorkflowBlocks(contents, firstMarker, secondMarker, endMarker string) string {
+	first := strings.Index(contents, firstMarker)
+	second := strings.Index(contents, secondMarker)
+	end := strings.Index(contents, endMarker)
+	if first < 0 || second <= first || end <= second {
+		return contents
+	}
+	return contents[:first] + contents[second:end] + contents[first:second] + contents[end:]
+}
+
+func validateReleaseProvenanceWorkflow(payload []byte) error {
+	var workflow releaseIntegrationWorkflow
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		return err
+	}
+	prepare, ok := workflow.Jobs["prepare"]
+	if !ok {
+		return errors.New("release.yml has no prepare job")
+	}
+	_, release := findReleaseIntegrationWorkflowStep(prepare.Steps, "Resolve and validate immutable release metadata")
+	if release == nil || !strings.Contains(release.Run, `test "$WORKFLOW_REF_TYPE" = tag`) ||
+		!strings.Contains(release.Run, `test "$WORKFLOW_REF_NAME" = "$RELEASE_TAG"`) {
+		return errors.New("release.yml does not bind the workflow ref to the immutable release tag")
+	}
+
+	binaries, ok := workflow.Jobs["binaries"]
+	if !ok {
+		return errors.New("release.yml has no binaries job")
+	}
+	if err := requireWorkflowPermissions("binaries", binaries.Permissions, map[string]string{
+		"attestations": "write", "contents": "read", "id-token": "write",
+	}); err != nil {
+		return err
+	}
+	checksumIndex, _ := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build the platform checksum manifest")
+	attestIndex, attest := findReleaseIntegrationWorkflowStep(binaries.Steps, "Attest platform release assets")
+	uploadIndex, _ := findReleaseIntegrationWorkflowStep(binaries.Steps, "Upload platform release assets")
+	if checksumIndex < 0 || attestIndex <= checksumIndex || uploadIndex <= attestIndex || attest == nil ||
+		attest.Uses != "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8" ||
+		attest.With["subject-path"] != "dist/*" {
+		return errors.New("release.yml does not attest final platform assets before upload")
+	}
+
+	images, ok := workflow.Jobs["images"]
+	if !ok {
+		return errors.New("release.yml has no images job")
+	}
+	if err := requireWorkflowPermissions("images", images.Permissions, map[string]string{
+		"attestations": "write", "contents": "read", "id-token": "write", "packages": "write",
+	}); err != nil {
+		return err
+	}
+	_, metadata := findReleaseIntegrationWorkflowStep(images.Steps, "Resolve image names")
+	standardBuildIndex, _ := findReleaseIntegrationWorkflowStep(images.Steps, "Build and push the standard image")
+	standardAttestIndex, standardAttest := findReleaseIntegrationWorkflowStep(images.Steps, "Attest standard image provenance")
+	fullBuildIndex, _ := findReleaseIntegrationWorkflowStep(images.Steps, "Build and push the Full image")
+	fullAttestIndex, fullAttest := findReleaseIntegrationWorkflowStep(images.Steps, "Attest Full image provenance")
+	recordIndex, record := findReleaseIntegrationWorkflowStep(images.Steps, "Record immutable image digests")
+	if metadata == nil || !strings.Contains(metadata.Run, "standard_subject=ghcr.io/$image_owner/powercontext") ||
+		!strings.Contains(metadata.Run, "full_subject=ghcr.io/$image_owner/powercontext-full") {
+		return errors.New("release.yml does not expose tag-free image subjects")
+	}
+	if standardBuildIndex < 0 || standardAttestIndex <= standardBuildIndex || fullBuildIndex <= standardAttestIndex ||
+		fullAttestIndex <= fullBuildIndex || recordIndex <= fullAttestIndex {
+		return errors.New("release.yml image build, attestation, and digest-record steps are out of order")
+	}
+	for name, step := range map[string]*releaseIntegrationWorkflowStep{"standard": standardAttest, "full": fullAttest} {
+		if step == nil || step.Uses != "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8" ||
+			step.With["subject-name"] != "${{ steps.metadata.outputs."+name+"_subject }}" ||
+			step.With["subject-digest"] != "${{ steps."+name+".outputs.digest }}" || step.With["push-to-registry"] != "true" {
+			return fmt.Errorf("release.yml %s image attestation = %#v", name, step)
+		}
+	}
+	if record == nil || !strings.Contains(record.Run, "github_provenance_attestations: true") {
+		return errors.New("release.yml image digest record does not require GitHub provenance")
+	}
+
+	draft, ok := workflow.Jobs["draft"]
+	if !ok {
+		return errors.New("release.yml has no draft job")
+	}
+	if err := requireWorkflowPermissions("draft", draft.Permissions, map[string]string{
+		"attestations": "write", "contents": "write", "id-token": "write",
+	}); err != nil {
+		return err
+	}
+	draftChecksumIndex, draftChecksum := findReleaseIntegrationWorkflowStep(draft.Steps, "Build the release-level checksum manifest")
+	draftAttestIndex, draftAttest := findReleaseIntegrationWorkflowStep(draft.Steps, "Attest release metadata")
+	draftReleaseIndex, draftRelease := findReleaseIntegrationWorkflowStep(draft.Steps, "Generate or refresh the reviewed release draft")
+	if draftChecksumIndex < 0 || draftAttestIndex <= draftChecksumIndex || draftReleaseIndex <= draftAttestIndex ||
+		draftAttest == nil || draftAttest.Uses != "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8" ||
+		strings.TrimSpace(draftAttest.With["subject-path"]) != "dist/SHA256SUMS\ndist/IMAGE-DIGESTS.json" {
+		return errors.New("release.yml does not attest final release metadata before publication")
+	}
+	if draftChecksum == nil || !strings.Contains(draftChecksum.Run, "dist/SHA256SUMS-*") ||
+		!strings.Contains(draftChecksum.Run, `test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 21`) ||
+		draftRelease == nil || !strings.Contains(draftRelease.Run, "dist/SHA256SUMS-*") {
+		return errors.New("release.yml does not publish and checksum all platform manifests")
+	}
+	return nil
+}
+
+func validateReleaseProvenanceVerification(payload []byte) error {
+	var workflow releaseIntegrationWorkflow
+	if err := yaml.Unmarshal(payload, &workflow); err != nil {
+		return err
+	}
+	if err := requireWorkflowPermissions("release verification", workflow.Permissions, map[string]string{
+		"attestations": "read", "contents": "read", "packages": "read",
+	}); err != nil {
+		return err
+	}
+	verify, ok := workflow.Jobs["verify"]
+	if !ok {
+		return errors.New("release-verify.yml has no verify job")
+	}
+	assetsIndex, assets := findReleaseIntegrationWorkflowStep(verify.Steps, "Download and verify the complete GitHub Release")
+	attestIndex, attest := findReleaseIntegrationWorkflowStep(verify.Steps, "Verify signed GitHub Release provenance")
+	archivesIndex, _ := findReleaseIntegrationWorkflowStep(verify.Steps, "Verify extracted Linux release contracts")
+	if assetsIndex < 0 || attestIndex <= assetsIndex || archivesIndex <= attestIndex {
+		return errors.New("release-verify.yml does not verify artifact provenance before extraction")
+	}
+	if assets == nil || !strings.Contains(assets.Run, "SHA256SUMS-$target") ||
+		!strings.Contains(assets.Run, `test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 21`) {
+		return errors.New("release-verify.yml does not require every platform checksum manifest")
+	}
+	if attest == nil {
+		return errors.New("release-verify.yml has no artifact provenance step")
+	}
+	for _, required := range []string{
+		`gh attestation verify "$ASSET_DIR/$subject"`, `--repo "$GITHUB_REPOSITORY"`,
+		`--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"`,
+		"SHA256SUMS-$target", "SHA256SUMS IMAGE-DIGESTS.json", "${product}-${VERSION}-${target}.tar.gz",
+		"${product}-${VERSION}-${target}.spdx.json",
+	} {
+		if !strings.Contains(attest.Run, required) {
+			return fmt.Errorf("release-verify.yml artifact provenance is missing %q", required)
+		}
+	}
+	imagesIndex, images := findReleaseIntegrationWorkflowStep(verify.Steps, "Verify immutable GHCR image manifests")
+	standardRuntimeIndex, _ := findReleaseIntegrationWorkflowStep(verify.Steps, "Run the published standard image by digest")
+	fullRuntimeIndex, _ := findReleaseIntegrationWorkflowStep(verify.Steps, "Run the published Full image by digest")
+	if imagesIndex < 0 || standardRuntimeIndex <= imagesIndex || fullRuntimeIndex <= imagesIndex || images == nil {
+		return errors.New("release-verify.yml image verification is not before runtime execution")
+	}
+	provenanceIndex := strings.Index(images.Run, `gh attestation verify "oci://$value"`)
+	inspectIndex := strings.Index(images.Run, `docker buildx imagetools inspect "$value"`)
+	if !strings.Contains(images.Run, ".github_provenance_attestations == true") || provenanceIndex < 0 ||
+		inspectIndex <= provenanceIndex || !strings.Contains(images.Run, `--repo "$GITHUB_REPOSITORY"`) ||
+		!strings.Contains(images.Run, `--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"`) {
+		return errors.New("release-verify.yml does not verify immutable OCI provenance before inspection")
+	}
+	return nil
+}
+
+func requireWorkflowPermissions(name string, got, want map[string]string) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("%s permissions = %#v, want %#v", name, got, want)
+	}
+	for permission, access := range want {
+		if got[permission] != access {
+			return fmt.Errorf("%s permission %q = %q, want %q", name, permission, got[permission], access)
+		}
+	}
+	return nil
+}
+
 func TestReleaseWorkflowsExcludeUnsupportedConsumers(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	releasePayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
@@ -1797,10 +2199,14 @@ func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []b
 }
 
 type releaseIntegrationWorkflow struct {
-	Jobs map[string]struct {
-		ContinueOnError any                              `yaml:"continue-on-error"`
-		Steps           []releaseIntegrationWorkflowStep `yaml:"steps"`
-	} `yaml:"jobs"`
+	Permissions map[string]string                        `yaml:"permissions"`
+	Jobs        map[string]releaseIntegrationWorkflowJob `yaml:"jobs"`
+}
+
+type releaseIntegrationWorkflowJob struct {
+	Permissions     map[string]string                `yaml:"permissions"`
+	ContinueOnError any                              `yaml:"continue-on-error"`
+	Steps           []releaseIntegrationWorkflowStep `yaml:"steps"`
 }
 
 type releaseIntegrationWorkflowStep struct {

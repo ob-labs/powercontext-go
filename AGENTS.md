@@ -550,6 +550,12 @@ source / artifact / trigger / inference
   then rebuild projections in the same transaction. On initialization, remove
   vec0 rows without metadata ownership. Verify revision cleanup, Scope
   isolation, startup orphan cleanup, and rollback after an invalid embedding.
+- When a release workflow publishes a downloadable artifact or OCI image,
+  create signed provenance in the job that produced the final bytes or digest
+  and bind it to the repository and immutable release identity. Verify every
+  attestation before extraction or execution, and prove missing permissions,
+  incorrect subjects, mutable image references, and reversed verification
+  order with workflow-contract mutants.
 - When a SQLite Server has no configured inference models, keep the minimal
   configuration runnable and attach no inference readiness probe or scheduler.
   Require a generation model before enabling Memory reranking, Source-window

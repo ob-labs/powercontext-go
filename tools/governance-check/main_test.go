@@ -84,11 +84,32 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			wantError: `package ecosystem "gomod" must be configured exactly once`,
 		},
 		{
-			name: "dependency ecosystem outside repository root",
+			name: "missing dependency manifest directory",
 			mutate: func(t *testing.T, root string) {
-				replaceFixtureText(t, root, ".github/dependabot.yml", `directory: "/"`, `directory: "/tools"`)
+				replaceFixtureText(t, root, ".github/dependabot.yml", "      - \"/test/downstream\"\n", "")
 			},
-			wantError: `package ecosystem "gomod" must monitor directory "/"`,
+			wantError: `package ecosystem "gomod" must monitor exactly ["/" "/test/downstream"]`,
+		},
+		{
+			name: "extra dependency manifest directory",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", "      - \"/test/downstream\"\n", "      - \"/test/downstream\"\n      - \"/unowned\"\n")
+			},
+			wantError: `package ecosystem "gomod" must monitor exactly ["/" "/test/downstream"]`,
+		},
+		{
+			name: "duplicate dependency manifest directory",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", "      - \"/test/downstream\"\n", "      - \"/test/downstream\"\n      - \"/test/downstream\"\n")
+			},
+			wantError: `package ecosystem "gomod" contains duplicate directory "/test/downstream"`,
+		},
+		{
+			name: "dependency manifest uses both directory forms",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, ".github/dependabot.yml", "    directories:\n", "    directory: \"/\"\n    directories:\n")
+			},
+			wantError: `package ecosystem "gomod" must use exactly one of directory or directories`,
 		},
 		{
 			name: "dependency updates more frequent than weekly",
@@ -135,9 +156,11 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 		{
 			name: "dependency automation with duplicate field",
 			mutate: func(t *testing.T, root string) {
-				replaceFixtureText(t, root, ".github/dependabot.yml", `    directory: "/"
+				replaceFixtureText(t, root, ".github/dependabot.yml", `  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-`, `    directory: "/"
+`, `  - package-ecosystem: "github-actions"
+    directory: "/"
     directory: "/"
     schedule:
 `)
@@ -162,6 +185,13 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 				}
 			},
 			wantError: "read docs/release/POLICY.md",
+		},
+		{
+			name: "release policy permits execution before attestation verification",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, "docs/release/POLICY.md", "verify the attestation before execution", "verify the artifact after execution")
+			},
+			wantError: "verify the attestation before execution",
 		},
 		{
 			name: "missing code of conduct",
@@ -441,7 +471,9 @@ func validDependabotConfig() string {
 	return `version: 2
 updates:
   - package-ecosystem: "gomod"
-    directory: "/"
+    directories:
+      - "/"
+      - "/test/downstream"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -461,6 +493,57 @@ updates:
     open-pull-requests-limit: 4
     groups:
       actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "uv"
+    directories:
+      - "/evaluation"
+      - "/integrations/bub"
+      - "/integrations/codex/plugins/powercontext"
+      - "/integrations/langchain"
+      - "/integrations/langgraph"
+      - "/integrations/pydantic-ai"
+      - "/tools/docs"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+    open-pull-requests-limit: 4
+    groups:
+      uv-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "npm"
+    directories:
+      - "/evaluation/web"
+      - "/integrations/dsh/plugins/powercontext"
+      - "/integrations/openclaw/plugins/memory-powercontext"
+      - "/integrations/opencode/plugins/powercontext"
+      - "/integrations/pi/plugins/powercontext"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+    open-pull-requests-limit: 4
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+    open-pull-requests-limit: 4
+    groups:
+      docker-minor-patch:
         patterns:
           - "*"
         update-types:
@@ -634,6 +717,9 @@ func validReleasePolicy() string {
 		"generator",
 		"adapter",
 		"binary versions",
+		"signed build provenance",
+		"immutable artifact digest",
+		"verify the attestation before execution",
 		"DCO sign-off is not required",
 	}, "\n")
 }
