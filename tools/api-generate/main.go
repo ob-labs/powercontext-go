@@ -32,24 +32,35 @@ func main() {
 	var target string
 	var packageName string
 	var clientInvoker string
+	var compatibility string
 	flag.StringVar(&specification, "spec", "powercontext.yaml", "canonical OpenAPI document")
 	flag.StringVar(&target, "target", "../api/v1", "generated package directory")
 	flag.StringVar(&packageName, "package", "v1", "generated Go package name")
 	flag.StringVar(&clientInvoker, "client-invoker", "", "optional normalized Client Invoker output")
+	flag.StringVar(&compatibility, "compatibility", "", "optional legacy/canonical compatibility surface")
 	flag.Parse()
-	if err := run(specification, target, packageName, clientInvoker); err != nil {
+	if err := run(specification, target, packageName, clientInvoker, compatibility); err != nil {
 		fmt.Fprintln(os.Stderr, "api-generate:", err)
 		os.Exit(1)
 	}
 }
 
-func run(specification, target, packageName, clientInvoker string) error {
+func run(specification, target, packageName, clientInvoker, compatibility string) error {
 	if specification == "" || target == "" || packageName == "" {
 		return errors.New("spec, target, and package must not be empty")
 	}
 	source, err := os.ReadFile(specification)
 	if err != nil {
 		return err
+	}
+	if compatibility != "" {
+		contents, readErr := os.ReadFile(compatibility)
+		if readErr != nil {
+			return fmt.Errorf("read compatibility surface: %w", readErr)
+		}
+		if validateErr := validateCompatibilitySurface(source, contents); validateErr != nil {
+			return fmt.Errorf("validate compatibility surface: %w", validateErr)
+		}
 	}
 	generatedInput, err := normalizeNullableReferences(source)
 	if err != nil {
