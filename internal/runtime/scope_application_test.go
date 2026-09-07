@@ -131,6 +131,40 @@ func TestScopeApplicationClearBindingIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestScopeApplicationListsAndReadsDefaultScopes(t *testing.T) {
+	first, err := scope.NewDescriptor("scope-a", "A", "first", "", nil, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := scope.NewDescriptor("scope-b", "B", "second", "", nil, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &memoryScopeStore{
+		scopes:    map[string]scope.Descriptor{second.ID(): second, first.ID(): first},
+		defaultID: second.ID(),
+	}
+	application, err := NewScopeApplication(New(), store, func() string { return "scope-created" })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	values, err := application.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 2 || values[0].ID() != first.ID() || values[1].ID() != second.ID() {
+		t.Fatalf("List() = %#v, want deterministic identity order", values)
+	}
+	defaultScope, err := application.Default(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultScope.ID() != second.ID() {
+		t.Fatalf("Default() = %#v, want %q", defaultScope, second.ID())
+	}
+}
+
 type memoryScopeStore struct {
 	scopes    map[string]scope.Descriptor
 	defaultID string

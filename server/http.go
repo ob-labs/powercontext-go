@@ -27,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	canonicalscopec "github.com/ob-labs/powercontext-go/api/canonical/scopes"
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	"github.com/ob-labs/powercontext-go/internal/httpapi"
@@ -48,6 +49,7 @@ type HTTPOptions struct {
 	metrics             *servermetrics.Server
 	webUI               *webui.Options
 	scopeBindings       mcpapi.ScopeBindingOperations
+	canonicalScopes     canonicalscopec.Handler
 }
 
 // MCPOptions controls the optional MCP Streamable HTTP route. Path defaults to
@@ -88,15 +90,16 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 	if options.metrics != nil {
 		middlewares = append(middlewares, options.metrics.HTTPMiddleware)
 	}
+	mapApplicationError := func(err error) (int, httpapi.Error, bool) {
+		mapped := endpoint.MapError(err)
+		return mapped.StatusCode, httpapi.Error{
+			Code: mapped.Code, Message: mapped.Message, Details: mapped.Details,
+		}, true
+	}
 	serverOptions := []v1.ServerOption{
 		v1.WithTracerProvider(httpapi.TracerProvider(options.TracerProvider)),
 		v1.WithMiddleware(middlewares...),
-		v1.WithErrorHandler(httpapi.ErrorHandler(func(err error) (int, httpapi.Error, bool) {
-			mapped := endpoint.MapError(err)
-			return mapped.StatusCode, httpapi.Error{
-				Code: mapped.Code, Message: mapped.Message, Details: mapped.Details,
-			}, true
-		})),
+		v1.WithErrorHandler(httpapi.ErrorHandler(mapApplicationError)),
 	}
 	if options.MeterProvider != nil {
 		serverOptions = append(serverOptions, v1.WithMeterProvider(options.MeterProvider))
@@ -105,6 +108,25 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 	if err != nil {
 		return nil, err
 	}
+	var canonicalGenerated *canonicalscopec.Server
+	if options.canonicalScopes != nil {
+		canonicalServerOptions := []canonicalscopec.ServerOption{
+			canonicalscopec.WithTracerProvider(httpapi.TracerProvider(options.TracerProvider)),
+			canonicalscopec.WithMiddleware(middlewares...),
+			canonicalscopec.WithErrorHandler(httpapi.ErrorHandler(mapApplicationError)),
+		}
+		if options.MeterProvider != nil {
+			canonicalServerOptions = append(canonicalServerOptions, canonicalscopec.WithMeterProvider(options.MeterProvider))
+		}
+		canonicalGenerated, err = canonicalscopec.NewServer(
+			options.canonicalScopes,
+			canonicalScopeSecurity{},
+			canonicalServerOptions...,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	mcpPath := ""
 	if options.MCP.Enabled {
 		mcpPath, err = normalizeMCPPath(options.MCP.Path)
@@ -112,7 +134,11 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 			return nil, err
 		}
 	}
-	validatedOpenAPI := httpapi.ValidateJSONUnicode(generated)
+	var openAPI http.Handler = generated
+	if canonicalGenerated != nil {
+		openAPI = canonicalScopeSidecar{legacy: generated, canonical: canonicalGenerated}
+	}
+	validatedOpenAPI := httpapi.ValidateJSONUnicode(openAPI)
 	var application http.Handler = validatedOpenAPI
 	var mux *http.ServeMux
 	if options.MCP.Enabled || options.metrics != nil || options.webUI != nil {
@@ -166,6 +192,11 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 				if !options.HandoffReportRoutes && strings.HasPrefix(request.URL.Path, "/v1/handoff-reports/") {
 					return "unmatched"
 				}
+				if canonicalGenerated != nil {
+					if route, found := canonicalGenerated.FindPath(request.Method, request.URL); found {
+						return route.OperationID()
+					}
+				}
 				route, found := generated.FindPath(request.Method, request.URL)
 				if !found {
 					return "unmatched"
@@ -186,6 +217,33 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		BearerToken: options.BearerToken, HandoffReportRoutes: options.HandoffReportRoutes,
 		Access: access,
 	})
+}
+
+// canonicalScopeSecurity is intentionally permissive: httpapi.Wrap owns the
+// process-wide bearer boundary and runs before this sidecar's generated server.
+type canonicalScopeSecurity struct{}
+
+func (canonicalScopeSecurity) HandleBearerAuth(
+	ctx context.Context,
+	_ canonicalscopec.OperationName,
+	_ canonicalscopec.BearerAuth,
+) (context.Context, error) {
+	return ctx, nil
+}
+
+// canonicalScopeSidecar reserves only exact generated Scope operation paths.
+// All other method/path pairs remain on the frozen legacy handler.
+type canonicalScopeSidecar struct {
+	legacy    http.Handler
+	canonical *canonicalscopec.Server
+}
+
+func (handler canonicalScopeSidecar) ServeHTTP(w http.ResponseWriter, request *http.Request) {
+	if _, found := handler.canonical.FindPath(request.Method, request.URL); found {
+		handler.canonical.ServeHTTP(w, request)
+		return
+	}
+	handler.legacy.ServeHTTP(w, request)
 }
 
 func normalizeMCPPath(value string) (string, error) {
