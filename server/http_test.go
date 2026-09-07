@@ -221,6 +221,32 @@ func TestMetricsEndpointIsAbsentWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpointIncludesProcessAndGoRuntimeMetrics(t *testing.T) {
+	t.Parallel()
+	observability, err := servermetrics.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := NewHTTPHandler(endpoint.NewHandler(endpoint.HandlerOptions{}), HTTPOptions{metrics: observability})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := perform(handler, http.MethodGet, "/metrics", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("metrics = %d %s", response.Code, response.Body.String())
+	}
+	exposition := response.Body.String()
+	for _, name := range []string{
+		"process_cpu_seconds_total",
+		"process_resident_memory_bytes",
+		"go_goroutines",
+	} {
+		if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(name) + ` [0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$`).MatchString(exposition) {
+			t.Fatalf("metrics do not contain an unlabelled %s sample:\n%s", name, exposition)
+		}
+	}
+}
+
 func TestHTTPReadinessMapsNotReadyAndDegradedStatuses(t *testing.T) {
 	t.Parallel()
 	probe := func(status runtime.CheckStatus) runtime.Probe {
