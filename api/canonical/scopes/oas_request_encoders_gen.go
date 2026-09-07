@@ -10,6 +10,20 @@ import (
 	ht "github.com/ogen-go/ogen/http"
 )
 
+func encodeClearScopeBindingRequest(
+	req *ClearScopeBindingRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
 func encodeCreateScopeRequest(
 	req *CreateScopeRequest,
 	r *http.Request,
@@ -54,6 +68,20 @@ func encodeResolveScopeSelectionRequest(
 
 func encodeSetDefaultScopeRequest(
 	req *SetDefaultScopeRequest,
+	r *http.Request,
+) error {
+	const contentType = "application/json"
+	e := new(jx.Encoder)
+	{
+		req.Encode(e)
+	}
+	encoded := e.Bytes()
+	ht.SetBody(r, bytes.NewReader(encoded), contentType)
+	return nil
+}
+
+func encodeSetScopeBindingRequest(
+	req *ScopeBinding,
 	r *http.Request,
 ) error {
 	const contentType = "application/json"

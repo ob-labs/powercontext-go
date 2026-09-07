@@ -11,21 +11,27 @@ import (
 )
 
 var (
-	rn6AllowedHeaders = map[string]string{
-		"POST": "Authorization,Content-Type",
+	rn10AllowedHeaders = map[string]string{
+		"PUT": "Authorization,Content-Type",
 	}
 	rn1AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
+	rn8AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
+	rn3AllowedHeaders = map[string]string{
 		"GET":  "Authorization",
 		"POST": "Authorization,Content-Type",
 	}
-	rn2AllowedHeaders = map[string]string{
+	rn4AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 		"PUT": "Authorization,Content-Type",
 	}
-	rn7AllowedHeaders = map[string]string{
+	rn9AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
-	rn4AllowedHeaders = map[string]string{
+	rn6AllowedHeaders = map[string]string{
 		"GET": "Authorization",
 		"PUT": "Authorization,Content-Type",
 	}
@@ -82,29 +88,94 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			switch elem[0] {
-			case '-': // Prefix: "-bindings/resolve"
+			case '-': // Prefix: "-bindings"
 
-				if l := len("-bindings/resolve"); len(elem) >= l && elem[0:l] == "-bindings/resolve" {
+				if l := len("-bindings"); len(elem) >= l && elem[0:l] == "-bindings" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					// Leaf node.
 					switch r.Method {
-					case "POST":
-						s.handleResolveScopeBindingRequest([0]string{}, elemIsEscaped, w, r)
+					case "PUT":
+						s.handleSetScopeBindingRequest([0]string{}, elemIsEscaped, w, r)
 					default:
 						s.notAllowed(w, r, notAllowedParams{
-							allowedMethods: "POST",
-							allowedHeaders: rn6AllowedHeaders,
-							acceptPost:     "application/json",
+							allowedMethods: "PUT",
+							allowedHeaders: rn10AllowedHeaders,
+							acceptPost:     "",
 							acceptPatch:    "",
 						})
 					}
 
 					return
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case 'c': // Prefix: "clear"
+
+						if l := len("clear"); len(elem) >= l && elem[0:l] == "clear" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "POST":
+								s.handleClearScopeBindingRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "POST",
+									allowedHeaders: rn1AllowedHeaders,
+									acceptPost:     "application/json",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+					case 'r': // Prefix: "resolve"
+
+						if l := len("resolve"); len(elem) >= l && elem[0:l] == "resolve" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "POST":
+								s.handleResolveScopeBindingRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "POST",
+									allowedHeaders: rn8AllowedHeaders,
+									acceptPost:     "application/json",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+					}
+
 				}
 
 			case 's': // Prefix: "s"
@@ -124,7 +195,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					default:
 						s.notAllowed(w, r, notAllowedParams{
 							allowedMethods: "GET,POST",
-							allowedHeaders: rn1AllowedHeaders,
+							allowedHeaders: rn3AllowedHeaders,
 							acceptPost:     "application/json",
 							acceptPatch:    "",
 						})
@@ -163,7 +234,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "GET,PUT",
-									allowedHeaders: rn2AllowedHeaders,
+									allowedHeaders: rn4AllowedHeaders,
 									acceptPost:     "",
 									acceptPatch:    "",
 								})
@@ -189,7 +260,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 							default:
 								s.notAllowed(w, r, notAllowedParams{
 									allowedMethods: "POST",
-									allowedHeaders: rn7AllowedHeaders,
+									allowedHeaders: rn9AllowedHeaders,
 									acceptPost:     "application/json",
 									acceptPatch:    "",
 								})
@@ -223,7 +294,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						default:
 							s.notAllowed(w, r, notAllowedParams{
 								allowedMethods: "GET,PUT",
-								allowedHeaders: rn4AllowedHeaders,
+								allowedHeaders: rn6AllowedHeaders,
 								acceptPost:     "",
 								acceptPatch:    "",
 							})
@@ -334,29 +405,94 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				break
 			}
 			switch elem[0] {
-			case '-': // Prefix: "-bindings/resolve"
+			case '-': // Prefix: "-bindings"
 
-				if l := len("-bindings/resolve"); len(elem) >= l && elem[0:l] == "-bindings/resolve" {
+				if l := len("-bindings"); len(elem) >= l && elem[0:l] == "-bindings" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					// Leaf node.
 					switch method {
-					case "POST":
-						r.name = ResolveScopeBindingOperation
-						r.summary = "Resolve an explicit durable or default Scope binding"
-						r.operationID = "resolve_scope_binding"
+					case "PUT":
+						r.name = SetScopeBindingOperation
+						r.summary = "Persist an external identity to Scope binding"
+						r.operationID = "set_scope_binding"
 						r.operationGroup = ""
-						r.pathPattern = "/v1/scope-bindings/resolve"
+						r.pathPattern = "/v1/scope-bindings"
 						r.args = args
 						r.count = 0
 						return r, true
 					default:
 						return
 					}
+				}
+				switch elem[0] {
+				case '/': // Prefix: "/"
+
+					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case 'c': // Prefix: "clear"
+
+						if l := len("clear"); len(elem) >= l && elem[0:l] == "clear" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "POST":
+								r.name = ClearScopeBindingOperation
+								r.summary = "Remove one durable external Scope binding"
+								r.operationID = "clear_scope_binding"
+								r.operationGroup = ""
+								r.pathPattern = "/v1/scope-bindings/clear"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
+					case 'r': // Prefix: "resolve"
+
+						if l := len("resolve"); len(elem) >= l && elem[0:l] == "resolve" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "POST":
+								r.name = ResolveScopeBindingOperation
+								r.summary = "Resolve an explicit durable or default Scope binding"
+								r.operationID = "resolve_scope_binding"
+								r.operationGroup = ""
+								r.pathPattern = "/v1/scope-bindings/resolve"
+								r.args = args
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
+					}
+
 				}
 
 			case 's': // Prefix: "s"

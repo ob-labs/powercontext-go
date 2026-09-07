@@ -81,6 +81,38 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// Ref: #/components/schemas/ClearScopeBindingRequest
+type ClearScopeBindingRequest struct {
+	Key ScopeBindingKey `json:"key"`
+}
+
+// GetKey returns the value of Key.
+func (s *ClearScopeBindingRequest) GetKey() ScopeBindingKey {
+	return s.Key
+}
+
+// SetKey sets the value of Key.
+func (s *ClearScopeBindingRequest) SetKey(val ScopeBindingKey) {
+	s.Key = val
+}
+
+// Ref: #/components/schemas/ClearScopeBindingResponse
+type ClearScopeBindingResponse struct {
+	Cleared bool `json:"cleared"`
+}
+
+// GetCleared returns the value of Cleared.
+func (s *ClearScopeBindingResponse) GetCleared() bool {
+	return s.Cleared
+}
+
+// SetCleared sets the value of Cleared.
+func (s *ClearScopeBindingResponse) SetCleared(val bool) {
+	s.Cleared = val
+}
+
+func (*ClearScopeBindingResponse) clearScopeBindingRes() {}
+
 // ConflictHeaders wraps ErrorResponse with response headers.
 type ConflictHeaders struct {
 	XPowerContextRequestID OptString
@@ -329,9 +361,11 @@ func (s *InvalidRequestHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
+func (*InvalidRequestHeaders) clearScopeBindingRes()     {}
 func (*InvalidRequestHeaders) createScopeRes()           {}
 func (*InvalidRequestHeaders) resolveScopeBindingRes()   {}
 func (*InvalidRequestHeaders) resolveScopeSelectionRes() {}
+func (*InvalidRequestHeaders) setScopeBindingRes()       {}
 func (*InvalidRequestHeaders) updateScopeRes()           {}
 
 // NewNilErrorDetailDetails returns new NilErrorDetailDetails with value set to v.
@@ -411,6 +445,7 @@ func (*NotFoundHeaders) getScopeRes()              {}
 func (*NotFoundHeaders) resolveScopeBindingRes()   {}
 func (*NotFoundHeaders) resolveScopeSelectionRes() {}
 func (*NotFoundHeaders) setDefaultScopeRes()       {}
+func (*NotFoundHeaders) setScopeBindingRes()       {}
 func (*NotFoundHeaders) updateScopeRes()           {}
 
 // NewOptNilString returns new OptNilString with value set to v.
@@ -567,6 +602,34 @@ func (s *ResolveScopeSelectionRequest) GetSelection() ScopeSelection {
 func (s *ResolveScopeSelectionRequest) SetSelection(val ScopeSelection) {
 	s.Selection = val
 }
+
+// Ref: #/components/schemas/ScopeBinding
+type ScopeBinding struct {
+	Key     ScopeBindingKey `json:"key"`
+	ScopeID string          `json:"scope_id"`
+}
+
+// GetKey returns the value of Key.
+func (s *ScopeBinding) GetKey() ScopeBindingKey {
+	return s.Key
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *ScopeBinding) GetScopeID() string {
+	return s.ScopeID
+}
+
+// SetKey sets the value of Key.
+func (s *ScopeBinding) SetKey(val ScopeBindingKey) {
+	s.Key = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *ScopeBinding) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+func (*ScopeBinding) setScopeBindingRes() {}
 
 // Ref: #/components/schemas/ScopeBindingKey
 type ScopeBindingKey struct {
@@ -986,6 +1049,7 @@ func (s *UnauthorizedHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
+func (*UnauthorizedHeaders) clearScopeBindingRes()     {}
 func (*UnauthorizedHeaders) createScopeRes()           {}
 func (*UnauthorizedHeaders) getDefaultScopeRes()       {}
 func (*UnauthorizedHeaders) getScopeRes()              {}
@@ -993,6 +1057,7 @@ func (*UnauthorizedHeaders) listScopesRes()            {}
 func (*UnauthorizedHeaders) resolveScopeBindingRes()   {}
 func (*UnauthorizedHeaders) resolveScopeSelectionRes() {}
 func (*UnauthorizedHeaders) setDefaultScopeRes()       {}
+func (*UnauthorizedHeaders) setScopeBindingRes()       {}
 func (*UnauthorizedHeaders) updateScopeRes()           {}
 
 // UnavailableHeaders wraps ErrorResponse with response headers.

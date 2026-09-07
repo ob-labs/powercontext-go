@@ -51,20 +51,6 @@ func TestOpenApplicationServesCanonicalScopeSidecar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, binding := range []struct {
-		integration, target string
-	}{
-		{integration: "codex", target: child.ID()},
-		{integration: "workbuddy", target: root.ID()},
-	} {
-		key, keyErr := scope.NewBindingKey(binding.integration, "project", "repository")
-		if keyErr != nil {
-			t.Fatal(keyErr)
-		}
-		if _, bindErr := application.scopes.Bind(t.Context(), key, binding.target); bindErr != nil {
-			t.Fatal(bindErr)
-		}
-	}
 
 	unauthenticated := newCanonicalScopeClient(t, handler, "")
 	denied, err := unauthenticated.ListScopes(t.Context())
@@ -142,18 +128,38 @@ func TestOpenApplicationServesCanonicalScopeSidecar(t *testing.T) {
 		{integration: "codex", target: child.ID()},
 		{integration: "workbuddy", target: root.ID()},
 	} {
+		key := canonicalscopec.ScopeBindingKey{
+			Integration: canonicalscopec.ScopeBindingKeyIntegration(binding.integration),
+			Kind:        "project",
+			ExternalID:  "repository",
+		}
+		set, setErr := client.SetScopeBinding(t.Context(), &canonicalscopec.ScopeBinding{
+			Key: key, ScopeID: binding.target,
+		})
+		if setErr != nil {
+			t.Fatal(setErr)
+		}
+		if value, ok := set.(*canonicalscopec.ScopeBinding); !ok || value.Key != key || value.ScopeID != binding.target {
+			t.Fatalf("%s SetScopeBinding() = %#v, want %q", binding.integration, set, binding.target)
+		}
 		result, resolveErr := client.ResolveScopeBinding(t.Context(), &canonicalscopec.ResolveScopeBindingRequest{
-			BindingKeys: []canonicalscopec.ScopeBindingKey{{
-				Integration: canonicalscopec.ScopeBindingKeyIntegration(binding.integration),
-				Kind:        "project",
-				ExternalID:  "repository",
-			}},
+			BindingKeys: []canonicalscopec.ScopeBindingKey{key},
 		})
 		if resolveErr != nil {
 			t.Fatal(resolveErr)
 		}
 		if value, ok := result.(*canonicalscopec.ScopeDescriptor); !ok || value.ScopeID != binding.target {
 			t.Fatalf("%s binding = %#v, want %q", binding.integration, result, binding.target)
+		}
+		for attempt, want := range []bool{true, false} {
+			cleared, clearErr := client.ClearScopeBinding(t.Context(), &canonicalscopec.ClearScopeBindingRequest{Key: key})
+			if clearErr != nil {
+				t.Fatal(clearErr)
+			}
+			response, ok := cleared.(*canonicalscopec.ClearScopeBindingResponse)
+			if !ok || response.Cleared != want {
+				t.Fatalf("%s ClearScopeBinding() attempt %d = %#v, want cleared=%t", binding.integration, attempt+1, cleared, want)
+			}
 		}
 	}
 	explicit := canonicalscopec.NewOptNilString(defaultScope.ID())

@@ -49,15 +49,13 @@ func TestScopeSidecarProjectsOnlyPinnedScopeMetadataOperations(t *testing.T) {
 		"set_default_scope":       {Method: "put", Path: "/v1/scopes/default"},
 		"resolve_scope_selection": {Method: "post", Path: "/v1/scopes/selection/resolve"},
 		"resolve_scope_binding":   {Method: "post", Path: "/v1/scope-bindings/resolve"},
+		"set_scope_binding":       {Method: "put", Path: "/v1/scope-bindings"},
+		"clear_scope_binding":     {Method: "post", Path: "/v1/scope-bindings/clear"},
 	}
 	if !sameCompatibilityOperations(mapCompatibilityOperations(operations), mapCompatibilityOperations(want)) {
 		t.Fatalf("scope sidecar operations = %#v, want %#v", operations, want)
 	}
-	for _, deferred := range []string{
-		"set_scope_binding",
-		"clear_scope_binding",
-		"create_source",
-	} {
+	for _, deferred := range []string{"create_source"} {
 		if _, found := operations[deferred]; found {
 			t.Fatalf("projected scope sidecar contains deferred operation %q", deferred)
 		}
@@ -86,32 +84,34 @@ func TestScopeSidecarProjectsOnlyPinnedScopeMetadataOperations(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects an extra deferred binding operation in the allowlist", func(t *testing.T) {
+	t.Run("rejects an extra deferred operation in the allowlist", func(t *testing.T) {
 		mutated := manifest
 		mutated.Operations = append(mutated.Operations, scopeSidecarOperation{
-			OperationID: "set_scope_binding",
-			Method:      "put",
-			Path:        "/v1/scope-bindings",
+			OperationID: "create_source",
+			Method:      "post",
+			Path:        "/v1/scopes/{scope_id}/sources",
 		})
 		if _, mutationErr := projectScopeSidecar(source, mutated, legacy, compatibility); mutationErr == nil {
-			t.Fatal("scope sidecar accepted a deferred binding operation")
+			t.Fatal("scope sidecar accepted a deferred operation")
 		}
 	})
 
-	t.Run("rejects a manifest operation with deferred ledger status", func(t *testing.T) {
-		surface, decodeErr := decodeCompatibilitySurface(compatibility)
-		if decodeErr != nil {
-			t.Fatal(decodeErr)
-		}
-		surface.Canonical.UpstreamOnlyOperations[stagedOperationIndex(t, surface, "create_scope")].Status = compatibilityStatusDeferred
-		mutated, marshalErr := json.Marshal(surface)
-		if marshalErr != nil {
-			t.Fatal(marshalErr)
-		}
-		if _, mutationErr := projectScopeSidecar(source, manifest, legacy, mutated); mutationErr == nil {
-			t.Fatal("scope sidecar accepted a manifest operation with deferred ledger status")
-		}
-	})
+	for _, operation := range manifest.Operations {
+		t.Run("rejects deferred ledger status for "+operation.OperationID, func(t *testing.T) {
+			surface, decodeErr := decodeCompatibilitySurface(compatibility)
+			if decodeErr != nil {
+				t.Fatal(decodeErr)
+			}
+			surface.Canonical.UpstreamOnlyOperations[stagedOperationIndex(t, surface, operation.OperationID)].Status = compatibilityStatusDeferred
+			mutated, marshalErr := json.Marshal(surface)
+			if marshalErr != nil {
+				t.Fatal(marshalErr)
+			}
+			if _, mutationErr := projectScopeSidecar(source, manifest, legacy, mutated); mutationErr == nil {
+				t.Fatalf("scope sidecar accepted deferred ledger status for %q", operation.OperationID)
+			}
+		})
+	}
 }
 
 func TestScopeSidecarProjectionIsByteDeterministic(t *testing.T) {
@@ -151,16 +151,14 @@ func TestScopeSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		"SetDefaultScope",
 		"ResolveScopeSelection",
 		"ResolveScopeBinding",
+		"SetScopeBinding",
+		"ClearScopeBinding",
 	} {
 		if !strings.Contains(generated, expected) {
 			t.Fatalf("generated scope package lacks operation %q", expected)
 		}
 	}
-	for _, absent := range []string{
-		"SetScopeBinding",
-		"ClearScopeBinding",
-		"CreateSource",
-	} {
+	for _, absent := range []string{"CreateSource"} {
 		if strings.Contains(generated, absent) {
 			t.Fatalf("generated scope package unexpectedly contains %q", absent)
 		}
@@ -181,7 +179,9 @@ func TestScopeSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		"ListScopesOperation":            {},
 		"ResolveScopeBindingOperation":   {},
 		"ResolveScopeSelectionOperation": {},
+		"SetScopeBindingOperation":       {},
 		"SetDefaultScopeOperation":       {},
+		"ClearScopeBindingOperation":     {},
 		"UpdateScopeOperation":           {},
 	}
 	if len(operationNames) != len(wantOperationNames) {
@@ -434,6 +434,8 @@ var (
 	_                = (*scopes.Client).UpdateScope
 	_                = (*scopes.Client).SetDefaultScope
 	_                = (*scopes.Client).ResolveScopeBinding
+	_                = (*scopes.Client).SetScopeBinding
+	_                = (*scopes.Client).ClearScopeBinding
 )
 `)
 	for _, arguments := range [][]string{{"mod", "tidy"}, {"mod", "verify"}, {"build", "./..."}, {"test", "-count=1", "./..."}} {
