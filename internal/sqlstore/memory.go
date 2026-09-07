@@ -204,6 +204,12 @@ func (r *MemoryRepository) commit(ctx context.Context, tx DBTX, value memory.Com
 			return memory.Memory{}, err
 		}
 	}
+	// Rebuildable index rows may reference the current heads. Clear those rows
+	// before replacing heads so an ON DELETE CASCADE cannot hide vec0 row IDs
+	// from SQLiteMemoryVectorIndex.Replace.
+	if err := r.index.Replace(ctx, tx, r.scopeID, next.Ref(), nil); err != nil {
+		return memory.Memory{}, err
+	}
 	if _, err := tx.ExecContext(ctx,
 		"DELETE FROM pc_memory_entry_heads WHERE scope_id = ? AND memory_artifact_id = ?",
 		r.scopeID, next.ID()); err != nil {

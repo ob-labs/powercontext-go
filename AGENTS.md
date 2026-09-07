@@ -541,3 +541,8 @@ source / artifact / trigger / inference
   expected `sqlite_master` object is a table in the same transaction. Prove a
   same-named view fails without leaving a partial schema or changing existing
   persisted data.
+- When SQLite vector projections keep vec0 rows outside relational foreign-key
+  ownership, clear vector metadata and vec0 rows before replacing Memory heads,
+  then rebuild projections in the same transaction. On initialization, remove
+  vec0 rows without metadata ownership. Verify revision cleanup, Scope
+  isolation, startup orphan cleanup, and rollback after an invalid embedding.
