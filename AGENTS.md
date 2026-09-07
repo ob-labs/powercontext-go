@@ -568,3 +568,11 @@ source / artifact / trigger / inference
   path or request-sensitive value. Verify real hook processes emit only the
   first repeated failure, a corrupted state recovers, and lock contention
   returns within the hook budget.
+- When workload-specific inference configuration accepts static provider
+  headers, parse each workload's JSON object with duplicate-name rejection,
+  validate HTTP field names and case-insensitive uniqueness, and reserve
+  `extra_headers` from model settings. Keep header values out of validation
+  errors, `String`/`GoString`, and structured logs. Verify valid independent
+  generation, embedding, and rerank settings; generation-backed rerank
+  overrides; orphaned or malformed overrides; and redaction in every rendered
+  configuration representation.

@@ -159,14 +159,17 @@ type HandoffReportConfig struct{ Enabled bool }
 
 type InferenceConfig struct {
 	GenerationModel        string
+	Generation             *InferenceWorkloadConfig
 	GenerationTimeout      time.Duration
 	GenerationMaxRequests  int
 	EmbeddingModel         string
+	Embedding              *InferenceWorkloadConfig
 	EmbeddingProfileID     string
 	EmbeddingDimension     int
 	EmbeddingNormalization string
 	EmbeddingTimeout       time.Duration
 	EmbeddingBatchSize     int
+	Rerank                 *RerankInferenceConfig
 }
 
 type ExternalSkillRoot struct {
