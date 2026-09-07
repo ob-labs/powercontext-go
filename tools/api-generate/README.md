@@ -14,6 +14,16 @@ Its `mcp_generated_openapi_operations` field covers only schema-generated
 OpenAPI-dispatch tools. Native conditional MCP tools have their own registration
 and tests.
 
+The Scope sidecar is the first deliberately narrow canonical package. Its
+`-scope-sidecar-manifest` mode reads the raw pinned upstream OpenAPI,
+compatibility inventory, and frozen legacy document; it validates the complete
+77-operation ledger before projecting only the five Scope read/resolve
+operations into `api/canonical/scopes`. The manifest carries the sole product
+overlay, which limits `ScopeBindingKey.integration` to `codex` and `workbuddy`.
+The mode requires package `scopes` below a `canonical/scopes` target and rejects
+every Client Invoker output. It generates no route registration, MCP schema, or
+legacy `v1` artifact.
+
 The frozen OpenAPI 3.0 document uses `$ref` with a `nullable: true` sibling.
 OpenAPI 3.0 formally ignores `$ref` siblings, so the generator command creates
 an ephemeral, semantically equivalent `oneOf: [$ref, null]` view before invoking

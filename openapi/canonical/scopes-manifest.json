@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "oceanbase/powercontext",
+    "commit": "74b961fbb07165595314726715d412a3d0d90589",
+    "path": "openapi/powercontext.yaml",
+    "sha256": "aca2a9dedfc4733176df3f7e27861deedcc751e0042515e3014ee9c36a017ec3"
+  },
+  "operations": [
+    {"operation_id": "list_scopes", "method": "get", "path": "/v1/scopes"},
+    {"operation_id": "get_scope", "method": "get", "path": "/v1/scopes/{scope_id}"},
+    {"operation_id": "get_default_scope", "method": "get", "path": "/v1/scopes/default"},
+    {"operation_id": "resolve_scope_selection", "method": "post", "path": "/v1/scopes/selection/resolve"},
+    {"operation_id": "resolve_scope_binding", "method": "post", "path": "/v1/scope-bindings/resolve"}
+  ],
+  "overlays": {
+    "scope_binding_key": {
+      "integration_enum": ["codex", "workbuddy"]
+    }
+  }
+}

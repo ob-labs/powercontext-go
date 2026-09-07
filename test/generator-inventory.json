@@ -40,6 +40,44 @@
       "evidence": ["tools/generated-consumers/main_test.go#func TestMCPSchemaGeneratorProducesGoldenBuildableConsumer("]
     },
     {
+      "name": "canonical-scope-sidecar",
+      "command": "go run ./tools/api-generate -scope-sidecar-manifest openapi/canonical/scopes-manifest.json",
+      "inputs": [
+        "openapi/canonical/upstream-powercontext.yaml",
+        "openapi/canonical/scopes-manifest.json",
+        "openapi/compatibility-surface.json",
+        "openapi/powercontext.yaml"
+      ],
+      "outputs": [
+        "openapi/canonical/scopes.json",
+        "api/canonical/scopes/oas_cfg_gen.go",
+        "api/canonical/scopes/oas_client_gen.go",
+        "api/canonical/scopes/oas_defaults_gen.go",
+        "api/canonical/scopes/oas_handlers_gen.go",
+        "api/canonical/scopes/oas_interfaces_gen.go",
+        "api/canonical/scopes/oas_json_gen.go",
+        "api/canonical/scopes/oas_labeler_gen.go",
+        "api/canonical/scopes/oas_middleware_gen.go",
+        "api/canonical/scopes/oas_operations_gen.go",
+        "api/canonical/scopes/oas_parameters_gen.go",
+        "api/canonical/scopes/oas_request_decoders_gen.go",
+        "api/canonical/scopes/oas_request_encoders_gen.go",
+        "api/canonical/scopes/oas_response_decoders_gen.go",
+        "api/canonical/scopes/oas_response_encoders_gen.go",
+        "api/canonical/scopes/oas_router_gen.go",
+        "api/canonical/scopes/oas_schemas_gen.go",
+        "api/canonical/scopes/oas_scope_external_reference_equal_gen.go",
+        "api/canonical/scopes/oas_scope_external_reference_hash_gen.go",
+        "api/canonical/scopes/oas_security_gen.go",
+        "api/canonical/scopes/oas_server_gen.go",
+        "api/canonical/scopes/oas_unimplemented_gen.go",
+        "api/canonical/scopes/oas_validators_gen.go",
+        "api/canonical/scopes/scopes_validators_unique_gen.go",
+        "api/canonical/scopes/time.go"
+      ],
+      "evidence": ["tools/api-generate/canonical_scopes_test.go#func TestScopeSidecarGenerationIsIsolatedAndFreshConsumerBuilds("]
+    },
+    {
       "name": "traceability",
       "command": "go run ./tools/traceability-generate",
       "inputs": ["test/conformance/testdata/python-v0.0.2/manifest.json", "test/conformance/traceability-rules.json"],

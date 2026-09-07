@@ -72,6 +72,7 @@ linters:
     generated: disable
     paths:
       - ^api/v1/
+      - ^api/canonical/scopes/
       - ^client/invoker_gen\.go$
       - ^internal/mcpapi/schemas_gen\.go$
     warn-unused: true
@@ -109,5 +110,6 @@ formatters:
     generated: disable
     paths:
       - ^api/v1/
+      - ^api/canonical/scopes/
       - ^client/invoker_gen\.go$
       - ^internal/mcpapi/schemas_gen\.go$
