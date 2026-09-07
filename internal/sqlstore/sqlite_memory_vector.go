@@ -103,6 +103,10 @@ func (i *SQLiteMemoryVectorIndex) Initialize(ctx context.Context, db DBTX) error
 	if err := i.ensureSQLiteVecProjection(ctx, db); err != nil {
 		return err
 	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM pc_memory_entry_vec
+        WHERE rowid NOT IN (SELECT vector_id FROM pc_memory_vector_entries)`); err != nil {
+		return newSQLiteVecCapabilityFailure("sqlite-vec projection cleanup failed", err)
+	}
 
 	probe := make([]float64, i.profile.Dimension)
 	packed, err := packSQLiteVector(probe)
