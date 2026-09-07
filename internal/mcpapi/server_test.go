@@ -17,7 +17,10 @@ package mcpapi
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
@@ -51,6 +54,52 @@ var baseToolNames = []string{
 	"revise_artifact_candidate",
 	"revise_memory_entry",
 	"search_memory",
+}
+
+func TestGeneratedOpenAPIToolsMatchCompatibilitySurface(t *testing.T) {
+	t.Parallel()
+	contents, err := os.ReadFile(filepath.Join("..", "..", "openapi", "compatibility-surface.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var surface struct {
+		Canonical struct {
+			UpstreamOnlyOperations []struct {
+				OperationID string `json:"operation_id"`
+			} `json:"upstream_only_operations"`
+		} `json:"canonical"`
+		MCPGeneratedOpenAPIOperations []string `json:"mcp_generated_openapi_operations"`
+	}
+	if decodeErr := jsonv2.Unmarshal(contents, &surface); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	server, err := NewServer(endpoint.NewHandler(endpoint.HandlerOptions{}), Options{HandoffReportEnabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := connectInMemory(t, server).ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(result.Tools))
+	for _, tool := range result.Tools {
+		// This picker and optional Scope Binding tools are native MCP additions.
+		// The compatibility surface covers only generated OpenAPI-dispatch tools.
+		if tool.Name != "select_handoff_workstream" {
+			got = append(got, tool.Name)
+		}
+	}
+	slices.Sort(got)
+	want := slices.Clone(surface.MCPGeneratedOpenAPIOperations)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("generated OpenAPI MCP tools = %v, want compatibility operations %v", got, want)
+	}
+	for _, operation := range surface.Canonical.UpstreamOnlyOperations {
+		if slices.Contains(got, operation.OperationID) {
+			t.Fatalf("unimplemented canonical operation %q is exposed through MCP", operation.OperationID)
+		}
+	}
 }
 
 func TestDefaultServerInfoMatchesFrozenPython(t *testing.T) {

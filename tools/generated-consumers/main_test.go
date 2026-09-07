@@ -31,9 +31,20 @@ import (
 const generatedAPIConsumerTest = `package generatedconsumer
 
 import (
+	"context"
 	"testing"
 
 	v1 "example.com/powercontext-generated-api/api/v1"
+)
+
+type legacyHandler struct{ v1.UnimplementedHandler }
+
+var (
+	_ v1.Handler = legacyHandler{}
+	_ v1.Invoker = (*v1.Client)(nil)
+	_ func(v1.Handler, v1.SecurityHandler, ...v1.ServerOption) (*v1.Server, error) = v1.NewServer
+	_ func(string, v1.SecuritySource, ...v1.ClientOption) (*v1.Client, error) = v1.NewClient
+	_ func(*v1.Client, context.Context, v1.GetStatsParams) (v1.GetStatsRes, error) = (*v1.Client).GetStats
 )
 
 func TestGeneratedClientConstruction(t *testing.T) {
@@ -336,6 +347,7 @@ func TestOpenAPIGeneratorProducesGoldenBuildableConsumer(t *testing.T) {
 		"-target", generatedAPI,
 		"-package", "v1",
 		"-client-invoker", invoker,
+		"-compatibility", filepath.Join(repository, "openapi", "compatibility-surface.json"),
 	)
 
 	compareTree(t, filepath.Join(repository, "api", "v1"), generatedAPI)

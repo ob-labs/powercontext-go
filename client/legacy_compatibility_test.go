@@ -12,7 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package openapi owns generation of the immutable HTTP contract.
-package openapi
+package client
 
-//go:generate go run ../tools/api-generate -spec powercontext.yaml -target ../api/v1 -package v1 -client-invoker ../client/invoker_gen.go -compatibility compatibility-surface.json
+import (
+	"context"
+
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
+)
+
+var (
+	_ v1.Invoker                                                                = (*Client)(nil)
+	_ func(*Client) *v1.Client                                                  = (*Client).Raw
+	_ func(*Client, context.Context, v1.GetStatsParams) (v1.GetStatsRes, error) = (*Client).GetStats
+)
