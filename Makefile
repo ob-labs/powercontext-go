@@ -82,7 +82,7 @@ PUBLIC_API_PACKAGES := \
 
 .PHONY: help lint-tools lint lint-fix api-compat-tools api-baseline api-compat govulncheck-tools license-eye-tools actionlint-tools actionlint modern-go-tools modern-go dependency-security generate check-generated parity-inventory-check release-contract-check module-check module-inventory module-integrity contract-test license-check license-fix license-dependencies fmt fmt-check vet build-all coverage coverage-check governance-check \
 	test unit-test e2e-test test-sqlite race-debt-check race-debt-functional test-race test-full real-provider-test \
-	docs-sync docs-test docs-build harness-sync harness-check harness-compose-check \
+	docs-sync docs-check docs-test docs-build harness-sync harness-check harness-compose-check \
 	harness-compose-acceptance harness-compose-down build build-full smoke smoke-full check \
 	portable-sdk-check check-portable generated-consumers downstream-compat package-standard package-full clean
 
@@ -363,10 +363,14 @@ real-provider-test: ## Run explicit credentialed real-provider smoke tests.
 docs-sync: ## Synchronize the locked documentation environment.
 	$(UV) sync --project tools/docs --frozen
 
-docs-test: ## Strictly build documentation without publishing it.
+docs-check: ## Verify documentation contracts before rendering.
+	$(UV) run --project tools/docs --frozen python -m unittest tools.docs.test_check_contract -v
+	$(UV) run --project tools/docs --frozen python tools/docs/check_contract.py
+
+docs-test: docs-check ## Strictly build documentation without publishing it.
 	$(UV) run --project tools/docs --frozen zensical build -s
 
-docs-build: ## Clean and build the documentation site.
+docs-build: docs-check ## Clean and build the documentation site.
 	$(UV) run --project tools/docs --frozen zensical build --clean
 
 harness-sync: ## Download and verify the E2E harness module graph.
