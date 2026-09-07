@@ -16,7 +16,9 @@ package metrics
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -68,6 +70,29 @@ func TestRuntimeScopeMetricsHaveOnlyBoundedStateLabels(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("metrics do not contain %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestServerHandlerIncludesPrivateProcessAndGoRuntimeCollectors(t *testing.T) {
+	t.Parallel()
+	server, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest("GET", "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d: %s", response.Code, response.Body.String())
+	}
+	exposition := response.Body.String()
+	for _, name := range []string{
+		"process_cpu_seconds_total",
+		"process_resident_memory_bytes",
+		"go_goroutines",
+	} {
+		if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(name) + ` [0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$`).MatchString(exposition) {
+			t.Fatalf("metrics do not contain an unlabelled %s sample:\n%s", name, exposition)
 		}
 	}
 }
