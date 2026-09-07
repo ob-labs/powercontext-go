@@ -65,7 +65,7 @@
   "canonical": {
     "operation_count": 77,
     "upstream_only_operations": [
-      {"operation_id": "clear_scope_binding", "method": "post", "path": "/v1/scope-bindings/clear", "status": "deferred"},
+      {"operation_id": "clear_scope_binding", "method": "post", "path": "/v1/scope-bindings/clear", "status": "implemented-canonical"},
       {"operation_id": "commit_connector_checkpoint", "method": "post", "path": "/v1/connector-checkpoints/commit", "status": "deferred"},
       {"operation_id": "create_artifact", "method": "post", "path": "/v1/scopes/{scope_id}/artifacts", "status": "deferred"},
       {"operation_id": "create_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/create", "status": "deferred"},
@@ -98,7 +98,7 @@
       {"operation_id": "resolve_scope_selection", "method": "post", "path": "/v1/scopes/selection/resolve", "status": "implemented-canonical"},
       {"operation_id": "revoke_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/revoke", "status": "deferred"},
       {"operation_id": "set_default_scope", "method": "put", "path": "/v1/scopes/default", "status": "implemented-canonical"},
-      {"operation_id": "set_scope_binding", "method": "put", "path": "/v1/scope-bindings", "status": "deferred"},
+      {"operation_id": "set_scope_binding", "method": "put", "path": "/v1/scope-bindings", "status": "implemented-canonical"},
       {"operation_id": "submit_source_observation", "method": "post", "path": "/v1/source-observations", "status": "deferred"},
       {"operation_id": "unpublish_remote_skill", "method": "post", "path": "/v1/skill/remote/publication/unpublish", "status": "deferred"},
       {"operation_id": "update_scope", "method": "put", "path": "/v1/scopes/{scope_id}", "status": "implemented-canonical"},

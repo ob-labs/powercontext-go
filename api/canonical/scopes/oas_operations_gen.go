@@ -6,6 +6,7 @@ package scopes
 type OperationName = string
 
 const (
+	ClearScopeBindingOperation     OperationName = "ClearScopeBinding"
 	CreateScopeOperation           OperationName = "CreateScope"
 	GetDefaultScopeOperation       OperationName = "GetDefaultScope"
 	GetScopeOperation              OperationName = "GetScope"
@@ -13,5 +14,6 @@ const (
 	ResolveScopeBindingOperation   OperationName = "ResolveScopeBinding"
 	ResolveScopeSelectionOperation OperationName = "ResolveScopeSelection"
 	SetDefaultScopeOperation       OperationName = "SetDefaultScope"
+	SetScopeBindingOperation       OperationName = "SetScopeBinding"
 	UpdateScopeOperation           OperationName = "UpdateScope"
 )

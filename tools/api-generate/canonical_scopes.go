@@ -43,6 +43,8 @@ var scopeSidecarOperations = []scopeSidecarOperation{
 	{OperationID: "set_default_scope", Method: "put", Path: "/v1/scopes/default"},
 	{OperationID: "resolve_scope_selection", Method: "post", Path: "/v1/scopes/selection/resolve"},
 	{OperationID: "resolve_scope_binding", Method: "post", Path: "/v1/scope-bindings/resolve"},
+	{OperationID: "set_scope_binding", Method: "put", Path: "/v1/scope-bindings"},
+	{OperationID: "clear_scope_binding", Method: "post", Path: "/v1/scope-bindings/clear"},
 }
 
 type scopeSidecarManifest struct {

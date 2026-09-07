@@ -8,6 +8,12 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// ClearScopeBinding implements clear_scope_binding operation.
+	//
+	// Remove one durable external Scope binding.
+	//
+	// POST /v1/scope-bindings/clear
+	ClearScopeBinding(ctx context.Context, req *ClearScopeBindingRequest) (ClearScopeBindingRes, error)
 	// CreateScope implements create_scope operation.
 	//
 	// Create an independent Scope boundary.
@@ -50,6 +56,12 @@ type Handler interface {
 	//
 	// PUT /v1/scopes/default
 	SetDefaultScope(ctx context.Context, req *SetDefaultScopeRequest) (SetDefaultScopeRes, error)
+	// SetScopeBinding implements set_scope_binding operation.
+	//
+	// Persist an external identity to Scope binding.
+	//
+	// PUT /v1/scope-bindings
+	SetScopeBinding(ctx context.Context, req *ScopeBinding) (SetScopeBindingRes, error)
 	// UpdateScope implements update_scope operation.
 	//
 	// Replace mutable Scope metadata and relationships.

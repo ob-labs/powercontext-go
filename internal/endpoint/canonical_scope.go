@@ -31,6 +31,8 @@ type ScopeOperations interface {
 	Get(context.Context, string) (scope.Descriptor, error)
 	Default(context.Context) (scope.Descriptor, error)
 	SetDefault(context.Context, string) (scope.Descriptor, error)
+	Bind(context.Context, scope.BindingKey, string) (scope.Binding, error)
+	ClearBinding(context.Context, scope.BindingKey) (bool, error)
 	Resolve(context.Context, *string, []scope.BindingKey) (scope.Descriptor, error)
 	ResolveSelection(context.Context, scope.Selection) ([]scope.Descriptor, error)
 }
@@ -231,6 +233,51 @@ func (h *CanonicalScopeHandler) ResolveScopeBinding(
 	return scopeDescriptor(resolved)
 }
 
+func (h *CanonicalScopeHandler) SetScopeBinding(
+	ctx context.Context,
+	request *canonicalscopec.ScopeBinding,
+) (canonicalscopec.SetScopeBindingRes, error) {
+	if err := h.available(); err != nil {
+		return nil, err
+	}
+	if request == nil {
+		return nil, &scope.ValidationError{}
+	}
+	key, err := canonicalScopeBindingKey(request.Key)
+	if err != nil {
+		return nil, err
+	}
+	if _, validationErr := scope.NewExactSelection([]string{request.ScopeID}); validationErr != nil {
+		return nil, &scope.ValidationError{}
+	}
+	binding, err := h.operations.Bind(ctx, key, request.ScopeID)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalScopeBinding(binding)
+}
+
+func (h *CanonicalScopeHandler) ClearScopeBinding(
+	ctx context.Context,
+	request *canonicalscopec.ClearScopeBindingRequest,
+) (canonicalscopec.ClearScopeBindingRes, error) {
+	if err := h.available(); err != nil {
+		return nil, err
+	}
+	if request == nil {
+		return nil, &scope.ValidationError{}
+	}
+	key, err := canonicalScopeBindingKey(request.Key)
+	if err != nil {
+		return nil, err
+	}
+	cleared, err := h.operations.ClearBinding(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return &canonicalscopec.ClearScopeBindingResponse{Cleared: cleared}, nil
+}
+
 func (h *CanonicalScopeHandler) available() error {
 	if h == nil || h.operations == nil {
 		return &RuntimeNotReadyError{}
@@ -262,18 +309,26 @@ func canonicalScopeSelection(value canonicalscopec.ScopeSelection) (scope.Select
 func canonicalScopeBindingKeys(values []canonicalscopec.ScopeBindingKey) ([]scope.BindingKey, error) {
 	keys := make([]scope.BindingKey, 0, len(values))
 	for _, value := range values {
-		switch value.Integration {
-		case canonicalscopec.ScopeBindingKeyIntegrationCodex, canonicalscopec.ScopeBindingKeyIntegrationWorkbuddy:
-		default:
-			return nil, &scope.ValidationError{}
-		}
-		key, err := scope.NewBindingKey(string(value.Integration), value.Kind, value.ExternalID)
+		key, err := canonicalScopeBindingKey(value)
 		if err != nil {
-			return nil, &scope.ValidationError{}
+			return nil, err
 		}
 		keys = append(keys, key)
 	}
 	return keys, nil
+}
+
+func canonicalScopeBindingKey(value canonicalscopec.ScopeBindingKey) (scope.BindingKey, error) {
+	switch value.Integration {
+	case canonicalscopec.ScopeBindingKeyIntegrationCodex, canonicalscopec.ScopeBindingKeyIntegrationWorkbuddy:
+	default:
+		return scope.BindingKey{}, &scope.ValidationError{}
+	}
+	key, err := scope.NewBindingKey(string(value.Integration), value.Kind, value.ExternalID)
+	if err != nil {
+		return scope.BindingKey{}, &scope.ValidationError{}
+	}
+	return key, nil
 }
 
 func canonicalParentScopeID(value canonicalscopec.OptNilString) (string, error) {
@@ -320,6 +375,24 @@ func scopeDescriptor(value scope.Descriptor) (*canonicalscopec.ScopeDescriptor, 
 		return nil, err
 	}
 	return &result, nil
+}
+
+func canonicalScopeBinding(value scope.Binding) (*canonicalscopec.ScopeBinding, error) {
+	key := value.Key()
+	integration := canonicalscopec.ScopeBindingKeyIntegration(key.Integration())
+	switch integration {
+	case canonicalscopec.ScopeBindingKeyIntegrationCodex, canonicalscopec.ScopeBindingKeyIntegrationWorkbuddy:
+	default:
+		return nil, &RuntimeNotReadyError{}
+	}
+	return &canonicalscopec.ScopeBinding{
+		Key: canonicalscopec.ScopeBindingKey{
+			Integration: integration,
+			Kind:        key.Kind(),
+			ExternalID:  key.ExternalID(),
+		},
+		ScopeID: value.ScopeID(),
+	}, nil
 }
 
 func scopeDescriptorValue(value scope.Descriptor) (canonicalscopec.ScopeDescriptor, error) {

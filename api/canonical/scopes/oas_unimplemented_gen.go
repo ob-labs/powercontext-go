@@ -13,6 +13,15 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// ClearScopeBinding implements clear_scope_binding operation.
+//
+// Remove one durable external Scope binding.
+//
+// POST /v1/scope-bindings/clear
+func (UnimplementedHandler) ClearScopeBinding(ctx context.Context, req *ClearScopeBindingRequest) (r ClearScopeBindingRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateScope implements create_scope operation.
 //
 // Create an independent Scope boundary.
@@ -73,6 +82,15 @@ func (UnimplementedHandler) ResolveScopeSelection(ctx context.Context, req *Reso
 //
 // PUT /v1/scopes/default
 func (UnimplementedHandler) SetDefaultScope(ctx context.Context, req *SetDefaultScopeRequest) (r SetDefaultScopeRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SetScopeBinding implements set_scope_binding operation.
+//
+// Persist an external identity to Scope binding.
+//
+// PUT /v1/scope-bindings
+func (UnimplementedHandler) SetScopeBinding(ctx context.Context, req *ScopeBinding) (r SetScopeBindingRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
