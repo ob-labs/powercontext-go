@@ -112,6 +112,57 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 	}
 }
 
+func TestOpenApplicationRunsMinimalSQLiteServerWithoutInferenceModels(t *testing.T) {
+	t.Parallel()
+	config := applicationTestConfig(t)
+	config.SchedulerPath = filepath.Join(t.TempDir(), "scheduler.db")
+	config.Inference.GenerationModel = ""
+	config.Inference.EmbeddingModel = ""
+	config.Inference.EmbeddingProfileID = ""
+	config.Inference.EmbeddingDimension = 0
+	config.Runtime.MemoryRerankEnabled = false
+	config.Runtime.SourceWindowInterval = nil
+	config.Runtime.ExperienceIncubationInterval = nil
+	if err := config.Validate(); err != nil {
+		t.Fatalf("minimal SQLite configuration was rejected: %v", err)
+	}
+
+	application, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := application.Close(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := os.Stat(config.SchedulerPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("minimal Server unexpectedly opened scheduler storage: %v", err)
+	}
+
+	handler, err := application.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := perform(handler, http.MethodGet, "/health/ready", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("minimal Server readiness = %d: %s", response.Code, response.Body.String())
+	}
+	var readiness struct {
+		Status string            `json:"status"`
+		Checks map[string]string `json:"checks"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &readiness); err != nil {
+		t.Fatal(err)
+	}
+	if readiness.Status != "ready" || len(readiness.Checks) != 2 ||
+		readiness.Checks["runtime"] != "ready" || readiness.Checks["database"] != "ready" {
+		t.Fatalf("minimal Server readiness = %#v", readiness)
+	}
+}
+
 func TestOpenApplicationRejectsUnsupportedDatabaseBeforeStorageSideEffects(t *testing.T) {
 	config := applicationTestConfig(t)
 	path := filepath.Join(t.TempDir(), "unsupported-seekdb")
