@@ -16,3 +16,4 @@
 package openapi
 
 //go:generate go run ../tools/api-generate -spec powercontext.yaml -target ../api/v1 -package v1 -client-invoker ../client/invoker_gen.go -compatibility compatibility-surface.json
+//go:generate go run ../tools/api-generate -spec canonical/upstream-powercontext.yaml -scope-sidecar-manifest canonical/scopes-manifest.json -target ../api/canonical/scopes -package scopes -compatibility compatibility-surface.json -legacy-spec powercontext.yaml

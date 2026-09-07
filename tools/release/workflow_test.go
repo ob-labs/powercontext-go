@@ -1423,6 +1423,7 @@ func TestLintExclusionsAreLimitedToOwnedGeneratedGoPaths(t *testing.T) {
 	}
 	wantPaths := map[string]bool{
 		"^api/v1/":                           true,
+		"^api/canonical/scopes/":             true,
 		"^client/invoker_gen\\.go$":          true,
 		"^internal/mcpapi/schemas_gen\\.go$": true,
 	}
@@ -2276,6 +2277,7 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 		".licenserc.yaml": {
 			"copyright-owner: OceanBase",
 			"- 'api/v1/**'",
+			"- 'api/canonical/scopes/**'",
 			"- 'client/invoker_gen.go'",
 			"- 'internal/mcpapi/schemas_gen.go'",
 			"internal/sqlstore/sqlitevec/sqlite-vec.c",

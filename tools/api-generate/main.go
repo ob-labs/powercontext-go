@@ -33,13 +33,31 @@ func main() {
 	var packageName string
 	var clientInvoker string
 	var compatibility string
+	var scopeSidecarManifest string
+	var legacySpecification string
 	flag.StringVar(&specification, "spec", "powercontext.yaml", "canonical OpenAPI document")
 	flag.StringVar(&target, "target", "../api/v1", "generated package directory")
 	flag.StringVar(&packageName, "package", "v1", "generated Go package name")
 	flag.StringVar(&clientInvoker, "client-invoker", "", "optional normalized Client Invoker output")
 	flag.StringVar(&compatibility, "compatibility", "", "optional legacy/canonical compatibility surface")
+	flag.StringVar(&scopeSidecarManifest, "scope-sidecar-manifest", "", "optional Scope sidecar projection manifest")
+	flag.StringVar(&legacySpecification, "legacy-spec", "", "legacy OpenAPI document required for Scope sidecar generation")
 	flag.Parse()
-	if err := run(specification, target, packageName, clientInvoker, compatibility); err != nil {
+	var err error
+	if scopeSidecarManifest == "" {
+		err = run(specification, target, packageName, clientInvoker, compatibility)
+	} else {
+		err = runScopeSidecar(
+			specification,
+			scopeSidecarManifest,
+			target,
+			packageName,
+			clientInvoker,
+			compatibility,
+			legacySpecification,
+		)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "api-generate:", err)
 		os.Exit(1)
 	}
@@ -66,36 +84,12 @@ func run(specification, target, packageName, clientInvoker, compatibility string
 	if err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp("", "powercontext-ogen-*.json")
-	if err != nil {
-		return err
-	}
-	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
-	if _, writeErr := temporary.Write(generatedInput); writeErr != nil {
-		return errors.Join(writeErr, temporary.Close())
-	}
-	if closeErr := temporary.Close(); closeErr != nil {
-		return closeErr
-	}
 	absoluteTarget, err := filepath.Abs(target)
 	if err != nil {
 		return err
 	}
-	command := exec.Command(
-		"go", "tool", "ogen", "--target", absoluteTarget,
-		"--package", packageName, "--clean", temporaryName,
-	)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	if err := command.Run(); err != nil {
-		return fmt.Errorf("run ogen: %w", err)
-	}
-	if err := rewriteDateTimeEncoders(absoluteTarget); err != nil {
-		return fmt.Errorf("rewrite date-time encoders: %w", err)
-	}
-	if err := writeDateTimeSupport(absoluteTarget); err != nil {
-		return fmt.Errorf("write date-time support: %w", err)
+	if err := runOgen(generatedInput, absoluteTarget, packageName, false); err != nil {
+		return err
 	}
 	if err := generateContractValidation(
 		source,
@@ -119,6 +113,38 @@ func run(specification, target, packageName, clientInvoker, compatibility string
 	return nil
 }
 
+func runOgen(generatedInput []byte, absoluteTarget, packageName string, allowNoDateTimeEncoders bool) error {
+	temporary, err := os.CreateTemp("", "powercontext-ogen-*.json")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer func() { _ = os.Remove(temporaryName) }()
+	if _, writeErr := temporary.Write(generatedInput); writeErr != nil {
+		return errors.Join(writeErr, temporary.Close())
+	}
+	if closeErr := temporary.Close(); closeErr != nil {
+		return closeErr
+	}
+	command := exec.Command(
+		"go", "tool", "ogen", "--target", absoluteTarget,
+		"--package", packageName, "--clean", temporaryName,
+	)
+	command.Stdout = os.Stdout
+	command.Stderr = os.Stderr
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("run ogen: %w", err)
+	}
+	if err := rewriteDateTimeEncoders(absoluteTarget); err != nil &&
+		(!allowNoDateTimeEncoders || !errors.Is(err, errNoDateTimeEncoders)) {
+		return fmt.Errorf("rewrite date-time encoders: %w", err)
+	}
+	if err := writeDateTimeSupport(absoluteTarget, packageName); err != nil {
+		return fmt.Errorf("write date-time support: %w", err)
+	}
+	return nil
+}
+
 // rewriteDateTimeEncoders keeps generated wire structs as time.Time while
 // replacing ogen's second-precision RFC3339 encoder with PowerContext's UTC
 // microsecond policy. The canonical OpenAPI remains byte-for-byte identical to
@@ -134,14 +160,17 @@ func rewriteDateTimeEncoders(target string) error {
 	const replacement = "encodeDateTime"
 	count := bytes.Count(contents, []byte(generated))
 	if count == 0 {
-		return errors.New("generated JSON contains no date-time encoders")
+		return errNoDateTimeEncoders
 	}
 	rewritten := bytes.ReplaceAll(contents, []byte(generated), []byte(replacement))
 	return os.WriteFile(path, rewritten, 0o644)
 }
 
-func writeDateTimeSupport(target string) error {
-	return os.WriteFile(filepath.Join(target, "time.go"), []byte(dateTimeSupport), 0o644)
+var errNoDateTimeEncoders = errors.New("generated JSON contains no date-time encoders")
+
+func writeDateTimeSupport(target, packageName string) error {
+	contents := strings.Replace(dateTimeSupport, "package v1\n", "package "+packageName+"\n", 1)
+	return os.WriteFile(filepath.Join(target, "time.go"), []byte(contents), 0o644)
 }
 
 const dateTimeSupport = `// Copyright (c) 2026 OceanBase.

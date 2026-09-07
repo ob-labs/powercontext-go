@@ -59,6 +59,7 @@ header:
     # generators run. Keep these owned generated roots explicit rather than
     # ignoring every generated-looking Go file in the repository.
     - 'api/v1/**'
+    - 'api/canonical/scopes/**'
     - 'client/invoker_gen.go'
     - 'internal/mcpapi/schemas_gen.go'
 
