@@ -46,6 +46,7 @@ _PLUGIN_ROOT = _HOOKS_ROOT.parent
 sys.path.insert(0, str(_PLUGIN_ROOT))
 sys.path.insert(0, str(_HOOKS_ROOT))
 
+import diagnostics as _diagnostics  # noqa: E402
 import prepared_context as _prepared_context  # noqa: E402
 from workbuddy_settings import (  # noqa: E402
     WorkBuddyConfigurationError,
@@ -416,6 +417,8 @@ def _emit_context_event(
     context_status: str | None = None,
     content_bytes: int | None = None,
 ) -> None:
+    if not _diagnostics.should_emit(outcome):
+        return
     event: dict[str, object] = {
         "component": "powercontext.workbuddy.recall",
         "event": "context_prepare",
