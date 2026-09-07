@@ -67,16 +67,17 @@ func TestOpenApplicationProvidesRunnableSQLiteVerticalSlice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	scopeID := applicationDefaultScopeID(t, application)
 
 	recorder := postApplicationJSON(t, handler, "/v1/sources/content", map[string]any{
-		"scope_id": "project:application", "source_id": "source-1", "content": "captured",
+		"scope_id": scopeID, "source_id": "source-1", "content": "captured",
 	})
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("capture status = %d: %s", recorder.Code, recorder.Body.String())
 	}
 
 	recorder = postApplicationJSON(t, handler, "/v1/memory/remember", map[string]any{
-		"scope_id": "project:application", "kind": "fact", "text": "Go server is running.",
+		"scope_id": scopeID, "kind": "fact", "text": "Go server is running.",
 	})
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("remember status = %d: %s", recorder.Code, recorder.Body.String())
@@ -209,18 +210,23 @@ func TestApplicationCloseWaitsForInFlightHTTPMemoryFlush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	scopeID := applicationDefaultScopeID(t, application)
 	if response := postApplicationJSON(t, handler, "/v1/sources/content", map[string]any{
-		"scope_id": "project:shutdown", "source_id": "source-1", "content": "flush while closing",
+		"scope_id": scopeID, "source_id": "source-1", "content": "flush while closing",
 	}); response.Code != http.StatusAccepted {
 		t.Fatalf("capture = %d: %s", response.Code, response.Body.String())
 	}
+	flushBody, err := json.Marshal(map[string]any{"scope_id": scopeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	flushRequest := httptest.NewRequest(http.MethodPost, "/v1/memory/flush", bytes.NewReader(flushBody))
+	flushRequest.Header.Set("Content-Type", "application/json")
 
 	flush := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		request := httptest.NewRequest(http.MethodPost, "/v1/memory/flush", strings.NewReader(`{"scope_id":"project:shutdown"}`))
-		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
+		handler.ServeHTTP(response, flushRequest)
 		flush <- response
 	}()
 	<-pipeline.started
@@ -270,7 +276,7 @@ func TestGoClientExercisesReviewHTTPRuntimeSQLiteVerticalSlice(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
-	const scope = "project:go-client-review"
+	scope := applicationDefaultScopeID(t, application)
 
 	capturedResult, err := sdk.CaptureContentSource(ctx, &v1.CaptureContentSourceRequest{
 		ScopeID: scope, SourceID: "task-1", Content: "Regeneration and contract validation passed.",
@@ -464,7 +470,7 @@ func TestGoClientGeneratesReviewedExperienceAndSkillCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
-	const scope = "project:go-client-generation"
+	scope := applicationDefaultScopeID(t, application)
 	capturedResult, err := sdk.CaptureContentSource(ctx, &v1.CaptureContentSourceRequest{
 		ScopeID: scope, SourceID: "task-1", Content: "The contract checks passed.",
 	})
@@ -824,19 +830,20 @@ func TestOpenApplicationPersistsBusinessInferenceAndRecallAcrossRestartWithoutMe
 	if err != nil {
 		t.Fatal(err)
 	}
+	scopeID := applicationDefaultScopeID(t, application)
 
 	if response := postApplicationJSON(t, handler, "/v1/sources/content", map[string]any{
-		"scope_id": "scope-statistics", "source_id": "source-1", "content": sourceContent,
+		"scope_id": scopeID, "source_id": "source-1", "content": sourceContent,
 	}); response.Code != http.StatusAccepted {
 		t.Fatalf("capture = %d: %s", response.Code, response.Body.String())
 	}
 	if response := postApplicationJSON(t, handler, "/v1/memory/flush", map[string]any{
-		"scope_id": "scope-statistics",
+		"scope_id": scopeID,
 	}); response.Code != http.StatusOK {
 		t.Fatalf("flush = %d: %s", response.Code, response.Body.String())
 	}
 	preparedResponse := postApplicationJSON(t, handler, "/v1/context/prepare", map[string]any{
-		"scope_id": "scope-statistics", "query": "statistics contract",
+		"scope_id": scopeID, "query": "statistics contract",
 	})
 	if preparedResponse.Code != http.StatusOK {
 		t.Fatalf("prepare = %d: %s", preparedResponse.Code, preparedResponse.Body.String())
@@ -852,9 +859,7 @@ func TestOpenApplicationPersistsBusinessInferenceAndRecallAcrossRestartWithoutMe
 		t.Fatalf("prepared = %#v", prepared)
 	}
 
-	statisticsResponse := perform(
-		handler, http.MethodGet, "/v1/stats?scope_id=scope-statistics&period=today", "",
-	)
+	statisticsResponse := perform(handler, http.MethodGet, "/v1/stats?scope_id="+scopeID+"&period=today", "")
 	if statisticsResponse.Code != http.StatusOK {
 		t.Fatalf("statistics = %d: %s", statisticsResponse.Code, statisticsResponse.Body.String())
 	}
@@ -925,9 +930,7 @@ func TestOpenApplicationPersistsBusinessInferenceAndRecallAcrossRestartWithoutMe
 	if err != nil {
 		t.Fatal(err)
 	}
-	restoredResponse := perform(
-		handler, http.MethodGet, "/v1/stats?scope_id=scope-statistics&period=7d", "",
-	)
+	restoredResponse := perform(handler, http.MethodGet, "/v1/stats?scope_id="+scopeID+"&period=7d", "")
 	if restoredResponse.Code != http.StatusOK {
 		t.Fatalf("restored statistics = %d: %s", restoredResponse.Code, restoredResponse.Body.String())
 	}
@@ -946,7 +949,7 @@ func TestOpenApplicationPersistsBusinessInferenceAndRecallAcrossRestartWithoutMe
 	}
 
 	preparedAgainResponse := postApplicationJSON(t, handler, "/v1/context/prepare", map[string]any{
-		"scope_id": "scope-statistics", "query": "statistics contract",
+		"scope_id": scopeID, "query": "statistics contract",
 	})
 	if preparedAgainResponse.Code != http.StatusOK {
 		t.Fatalf("prepare after restart = %d: %s", preparedAgainResponse.Code, preparedAgainResponse.Body.String())
@@ -958,9 +961,7 @@ func TestOpenApplicationPersistsBusinessInferenceAndRecallAcrossRestartWithoutMe
 	if preparedAgain.Status != "ready" || preparedAgain.Content == nil || *preparedAgain.Content != *prepared.Content {
 		t.Fatalf("prepared after restart = %#v", preparedAgain)
 	}
-	updatedResponse := perform(
-		handler, http.MethodGet, "/v1/stats?scope_id=scope-statistics&period=7d", "",
-	)
+	updatedResponse := perform(handler, http.MethodGet, "/v1/stats?scope_id="+scopeID+"&period=7d", "")
 	if updatedResponse.Code != http.StatusOK {
 		t.Fatalf("updated statistics = %d: %s", updatedResponse.Code, updatedResponse.Body.String())
 	}
@@ -992,6 +993,7 @@ func TestOpenApplicationStatsUsesInclusiveUTCPeriodsForEmptyScope(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	scopeID := applicationDefaultScopeID(t, application)
 
 	type usageValue struct {
 		Requests     int `json:"requests"`
@@ -1046,9 +1048,7 @@ func TestOpenApplicationStatsUsesInclusiveUTCPeriodsForEmptyScope(t *testing.T) 
 		{name: "thirty days", query: "&period=30d", preset: "30d", days: 30},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			response := perform(
-				handler, http.MethodGet, "/v1/stats?scope_id=project%3Atest"+test.query, "",
-			)
+			response := perform(handler, http.MethodGet, "/v1/stats?scope_id="+scopeID+test.query, "")
 			if response.Code != http.StatusOK {
 				t.Fatalf("statistics = %d: %s", response.Code, response.Body.String())
 			}
@@ -1061,7 +1061,7 @@ func TestOpenApplicationStatsUsesInclusiveUTCPeriodsForEmptyScope(t *testing.T) 
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
 			}
-			if body.ScopeID != "project:test" || !body.AsOf.Equal(utcNow) {
+			if body.ScopeID != scopeID || !body.AsOf.Equal(utcNow) {
 				t.Fatalf("statistics identity = scope:%q as_of:%s", body.ScopeID, body.AsOf)
 			}
 			endDate := time.Date(utcNow.Year(), utcNow.Month(), utcNow.Day(), 0, 0, 0, 0, time.UTC)
@@ -1090,9 +1090,7 @@ func TestOpenApplicationStatsUsesInclusiveUTCPeriodsForEmptyScope(t *testing.T) 
 		})
 	}
 
-	invalid := perform(
-		handler, http.MethodGet, "/v1/stats?scope_id=project%3Atest&period=all", "",
-	)
+	invalid := perform(handler, http.MethodGet, "/v1/stats?scope_id="+scopeID+"&period=all", "")
 	if invalid.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid period = %d: %s", invalid.Code, invalid.Body.String())
 	}

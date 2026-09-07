@@ -2,7 +2,10 @@ module example.com/powercontext-downstream
 
 go 1.27.0
 
-require github.com/ob-labs/powercontext-go v0.0.0
+require (
+	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/ob-labs/powercontext-go v0.0.0
+)
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -20,7 +23,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.6.1 // indirect
 	github.com/ogen-go/ogen v1.23.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect

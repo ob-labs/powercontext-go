@@ -530,3 +530,14 @@ source / artifact / trigger / inference
   subprocess, provision the pinned Python and uv runtime in every job that
   executes that target. Verify the workflow contract and the real target so a
   clean runner cannot fail before the cross-language service chain begins.
+- When Server composition owns durable Scope admission, install its SQLite
+  ScopeReader before constructing Runtime and bootstrap the default through an
+  unscoped lifecycle operation. Make release, downstream, differential, and
+  benchmark consumers use a durable Scope or the MCP resolver. Verify public
+  HTTP rejects an unknown Scope with a redacted 404 before any Source or Memory
+  persistence, and verify a process consumer resolves the same default Scope
+  across restart.
+- When SQLite initialization uses `CREATE TABLE IF NOT EXISTS`, verify every
+  expected `sqlite_master` object is a table in the same transaction. Prove a
+  same-named view fails without leaving a partial schema or changing existing
+  persisted data.

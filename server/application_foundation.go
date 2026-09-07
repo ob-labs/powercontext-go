@@ -77,6 +77,18 @@ func openApplicationFoundation(
 		ownedResources = append(ownedResources, tracingResource)
 	}
 	ownedResources = append(ownedResources, assembled.resources...)
+	scopeReader, scopeReaderErr := sqlstore.NewRuntimeScopeReader(storage.database, sqlstore.ScopeRepository{})
+	if scopeReaderErr != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		var closeErrors []error
+		for index := len(ownedResources) - 1; index >= 0; index-- {
+			if ownedResources[index] != nil {
+				closeErrors = append(closeErrors, ownedResources[index].Close(closeCtx))
+			}
+		}
+		return applicationFoundation{}, errors.Join(append([]error{scopeReaderErr}, closeErrors...)...)
+	}
 	var scopeObserver pcruntime.ScopeCacheObserver
 	if metrics != nil {
 		scopeObserver = metrics.SetRuntimeScopes
@@ -85,6 +97,7 @@ func openApplicationFoundation(
 		ScopeCacheSize: config.Runtime.ScopeCacheSize,
 		ScopeObserver:  scopeObserver,
 		Tracing:        newRuntimeStageTracing(tracingProvider),
+		ScopeReader:    scopeReader,
 	}, relationalModelUsageRecorder{
 		database: storage.database, repository: statisticsRepository,
 		clock: statisticsClock, logger: dependencies.Logger,

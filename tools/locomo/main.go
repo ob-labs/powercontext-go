@@ -224,7 +224,13 @@ func runCommand(ctx context.Context, arguments []string) error {
 	if flags.skipEvaluation {
 		applicationRerank = locomo.RerankNone
 	}
-	application, err := openBenchmarkApplication(ctx, config, applicationRerank, flags.topK, !flags.skipEvaluation)
+	scopeIDs, err := benchmarkScopeIDs(dataset, runID)
+	if err != nil {
+		return err
+	}
+	application, err := openBenchmarkApplication(
+		ctx, config, applicationRerank, flags.topK, !flags.skipEvaluation, scopeIDs,
+	)
 	if err != nil {
 		return err
 	}

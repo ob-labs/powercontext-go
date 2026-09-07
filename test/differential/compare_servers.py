@@ -25,6 +25,7 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -594,13 +595,47 @@ def _run_one(
     cwd: Path,
     root: Path,
     startup_timeout: float,
+    *,
+    seed_go_scope: bool,
 ) -> dict[str, Any]:
     home = root / "home"
     home.mkdir(parents=True, mode=0o700)
+    if seed_go_scope:
+        with _server(executable.resolve(), cwd.resolve(), home, startup_timeout):
+            pass
+        _seed_go_durable_scope(home)
     with _server(
-        executable.resolve(), cwd.resolve(), home, startup_timeout
+        executable.resolve(),
+        cwd.resolve(),
+        home,
+        startup_timeout,
     ) as base_url:
         return _scenario(base_url)
+
+
+def _seed_go_durable_scope(home: Path) -> None:
+    # The frozen scenario owns this public identity. Seed it only before the Go
+    # process starts so the compared HTTP calls and their selection digests stay
+    # byte-for-byte comparable with the v0.1 Oracle.
+    database = home / "powercontext.db"
+    if not database.is_file():
+        raise ComparisonFailure("Go bootstrap did not create the SQLite database")
+    try:
+        with sqlite3.connect(database) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                """INSERT INTO pc_scopes (scope_id, title, summary, parent_scope_id, version)
+                VALUES (?, ?, ?, NULL, 1)""",
+                ("differential:scope", "Differential", "Frozen differential Scope"),
+            )
+            updated = connection.execute(
+                "UPDATE pc_scope_settings SET scope_id = ? WHERE name = 'default'",
+                ("differential:scope",),
+            )
+            if updated.rowcount != 1:
+                raise ComparisonFailure("Go bootstrap did not persist one default Scope setting")
+    except sqlite3.Error as error:
+        raise ComparisonFailure("seed durable Go differential Scope") from error
 
 
 def _canonical(value: Any) -> str:
@@ -616,12 +651,14 @@ def main() -> int:
             args.python_cwd,
             root / "python",
             args.startup_timeout,
+            seed_go_scope=False,
         )
         go_observation = _run_one(
             args.go_executable,
             args.go_cwd,
             root / "go",
             args.startup_timeout,
+            seed_go_scope=True,
         )
     if python_observation != go_observation:
         difference = "".join(
