@@ -16,6 +16,7 @@ package modelprovider
 
 import (
 	"context"
+	json "encoding/json/v2"
 	"fmt"
 	"net/http"
 	"os"
@@ -28,6 +29,107 @@ import (
 type EnvLookup func(string) (string, bool)
 
 func ProcessEnvironment(name string) (string, bool) { return os.LookupEnv(name) }
+
+// WorkloadConfig carries one server-owned model workload override. It is
+// copied before a provider client is assembled so callers cannot mutate a
+// live provider configuration through their ProcessConfig value.
+type WorkloadConfig struct {
+	BaseURL       string
+	Headers       http.Header
+	ModelSettings map[string]any
+}
+
+func (c WorkloadConfig) hasOverrides() bool {
+	return c.BaseURL != "" || len(c.Headers) != 0 || len(c.ModelSettings) != 0
+}
+
+func cloneWorkloadConfig(value WorkloadConfig) (WorkloadConfig, error) {
+	result := WorkloadConfig{BaseURL: value.BaseURL, Headers: value.Headers.Clone()}
+	if len(value.ModelSettings) == 0 {
+		return result, nil
+	}
+	encoded, err := json.Marshal(value.ModelSettings)
+	if err != nil {
+		return WorkloadConfig{}, inference.WrapConfigurationError("workload-settings", "", err)
+	}
+	if unmarshalErr := json.Unmarshal(encoded, &result.ModelSettings); unmarshalErr != nil {
+		return WorkloadConfig{}, inference.WrapConfigurationError("workload-settings", "", unmarshalErr)
+	}
+	settings, err := normalizeWorkloadModelSettings(result.ModelSettings)
+	if err != nil {
+		return WorkloadConfig{}, err
+	}
+	result.ModelSettings = settings
+	return result, nil
+}
+
+func normalizeWorkloadModelSettings(settings map[string]any) (map[string]any, error) {
+	if len(settings) == 0 {
+		return nil, nil
+	}
+	result := make(map[string]any, len(settings))
+	extraBody, hasExtraBody := settings["extra_body"]
+	for name, value := range settings {
+		if name == "extra_body" {
+			continue
+		}
+		if err := validateWorkloadSettingName(name); err != nil {
+			return nil, err
+		}
+		result[name] = value
+	}
+	if !hasExtraBody {
+		return result, nil
+	}
+	values, ok := extraBody.(map[string]any)
+	if !ok {
+		return nil, inference.NewConfigurationError("workload-settings", "")
+	}
+	for name, value := range values {
+		if name == "extra_body" {
+			return nil, inference.NewConfigurationError("workload-settings", "")
+		}
+		if err := validateWorkloadSettingName(name); err != nil {
+			return nil, err
+		}
+		if containsNestedExtraBody(value) {
+			return nil, inference.NewConfigurationError("workload-settings", "")
+		}
+		if _, found := result[name]; found {
+			return nil, inference.NewConfigurationError("workload-settings", "")
+		}
+		result[name] = value
+	}
+	return result, nil
+}
+
+func containsNestedExtraBody(value any) bool {
+	switch value := value.(type) {
+	case map[string]any:
+		for name, nested := range value {
+			if name == "extra_body" || containsNestedExtraBody(nested) {
+				return true
+			}
+		}
+	case []any:
+		for _, nested := range value {
+			if containsNestedExtraBody(nested) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validateWorkloadSettingName(name string) error {
+	if !workloadSettingNamePattern.MatchString(name) {
+		return inference.NewConfigurationError("workload-settings", "")
+	}
+	if _, owned := workloadOwnedRequestFields[name]; owned {
+		return inference.NewConfigurationError("workload-settings", "")
+	}
+	return nil
+}
 
 type Factory struct {
 	milestone  Milestone
@@ -46,6 +148,20 @@ func NewFactory(milestone Milestone, lookup EnvLookup, httpClient *http.Client) 
 }
 
 func (f *Factory) TextModel(modelID string) (inference.TextModel, error) {
+	return f.textModel(modelID, WorkloadConfig{})
+}
+
+// TextModelWithWorkload builds an OpenAI-compatible text client with a
+// workload-local endpoint, headers, and request settings.
+func (f *Factory) TextModelWithWorkload(modelID string, workload WorkloadConfig) (inference.TextModel, error) {
+	return f.textModel(modelID, workload)
+}
+
+func (f *Factory) textModel(modelID string, workload WorkloadConfig) (inference.TextModel, error) {
+	clonedWorkload, err := cloneWorkloadConfig(workload)
+	if err != nil {
+		return nil, err
+	}
 	route, err := Resolve(modelID, Generation)
 	if err != nil {
 		return nil, err
@@ -56,12 +172,16 @@ func (f *Factory) TextModel(modelID string) (inference.TextModel, error) {
 	if err := validateProviderModel(route); err != nil {
 		return nil, err
 	}
+	if clonedWorkload.hasOverrides() && route.protocol != ProtocolOpenAIChat && route.protocol != ProtocolOpenAIResponses {
+		return nil, inference.NewConfigurationError("workload-provider", "workload overrides require OpenAI-compatible model routes")
+	}
 	switch route.protocol {
 	case ProtocolOpenAIChat, ProtocolOpenAIResponses:
 		config, configErr := f.openAIConfig(route)
 		if configErr != nil {
 			return nil, configErr
 		}
+		config = config.withWorkload(clonedWorkload)
 		return NewOpenAITextModel(route, config)
 	case ProtocolAnthropic:
 		config, configErr := f.anthropicConfig(route)
@@ -105,6 +225,23 @@ func (f *Factory) TextModel(modelID string) (inference.TextModel, error) {
 }
 
 func (f *Factory) EmbeddingTransport(modelID string) (inference.EmbeddingTransport, error) {
+	return f.embeddingTransport(modelID, WorkloadConfig{})
+}
+
+// EmbeddingTransportWithWorkload builds an OpenAI-compatible embedding client
+// with workload-local endpoint, headers, and request settings.
+func (f *Factory) EmbeddingTransportWithWorkload(
+	modelID string,
+	workload WorkloadConfig,
+) (inference.EmbeddingTransport, error) {
+	return f.embeddingTransport(modelID, workload)
+}
+
+func (f *Factory) embeddingTransport(modelID string, workload WorkloadConfig) (inference.EmbeddingTransport, error) {
+	clonedWorkload, err := cloneWorkloadConfig(workload)
+	if err != nil {
+		return nil, err
+	}
 	route, err := Resolve(modelID, Embedding)
 	if err != nil {
 		return nil, err
@@ -115,12 +252,16 @@ func (f *Factory) EmbeddingTransport(modelID string) (inference.EmbeddingTranspo
 	if err := validateProviderModel(route); err != nil {
 		return nil, err
 	}
+	if clonedWorkload.hasOverrides() && route.protocol != ProtocolOpenAIEmbedding {
+		return nil, inference.NewConfigurationError("workload-provider", "workload overrides require OpenAI-compatible model routes")
+	}
 	switch route.protocol {
 	case ProtocolOpenAIEmbedding:
 		config, configErr := f.openAIConfig(route)
 		if configErr != nil {
 			return nil, configErr
 		}
+		config = config.withWorkload(clonedWorkload)
 		return NewOpenAIEmbeddingTransport(route, config)
 	case ProtocolGoogle:
 		config, configErr := f.googleConfig(route)
@@ -154,6 +295,13 @@ func (f *Factory) EmbeddingTransport(modelID string) (inference.EmbeddingTranspo
 }
 
 var gatewayKeyPattern = regexp.MustCompile(`^pylf_v[0-9]+_([a-z]+)_[A-Za-z0-9_-]+$`)
+
+var workloadSettingNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+var workloadOwnedRequestFields = map[string]struct{}{
+	"dimensions": {}, "include": {}, "input": {}, "instructions": {}, "messages": {}, "model": {},
+	"response_format": {}, "stream": {}, "text": {},
+}
 
 func (f *Factory) gatewayCredentials(route Route) (string, string, error) {
 	key, ok := f.firstNonEmpty("PYDANTIC_AI_GATEWAY_API_KEY", "PAIG_API_KEY")
