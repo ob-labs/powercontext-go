@@ -24,6 +24,14 @@ The mode requires package `scopes` below a `canonical/scopes` target and rejects
 every Client Invoker output. It generates no route registration, MCP schema, or
 legacy `v1` artifact.
 
+The independent `-artifact-sidecar-manifest` mode projects exactly
+`get_artifact` and `get_artifact_revision` into `api/canonical/artifacts`.
+It pins the complete upstream digest and operation ledger, closes only the
+required components, and applies the Artifact-only lineage enum policy tracked
+in Issue #202. Its generated artifacts are listed in `test/generator-inventory.json`.
+Projection tests reject pin, digest, operation, ledger, and policy mutants and
+verify the complete generated output in a fresh consumer module.
+
 The frozen OpenAPI 3.0 document uses `$ref` with a `nullable: true` sibling.
 OpenAPI 3.0 formally ignores `$ref` siblings, so the generator command creates
 an ephemeral, semantically equivalent `oneOf: [$ref, null]` view before invoking

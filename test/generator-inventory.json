@@ -115,6 +115,40 @@
       ]
     },
     {
+      "name": "canonical-artifact-sidecar",
+      "command": "go run ./tools/api-generate -artifact-sidecar-manifest openapi/canonical/artifacts-manifest.json",
+      "inputs": [
+        "openapi/canonical/upstream-powercontext.yaml",
+        "openapi/canonical/artifacts-manifest.json",
+        "openapi/compatibility-surface.json",
+        "openapi/powercontext.yaml"
+      ],
+      "outputs": [
+        "openapi/canonical/artifacts.json",
+        "api/canonical/artifacts/oas_cfg_gen.go",
+        "api/canonical/artifacts/oas_client_gen.go",
+        "api/canonical/artifacts/oas_handlers_gen.go",
+        "api/canonical/artifacts/oas_interfaces_gen.go",
+        "api/canonical/artifacts/oas_json_gen.go",
+        "api/canonical/artifacts/oas_labeler_gen.go",
+        "api/canonical/artifacts/oas_middleware_gen.go",
+        "api/canonical/artifacts/oas_operations_gen.go",
+        "api/canonical/artifacts/oas_parameters_gen.go",
+        "api/canonical/artifacts/oas_request_decoders_gen.go",
+        "api/canonical/artifacts/oas_request_encoders_gen.go",
+        "api/canonical/artifacts/oas_response_decoders_gen.go",
+        "api/canonical/artifacts/oas_response_encoders_gen.go",
+        "api/canonical/artifacts/oas_router_gen.go",
+        "api/canonical/artifacts/oas_schemas_gen.go",
+        "api/canonical/artifacts/oas_security_gen.go",
+        "api/canonical/artifacts/oas_server_gen.go",
+        "api/canonical/artifacts/oas_unimplemented_gen.go",
+        "api/canonical/artifacts/oas_validators_gen.go",
+        "api/canonical/artifacts/time.go"
+      ],
+      "evidence": ["tools/api-generate/canonical_artifacts_test.go#func TestArtifactSidecarGenerationIsIsolatedAndFreshConsumerBuilds("]
+    },
+    {
       "name": "traceability",
       "command": "go run ./tools/traceability-generate",
       "inputs": ["test/conformance/testdata/python-v0.0.2/manifest.json", "test/conformance/traceability-rules.json"],

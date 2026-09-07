@@ -35,6 +35,7 @@ import (
 type applicationServices struct {
 	scopes         *pcruntime.ScopeApplication
 	sources        *pcruntime.SourceApplication
+	artifacts      *pcruntime.ArtifactResourceApplication
 	memory         *pcruntime.MemoryApplication
 	context        *pcruntime.ContextApplication
 	review         *pcruntime.ReviewApplication
@@ -83,6 +84,14 @@ func buildApplicationServices(
 	}
 
 	idFactory := dependencies.IDFactory
+	artifactReader, err := sqlstore.NewRuntimeArtifactReader(database, repositories.artifacts)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	artifactApplication, err := pcruntime.NewArtifactResourceApplication(lifecycle, artifactReader)
+	if err != nil {
+		return applicationServices{}, err
+	}
 	if idFactory == nil {
 		idFactory = scopedIDFactory
 	}
@@ -293,7 +302,7 @@ func buildApplicationServices(
 		return applicationServices{}, err
 	}
 	return applicationServices{
-		scopes: scopeApplication, sources: sourceApplication, memory: memoryApplication, context: contextApplication,
+		scopes: scopeApplication, sources: sourceApplication, artifacts: artifactApplication, memory: memoryApplication, context: contextApplication,
 		review: reviewApplication, generation: generationApplication, externalSkills: externalApplication,
 		handoff: handoffApplication, work: workApplication, handoffReport: handoffReportApplication,
 		statistics: statisticsApplication,

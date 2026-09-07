@@ -227,7 +227,7 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 	$(GO) generate ./openapi
 	$(GO) run ./tools/mcp-schema-generate
 	$(GO) run ./tools/traceability-generate -check
-	git diff --exit-code -- api/v1 api/canonical/scopes api/canonical/sources client/invoker_gen.go internal/mcpapi/schemas_gen.go openapi/canonical/scopes.json openapi/canonical/sources.json
+	git diff --exit-code -- api/v1 api/canonical/scopes api/canonical/sources api/canonical/artifacts client/invoker_gen.go internal/mcpapi/schemas_gen.go openapi/canonical/scopes.json openapi/canonical/sources.json openapi/canonical/artifacts.json
 
 parity-inventory-check: ## Fail closed until the exact upstream master node list is fully classified.
 	@test -n "$(UPSTREAM_MASTER_CHECKOUT)" || { echo 'UPSTREAM_MASTER_CHECKOUT must name the exact upstream master checkout' >&2; exit 2; }
