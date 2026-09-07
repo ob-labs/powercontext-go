@@ -67,6 +67,17 @@ func (c Content) Description() string  { return c.description }
 func (c Content) Instructions() string { return c.instructions }
 func (c Content) Validation() []string { return slices.Clone(c.validation) }
 
+// PackageContent is the immutable v2 representation of a managed Skill
+// package. It intentionally does not satisfy Content's v1 validation
+// contract, because a package carries its own verified manifest and archive.
+type PackageContent struct{ snapshot PackageSnapshot }
+
+// Reference returns the immutable identity of the captured package.
+func (c PackageContent) Reference() PackageRef { return c.snapshot.Reference() }
+
+// Snapshot returns an independently owned snapshot of the captured package.
+func (c PackageContent) Snapshot() PackageSnapshot { return clonePackageSnapshot(c.snapshot) }
+
 type (
 	Skill = artifact.Artifact[Content]
 	Draft = artifact.Draft[Content]
