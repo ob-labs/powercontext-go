@@ -135,9 +135,10 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 	return NewHTTPHandler(a.endpoint, HTTPOptions{
 		BearerToken: token, HandoffReportRoutes: a.config.HandoffReport.Enabled,
 		metrics: a.metrics, TracerProvider: a.tracing, Logger: a.logger, AccessLog: a.config.Logging.Access,
-		MCP:           MCPOptions{Enabled: a.config.MCP.Enabled, Path: a.config.MCP.Path},
-		webUI:         webOptions,
-		scopeBindings: a.scopes,
+		MCP:             MCPOptions{Enabled: a.config.MCP.Enabled, Path: a.config.MCP.Path},
+		webUI:           webOptions,
+		scopeBindings:   a.scopes,
+		canonicalScopes: endpoint.NewCanonicalScopeHandler(a.scopes),
 	})
 }
 

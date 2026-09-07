@@ -111,6 +111,39 @@ func (a *ScopeApplication) Get(ctx context.Context, id string) (result scope.Des
 	return result, err
 }
 
+// List returns durable Scope metadata in stable identity order.
+func (a *ScopeApplication) List(ctx context.Context) (result []scope.Descriptor, err error) {
+	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
+		values, listErr := a.store.List(ctx)
+		if listErr != nil {
+			return listErr
+		}
+		values = slices.Clone(values)
+		slices.SortFunc(values, func(left, right scope.Descriptor) int {
+			return cmp.Compare(left.ID(), right.ID())
+		})
+		result = values
+		return nil
+	})
+	return result, err
+}
+
+// Default returns the durable default Scope without considering external bindings.
+func (a *ScopeApplication) Default(ctx context.Context) (result scope.Descriptor, err error) {
+	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
+		value, found, defaultErr := a.store.Default(ctx)
+		if defaultErr != nil {
+			return defaultErr
+		}
+		if !found {
+			return &scope.NotFoundError{}
+		}
+		result = value
+		return nil
+	})
+	return result, err
+}
+
 func (a *ScopeApplication) SetDefault(ctx context.Context, id string) (result scope.Descriptor, err error) {
 	err = a.runtime.Operation(ctx, func(ctx context.Context) error {
 		value, setErr := a.store.SetDefault(ctx, id)
