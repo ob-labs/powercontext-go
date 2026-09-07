@@ -15,6 +15,7 @@
 package server
 
 import (
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -68,14 +69,26 @@ type environmentConfig struct {
 	HandoffReportEnabled bool `env:"HANDOFF_REPORT_ENABLED"`
 
 	GenerationModel          string `env:"INFERENCE_GENERATION_MODEL"`
+	GenerationBaseURL        string `env:"INFERENCE_GENERATION_BASE_URL"`
+	GenerationHeaders        string `env:"INFERENCE_GENERATION_HEADERS"`
+	GenerationModelSettings  string `env:"INFERENCE_GENERATION_MODEL_SETTINGS"`
 	GenerationTimeoutSeconds string `env:"INFERENCE_GENERATION_TIMEOUT_SECONDS"`
 	GenerationMaxRequests    int    `env:"INFERENCE_GENERATION_MAX_REQUESTS"`
 	EmbeddingModel           string `env:"INFERENCE_EMBEDDING_MODEL"`
+	EmbeddingBaseURL         string `env:"INFERENCE_EMBEDDING_BASE_URL"`
+	EmbeddingHeaders         string `env:"INFERENCE_EMBEDDING_HEADERS"`
+	EmbeddingModelSettings   string `env:"INFERENCE_EMBEDDING_MODEL_SETTINGS"`
 	EmbeddingProfileID       string `env:"INFERENCE_EMBEDDING_PROFILE_ID"`
 	EmbeddingDimension       int    `env:"INFERENCE_EMBEDDING_DIMENSION"`
 	EmbeddingNormalization   string `env:"INFERENCE_EMBEDDING_NORMALIZATION"`
 	EmbeddingTimeoutSeconds  string `env:"INFERENCE_EMBEDDING_TIMEOUT_SECONDS"`
 	EmbeddingBatchSize       int    `env:"INFERENCE_EMBEDDING_BATCH_SIZE"`
+	RerankModel              string `env:"INFERENCE_RERANK_MODEL"`
+	RerankBaseURL            string `env:"INFERENCE_RERANK_BASE_URL"`
+	RerankHeaders            string `env:"INFERENCE_RERANK_HEADERS"`
+	RerankModelSettings      string `env:"INFERENCE_RERANK_MODEL_SETTINGS"`
+	RerankTimeoutSeconds     string `env:"INFERENCE_RERANK_TIMEOUT_SECONDS"`
+	RerankMaxRequests        string `env:"INFERENCE_RERANK_MAX_REQUESTS"`
 	ExternalSkills           string `env:"EXTERNAL_SKILLS"`
 	ExternalSkillHostID      string `env:"EXTERNAL_SKILLS_HOST_ID"`
 	ExternalSkillTargets     string `env:"EXTERNAL_SKILLS_TARGETS"`
@@ -164,6 +177,32 @@ func buildProcessConfig(value environmentConfig, override HTTPConfigOverride) (P
 		return ProcessConfig{}, err
 	}
 	embeddingTimeout, err := positiveSeconds("inference.embedding_timeout_seconds", value.EmbeddingTimeoutSeconds)
+	if err != nil {
+		return ProcessConfig{}, err
+	}
+	generationWorkload, err := parseInferenceWorkload(
+		"generation", value.GenerationBaseURL, value.GenerationHeaders, value.GenerationModelSettings,
+	)
+	if err != nil {
+		return ProcessConfig{}, err
+	}
+	embeddingWorkload, err := parseInferenceWorkload(
+		"embedding", value.EmbeddingBaseURL, value.EmbeddingHeaders, value.EmbeddingModelSettings,
+	)
+	if err != nil {
+		return ProcessConfig{}, err
+	}
+	rerankWorkload, err := parseInferenceWorkload(
+		"rerank", value.RerankBaseURL, value.RerankHeaders, value.RerankModelSettings,
+	)
+	if err != nil {
+		return ProcessConfig{}, err
+	}
+	rerankTimeout, err := optionalPositiveSeconds("inference.rerank_timeout_seconds", value.RerankTimeoutSeconds)
+	if err != nil {
+		return ProcessConfig{}, err
+	}
+	rerankMaxRequests, err := optionalPositiveInt("inference.rerank_max_requests", value.RerankMaxRequests)
 	if err != nil {
 		return ProcessConfig{}, err
 	}
@@ -263,14 +302,21 @@ func buildProcessConfig(value environmentConfig, override HTTPConfigOverride) (P
 		},
 		HandoffReport: HandoffReportConfig{Enabled: value.HandoffReportEnabled},
 		Inference: InferenceConfig{
-			GenerationModel: strings.TrimSpace(value.GenerationModel), GenerationTimeout: generationTimeout,
-			GenerationMaxRequests: value.GenerationMaxRequests, EmbeddingModel: strings.TrimSpace(value.EmbeddingModel),
+			GenerationModel: strings.TrimSpace(value.GenerationModel), Generation: generationWorkload,
+			GenerationTimeout: generationTimeout, GenerationMaxRequests: value.GenerationMaxRequests,
+			EmbeddingModel: strings.TrimSpace(value.EmbeddingModel), Embedding: embeddingWorkload,
 			EmbeddingProfileID: strings.TrimSpace(value.EmbeddingProfileID), EmbeddingDimension: value.EmbeddingDimension,
 			EmbeddingNormalization: strings.TrimSpace(value.EmbeddingNormalization), EmbeddingTimeout: embeddingTimeout,
 			EmbeddingBatchSize: value.EmbeddingBatchSize,
 		},
 		ExternalSkills: ExternalSkillsConfig{HostID: externalHostID, Targets: targets, CodexRoots: roots},
 		SchedulerPath:  value.SchedulerPath,
+	}
+	if rerankWorkload != nil || strings.TrimSpace(value.RerankModel) != "" || rerankTimeout != nil || rerankMaxRequests != nil {
+		config.Inference.Rerank = &RerankInferenceConfig{
+			Workload: rerankWorkload, Model: strings.TrimSpace(value.RerankModel),
+			Timeout: rerankTimeout, MaxRequests: rerankMaxRequests,
+		}
 	}
 	if override.Host != nil {
 		config.HTTP.Host = *override.Host
@@ -282,4 +328,52 @@ func buildProcessConfig(value environmentConfig, override HTTPConfigOverride) (P
 		return ProcessConfig{}, err
 	}
 	return config, nil
+}
+
+func parseInferenceWorkload(
+	workload, rawBaseURL, rawHeaders, rawModelSettings string,
+) (*InferenceWorkloadConfig, error) {
+	headers, err := parseInferenceHeaders(workload, rawHeaders)
+	if err != nil {
+		return nil, err
+	}
+	modelSettings, err := parseInferenceModelSettings(workload, rawModelSettings)
+	if err != nil {
+		return nil, err
+	}
+	config := &InferenceWorkloadConfig{
+		BaseURL: strings.TrimSpace(rawBaseURL), Headers: headers, ModelSettings: modelSettings,
+	}
+	if !config.hasOverrides() {
+		return nil, nil
+	}
+	return config, nil
+}
+
+func parseInferenceHeaders(workload, encoded string) (InferenceHeaders, error) {
+	if strings.TrimSpace(encoded) == "" {
+		return InferenceHeaders{}, nil
+	}
+	if !strings.HasPrefix(strings.TrimSpace(encoded), "{") {
+		return InferenceHeaders{}, fmt.Errorf("server: %s headers must be a JSON object", workload)
+	}
+	values := make(map[string]string)
+	if err := json.Unmarshal([]byte(encoded), &values); err != nil {
+		return InferenceHeaders{}, fmt.Errorf("server: %s headers must be a JSON object", workload)
+	}
+	return InferenceHeaders{values: values}, nil
+}
+
+func parseInferenceModelSettings(workload, encoded string) (map[string]any, error) {
+	if strings.TrimSpace(encoded) == "" {
+		return nil, nil
+	}
+	if !strings.HasPrefix(strings.TrimSpace(encoded), "{") {
+		return nil, fmt.Errorf("server: %s model settings must be a JSON object", workload)
+	}
+	values := make(map[string]any)
+	if err := json.Unmarshal([]byte(encoded), &values); err != nil {
+		return nil, fmt.Errorf("server: %s model settings must be a JSON object", workload)
+	}
+	return values, nil
 }
