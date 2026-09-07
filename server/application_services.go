@@ -88,7 +88,7 @@ func buildApplicationServices(
 	if err != nil {
 		return applicationServices{}, err
 	}
-	artifactApplication, err := pcruntime.NewArtifactResourceApplication(lifecycle, artifactReader)
+	artifactApplication, err := pcruntime.NewArtifactResourceApplication(lifecycle, artifactReader, foundation.storage.artifactCursorKey, dependencies.Clock)
 	if err != nil {
 		return applicationServices{}, err
 	}

@@ -7,6 +7,141 @@ import (
 	"github.com/go-faster/jx"
 )
 
+// Ref: #/components/schemas/ArtifactCollectionItem
+type ArtifactCollectionItem struct {
+	ArtifactID    string                `json:"artifact_id"`
+	Artifacts     []ArtifactReference   `json:"artifacts"`
+	ContentDigest string                `json:"content_digest"`
+	Family        BaseArtifactFamily    `json:"family"`
+	Revision      int                   `json:"revision"`
+	ScopeID       string                `json:"scope_id"`
+	Sources       []SourceTypeReference `json:"sources"`
+}
+
+// GetArtifactID returns the value of ArtifactID.
+func (s *ArtifactCollectionItem) GetArtifactID() string {
+	return s.ArtifactID
+}
+
+// GetArtifacts returns the value of Artifacts.
+func (s *ArtifactCollectionItem) GetArtifacts() []ArtifactReference {
+	return s.Artifacts
+}
+
+// GetContentDigest returns the value of ContentDigest.
+func (s *ArtifactCollectionItem) GetContentDigest() string {
+	return s.ContentDigest
+}
+
+// GetFamily returns the value of Family.
+func (s *ArtifactCollectionItem) GetFamily() BaseArtifactFamily {
+	return s.Family
+}
+
+// GetRevision returns the value of Revision.
+func (s *ArtifactCollectionItem) GetRevision() int {
+	return s.Revision
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *ArtifactCollectionItem) GetScopeID() string {
+	return s.ScopeID
+}
+
+// GetSources returns the value of Sources.
+func (s *ArtifactCollectionItem) GetSources() []SourceTypeReference {
+	return s.Sources
+}
+
+// SetArtifactID sets the value of ArtifactID.
+func (s *ArtifactCollectionItem) SetArtifactID(val string) {
+	s.ArtifactID = val
+}
+
+// SetArtifacts sets the value of Artifacts.
+func (s *ArtifactCollectionItem) SetArtifacts(val []ArtifactReference) {
+	s.Artifacts = val
+}
+
+// SetContentDigest sets the value of ContentDigest.
+func (s *ArtifactCollectionItem) SetContentDigest(val string) {
+	s.ContentDigest = val
+}
+
+// SetFamily sets the value of Family.
+func (s *ArtifactCollectionItem) SetFamily(val BaseArtifactFamily) {
+	s.Family = val
+}
+
+// SetRevision sets the value of Revision.
+func (s *ArtifactCollectionItem) SetRevision(val int) {
+	s.Revision = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *ArtifactCollectionItem) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+// SetSources sets the value of Sources.
+func (s *ArtifactCollectionItem) SetSources(val []SourceTypeReference) {
+	s.Sources = val
+}
+
+// Ref: #/components/schemas/ArtifactPage
+type ArtifactPage struct {
+	Items      []ArtifactCollectionItem `json:"items"`
+	NextCursor NilString                `json:"next_cursor"`
+}
+
+// GetItems returns the value of Items.
+func (s *ArtifactPage) GetItems() []ArtifactCollectionItem {
+	return s.Items
+}
+
+// GetNextCursor returns the value of NextCursor.
+func (s *ArtifactPage) GetNextCursor() NilString {
+	return s.NextCursor
+}
+
+// SetItems sets the value of Items.
+func (s *ArtifactPage) SetItems(val []ArtifactCollectionItem) {
+	s.Items = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *ArtifactPage) SetNextCursor(val NilString) {
+	s.NextCursor = val
+}
+
+// ArtifactPageHeaders wraps ArtifactPage with response headers.
+type ArtifactPageHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ArtifactPage
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *ArtifactPageHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ArtifactPageHeaders) GetResponse() ArtifactPage {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *ArtifactPageHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ArtifactPageHeaders) SetResponse(val ArtifactPage) {
+	s.Response = val
+}
+
+func (*ArtifactPageHeaders) listArtifactsRes() {}
+
 // Ref: #/components/schemas/ArtifactReference
 type ArtifactReference struct {
 	ArtifactID string `json:"artifact_id"`
@@ -186,6 +321,34 @@ func (s *ArtifactRevisionHeaders) SetResponse(val ArtifactRevision) {
 
 func (*ArtifactRevisionHeaders) getArtifactRes() {}
 
+// BadRequestHeaders wraps ErrorResponse with response headers.
+type BadRequestHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ErrorResponse
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *BadRequestHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *BadRequestHeaders) GetResponse() ErrorResponse {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *BadRequestHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *BadRequestHeaders) SetResponse(val ErrorResponse) {
+	s.Response = val
+}
+
+func (*BadRequestHeaders) listArtifactsRes() {}
+
 // Ref: #/components/schemas/BaseArtifactFamily
 type BaseArtifactFamily string
 
@@ -266,6 +429,34 @@ func (s *BearerAuth) SetToken(val string) {
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
+
+// CursorExpiredHeaders wraps ErrorResponse with response headers.
+type CursorExpiredHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ErrorResponse
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *CursorExpiredHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *CursorExpiredHeaders) GetResponse() ErrorResponse {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *CursorExpiredHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *CursorExpiredHeaders) SetResponse(val ErrorResponse) {
+	s.Response = val
+}
+
+func (*CursorExpiredHeaders) listArtifactsRes() {}
 
 // Ref: #/components/schemas/ErrorDetail
 type ErrorDetail struct {
@@ -524,6 +715,7 @@ func (s *InternalErrorHeaders) SetResponse(val ErrorResponse) {
 
 func (*InternalErrorHeaders) getArtifactRes()         {}
 func (*InternalErrorHeaders) getArtifactRevisionRes() {}
+func (*InternalErrorHeaders) listArtifactsRes()       {}
 
 // InvalidRequestHeaders wraps ErrorResponse with response headers.
 type InvalidRequestHeaders struct {
@@ -553,6 +745,62 @@ func (s *InvalidRequestHeaders) SetResponse(val ErrorResponse) {
 
 func (*InvalidRequestHeaders) getArtifactRes()         {}
 func (*InvalidRequestHeaders) getArtifactRevisionRes() {}
+func (*InvalidRequestHeaders) listArtifactsRes()       {}
+
+type ListArtifactsFamily string
+
+const (
+	ListArtifactsFamilyMemory     ListArtifactsFamily = "memory"
+	ListArtifactsFamilyExperience ListArtifactsFamily = "experience"
+	ListArtifactsFamilySkill      ListArtifactsFamily = "skill"
+	ListArtifactsFamilyHandoff    ListArtifactsFamily = "handoff"
+)
+
+// AllValues returns all ListArtifactsFamily values.
+func (ListArtifactsFamily) AllValues() []ListArtifactsFamily {
+	return []ListArtifactsFamily{
+		ListArtifactsFamilyMemory,
+		ListArtifactsFamilyExperience,
+		ListArtifactsFamilySkill,
+		ListArtifactsFamilyHandoff,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s ListArtifactsFamily) MarshalText() ([]byte, error) {
+	switch s {
+	case ListArtifactsFamilyMemory:
+		return []byte(s), nil
+	case ListArtifactsFamilyExperience:
+		return []byte(s), nil
+	case ListArtifactsFamilySkill:
+		return []byte(s), nil
+	case ListArtifactsFamilyHandoff:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *ListArtifactsFamily) UnmarshalText(data []byte) error {
+	switch ListArtifactsFamily(data) {
+	case ListArtifactsFamilyMemory:
+		*s = ListArtifactsFamilyMemory
+		return nil
+	case ListArtifactsFamilyExperience:
+		*s = ListArtifactsFamilyExperience
+		return nil
+	case ListArtifactsFamilySkill:
+		*s = ListArtifactsFamilySkill
+		return nil
+	case ListArtifactsFamilyHandoff:
+		*s = ListArtifactsFamilyHandoff
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
 
 // NewNilErrorDetailDetails returns new NilErrorDetailDetails with value set to v.
 func NewNilErrorDetailDetails(v ErrorDetailDetails) NilErrorDetailDetails {
@@ -599,6 +847,51 @@ func (o NilErrorDetailDetails) Or(d ErrorDetailDetails) ErrorDetailDetails {
 	return d
 }
 
+// NewNilString returns new NilString with value set to v.
+func NewNilString(v string) NilString {
+	return NilString{
+		Value: v,
+	}
+}
+
+// NilString is nullable string.
+type NilString struct {
+	Value string
+	Null  bool
+}
+
+// SetTo sets value to v.
+func (o *NilString) SetTo(v string) {
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o NilString) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *NilString) SetToNull() {
+	o.Null = true
+	var v string
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o NilString) Get() (v string, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o NilString) Or(d string) string {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NotFoundHeaders wraps ErrorResponse with response headers.
 type NotFoundHeaders struct {
 	XPowerContextRequestID OptString
@@ -627,6 +920,52 @@ func (s *NotFoundHeaders) SetResponse(val ErrorResponse) {
 
 func (*NotFoundHeaders) getArtifactRes()         {}
 func (*NotFoundHeaders) getArtifactRevisionRes() {}
+
+// NewOptInt returns new OptInt with value set to v.
+func NewOptInt(v int) OptInt {
+	return OptInt{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptInt is optional int.
+type OptInt struct {
+	Value int
+	Set   bool
+}
+
+// IsSet returns true if OptInt was set.
+func (o OptInt) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptInt) Reset() {
+	var v int
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptInt) SetTo(v int) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptInt) Get() (v int, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptInt) Or(d int) int {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
@@ -787,6 +1126,7 @@ func (s *UnauthorizedHeaders) SetResponse(val ErrorResponse) {
 
 func (*UnauthorizedHeaders) getArtifactRes()         {}
 func (*UnauthorizedHeaders) getArtifactRevisionRes() {}
+func (*UnauthorizedHeaders) listArtifactsRes()       {}
 
 // UnavailableHeaders wraps ErrorResponse with response headers.
 type UnavailableHeaders struct {
@@ -816,3 +1156,4 @@ func (s *UnavailableHeaders) SetResponse(val ErrorResponse) {
 
 func (*UnavailableHeaders) getArtifactRes()         {}
 func (*UnavailableHeaders) getArtifactRevisionRes() {}
+func (*UnavailableHeaders) listArtifactsRes()       {}

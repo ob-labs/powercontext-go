@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact"
@@ -46,6 +47,8 @@ func TestMapErrorFrozenTaxonomy(t *testing.T) {
 		details map[string]any
 	}{
 		{name: "runtime", err: &runtime.StateError{Code: "closed"}, status: 503, code: "runtime_not_ready"},
+		{name: "invalid artifact cursor", err: errors.Join(errors.New("private-token"), &runtime.InvalidArtifactCursorError{}), status: 400, code: "invalid_cursor"},
+		{name: "expired artifact cursor", err: errors.Join(errors.New("private-token"), &runtime.ExpiredArtifactCursorError{}), status: 410, code: "cursor_expired"},
 		{name: "scope missing", err: &scope.NotFoundError{}, status: 404, code: "scope_not_found"},
 		{name: "binding missing", err: &scope.BindingNotFoundError{}, status: 404, code: "scope_binding_not_found"},
 		{name: "scope validation", err: &scope.ValidationError{}, status: 422, code: "invalid_request"},
@@ -78,6 +81,9 @@ func TestMapErrorFrozenTaxonomy(t *testing.T) {
 			}
 			if got.Message == "" {
 				t.Fatal("empty public message")
+			}
+			if strings.Contains(got.Message, "private-token") {
+				t.Fatal("error mapping exposed cursor material")
 			}
 		})
 	}

@@ -68,11 +68,11 @@ func TestCanonicalArtifactAccessLogsAttributeGeneratedOperations(t *testing.T) {
 	}
 	_, handler := artifactHTTPClient(t, application, config.Auth.Token)
 	for _, tc := range []struct{ suffix, operation string }{
-		{"", "get_artifact"}, {"/revisions/1", "get_artifact_revision"},
+		{"/private-access-artifact", "get_artifact"}, {"/private-access-artifact/revisions/1", "get_artifact_revision"}, {"", "list_artifacts"},
 	} {
 		t.Run(tc.operation, func(t *testing.T) {
 			logs.Reset()
-			request := httptest.NewRequest(http.MethodGet, "/v1/scopes/"+scopeID+"/artifacts/experience/private-access-artifact"+tc.suffix, nil)
+			request := httptest.NewRequest(http.MethodGet, "/v1/scopes/"+scopeID+"/artifacts/experience"+tc.suffix, nil)
 			request.Header.Set("Authorization", "Bearer "+config.Auth.Token)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
@@ -146,7 +146,7 @@ func TestCanonicalArtifactHTTPAdmissionErrorsAndNoWrites(t *testing.T) {
 		{"unsupported family", http.MethodGet, "/v1/scopes/" + scopeID + "/artifacts/private-family/private-corrupt", "", config.Auth.Token, 422},
 		{"corrupt content", http.MethodGet, base + "/private-corrupt", "", config.Auth.Token, 500},
 		{"historical corrupt content", http.MethodGet, base + "/private-corrupt/revisions/1", "", config.Auth.Token, 500},
-		{"unimplemented list", http.MethodGet, base, "", config.Auth.Token, 404},
+		{"corrupt list content", http.MethodGet, base, "", config.Auth.Token, 500},
 		{"unimplemented create", http.MethodPost, "/v1/scopes/" + scopeID + "/artifacts", `{}`, config.Auth.Token, 404},
 		{"unimplemented replace", http.MethodPut, base + "/private-corrupt", `{}`, config.Auth.Token, 404},
 		{"body limit", http.MethodGet, base + "/private-corrupt", `{"value":"` + strings.Repeat("x", 32<<20) + `"}`, config.Auth.Token, 413},
@@ -314,6 +314,7 @@ func TestCanonicalArtifactPackageSkillRehydratesAndRejectsCorruption(t *testing.
 			if !headOK || head.Response.Revision != 2 || head.Response.ContentDigest != headers.Response.ContentDigest {
 				t.Fatalf("package head = %#v", headResponse)
 			}
+			assertArtifactCollectionMatchesRevision(t, client, head.Response)
 		}
 	}
 	for _, mutation := range []string{
@@ -490,6 +491,9 @@ func TestCanonicalArtifactFourFamiliesLineageAndRestart(t *testing.T) {
 					}
 					if fixture.family == "skill" && (len(record.Artifacts) != 2 || record.Artifacts[0].Revision != 2 || record.Artifacts[1].Revision != 1) {
 						t.Fatalf("artifact order = %#v", record.Artifacts)
+					}
+					if version.revision == 2 {
+						assertArtifactCollectionMatchesRevision(t, client, record)
 					}
 				}
 			})

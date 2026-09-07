@@ -23,9 +23,10 @@ import (
 )
 
 type applicationStorage struct {
-	database *sqlstore.Database
-	resource pcruntime.Resource
-	dialect  sqlstore.Dialect
+	database          *sqlstore.Database
+	resource          pcruntime.Resource
+	dialect           sqlstore.Dialect
+	artifactCursorKey [32]byte
 }
 
 func openApplicationStorage(ctx context.Context, config DatabaseConfig) (applicationStorage, error) {
@@ -42,6 +43,12 @@ func openApplicationStorage(ctx context.Context, config DatabaseConfig) (applica
 				MaxOpenConns: config.SQLite.MaxOpenConns, MaxIdleConns: config.SQLite.MaxIdleConns,
 				ConnMaxLifetime: config.SQLite.ConnMaxLifetime,
 			})
+		}
+		if err == nil {
+			storage.artifactCursorKey, err = loadArtifactCursorKey(ctx, dsn)
+			if err != nil {
+				_ = storage.database.Close(context.WithoutCancel(ctx))
+			}
 		}
 		storage.resource = storage.database
 	case "oceanbase":

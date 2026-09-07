@@ -23,6 +23,7 @@ import (
 )
 
 var artifactSidecarOperations = []scopeSidecarOperation{
+	{OperationID: "list_artifacts", Method: "get", Path: "/v1/scopes/{scope_id}/artifacts/{family}"},
 	{OperationID: "get_artifact", Method: "get", Path: "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}"},
 	{OperationID: "get_artifact_revision", Method: "get", Path: "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}/revisions/{revision}"},
 }
@@ -89,8 +90,9 @@ func projectArtifactSidecar(source []byte, manifest artifactSidecarManifest, leg
 	if err != nil {
 		return nil, err
 	}
-	// The cloned component is reachable only from ArtifactRevision in this
-	// sidecar. The pinned upstream document and other sidecars stay immutable.
+	// The cloned component is reachable only from ArtifactRevision and
+	// ArtifactCollectionItem in this sidecar. The pinned upstream document and
+	// other sidecars stay immutable.
 	schemas, err := scopeSidecarObject(components, "schemas")
 	if err != nil {
 		return nil, err

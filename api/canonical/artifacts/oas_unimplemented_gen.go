@@ -30,3 +30,12 @@ func (UnimplementedHandler) GetArtifact(ctx context.Context, params GetArtifactP
 func (UnimplementedHandler) GetArtifactRevision(ctx context.Context, params GetArtifactRevisionParams) (r GetArtifactRevisionRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
+
+// ListArtifacts implements list_artifacts operation.
+//
+// List current heads for exactly one built-in Artifact family.
+//
+// GET /v1/scopes/{scope_id}/artifacts/{family}
+func (UnimplementedHandler) ListArtifacts(ctx context.Context, params ListArtifactsParams) (r ListArtifactsRes, _ error) {
+	return r, ht.ErrNotImplemented
+}

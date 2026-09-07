@@ -55,8 +55,8 @@ Scope Binding tools are registered and tested separately. A staged Scope
 operation or a schema inventory entry alone does not expose a generated MCP
 tool.
 
-`canonical/artifacts-manifest.json` projects only `get_artifact` and
-`get_artifact_revision` from the same pinned upstream blob. The independent
+`canonical/artifacts-manifest.json` projects only `list_artifacts`,
+`get_artifact`, and `get_artifact_revision` from the same pinned upstream blob. The independent
 `api/canonical/artifacts` package is mounted through the existing HTTP policy
 chain and the Runtime-owned scoped reader. SQLite resolves the head or exact
 revision, its ordered lineage, and any Skill package in one read transaction.
@@ -69,13 +69,13 @@ content remain distinct. Existing domain validation, including Memory reason
 normalization during decoding, is preserved.
 
 The [Issue #202 lineage policy](https://github.com/ob-labs/powercontext-go/issues/202#issuecomment-5575546837)
-overlays only this sidecar's `ArtifactRevision` source lineage to preserve
+overlays only this sidecar's `ArtifactRevision` and `ArtifactCollectionItem` source lineage to preserve
 `content`, `external-skill-snapshot`, and `accepted-observation` in their stored
 order. Scope and Source schemas remain unchanged. Head GET uses the pinned
 upstream strong validator `"revision:N"`; exact `If-None-Match` equality returns
 304 with ETag and request ID and no body. Exact revision GET does not substitute
-the head or use its cache validator. Artifact list, create, and replace remain
-deferred, and these two GETs add no MCP tools.
+the head or use its cache validator. Artifact create and replace remain
+deferred, and these three GETs add no MCP tools.
 
 OpenAPI 3.0 cannot encode the combined `source_refs` + `artifact_refs` maximum
 described by the Candidate schemas. The generator derives the affected model

@@ -20,6 +20,12 @@ type Handler interface {
 	//
 	// GET /v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}/revisions/{revision}
 	GetArtifactRevision(ctx context.Context, params GetArtifactRevisionParams) (GetArtifactRevisionRes, error)
+	// ListArtifacts implements list_artifacts operation.
+	//
+	// List current heads for exactly one built-in Artifact family.
+	//
+	// GET /v1/scopes/{scope_id}/artifacts/{family}
+	ListArtifacts(ctx context.Context, params ListArtifactsParams) (ListArtifactsRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

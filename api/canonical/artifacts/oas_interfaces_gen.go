@@ -8,3 +8,7 @@ type GetArtifactRes interface {
 type GetArtifactRevisionRes interface {
 	getArtifactRevisionRes()
 }
+
+type ListArtifactsRes interface {
+	listArtifactsRes()
+}

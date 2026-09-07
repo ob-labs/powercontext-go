@@ -34,6 +34,7 @@ import (
 
 type ArtifactResourceOperations interface {
 	GetArtifact(context.Context, string, string, string, int64) (runtime.ArtifactRecord, error)
+	ListArtifacts(context.Context, string, string, int, *string) (runtime.ArtifactPage, error)
 }
 
 type CanonicalArtifactHandler struct{ operations ArtifactResourceOperations }
@@ -42,6 +43,36 @@ var _ canonicalartifact.Handler = (*CanonicalArtifactHandler)(nil)
 
 func NewCanonicalArtifactHandler(operations ArtifactResourceOperations) *CanonicalArtifactHandler {
 	return &CanonicalArtifactHandler{operations: operations}
+}
+
+func (h *CanonicalArtifactHandler) ListArtifacts(ctx context.Context, params canonicalartifact.ListArtifactsParams) (canonicalartifact.ListArtifactsRes, error) {
+	if h == nil || h.operations == nil {
+		return nil, &RuntimeNotReadyError{}
+	}
+	var cursor *string
+	if value, present := params.Cursor.Get(); present {
+		cursor = new(value)
+	}
+	result, err := h.operations.ListArtifacts(ctx, params.ScopeID, string(params.Family), params.Limit.Or(50), cursor)
+	if err != nil {
+		return nil, err
+	}
+	page := canonicalartifact.ArtifactPage{Items: make([]canonicalartifact.ArtifactCollectionItem, len(result.Items))}
+	page.NextCursor.SetToNull()
+	if result.NextCursor != nil {
+		page.NextCursor.SetTo(*result.NextCursor)
+	}
+	for index, item := range result.Items {
+		record, projectErr := canonicalArtifactRecord(item)
+		if projectErr != nil {
+			return nil, projectErr
+		}
+		page.Items[index] = canonicalartifact.ArtifactCollectionItem{
+			ScopeID: record.ScopeID, Family: record.Family, ArtifactID: record.ArtifactID,
+			Revision: record.Revision, Sources: record.Sources, Artifacts: record.Artifacts, ContentDigest: record.ContentDigest,
+		}
+	}
+	return &canonicalartifact.ArtifactPageHeaders{Response: page, XPowerContextRequestID: canonicalArtifactRequestID(ctx)}, nil
 }
 
 func (h *CanonicalArtifactHandler) GetArtifact(ctx context.Context, params canonicalartifact.GetArtifactParams) (canonicalartifact.GetArtifactRes, error) {

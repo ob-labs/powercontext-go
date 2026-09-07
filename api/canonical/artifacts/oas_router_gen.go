@@ -11,6 +11,9 @@ import (
 )
 
 var (
+	rn4AllowedHeaders = map[string]string{
+		"GET": "Authorization",
+	}
 	rn6AllowedHeaders = map[string]string{
 		"GET": "Authorization,If-None-Match",
 	}
@@ -97,7 +100,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				elem = elem[idx:]
 
 				if len(elem) == 0 {
-					break
+					switch r.Method {
+					case "GET":
+						s.handleListArtifactsRequest([2]string{
+							args[0],
+							args[1],
+						}, elemIsEscaped, w, r)
+					default:
+						s.notAllowed(w, r, notAllowedParams{
+							allowedMethods: "GET",
+							allowedHeaders: rn4AllowedHeaders,
+							acceptPost:     "",
+							acceptPatch:    "",
+						})
+					}
+
+					return
 				}
 				switch elem[0] {
 				case '/': // Prefix: "/"
@@ -307,7 +325,19 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				elem = elem[idx:]
 
 				if len(elem) == 0 {
-					break
+					switch method {
+					case "GET":
+						r.name = ListArtifactsOperation
+						r.summary = "List current Artifact heads"
+						r.operationID = "list_artifacts"
+						r.operationGroup = ""
+						r.pathPattern = "/v1/scopes/{scope_id}/artifacts/{family}"
+						r.args = args
+						r.count = 2
+						return r, true
+					default:
+						return
+					}
 				}
 				switch elem[0] {
 				case '/': // Prefix: "/"
