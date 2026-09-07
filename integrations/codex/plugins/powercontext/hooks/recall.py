@@ -37,7 +37,8 @@ _PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PLUGIN_ROOT))
 
 from hooks import prepared_context as _prepared_context  # noqa: E402
-from scripts.project_scope import resolve_scope_id  # noqa: E402
+from hooks import mcp_client as _mcp_client  # noqa: E402
+from scripts.project_scope import scope_binding_keys  # noqa: E402
 from settings import CodexPluginSettings, _is_loopback_host  # noqa: E402
 
 _MAX_CONTEXT_BYTES = _prepared_context.MAX_CONTEXT_BYTES
@@ -128,7 +129,11 @@ def main(settings: CodexPluginSettings | None = None) -> int:
         if not isinstance(prompt, str) or not prompt.strip() or not isinstance(cwd, str):
             _emit_context_event("skipped")
             return 0
-        scope_id = resolve_scope_id(cwd, configured_scope_id=settings.scope_id)
+        try:
+            scope_id = _resolve_scope_id(payload, cwd, settings=settings, deadline=http_deadline)
+        except _mcp_client.MCPResolutionError:
+            _emit_context_event("scope_resolution_failed")
+            return 0
         context = _recall_context(prompt, scope_id, settings=settings, deadline=http_deadline)
         if settings.capture_prompts and len(prompt) <= _MAX_SOURCE_LENGTH:
             with suppress(Exception):
@@ -191,6 +196,22 @@ def _prepare_context(
     )
 
 
+def _resolve_scope_id(
+    payload: Mapping[str, object],
+    cwd: str,
+    *,
+    settings: CodexPluginSettings,
+    deadline: float,
+) -> str:
+    session_id = _payload_identifier(payload, "session_id", "conversation_id", "thread_id")
+    return _mcp_client.resolve_scope_binding(
+        scope_binding_keys(cwd, session_id=session_id),
+        explicit_scope_id=settings.scope_id,
+        settings=settings,
+        deadline=deadline,
+    )
+
+
 def _capture_prompt(
     payload: Mapping[str, object],
     *,
@@ -207,7 +228,6 @@ def _capture_prompt(
     metadata = {
         "origin": "codex",
         "event": "user_prompt_submit",
-        "cwd": cwd,
     }
     if session_id is not None:
         metadata["session_id"] = session_id

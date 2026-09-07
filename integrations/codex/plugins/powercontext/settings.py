@@ -65,11 +65,13 @@ class _McpEndpointSettingsSource(PydanticBaseSettingsSource):
     def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         if field_name == "server_url":
             return _server_url_from_mcp_configuration(), field_name, False
+        if field_name == "mcp_url":
+            return _mcp_url_from_configuration(), field_name, False
         return None, field_name, False
 
     @override
     def __call__(self) -> dict[str, Any]:
-        return {"server_url": _server_url_from_mcp_configuration()}
+        return {"server_url": _server_url_from_mcp_configuration(), "mcp_url": _mcp_url_from_configuration()}
 
 
 class CodexPluginSettings(BaseSettings):
@@ -83,7 +85,9 @@ class CodexPluginSettings(BaseSettings):
     )
 
     server_url: str = Field(default="", repr=False)
+    mcp_url: str = Field(default="", repr=False)
     authorization: SecretStr | None = Field(default=None, repr=False)
+    # Preserve an explicit blank override so the Server, rather than a binding fallback, rejects it.
     scope_id: str | None = None
     capture_prompts: bool = True
     flush_on_capture: bool = False
@@ -134,17 +138,14 @@ class CodexPluginSettings(BaseSettings):
             file_secret_settings,
         )
 
-    @field_validator("scope_id")
-    @classmethod
-    def normalize_scope_id(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        return value.strip() or None
-
-
 def _server_url_from_mcp_configuration() -> str:
     configuration = _McpConfiguration.model_validate_json(_MCP_CONFIGURATION_PATH.read_text())
     return _http_base_url(configuration.mcp_servers["powercontext"].url)
+
+
+def _mcp_url_from_configuration() -> str:
+    configuration = _McpConfiguration.model_validate_json(_MCP_CONFIGURATION_PATH.read_text())
+    return configuration.mcp_servers["powercontext"].url.rstrip("/") + "/"
 
 
 def _http_base_url(mcp_url: str) -> str:

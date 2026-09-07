@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -41,6 +42,12 @@ def scope_module() -> ModuleType:
 @pytest.fixture
 def recall_module() -> ModuleType:
     return _load_module("powercontext_codex_recall", PLUGIN_ROOT / "hooks" / "recall.py")
+
+
+@pytest.fixture
+def mcp_client_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    monkeypatch.syspath_prepend(str(PLUGIN_ROOT))
+    return _load_module("powercontext_codex_mcp_client", PLUGIN_ROOT / "hooks" / "mcp_client.py")
 
 
 @pytest.fixture

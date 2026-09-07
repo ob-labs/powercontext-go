@@ -4,6 +4,7 @@ integrations/codex/plugins/powercontext/.codex-plugin/plugin.json
 integrations/codex/plugins/powercontext/.mcp.json
 integrations/codex/plugins/powercontext/README.md
 integrations/codex/plugins/powercontext/hooks/hooks.json
+integrations/codex/plugins/powercontext/hooks/mcp_client.py
 integrations/codex/plugins/powercontext/hooks/prepared_context.py
 integrations/codex/plugins/powercontext/hooks/recall.py
 integrations/codex/plugins/powercontext/pyproject.toml

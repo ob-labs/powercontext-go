@@ -29,3 +29,14 @@ runs:
 
     - name: Restore repository-local tools
       uses: ./.github/actions/setup-tools
+
+    - name: Set up Python for cross-language Go tests
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      with:
+        python-version: "3.12"
+
+    - name: Set up uv for cross-language Go tests
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      with:
+        version: "0.10.12"
+        enable-cache: true

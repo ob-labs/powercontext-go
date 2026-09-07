@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import io
 import json
 import os
@@ -75,8 +76,8 @@ def test_recall_emits_bounded_untrusted_context(
     )
     monkeypatch.setattr(
         recall_module,
-        "resolve_scope_id",
-        lambda _cwd, *, configured_scope_id: "project:test",
+        "_resolve_scope_id",
+        lambda _payload, _cwd, *, settings, deadline: "project:test",
     )
     captured: list[tuple[str, str]] = []
     monkeypatch.setattr(
@@ -120,8 +121,8 @@ def test_recall_reads_utf8_stdin_on_windows_encodings(
     )
     monkeypatch.setattr(
         recall_module,
-        "resolve_scope_id",
-        lambda _cwd, *, configured_scope_id: "project:test",
+        "_resolve_scope_id",
+        lambda _payload, _cwd, *, settings, deadline: "project:test",
     )
     monkeypatch.setattr(
         recall_module,
@@ -158,8 +159,8 @@ def test_recall_failure_is_non_blocking(
     )
     monkeypatch.setattr(
         recall_module,
-        "resolve_scope_id",
-        lambda _cwd, *, configured_scope_id: "project:test",
+        "_resolve_scope_id",
+        lambda _payload, _cwd, *, settings, deadline: "project:test",
     )
     monkeypatch.setattr(
         sys,
@@ -232,8 +233,8 @@ def test_recall_records_exact_injected_context_only_when_eval_trace_is_enabled(
     )
     monkeypatch.setattr(
         recall_module,
-        "resolve_scope_id",
-        lambda _cwd, *, configured_scope_id: "eval:run-1:on",
+        "_resolve_scope_id",
+        lambda _payload, _cwd, *, settings, deadline: "eval:run-1:on",
     )
     monkeypatch.setattr(recall_module, "_capture_prompt", lambda *_args, **_kwargs: {"position": 1})
     monkeypatch.setattr(
@@ -285,8 +286,8 @@ def test_recall_does_not_write_an_evaluation_trace_by_default(
     )
     monkeypatch.setattr(
         recall_module,
-        "resolve_scope_id",
-        lambda _cwd, *, configured_scope_id: "project:test",
+        "_resolve_scope_id",
+        lambda _payload, _cwd, *, settings, deadline: "project:test",
     )
     monkeypatch.setattr(recall_module, "_capture_prompt", lambda *_args, **_kwargs: {"position": 1})
     monkeypatch.setattr(
@@ -318,7 +319,7 @@ def test_recall_uses_the_eval_home_when_codex_filters_the_trace_path(
         "_prepare_context",
         lambda *_args, **_kwargs: _prepared("PowerContext recalled context: Use the retained audit."),
     )
-    monkeypatch.setattr(recall_module, "resolve_scope_id", lambda *_args, **_kwargs: "eval:run-1:on")
+    monkeypatch.setattr(recall_module, "_resolve_scope_id", lambda *_args, **_kwargs: "eval:run-1:on")
     monkeypatch.setattr(recall_module, "_capture_prompt", lambda *_args, **_kwargs: {"position": 1})
     monkeypatch.setattr(
         sys,
@@ -357,8 +358,8 @@ def test_hook_accepts_codex_event_name_variants(
     )
     monkeypatch.setattr(
         recall_module,
-        "resolve_scope_id",
-        lambda _cwd, *, configured_scope_id: "project:test",
+        "_resolve_scope_id",
+        lambda _payload, _cwd, *, settings, deadline: "project:test",
     )
     monkeypatch.setattr(
         sys,
@@ -485,6 +486,314 @@ def test_context_request_uses_the_prepare_endpoint_once(
     ]
 
 
+def test_hook_resolves_scope_over_mcp_before_prepare_and_capture(
+    recall_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    received: list[tuple[str, str, dict[str, str], dict[str, object] | None]] = []
+
+    class Service(BaseHTTPRequestHandler):
+        def _read_json(self) -> dict[str, object]:
+            return json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+
+        def _reply_json(self, value: dict[str, object], *, session: bool = False) -> None:
+            encoded = json.dumps(value).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            if session:
+                self.send_header("Mcp-Session-Id", "resolver-session")
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def do_POST(self) -> None:
+            payload = self._read_json()
+            received.append(("POST", self.path, dict(self.headers), payload))
+            if self.path == "/mcp":
+                method = payload.get("method")
+                if method == "initialize":
+                    self._reply_json(
+                        {"jsonrpc": "2.0", "id": payload["id"], "result": {"protocolVersion": "2025-11-25"}},
+                        session=True,
+                    )
+                    return
+                if method == "notifications/initialized":
+                    self.send_response(202)
+                    self.end_headers()
+                    return
+                if method == "tools/call":
+                    self._reply_json(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": payload["id"],
+                            "result": {
+                                "content": [{"type": "text", "text": "resolved"}],
+                                "structuredContent": {"scope_id": "scope-bound-to-session"},
+                                "isError": False,
+                            },
+                        }
+                    )
+                    return
+            if self.path == "/v1/context/prepare":
+                self._reply_json(_prepared(None, status="empty"))
+                return
+            if self.path == "/v1/sources/content":
+                self._reply_json({"position": 1})
+                return
+            self.send_error(404)
+
+        def do_DELETE(self) -> None:
+            received.append(("DELETE", self.path, dict(self.headers), None))
+            self.send_response(202)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            pass
+
+    raw_workspace = str(tmp_path)
+    monkeypatch.setenv("POWERCONTEXT_CODEX_AUTHORIZATION", "Bearer resolver-token")
+    with _serve(Service) as server_url:
+        settings = recall_module.CodexPluginSettings()
+        object.__setattr__(settings, "server_url", server_url)
+        object.__setattr__(settings, "mcp_url", f"{server_url}/mcp")
+
+        def resolve(binding_keys: list[dict[str, str]], **kwargs: object) -> str:
+            received.extend(
+                [
+                    ("POST", "/mcp", {"Authorization": "Bearer resolver-token"}, {"method": "initialize"}),
+                    ("POST", "/mcp", {"Authorization": "Bearer resolver-token"}, {"method": "notifications/initialized"}),
+                    (
+                        "POST",
+                        "/mcp",
+                        {"Authorization": "Bearer resolver-token"},
+                        {"method": "tools/call", "params": {"name": "scope_binding_resolve", "arguments": {"binding_keys": binding_keys}}},
+                    ),
+                ]
+            )
+            assert kwargs["explicit_scope_id"] is None
+            return "scope-bound-to-session"
+
+        def post(path: str, payload: dict[str, object], **_kwargs: object) -> dict[str, object]:
+            received.append(("POST", path, {"Authorization": "Bearer resolver-token"}, payload))
+            return _prepared(None, status="empty") if path == "/v1/context/prepare" else {"position": 1}
+
+        monkeypatch.setattr(recall_module._mcp_client, "resolve_scope_binding", resolve)
+        monkeypatch.setattr(recall_module, "_post_json", post)
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps(
+                    {
+                        "hook_event_name": "UserPromptSubmit",
+                        "cwd": raw_workspace,
+                        "prompt": "Remember the bound scope.",
+                        "session_id": "session-42",
+                    }
+                )
+            ),
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", stdout)
+        monkeypatch.setattr(sys, "stderr", stderr)
+
+        assert recall_module.main(settings) == 0
+
+    tool_call = next(payload for method, path, _, payload in received if method == "POST" and path == "/mcp" and payload and payload.get("method") == "tools/call")
+    assert tool_call["params"] == {
+        "name": "scope_binding_resolve",
+        "arguments": {
+            "binding_keys": [
+                {"integration": "codex", "kind": "session", "external_id": "session-42"},
+                {
+                    "integration": "codex",
+                    "kind": "workspace",
+                    "external_id": sha256(raw_workspace.encode("utf-8")).hexdigest(),
+                },
+            ]
+        },
+    }
+    assert [path for method, path, _, _ in received if method == "POST"] == [
+        "/mcp",
+        "/mcp",
+        "/mcp",
+        "/v1/context/prepare",
+        "/v1/sources/content",
+    ]
+    assert all(headers.get("Authorization") == "Bearer resolver-token" for _, _, headers, _ in received)
+    downstream = [payload for _, path, _, payload in received if path.startswith("/v1/")]
+    assert all(payload is not None and payload["scope_id"] == "scope-bound-to-session" for payload in downstream)
+    capture = next(payload for _, path, _, payload in received if path == "/v1/sources/content")
+    assert capture is not None and "cwd" not in capture["metadata"]
+    assert raw_workspace not in json.dumps([payload for _, _, _, payload in received])
+    assert raw_workspace not in stderr.getvalue()
+    assert stdout.getvalue() == ""
+
+
+def test_hook_fails_closed_when_mcp_scope_resolver_returns_a_tool_error(
+    recall_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    received: list[str] = []
+
+    class ToolFailureService(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            received.append(self.path)
+            if payload.get("method") == "initialize":
+                encoded = json.dumps(
+                    {"jsonrpc": "2.0", "id": payload["id"], "result": {"protocolVersion": "2025-11-25"}}
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.send_header("Mcp-Session-Id", "resolver-session")
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+            if payload.get("method") == "notifications/initialized":
+                self.send_response(202)
+                self.end_headers()
+                return
+            encoded = json.dumps(
+                {"jsonrpc": "2.0", "id": payload["id"], "result": {"content": [], "isError": True}}
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def do_DELETE(self) -> None:
+            self.send_response(202)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+            pass
+
+    raw_workspace = str(tmp_path)
+    with _serve(ToolFailureService) as server_url:
+        settings = recall_module.CodexPluginSettings()
+        object.__setattr__(settings, "server_url", server_url)
+        object.__setattr__(settings, "mcp_url", f"{server_url}/mcp")
+        monkeypatch.setattr(
+            recall_module._mcp_client,
+            "resolve_scope_binding",
+            lambda *_args, **_kwargs: (received.append("/mcp") or (_ for _ in ()).throw(recall_module._mcp_client.MCPResolutionError())),
+        )
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "cwd": raw_workspace, "prompt": "Never capture."})),
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", stdout)
+        monkeypatch.setattr(sys, "stderr", stderr)
+
+        assert recall_module.main(settings) == 0
+
+    assert received == ["/mcp"]
+    assert stdout.getvalue() == ""
+    assert raw_workspace not in stderr.getvalue()
+
+
+def test_hook_fails_closed_before_mcp_when_git_root_is_not_utf8(
+    recall_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+    monkeypatch.setattr(
+        recall_module,
+        "scope_binding_keys",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid")),
+    )
+    monkeypatch.setattr(
+        recall_module._mcp_client,
+        "resolve_scope_binding",
+        lambda *_args, **_kwargs: called,
+    )
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "cwd": "/workspace", "prompt": "Never capture."})),
+    )
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+
+    assert recall_module.main() == 0
+    assert called is False
+
+
+def test_hook_forwards_user_explicit_scope_only_to_the_mcp_resolver(
+    recall_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolved: list[tuple[list[dict[str, str]], str | None]] = []
+    downstream: list[dict[str, object]] = []
+    monkeypatch.setenv("POWERCONTEXT_CODEX_SCOPE_ID", "scope-explicit")
+    monkeypatch.setattr(
+        recall_module._mcp_client,
+        "resolve_scope_binding",
+        lambda keys, *, explicit_scope_id, **_kwargs: (resolved.append((keys, explicit_scope_id)) or "scope-validated"),
+    )
+    monkeypatch.setattr(
+        recall_module,
+        "_post_json",
+        lambda _path, payload, **_kwargs: (downstream.append(payload) or _prepared(None, status="empty")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "cwd": "/workspace", "prompt": "Recall context"})),
+    )
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+
+    assert recall_module.main() == 0
+
+    assert resolved[0][1] == "scope-explicit"
+    assert downstream[0]["scope_id"] == "scope-validated"
+
+
+@pytest.mark.parametrize("scope_id", ("", "  "))
+def test_hook_preserves_blank_explicit_scope_for_server_validation(
+    recall_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    scope_id: str,
+) -> None:
+    resolved: list[str | None] = []
+    downstream: list[dict[str, object]] = []
+    monkeypatch.setenv("POWERCONTEXT_CODEX_SCOPE_ID", scope_id)
+    monkeypatch.setattr(
+        recall_module._mcp_client,
+        "resolve_scope_binding",
+        lambda _keys, *, explicit_scope_id, **_kwargs: (
+            resolved.append(explicit_scope_id)
+            or (_ for _ in ()).throw(recall_module._mcp_client.MCPResolutionError())
+        ),
+    )
+    monkeypatch.setattr(
+        recall_module,
+        "_post_json",
+        lambda _path, payload, **_kwargs: downstream.append(payload),
+    )
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "cwd": "/workspace", "prompt": "Never recall."})),
+    )
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    assert recall_module.main() == 0
+
+    assert resolved == [scope_id]
+    assert downstream == []
+    assert stdout.getvalue() == ""
+
+
 def test_context_prepare_404_is_reported_as_a_version_mismatch(
     recall_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
@@ -559,7 +868,6 @@ def test_capture_prompt_is_idempotent_and_preserves_provenance(
     assert payload["metadata"] == {
         "origin": "codex",
         "event": "user_prompt_submit",
-        "cwd": "/workspace/project",
         "session_id": "session-1",
         "turn_id": "turn-2",
     }

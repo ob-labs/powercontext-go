@@ -924,7 +924,15 @@
       "mode": "retained-host",
       "case_evidence": [
         "py:integrations/codex/tests/test_contract.py#{python_test}"
-      ]
+      ],
+      "cases": {
+        "test_scope_binding_is_persisted_in_git_private_state": [
+          "py:integrations/codex/tests/test_contract.py#test_scope_binding_routes_through_server"
+        ],
+        "test_scope_binding_requires_a_git_workspace": [
+          "py:integrations/codex/tests/test_contract.py#test_scope_binding_accepts_non_git_workspace"
+        ]
+      }
     },
     "tests/codex_plugin/test_recall.py": {
       "mode": "retained-host",

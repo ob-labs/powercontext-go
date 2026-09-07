@@ -14,10 +14,12 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import json
-import os
 from pathlib import Path
 from types import ModuleType
+from typing import Any
+from urllib.request import Request
 
 import pytest
 from pydantic import ValidationError
@@ -29,67 +31,192 @@ _TRANSPORT_VECTORS = json.loads(
 )
 
 
-@pytest.mark.parametrize(
-    ("remote", "expected"),
-    [
-        ("https://github.com/OceanBase/powercontext.git", "github.com/OceanBase/powercontext"),
-        ("ssh://git@github.com/OceanBase/powercontext.git", "github.com/OceanBase/powercontext"),
-        ("git@github.com:OceanBase/powercontext.git", "github.com/OceanBase/powercontext"),
-    ],
-)
-def test_scope_normalizes_network_git_remotes(
-    scope_module: ModuleType,
-    remote: str,
-    expected: str,
-) -> None:
-    assert scope_module.normalize_git_remote(remote) == expected
-
-
-def test_scope_override_wins(scope_module: ModuleType, tmp_path: Path) -> None:
-    assert (
-        scope_module.derive_scope_id(
-            str(tmp_path),
-            configured_scope_id="project:explicit",
-        )
-        == "project:explicit"
-    )
-
-
-def test_scope_binding_is_persisted_in_git_private_state(
+def test_scope_binding_keys_prioritize_session_and_hash_the_unmodified_git_root(
     scope_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
 ) -> None:
-    git_directory = tmp_path / ".git"
-    git_directory.mkdir()
+    git_root = "C:\\工程\\private repository "
     monkeypatch.setattr(
         scope_module,
         "_git_value",
-        lambda _cwd, *arguments: str(git_directory) if arguments == ("rev-parse", "--absolute-git-dir") else None,
+        lambda _cwd, *arguments: git_root if arguments == ("rev-parse", "--show-toplevel") else None,
     )
 
-    assert scope_module.bind_workstream_scope(str(tmp_path), "handoff-ui-review") == "handoff-ui-review"
-    assert scope_module.read_bound_scope_id(str(tmp_path)) == "handoff-ui-review"
-    assert scope_module.resolve_scope_id(str(tmp_path)) == "handoff-ui-review"
-    assert scope_module.resolve_scope_id(str(tmp_path), configured_scope_id="scope:override") == "scope:override"
-    state_path = git_directory / "powercontext" / "codex-workspace.json"
-    if os.name != "nt":
-        assert state_path.stat().st_mode & 0o777 == 0o600
+    keys = scope_module.scope_binding_keys("C:\\fallback", session_id="session-42")
 
-    assert scope_module.clear_workstream_scope(str(tmp_path)) is True
-    assert scope_module.read_bound_scope_id(str(tmp_path)) is None
-    assert scope_module.clear_workstream_scope(str(tmp_path)) is False
+    assert keys == [
+        {"integration": "codex", "kind": "session", "external_id": "session-42"},
+        {
+            "integration": "codex",
+            "kind": "workspace",
+            "external_id": sha256(git_root.encode("utf-8")).hexdigest(),
+        },
+    ]
+    assert all(git_root not in str(key) and "C:\\fallback" not in str(key) for key in keys)
 
 
-def test_scope_binding_requires_a_git_workspace(
+@pytest.mark.parametrize(
+    "remote",
+    (
+        "https://github.com/OceanBase/powercontext.git",
+        "ssh://git@github.com/OceanBase/powercontext.git",
+        "git@github.com:OceanBase/powercontext.git",
+    ),
+)
+def test_scope_normalizes_network_git_remotes(
+    scope_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    remote: str,
+) -> None:
+    """Server-owned workspace bindings must never derive a Scope from a remote."""
+
+    calls: list[tuple[str, ...]] = []
+
+    def git_value(_cwd: str, *arguments: str) -> str | None:
+        calls.append(arguments)
+        if arguments == ("rev-parse", "--show-toplevel"):
+            return "C:\\workspace"
+        return remote
+
+    monkeypatch.setattr(scope_module, "_git_value", git_value)
+
+    keys = scope_module.scope_binding_keys("C:\\fallback")
+
+    assert calls == [("rev-parse", "--show-toplevel")]
+    assert keys == [
+        {
+            "integration": "codex",
+            "kind": "workspace",
+            "external_id": sha256(b"C:\\workspace").hexdigest(),
+        }
+    ]
+
+
+def test_scope_override_wins(
+    scope_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit host override remains distinct from an omitted override."""
+
+    monkeypatch.setenv("POWERCONTEXT_CODEX_SCOPE_ID", "scope-explicit")
+
+    assert scope_module.CodexPluginSettings().scope_id == "scope-explicit"
+
+
+def test_scope_binding_routes_through_server(
     scope_module: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """The legacy private-binding case now persists only through the Server client."""
+
+    workspace = str(tmp_path / "workspace")
+    calls: list[tuple[str, object]] = []
+    monkeypatch.setattr(scope_module, "_git_value", lambda *_args: workspace)
+    monkeypatch.setattr(
+        scope_module.mcp_client,
+        "set_workspace_scope_binding",
+        lambda key, scope_id, **_kwargs: calls.append(("set", (key, scope_id))),
+    )
+    monkeypatch.setattr(
+        scope_module.mcp_client,
+        "resolve_scope_binding",
+        lambda keys, **_kwargs: calls.append(("resolve", keys)) or "scope-server",
+    )
+
+    assert scope_module.main(["--cwd", workspace, "--bind-workstream", "scope-server"]) == 0
+    assert calls[0][0] == "set"
+    assert calls[1][0] == "resolve"
+    assert not (tmp_path / ".git" / "powercontext" / "codex-workspace.json").exists()
+
+
+def test_scope_binding_accepts_non_git_workspace(
+    scope_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-Git cwd remains an opaque hashed Server binding identity."""
+
+    cwd = "C:\\not-a-git-workspace"
     monkeypatch.setattr(scope_module, "_git_value", lambda *_args: None)
 
-    with pytest.raises(ValueError, match="requires a Git workspace"):
-        scope_module.bind_workstream_scope(str(tmp_path), "handoff-ui-review")
+    assert scope_module.scope_binding_keys(cwd) == [
+        {
+            "integration": "codex",
+            "kind": "workspace",
+            "external_id": sha256(cwd.encode("utf-8")).hexdigest(),
+        }
+    ]
+
+
+def test_mcp_scope_resolver_uses_session_headers_and_the_authorization_reference(
+    mcp_client_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Response:
+        def __init__(self, status: int, body: dict[str, object], headers: dict[str, str] | None = None) -> None:
+            self.status = status
+            self.headers = {"Content-Type": "application/json", **(headers or {})}
+            self._body = json.dumps(body).encode("utf-8")
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self, amount: int = -1) -> bytes:
+            chunk, self._body = self._body[:amount], self._body[amount:]
+            return chunk
+
+    class Opener:
+        def __init__(self) -> None:
+            self.requests: list[Request] = []
+            self.responses = iter(
+                [
+                    Response(200, {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}, {"mcp-session-id": "session"}),
+                    Response(202, {}),
+                    Response(200, {"jsonrpc": "2.0", "id": 2, "result": {"content": [], "isError": False, "structuredContent": {"scope_id": "scope-1"}}}),
+                    Response(202, {}),
+                ]
+            )
+
+        def open(self, request: Request, timeout: float) -> Response:
+            self.requests.append(request)
+            return next(self.responses)
+
+    monkeypatch.setenv("POWERCONTEXT_CODEX_AUTHORIZATION", "Bearer resolver-token")
+    settings = mcp_client_module.CodexPluginSettings()
+    opener = Opener()
+    monkeypatch.setattr(mcp_client_module, "_URL_OPENER", opener)
+
+    assert mcp_client_module.resolve_scope_binding(
+        [{"integration": "codex", "kind": "workspace", "external_id": "digest"}],
+        explicit_scope_id="scope-explicit",
+        settings=settings,
+        deadline=mcp_client_module.monotonic() + 1,
+    ) == "scope-1"
+
+    bodies = [json.loads(request.data) for request in opener.requests[:3]]
+    assert bodies[2]["params"] == {
+        "name": "scope_binding_resolve",
+        "arguments": {
+            "explicit_scope_id": "scope-explicit",
+            "binding_keys": [{"integration": "codex", "kind": "workspace", "external_id": "digest"}],
+        },
+    }
+    assert all(request.get_header("Authorization") == "Bearer resolver-token" for request in opener.requests)
+    assert all(request.full_url == "http://127.0.0.1:8000/mcp/" for request in opener.requests)
+    assert opener.requests[1].get_header("Mcp-session-id") == "session"
+    assert opener.requests[2].get_header("Mcp-protocol-version") == "2025-11-25"
+    assert opener.requests[2].get_header("Mcp-session-id") == "session"
+    assert opener.requests[3].get_header("Mcp-session-id") == "session"
+    assert opener.requests[3].get_method() == "DELETE"
+
+
+def test_mcp_proxy_handler_bypasses_loopback_destinations(mcp_client_module: ModuleType) -> None:
+    request = mcp_client_module.Request("http://127.0.0.1:8000/mcp", data=b"{}", method="POST")
+
+    assert mcp_client_module._LoopbackAwareProxyHandler().proxy_open(request, "http://127.0.0.1:9", "http") is None
 
 
 def test_codex_settings_precedence_and_validation(
@@ -104,6 +231,7 @@ def test_codex_settings_precedence_and_validation(
     explicit = recall_module.CodexPluginSettings(server_url="https://explicit.example/")
 
     assert environment.server_url == "http://127.0.0.1:8000"
+    assert environment.mcp_url == "http://127.0.0.1:8000/mcp/"
     assert environment.capture_prompts is False
     assert environment.request_timeout_seconds == 4.5
     assert explicit.server_url == "http://127.0.0.1:8000"
@@ -190,6 +318,50 @@ def test_codex_settings_normalize_the_mcp_path_to_http_base(
     settings_module: ModuleType,
 ) -> None:
     assert settings_module._http_base_url("https://memory.example/api/mcp/") == "https://memory.example/api"
+
+
+def test_git_scope_value_decodes_only_utf8_bytes_and_preserves_trailing_space(
+    scope_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = "C:\\工程\\private repository ".encode("utf-8") + b"\r\n"
+    monkeypatch.setattr(
+        scope_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Completed", (), {"stdout": raw})(),
+    )
+
+    assert scope_module._git_value("C:\\fallback", "rev-parse", "--show-toplevel") == "C:\\工程\\private repository "
+
+
+@pytest.mark.parametrize("terminator", (b"\n", b"\r\n"))
+def test_git_scope_value_removes_only_the_terminal_line_ending(
+    scope_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    terminator: bytes,
+) -> None:
+    raw = b"C:\\workspace " + terminator
+    monkeypatch.setattr(
+        scope_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Completed", (), {"stdout": raw})(),
+    )
+
+    assert scope_module._git_value("C:\\fallback", "rev-parse", "--show-toplevel") == "C:\\workspace "
+
+
+def test_invalid_git_utf8_does_not_fall_back_to_a_local_scope(
+    scope_module: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        scope_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Completed", (), {"stdout": b"\xff\r\n"})(),
+    )
+
+    with pytest.raises(UnicodeDecodeError):
+        scope_module.scope_binding_keys("C:\\fallback")
 
 
 def test_project_context_skill_uses_the_high_level_work_continuity_loop() -> None:

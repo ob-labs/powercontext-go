@@ -4188,7 +4188,7 @@
         {
           "kind": "py",
           "file": "integrations/codex/tests/test_contract.py",
-          "test": "test_scope_binding_is_persisted_in_git_private_state"
+          "test": "test_scope_binding_routes_through_server"
         }
       ]
     },
@@ -4205,7 +4205,7 @@
         {
           "kind": "py",
           "file": "integrations/codex/tests/test_contract.py",
-          "test": "test_scope_binding_requires_a_git_workspace"
+          "test": "test_scope_binding_accepts_non_git_workspace"
         }
       ]
     },

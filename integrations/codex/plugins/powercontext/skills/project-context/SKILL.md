@@ -23,10 +23,12 @@ Before the first memory tool call, run:
 
 Reuse that exact `scope_id` for the task.
 
-The resolver first honors an explicit plugin scope, then a Git-private Workstream
-binding, and finally the normalized remote or project path. When the user
-explicitly asks to bind the current checkout to a known Handoff Report
-Workstream, run:
+The resolver sends a user-configured explicit Scope only to the Server for
+validation. Otherwise it resolves the Server's durable workspace binding using
+an opaque SHA-256 identifier derived from the Git root (or current directory
+when Git is unavailable); it never derives a local Scope from a path or remote.
+When the user explicitly asks to bind the current checkout to a known Handoff
+Report Workstream, run:
 
 ```bash
 "$PLUGIN_ROOT/.venv/bin/python" "$PLUGIN_ROOT/scripts/project_scope.py" \
@@ -34,7 +36,7 @@ Workstream, run:
 ```
 
 Then run the normal resolver command again and verify the same scope. The
-binding is stored below the checkout's Git directory and is not committed.
+binding is stored by the Server, not below the checkout's Git directory.
 Never infer one Workstream when multiple candidates remain consequential.
 
 Before a durable one-turn Handoff or a `latest` Continue without an exact
