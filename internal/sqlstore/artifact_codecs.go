@@ -15,9 +15,14 @@
 package sqlstore
 
 import (
+	"context"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
+	"reflect"
 
+	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
@@ -32,13 +37,44 @@ func ExperienceArtifactCodec() ArtifactCodec {
 	return codec
 }
 
-// SkillArtifactCodec returns the Python-compatible managed Skill route.
+// SkillArtifactCodec returns the legacy Python-compatible managed Skill route
+// together with the Go-only package-backed v2 variant.
 func SkillArtifactCodec() ArtifactCodec {
-	codec, err := NewArtifactCodec(skill.Family, encodeSkill, decodeSkill)
-	if err != nil {
-		panic(err)
+	return ArtifactCodec{
+		family: skill.Family,
+		contentTypes: map[reflect.Type]struct{}{
+			reflect.TypeFor[skill.Content]():        {},
+			reflect.TypeFor[skill.PackageContent](): {},
+		},
+		encode: encodeSkillVariant,
+		decodeContent: func(payload []byte) (any, error) {
+			return decodeSkill(payload)
+		},
+		decodeScoped: func(ctx context.Context, db DBTX, scopeID string, payload []byte) (any, error) {
+			return decodeSkillVariant(ctx, db, scopeID, payload)
+		},
+		decode: func(
+			ctx context.Context,
+			db DBTX,
+			scopeID string,
+			ref artifact.Ref,
+			lineage artifact.Lineage,
+			payload []byte,
+		) (artifact.Snapshot, error) {
+			content, err := decodeSkillVariant(ctx, db, scopeID, payload)
+			if err != nil {
+				return nil, err
+			}
+			switch value := content.(type) {
+			case skill.Content:
+				return artifact.Restore(ref, value, lineage)
+			case skill.PackageContent:
+				return artifact.Restore(ref, value, lineage)
+			default:
+				return nil, fmt.Errorf("unsupported managed Skill content type %T", content)
+			}
+		},
 	}
-	return codec
 }
 
 // MemoryArtifactCodec returns the authoritative Memory manifest route.
@@ -96,6 +132,68 @@ func decodeSkill(payload []byte) (skill.Content, error) {
 		return skill.Content{}, err
 	}
 	return skill.NewContent(value.Name, value.Description, value.Instructions, value.Validation)
+}
+
+type skillPackageContentJSON struct {
+	PackageRef skillPackageRefJSON `json:"package_ref"`
+}
+
+type skillPackageRefJSON struct {
+	TreeDigest       string `json:"tree_digest"`
+	ArchiveDigest    string `json:"archive_digest"`
+	FileCount        int    `json:"file_count"`
+	UncompressedSize int    `json:"uncompressed_size"`
+	ArchiveSize      int    `json:"archive_size"`
+}
+
+func encodeSkillVariant(value any) ([]byte, error) {
+	switch content := value.(type) {
+	case skill.Content:
+		return encodeSkill(content)
+	case skill.PackageContent:
+		ref := content.Reference()
+		if err := ref.Validate(); err != nil {
+			return nil, err
+		}
+		return jsonv2.Marshal(skillPackageContentJSON{PackageRef: skillPackageRefJSON{
+			TreeDigest:       ref.TreeDigest(),
+			ArchiveDigest:    ref.ArchiveDigest(),
+			FileCount:        ref.FileCount(),
+			UncompressedSize: ref.UncompressedSize(),
+			ArchiveSize:      ref.ArchiveSize(),
+		}})
+	default:
+		return nil, fmt.Errorf("unsupported managed Skill content type %T", value)
+	}
+}
+
+func decodeSkillVariant(ctx context.Context, db DBTX, scopeID string, payload []byte) (any, error) {
+	var fields map[string]jsontext.Value
+	if err := jsonv2.Unmarshal(payload, &fields); err != nil {
+		return nil, err
+	}
+	if _, packageBacked := fields["package_ref"]; !packageBacked {
+		return decodeSkill(payload)
+	}
+	var encoded skillPackageContentJSON
+	if err := jsonv2.Unmarshal(payload, &encoded, jsonv2.RejectUnknownMembers(true)); err != nil {
+		return nil, err
+	}
+	ref, err := skill.NewPackageRef(
+		encoded.PackageRef.TreeDigest,
+		encoded.PackageRef.ArchiveDigest,
+		encoded.PackageRef.FileCount,
+		encoded.PackageRef.UncompressedSize,
+		encoded.PackageRef.ArchiveSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := (SkillPackageRepository{}).Get(ctx, db, scopeID, ref)
+	if err != nil {
+		return nil, err
+	}
+	return skill.NewPackageContent(snapshot)
 }
 
 type memoryContentJSON struct {

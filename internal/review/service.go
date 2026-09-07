@@ -99,6 +99,22 @@ func (s *Service) ProposeSkill(
 	return skillCandidate(value)
 }
 
+// ProposePackageSkill submits a v2 package-backed managed Skill for review.
+func (s *Service) ProposePackageSkill(
+	ctx context.Context,
+	proposal skill.PackageContent,
+	sources []source.Ref,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (Candidate[skill.PackageContent], error) {
+	value, err := s.propose(ctx, skill.Family, proposal, sources, artifacts, target, reason)
+	if err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	return packageSkillCandidate(value)
+}
+
 func (s *Service) propose(
 	ctx context.Context,
 	family string,
@@ -210,6 +226,22 @@ func (s *Service) GetSkill(ctx context.Context, ref artifact.Ref) (skill.Skill, 
 	return result, nil
 }
 
+// GetPackageSkill returns one package-backed managed Skill revision.
+func (s *Service) GetPackageSkill(ctx context.Context, ref artifact.Ref) (skill.PackageSkill, error) {
+	if ref.Family() != skill.Family {
+		return skill.PackageSkill{}, &artifact.NotFoundError{Ref: ref}
+	}
+	value, err := s.backend.GetArtifact(ctx, ref)
+	if err != nil {
+		return skill.PackageSkill{}, err
+	}
+	result, ok := value.(skill.PackageSkill)
+	if !ok {
+		return skill.PackageSkill{}, &artifact.NotFoundError{Ref: ref}
+	}
+	return result, nil
+}
+
 func experienceCandidate(value Snapshot) (Candidate[experience.Content], error) {
 	proposal, ok := value.ProposalValue().(experience.Content)
 	if !ok || value.Family() != experience.Family {
@@ -226,6 +258,18 @@ func skillCandidate(value Snapshot) (Candidate[skill.Content], error) {
 	proposal, ok := value.ProposalValue().(skill.Content)
 	if !ok || value.Family() != skill.Family {
 		return Candidate[skill.Content]{}, &InvalidCandidateError{Field: "family", Detail: value.Family()}
+	}
+	return NewCandidate(
+		value.ID(), value.Version(), value.Family(), value.Status(), proposal,
+		value.Sources(), value.Artifacts(), value.Target(), value.Reason(),
+		value.ResultArtifact(), value.DecisionReason(),
+	)
+}
+
+func packageSkillCandidate(value Snapshot) (Candidate[skill.PackageContent], error) {
+	proposal, ok := value.ProposalValue().(skill.PackageContent)
+	if !ok || value.Family() != skill.Family {
+		return Candidate[skill.PackageContent]{}, &InvalidCandidateError{Field: "family", Detail: value.Family()}
 	}
 	return NewCandidate(
 		value.ID(), value.Version(), value.Family(), value.Status(), proposal,

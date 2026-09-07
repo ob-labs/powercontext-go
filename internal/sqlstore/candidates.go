@@ -19,7 +19,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/internal/review"
@@ -154,7 +153,7 @@ func (r *CandidateRepository) List(
 	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
 	values := make([]review.Snapshot, 0, limit+1)
 	for rows.Next() {
-		candidate, err := r.scanAndDecode(rows)
+		candidate, err := r.scanAndDecode(ctx, db, scopeID, rows)
 		if err != nil {
 			return review.Page{}, err
 		}
@@ -354,14 +353,19 @@ func (r *CandidateRepository) findCurrent(
 	if locked && r.dialect == MySQLDialect {
 		query += " FOR UPDATE"
 	}
-	candidate, err := r.scanAndDecode(db.QueryRowContext(ctx, query, scopeID, candidateID))
+	candidate, err := r.scanAndDecode(ctx, db, scopeID, db.QueryRowContext(ctx, query, scopeID, candidateID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	return candidate, err == nil, err
 }
 
-func (r *CandidateRepository) scanAndDecode(value scanner) (review.Snapshot, error) {
+func (r *CandidateRepository) scanAndDecode(
+	ctx context.Context,
+	db DBTX,
+	scopeID string,
+	value scanner,
+) (review.Snapshot, error) {
 	var candidateID, family, status string
 	var version, resultFamily, resultID, resultRevision, decisionReason any
 	var proposalPayload, sourcePayload, artifactPayload any
@@ -386,7 +390,7 @@ func (r *CandidateRepository) scanAndDecode(value scanner) (review.Snapshot, err
 	if err != nil {
 		return nil, err
 	}
-	proposal, err := codec.decodeContent(proposalBytes)
+	proposal, err := codec.decodeScoped(ctx, db, scopeID, proposalBytes)
 	if err != nil {
 		return nil, &InvalidStoredPayloadError{Kind: "candidate-proposal", Name: family, Issue: "payload does not match the model"}
 	}
@@ -433,9 +437,9 @@ func (r *CandidateRepository) requireProposal(family string, proposal any) error
 	if !ok {
 		return &review.InvalidCandidateError{Field: "family", Detail: family}
 	}
-	if reflect.TypeOf(proposal) != codec.contentType {
+	if !codec.supportsContent(proposal) {
 		return &review.InvalidCandidateError{
-			Field: "proposal", Detail: fmt.Sprintf("expected %s", codec.contentType.Name()),
+			Field: "proposal", Detail: "must match a registered exact content type",
 		}
 	}
 	return nil

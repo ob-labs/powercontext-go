@@ -36,6 +36,7 @@ type ReviewBackend struct {
 	artifacts       *ArtifactRepository
 	sources         *SourceRepository
 	experienceIndex ExperienceIndex
+	skillPackages   SkillPackageRepository
 }
 
 func NewReviewBackend(
@@ -58,6 +59,7 @@ func NewReviewBackend(
 	return &ReviewBackend{
 		database: database, scopeID: scopeID, candidates: candidates,
 		artifacts: artifacts, sources: sources, experienceIndex: experienceIndex,
+		skillPackages: SkillPackageRepository{},
 	}, nil
 }
 
@@ -78,6 +80,9 @@ func (r *ReviewBackend) Propose(
 ) (review.Snapshot, error) {
 	var result review.Snapshot
 	err := r.database.Transaction(ctx, func(tx DBTX) error {
+		if err := r.persistPackageProposal(ctx, tx, family, proposal); err != nil {
+			return err
+		}
 		if err := r.validateEvidence(ctx, tx, sources, artifacts); err != nil {
 			return err
 		}
@@ -150,8 +155,11 @@ func (r *ReviewBackend) Revise(
 		if err != nil {
 			return err
 		}
-		if proposalErr := validateReviewedProposal(current.Family(), proposal); proposalErr != nil {
+		if proposalErr := validateReviewedProposal(current.Family(), current.ProposalValue(), proposal); proposalErr != nil {
 			return proposalErr
+		}
+		if packageErr := r.persistPackageProposal(ctx, tx, current.Family(), proposal); packageErr != nil {
+			return packageErr
 		}
 		if !equalOptionalRef(target, current.Target()) {
 			return &review.InvalidCandidateError{Field: "target", Detail: "cannot change across Candidate versions"}
@@ -197,6 +205,9 @@ func (r *ReviewBackend) Approve(
 		candidate, err := r.candidates.LockPending(ctx, tx, r.scopeID, candidateID, expectedVersion)
 		if err != nil {
 			return err
+		}
+		if packageErr := r.revalidatePackageProposal(ctx, tx, candidate); packageErr != nil {
+			return packageErr
 		}
 		if lineageErr := validateApprovalLineage(candidate); lineageErr != nil {
 			return lineageErr
@@ -324,15 +335,22 @@ func (r *ReviewBackend) validateTarget(
 	return nil
 }
 
-func validateReviewedProposal(family string, proposal any) error {
-	expected := map[string]reflect.Type{
-		experience.Family: reflect.TypeFor[experience.Content](),
-		skill.Family:      reflect.TypeFor[skill.Content](),
-	}[family]
-	if expected == nil || reflect.TypeOf(proposal) != expected {
+func validateReviewedProposal(family string, current, proposal any) error {
+	if reflect.TypeOf(current) != reflect.TypeOf(proposal) {
 		return &review.InvalidCandidateError{Field: "family", Detail: family}
 	}
-	return nil
+	switch family {
+	case experience.Family:
+		if _, ok := proposal.(experience.Content); ok {
+			return nil
+		}
+	case skill.Family:
+		switch proposal.(type) {
+		case skill.Content, skill.PackageContent:
+			return nil
+		}
+	}
+	return &review.InvalidCandidateError{Field: "family", Detail: family}
 }
 
 func validateApprovalLineage(candidate review.Snapshot) error {
@@ -372,8 +390,46 @@ func candidateDraft(candidate review.Snapshot) (artifact.DraftSnapshot, error) {
 			break
 		}
 		return skill.NewDraft(proposal, candidate.Sources(), candidate.Artifacts())
+	case skill.PackageContent:
+		if candidate.Family() != skill.Family {
+			break
+		}
+		return skill.NewPackageDraft(proposal, candidate.Sources(), candidate.Artifacts())
 	}
 	return nil, &review.InvalidCandidateError{Field: "family", Detail: candidate.Family()}
+}
+
+func (r *ReviewBackend) persistPackageProposal(
+	ctx context.Context,
+	tx DBTX,
+	family string,
+	proposal any,
+) error {
+	if family != skill.Family {
+		return nil
+	}
+	content, packageBacked := proposal.(skill.PackageContent)
+	if !packageBacked {
+		return nil
+	}
+	_, err := r.skillPackages.Add(ctx, tx, r.scopeID, content.Snapshot())
+	return err
+}
+
+func (r *ReviewBackend) revalidatePackageProposal(
+	ctx context.Context,
+	tx DBTX,
+	candidate review.Snapshot,
+) error {
+	if candidate.Family() != skill.Family {
+		return nil
+	}
+	content, packageBacked := candidate.ProposalValue().(skill.PackageContent)
+	if !packageBacked {
+		return nil
+	}
+	_, err := r.skillPackages.Get(ctx, tx, r.scopeID, content.Reference())
+	return err
 }
 
 func equalOptionalRef(left, right *artifact.Ref) bool {

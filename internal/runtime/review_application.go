@@ -81,6 +81,29 @@ func (a *ReviewApplication) ProposeSkill(
 	return result, err
 }
 
+// ProposePackageSkill serializes a v2 package-backed managed Skill proposal
+// through the resolved scope's review service.
+func (a *ReviewApplication) ProposePackageSkill(
+	ctx context.Context,
+	scopeID string,
+	proposal skill.PackageContent,
+	sources []source.Ref,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (review.Snapshot, error) {
+	var result review.Snapshot
+	err := a.runtime.ScopedWrite(ctx, scopeID, func(ctx context.Context, scope string) error {
+		service, err := a.service(scope)
+		if err != nil {
+			return err
+		}
+		result, err = service.ProposePackageSkill(ctx, proposal, sources, artifacts, target, reason)
+		return err
+	})
+	return result, err
+}
+
 func (a *ReviewApplication) GetCandidate(ctx context.Context, scopeID, candidateID string) (review.Snapshot, error) {
 	var result review.Snapshot
 	err := a.runtime.ScopedRead(ctx, scopeID, func(ctx context.Context, scope string) error {
@@ -180,6 +203,24 @@ func (a *ReviewApplication) GetSkill(
 			return err
 		}
 		result, err = service.GetSkill(ctx, ref)
+		return err
+	})
+	return result, err
+}
+
+// GetPackageSkill reads one v2 package-backed managed Skill revision.
+func (a *ReviewApplication) GetPackageSkill(
+	ctx context.Context,
+	scopeID string,
+	ref artifact.Ref,
+) (skill.PackageSkill, error) {
+	var result skill.PackageSkill
+	err := a.runtime.ScopedRead(ctx, scopeID, func(ctx context.Context, scope string) error {
+		service, err := a.service(scope)
+		if err != nil {
+			return err
+		}
+		result, err = service.GetPackageSkill(ctx, ref)
 		return err
 	})
 	return result, err

@@ -15,8 +15,11 @@
 package sqlstore_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/artifact"
@@ -206,6 +209,451 @@ func TestManagedSkillApprovalValidatesLineageBeforeArtifactWrite(t *testing.T) {
 	}
 	if got := lineage.Artifacts(); len(got) != 1 || got[0] != *initialRef {
 		t.Fatalf("replacement Artifact lineage = %#v", got)
+	}
+}
+
+func TestPackageBackedSkillReviewPersistsOnlyCanonicalReference(t *testing.T) {
+	fixture := newReviewFixture(t, "package-review", (&sequenceIDs{}).New)
+	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+	snapshot := skillPackageSnapshot(t, "package-review-skill")
+	proposal, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	candidate, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, proposal, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candidate.Proposal().Reference() != snapshot.Reference() {
+		t.Fatalf("candidate package reference = %#v, want %#v", candidate.Proposal().Reference(), snapshot.Reference())
+	}
+	assertPackageReviewPayload(t, fixture, candidate.ID(), "proposal", snapshot)
+	assertPackageReviewRow(t, fixture, snapshot, 1)
+
+	approved, err := fixture.service.Approve(fixture.ctx, candidate.ID(), candidate.Version())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approved.ResultArtifact() == nil {
+		t.Fatal("approved package Candidate has no Artifact")
+	}
+	stored, err := fixture.service.GetPackageSkill(fixture.ctx, *approved.ResultArtifact())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Content().Reference() != snapshot.Reference() {
+		t.Fatalf("stored package Artifact reference = %#v, want %#v", stored.Content().Reference(), snapshot.Reference())
+	}
+	assertPackageArtifactPayload(t, fixture, *approved.ResultArtifact(), snapshot)
+
+	legacy := reviewSkill(t, "Keep legacy skill JSON unchanged.")
+	legacyCandidate, err := fixture.service.ProposeSkill(
+		fixture.ctx, legacy, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacyPayload []byte
+	if err := fixture.database.SQLDB().QueryRowContext(fixture.ctx, `SELECT proposal
+        FROM pc_artifact_candidate_versions WHERE scope_id = ? AND candidate_id = ?`,
+		fixture.scope, legacyCandidate.ID()).Scan(&legacyPayload); err != nil {
+		t.Fatal(err)
+	}
+	wantLegacy := `{"name":"powercontext-review","description":"Use for reviewed changes.","instructions":"Keep legacy skill JSON unchanged.","validation":["tests pass"]}`
+	if string(legacyPayload) != wantLegacy {
+		t.Fatalf("legacy Skill proposal JSON changed: %s", legacyPayload)
+	}
+}
+
+func TestPackageSkillProposalRollsBackPackageWhenCandidateWriteFails(t *testing.T) {
+	fixedID := func(kind string) (string, error) { return kind + "-package", nil }
+	fixture := newReviewFixture(t, "package-rollback", fixedID)
+	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+	snapshot := skillPackageSnapshot(t, "package-rollback-skill")
+	proposal, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, triggerErr := fixture.database.SQLDB().ExecContext(fixture.ctx, `CREATE TRIGGER pc_test_fail_package_candidate
+        BEFORE INSERT ON pc_artifact_candidate_heads
+		BEGIN SELECT RAISE(ABORT, 'injected package Candidate failure'); END`); triggerErr != nil {
+		t.Fatal(triggerErr)
+	}
+
+	_, err = fixture.service.ProposePackageSkill(fixture.ctx, proposal, []source.Ref{evidence}, nil, nil, nil)
+	if err == nil {
+		t.Fatal("package proposal unexpectedly survived Candidate failure")
+	}
+	assertPackageReviewRow(t, fixture, snapshot, 0)
+}
+
+func TestPackageSkillRevisionPersistsExactReferenceAndRollsBackOnCandidateFailure(t *testing.T) {
+	fixture := newReviewFixture(t, "package-revision", (&sequenceIDs{}).New)
+	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+	initialSnapshot := skillPackageSnapshot(t, "package-revision-initial")
+	initialContent, err := skill.NewPackageContent(initialSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, initialContent, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialApproval, err := fixture.service.Approve(fixture.ctx, initial.ID(), initial.Version())
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialRef := initialApproval.ResultArtifact()
+	if initialRef == nil {
+		t.Fatal("initial package Skill has no Artifact")
+	}
+
+	revisedSnapshot := skillPackageSnapshot(t, "package-revision-revised")
+	revisedContent, err := skill.NewPackageContent(revisedSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, revisedContent, []source.Ref{evidence}, []artifact.Ref{*initialRef}, initialRef, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacementApproval, err := fixture.service.Approve(fixture.ctx, replacement.ID(), replacement.Version())
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisedRef := replacementApproval.ResultArtifact()
+	if revisedRef == nil || revisedRef.ID() != initialRef.ID() || revisedRef.Revision() != 2 {
+		t.Fatalf("revised package Artifact = %#v, want revision 2 of %#v", revisedRef, initialRef)
+	}
+	stored, err := fixture.service.GetPackageSkill(fixture.ctx, *revisedRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Content().Reference() != revisedSnapshot.Reference() {
+		t.Fatalf("revised package reference = %#v, want %#v", stored.Content().Reference(), revisedSnapshot.Reference())
+	}
+	if lineage := stored.Lineage(); len(lineage.Sources()) != 1 || lineage.Sources()[0] != evidence ||
+		len(lineage.Artifacts()) != 1 || lineage.Artifacts()[0] != *initialRef {
+		t.Fatalf("revised package lineage = %#v", lineage)
+	}
+	assertPackageArtifactPayload(t, fixture, *revisedRef, revisedSnapshot)
+
+	rollbackSnapshot := skillPackageSnapshot(t, "package-revision-rollback")
+	rollbackContent, err := skill.NewPackageContent(rollbackSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, initialContent, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, triggerErr := fixture.database.SQLDB().ExecContext(fixture.ctx, `CREATE TRIGGER pc_test_fail_package_revision
+        BEFORE UPDATE OF version ON pc_artifact_candidate_heads
+		BEGIN SELECT RAISE(ABORT, 'injected package Candidate revision failure'); END`); triggerErr != nil {
+		t.Fatal(triggerErr)
+	}
+	_, err = fixture.service.Revise(
+		fixture.ctx, pending.ID(), pending.Version(), rollbackContent, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err == nil {
+		t.Fatal("package revision unexpectedly survived Candidate failure")
+	}
+	assertPackageReviewRow(t, fixture, rollbackSnapshot, 0)
+	assertPendingCandidate(t, fixture.service, pending.ID())
+}
+
+func TestPackageSkillCandidateRevisionRejectsCrossVariant(t *testing.T) {
+	fixture := newReviewFixture(t, "package-cross-variant", (&sequenceIDs{}).New)
+	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+	snapshot := skillPackageSnapshot(t, "package-cross-variant-skill")
+	packageContent, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, packageContent, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := reviewSkill(t, "Do not cross Skill content variants.")
+	_, err = fixture.service.Revise(
+		fixture.ctx, candidate.ID(), candidate.Version(), legacy, []source.Ref{evidence}, nil, nil, nil,
+	)
+	assertReviewInvalidField(t, err, "family")
+	current, err := fixture.service.Get(fixture.ctx, candidate.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Version() != candidate.Version() {
+		t.Fatalf("cross-variant Candidate changed to version %d", current.Version())
+	}
+}
+
+func TestPackageSkillApprovalRollsBackArtifactAndCandidateForEveryWriteFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		triggerSQL string
+	}{
+		{
+			name: "artifact insert",
+			triggerSQL: `CREATE TRIGGER pc_test_fail_package_artifact
+                BEFORE INSERT ON pc_artifacts
+                BEGIN SELECT RAISE(ABORT, 'injected package Artifact failure'); END`,
+		},
+		{
+			name: "source lineage insert",
+			triggerSQL: `CREATE TRIGGER pc_test_fail_package_lineage
+                BEFORE INSERT ON pc_artifact_lineage_sources
+                BEGIN SELECT RAISE(ABORT, 'injected package lineage failure'); END`,
+		},
+		{
+			name: "candidate terminal update",
+			triggerSQL: `CREATE TRIGGER pc_test_fail_package_terminal
+                BEFORE UPDATE OF status ON pc_artifact_candidate_heads
+                WHEN NEW.status = 'approved'
+                BEGIN SELECT RAISE(ABORT, 'injected package terminal failure'); END`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newReviewFixture(t, "package-approval-rollback", (&sequenceIDs{}).New)
+			evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+			snapshot := skillPackageSnapshot(t, "package-approval-rollback-skill")
+			proposal, err := skill.NewPackageContent(snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			candidate, err := fixture.service.ProposePackageSkill(
+				fixture.ctx, proposal, []source.Ref{evidence}, nil, nil, nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, test.triggerSQL); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := fixture.service.Approve(fixture.ctx, candidate.ID(), candidate.Version()); err == nil {
+				t.Fatal("package approval unexpectedly survived injected write failure")
+			}
+			assertPendingCandidate(t, fixture.service, candidate.ID())
+			assertArtifactCount(t, fixture.database, fixture.scope, skill.Family, 0)
+			assertPackageReviewRow(t, fixture, snapshot, 1)
+		})
+	}
+}
+
+func TestPackageSkillApprovalRejectsCorruptCanonicalArchiveBeforeArtifactWrite(t *testing.T) {
+	fixture := newReviewFixture(t, "package-approval-corrupt", (&sequenceIDs{}).New)
+	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+	snapshot := skillPackageSnapshot(t, "package-approval-corrupt-skill")
+	proposal, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, proposal, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, corruptErr := fixture.database.SQLDB().ExecContext(fixture.ctx, `UPDATE pc_skill_packages SET archive = ?
+        WHERE scope_id = ? AND tree_digest = ?`, []byte("approval-corrupt-package-secret"), fixture.scope, snapshot.Reference().TreeDigest()); corruptErr != nil {
+		t.Fatal(corruptErr)
+	}
+
+	_, err = fixture.service.Approve(fixture.ctx, candidate.ID(), candidate.Version())
+	assertPackageReadFailureRedacted(t, err, fixture, snapshot, "approval-corrupt-package-secret")
+	assertPendingCandidateHead(t, fixture.database, fixture.scope, candidate.ID())
+	assertArtifactCount(t, fixture.database, fixture.scope, skill.Family, 0)
+}
+
+func TestPackageSkillArtifactReadRevalidatesCanonicalArchive(t *testing.T) {
+	fixture := newReviewFixture(t, "package-artifact-corrupt", (&sequenceIDs{}).New)
+	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+	snapshot := skillPackageSnapshot(t, "package-artifact-corrupt-skill")
+	proposal, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := fixture.service.ProposePackageSkill(
+		fixture.ctx, proposal, []source.Ref{evidence}, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := fixture.service.Approve(fixture.ctx, candidate.ID(), candidate.Version())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := approved.ResultArtifact()
+	if ref == nil {
+		t.Fatal("approved package Skill has no Artifact")
+	}
+	if _, corruptErr := fixture.database.SQLDB().ExecContext(fixture.ctx, `UPDATE pc_skill_packages SET archive = ?
+        WHERE scope_id = ? AND tree_digest = ?`, []byte("artifact-read-corrupt-package-secret"), fixture.scope, snapshot.Reference().TreeDigest()); corruptErr != nil {
+		t.Fatal(corruptErr)
+	}
+
+	_, err = fixture.service.GetPackageSkill(fixture.ctx, *ref)
+	assertPackageReadFailureRedacted(t, err, fixture, snapshot, "artifact-read-corrupt-package-secret")
+}
+
+func TestPackageSkillReadRejectsMissingOrCorruptCanonicalPackageWithoutLeakingIdentity(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*testing.T, reviewFixture, skill.PackageSnapshot, string)
+	}{
+		{
+			name: "scope mismatch",
+			mutate: func(t *testing.T, fixture reviewFixture, snapshot skill.PackageSnapshot, candidateID string) {
+				t.Helper()
+				var proposal, sourceRefs, artifactRefs []byte
+				if err := fixture.database.SQLDB().QueryRowContext(fixture.ctx, `SELECT proposal, source_refs, artifact_refs
+                    FROM pc_artifact_candidate_versions WHERE scope_id = ? AND candidate_id = ?`, fixture.scope, candidateID).Scan(
+					&proposal, &sourceRefs, &artifactRefs,
+				); err != nil {
+					t.Fatal(err)
+				}
+				const otherScope = "package-other-scope-secret"
+				if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, `INSERT INTO pc_artifact_candidate_versions
+                    (scope_id, candidate_id, version, family, proposal, source_refs, artifact_refs, reason)
+                    VALUES (?, ?, 1, ?, ?, ?, ?, NULL)`, otherScope, "package-mismatched-candidate", skill.Family,
+					proposal, sourceRefs, artifactRefs,
+				); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, `INSERT INTO pc_artifact_candidate_heads
+                    (scope_id, candidate_id, family, version, status)
+                    VALUES (?, ?, ?, 1, 'pending')`, otherScope, "package-mismatched-candidate", skill.Family); err != nil {
+					t.Fatal(err)
+				}
+				candidateRepository := reviewCandidateRepository(t)
+				err := fixture.database.Transaction(fixture.ctx, func(tx sqlstore.DBTX) error {
+					_, getErr := candidateRepository.Get(fixture.ctx, tx, otherScope, "package-mismatched-candidate")
+					return getErr
+				})
+				assertPackageReadFailureRedacted(t, err, fixture, snapshot, otherScope)
+			},
+		},
+		{
+			name: "corrupt archive",
+			mutate: func(t *testing.T, fixture reviewFixture, snapshot skill.PackageSnapshot, candidateID string) {
+				t.Helper()
+				if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, `UPDATE pc_skill_packages SET archive = ?
+                    WHERE scope_id = ? AND tree_digest = ?`, []byte("stored-package-secret"), fixture.scope, snapshot.Reference().TreeDigest()); err != nil {
+					t.Fatal(err)
+				}
+				_, err := fixture.service.Get(fixture.ctx, candidateID)
+				assertPackageReadFailureRedacted(t, err, fixture, snapshot, "stored-package-secret")
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newReviewFixture(t, "package-read-secret", (&sequenceIDs{}).New)
+			evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")
+			snapshot := skillPackageSnapshot(t, "package-read-skill")
+			proposal, err := skill.NewPackageContent(snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			candidate, err := fixture.service.ProposePackageSkill(
+				fixture.ctx, proposal, []source.Ref{evidence}, nil, nil, nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(t, fixture, snapshot, candidate.ID())
+		})
+	}
+}
+
+func assertPackageReadFailureRedacted(
+	t *testing.T,
+	err error,
+	fixture reviewFixture,
+	snapshot skill.PackageSnapshot,
+	extraSecret string,
+) {
+	t.Helper()
+	if _, invalid := errors.AsType[*sqlstore.InvalidStoredPayloadError](err); !invalid {
+		t.Fatalf("package read error = %T %v, want InvalidStoredPayloadError", err, err)
+	}
+	for _, secret := range []string{fixture.scope, snapshot.Metadata().Name(), snapshot.Reference().TreeDigest(), snapshot.Reference().ArchiveDigest(), extraSecret} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("package read error leaked %q: %v", secret, err)
+		}
+	}
+}
+
+func assertPendingCandidateHead(t *testing.T, database *sqlstore.Database, scopeID, candidateID string) {
+	t.Helper()
+	var status string
+	if err := database.SQLDB().QueryRowContext(t.Context(), `SELECT status
+        FROM pc_artifact_candidate_heads WHERE scope_id = ? AND candidate_id = ?`, scopeID, candidateID).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != string(review.Pending) {
+		t.Fatalf("Candidate head status = %q, want pending", status)
+	}
+}
+
+func assertPackageReviewPayload(t *testing.T, fixture reviewFixture, candidateID, column string, snapshot skill.PackageSnapshot) {
+	t.Helper()
+	var payload []byte
+	query := fmt.Sprintf(`SELECT %s FROM pc_artifact_candidate_versions WHERE scope_id = ? AND candidate_id = ?`, column)
+	if err := fixture.database.SQLDB().QueryRowContext(fixture.ctx, query, fixture.scope, candidateID).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	assertPackageReferencePayload(t, payload, snapshot)
+}
+
+func assertPackageArtifactPayload(t *testing.T, fixture reviewFixture, ref artifact.Ref, snapshot skill.PackageSnapshot) {
+	t.Helper()
+	var payload []byte
+	if err := fixture.database.SQLDB().QueryRowContext(fixture.ctx, `SELECT content FROM pc_artifacts
+        WHERE scope_id = ? AND family = ? AND artifact_id = ? AND revision = ?`,
+		fixture.scope, ref.Family(), ref.ID(), ref.Revision()).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	assertPackageReferencePayload(t, payload, snapshot)
+}
+
+func assertPackageReferencePayload(t *testing.T, payload []byte, snapshot skill.PackageSnapshot) {
+	t.Helper()
+	ref := snapshot.Reference()
+	want := fmt.Sprintf(`{"package_ref":{"tree_digest":"%s","archive_digest":"%s","file_count":%d,"uncompressed_size":%d,"archive_size":%d}}`,
+		ref.TreeDigest(), ref.ArchiveDigest(), ref.FileCount(), ref.UncompressedSize(), ref.ArchiveSize())
+	if string(payload) != want {
+		t.Fatalf("package reference payload = %s, want %s", payload, want)
+	}
+	for _, forbidden := range [][]byte{snapshot.Archive(), snapshot.Manifest(), []byte(snapshot.Instructions())} {
+		if bytes.Contains(payload, forbidden) {
+			t.Fatalf("package reference payload duplicated package bytes: %q", payload)
+		}
+	}
+}
+
+func assertPackageReviewRow(t *testing.T, fixture reviewFixture, snapshot skill.PackageSnapshot, want int) {
+	t.Helper()
+	var count int
+	if err := fixture.database.SQLDB().QueryRowContext(fixture.ctx, `SELECT COUNT(*) FROM pc_skill_packages
+        WHERE scope_id = ? AND tree_digest = ?`, fixture.scope, snapshot.Reference().TreeDigest()).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != want {
+		t.Fatalf("stored package rows = %d, want %d", count, want)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,7 +265,7 @@ func TestSkillPackageRepositoryPreservesNonConstraintDatabaseError(t *testing.T)
 	}
 }
 
-func TestLegacyArtifactCodecRejectsPackageContentBeforeWrite(t *testing.T) {
+func TestSkillArtifactCodecPersistsPackageReferenceWithoutPackageBytes(t *testing.T) {
 	database := openTestDatabase(t)
 	snapshot := skillPackageSnapshot(t, "v2-package-skill")
 	packageContent, err := skill.NewPackageContent(snapshot)
@@ -275,23 +276,88 @@ func TestLegacyArtifactCodecRejectsPackageContentBeforeWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy, err := sqlstore.NewArtifactRepository(sqlstore.SQLiteDialect, sqlstore.SkillArtifactCodec())
+	repository, err := sqlstore.NewArtifactRepository(sqlstore.SQLiteDialect, sqlstore.SkillArtifactCodec())
 	if err != nil {
 		t.Fatal(err)
 	}
+	packageRepository := sqlstore.SkillPackageRepository{}
+	const scopeID = "scope-package-codec"
+	var stored artifact.Snapshot
 	err = database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
-		_, createErr := legacy.Create(t.Context(), tx, "scope-package-codec", "legacy-artifact", packageDraft)
+		if _, addErr := packageRepository.Add(t.Context(), tx, scopeID, snapshot); addErr != nil {
+			return addErr
+		}
+		var createErr error
+		stored, createErr = repository.Create(t.Context(), tx, scopeID, "package-artifact", packageDraft)
 		return createErr
 	})
-	if _, ok := errors.AsType[*artifact.FamilyMismatchError](err); !ok {
-		t.Fatalf("legacy codec package write = %T %v", err, err)
-	}
-	var artifactRows int
-	if err := database.SQLDB().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_artifacts").Scan(&artifactRows); err != nil {
+	if err != nil {
 		t.Fatal(err)
 	}
-	if artifactRows != 0 {
-		t.Fatalf("package-backed value wrote %d legacy artifact rows", artifactRows)
+	packageArtifact, ok := stored.(skill.PackageSkill)
+	if !ok || packageArtifact.Content().Reference() != snapshot.Reference() {
+		t.Fatalf("stored package Artifact = %#v", stored)
+	}
+	var payload []byte
+	if err := database.SQLDB().QueryRowContext(t.Context(), `SELECT content FROM pc_artifacts
+        WHERE scope_id = ? AND family = ? AND artifact_id = ?`, scopeID, skill.Family, "package-artifact").Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	ref := snapshot.Reference()
+	want := fmt.Sprintf(`{"package_ref":{"tree_digest":"%s","archive_digest":"%s","file_count":%d,"uncompressed_size":%d,"archive_size":%d}}`,
+		ref.TreeDigest(), ref.ArchiveDigest(), ref.FileCount(), ref.UncompressedSize(), ref.ArchiveSize())
+	if string(payload) != want || bytes.Contains(payload, snapshot.Archive()) || bytes.Contains(payload, snapshot.Manifest()) ||
+		bytes.Contains(payload, []byte(snapshot.Instructions())) {
+		t.Fatalf("package Artifact payload = %q, want reference-only %q", payload, want)
+	}
+}
+
+func TestSkillArtifactCodecRejectsCrossVariantRevision(t *testing.T) {
+	database := openTestDatabase(t)
+	repository, err := sqlstore.NewArtifactRepository(sqlstore.SQLiteDialect, sqlstore.SkillArtifactCodec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyContent, err := skill.NewContent("legacy-skill", "Preserve legacy Skill.", "Keep legacy behavior.", []string{"tests pass"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDraft, err := skill.NewDraft(legacyContent, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := skillPackageSnapshot(t, "cross-variant-skill")
+	packageContent, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packageDraft, err := skill.NewPackageDraft(packageContent, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const scopeID = "scope-cross-variant"
+	var created artifact.Snapshot
+	if createErr := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		var artifactCreateErr error
+		created, artifactCreateErr = repository.Create(t.Context(), tx, scopeID, "skill-artifact", legacyDraft)
+		return artifactCreateErr
+	}); createErr != nil {
+		t.Fatal(createErr)
+	}
+	err = database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		_, reviseErr := repository.Revise(t.Context(), tx, scopeID, created, packageDraft)
+		return reviseErr
+	})
+	if _, mismatch := errors.AsType[*artifact.FamilyMismatchError](err); !mismatch {
+		t.Fatalf("cross-variant revision error = %T %v, want FamilyMismatchError", err, err)
+	}
+	var revisions int
+	if err := database.SQLDB().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM pc_artifacts
+        WHERE scope_id = ? AND family = ? AND artifact_id = ?`, scopeID, skill.Family, "skill-artifact").Scan(&revisions); err != nil {
+		t.Fatal(err)
+	}
+	if revisions != 1 {
+		t.Fatalf("cross-variant revision wrote %d rows", revisions)
 	}
 }
 
