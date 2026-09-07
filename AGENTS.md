@@ -585,3 +585,8 @@ source / artifact / trigger / inference
   values with an existing typed redacted error before invoking the native
   boundary. Verify every public lifecycle command fails closed without a
   panic.
+- When a personal-service adapter verifies manager ownership before a mutable
+  operation, derive its fixed artifact path from a composition-provided user
+  root, reject global load roots, and fail closed on missing or nonempty
+  `DropInPaths`. Verify global paths, drop-ins, space-containing command
+  arguments, and zero-value public operations cannot reach a native boundary.
