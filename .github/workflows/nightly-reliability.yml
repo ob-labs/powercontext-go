@@ -141,7 +141,11 @@ jobs:
             jq -r '.[0:200][] | "| `\(.package)` | `\(.test)` | \(.passes) | \(.failures) |"' "$statistics"
           } > "$SUMMARY"
           cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
-          tail -c 1048576 "$RESULTS" > "$BOUNDED_RESULTS"
+          tail -c 1048576 "$RESULTS" | sed \
+            -e "s|$RUNNER_TEMP|[runner-temp]|g" \
+            -e "s|$GITHUB_WORKSPACE|[workspace]|g" \
+            -e "s|$HOME|[home]|g" \
+            > "$BOUNDED_RESULTS"
           exit "$test_status"
 
       - name: Upload bounded stability summary

@@ -111,6 +111,7 @@ func checkNightlyReliabilityWorkflow(payload []byte) error {
 		"fuzzing-status:", "needs: [fuzz]", "if: always()", "test \"$FUZZ_RESULT\" = success",
 		"go test -json -race -shuffle=on -count=25", "./internal/runtime ./internal/sqlstore ./source ./server",
 		"test_status=\"${PIPESTATUS[0]}\"", "GITHUB_STEP_SUMMARY", "tail -c 1048576",
+		`s|$RUNNER_TEMP|[runner-temp]|g`, `s|$GITHUB_WORKSPACE|[workspace]|g`, `s|$HOME|[home]|g`,
 		"- name: Upload bounded stability summary\n        if: always()",
 		"- name: Upload bounded failing test output\n        if: failure()", "retention-days: 14",
 	})
