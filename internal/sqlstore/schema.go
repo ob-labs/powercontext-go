@@ -377,9 +377,13 @@ var sqliteBuiltinSchemaTables = []string{
 	"pc_recall_token_daily",
 }
 
-// EnsureBuiltinSchema creates only absent Python-compatible core tables.
+// EnsureBuiltinSchema creates absent Python-compatible core tables and the
+// SQLite-only Go product tables that share its local initialization path.
 func EnsureBuiltinSchema(ctx context.Context, db DBTX) error {
-	return EnsureBuiltinSchemaForDialect(ctx, db, SQLiteDialect)
+	if err := EnsureBuiltinSchemaForDialect(ctx, db, SQLiteDialect); err != nil {
+		return err
+	}
+	return EnsureSQLiteSkillPackageSchema(ctx, db)
 }
 
 // EnsureBuiltinSchemaForDialect creates the same logical SQLAlchemy schema
