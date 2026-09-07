@@ -281,6 +281,15 @@ func mapDomainError(err error) ErrorMapping {
 		return mapping(http.StatusNotFound, "memory_not_found", "The requested Memory value was not found.", nil)
 	}
 	var sourceConflict *source.ConflictError
+	if _, ok := errors.AsType[*source.ResourceNotFoundError](err); ok {
+		return mapping(http.StatusNotFound, "source_not_found", "The requested Source was not found.", nil)
+	}
+	if _, ok := errors.AsType[*source.ResourceConflictError](err); ok {
+		return mapping(http.StatusConflict, "idempotency_conflict", "The stable identity already names different durable state.", map[string]any{"kind": "source"})
+	}
+	if _, ok := errors.AsType[*source.InvalidContentResourceError](err); ok {
+		return invalidRequest()
+	}
 	if errors.As(err, &sourceConflict) {
 		return mapping(http.StatusConflict, "source_conflict", "The Source identity has different content.", nil)
 	}

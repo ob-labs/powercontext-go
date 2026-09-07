@@ -34,6 +34,21 @@ Invoker, and does not register HTTP routes or MCP tools. Its generated package
 is a compile-time contract for a later Server and SQLite Scope-read slice, not
 evidence that those endpoints are mounted.
 
+`canonical/sources-manifest.json` independently projects `create_source` and
+`get_source` from that same pinned upstream blob into `canonical/sources.json`
+and `api/canonical/sources`. Server composition dispatches only the exact generated
+method/path matches through the existing authentication, request-body, tracing,
+and error middleware. Source resource creation allocates a server-owned identity;
+the legacy capture API retains its caller-owned identity and text semantics.
+
+Source resource content preserves JSON types, including explicit null and empty
+strings. Digests use RFC 8785 without Unicode normalization. The stored wire value
+also preserves integer versus floating-point tokens: a valid float such as
+`9007199254740992.0` must not become an out-of-domain integer after restart.
+Unknown Scope admission remains a redacted HTTP 404. The pinned `create_source`
+schema does not declare that status, so its generated client reports an unexpected
+status for this case; this is an explicit upstream typed-client coverage gap.
+
 `mcp_generated_openapi_operations` enumerates only the fixed curated legacy
 OpenAPI-dispatch tools. Native conditional tools such as the Handoff picker and
 Scope Binding tools are registered and tested separately. A staged Scope

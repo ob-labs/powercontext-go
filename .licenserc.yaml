@@ -60,6 +60,7 @@ header:
     # ignoring every generated-looking Go file in the repository.
     - 'api/v1/**'
     - 'api/canonical/scopes/**'
+    - 'api/canonical/sources/**'
     - 'client/invoker_gen.go'
     - 'internal/mcpapi/schemas_gen.go'
 

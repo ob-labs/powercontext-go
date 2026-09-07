@@ -105,11 +105,13 @@ func ContentSourceCodec() SourceCodec {
 }
 
 type contentSourceJSON struct {
-	Name            string                 `json:"name"`
-	Materialization source.Materialization `json:"materialization"`
-	Description     *string                `json:"description"`
-	Content         string                 `json:"content"`
-	Metadata        map[string]any         `json:"metadata"`
+	Name               string                 `json:"name"`
+	Materialization    source.Materialization `json:"materialization"`
+	Description        *string                `json:"description"`
+	Content            string                 `json:"content"`
+	Metadata           map[string]any         `json:"metadata"`
+	WireContent        json.RawMessage        `json:"wire_content,omitempty"`
+	WireContentPresent bool                   `json:"wire_content_present,omitempty"`
 }
 
 func encodeContentSource(value source.ContentSource) ([]byte, error) {
@@ -119,11 +121,13 @@ func encodeContentSource(value source.ContentSource) ([]byte, error) {
 		optional = &description
 	}
 	return marshalJSON(contentSourceJSON{
-		Name:            value.SourceName(),
-		Materialization: value.SourceMaterialization(),
-		Description:     optional,
-		Content:         value.Content(),
-		Metadata:        value.Metadata(),
+		Name:               value.SourceName(),
+		Materialization:    value.SourceMaterialization(),
+		Description:        optional,
+		Content:            value.Content(),
+		Metadata:           value.Metadata(),
+		WireContent:        value.WireContentJSON(),
+		WireContentPresent: value.HasJSONContent(),
 	})
 }
 
@@ -168,7 +172,31 @@ func decodeContentSource(payload []byte) (source.ContentSource, error) {
 			return source.ContentSource{}, err
 		}
 	}
-	return source.RestoreContentSource(name, materialization, description, content, metadata)
+	restored, err := source.RestoreContentSource(name, materialization, description, content, metadata)
+	if err != nil {
+		return source.ContentSource{}, err
+	}
+	var wirePresent bool
+	if raw, exists := fields["wire_content_present"]; exists {
+		if err := unmarshalJSON(raw, &wirePresent); err != nil {
+			return source.ContentSource{}, err
+		}
+	}
+	wire, exists := fields["wire_content"]
+	if wirePresent || exists && string(wire) != "null" {
+		if !exists {
+			return source.ContentSource{}, &source.InvalidContentResourceError{}
+		}
+		resource, resourceErr := restored.WithJSONContent(wire)
+		if resourceErr != nil {
+			return source.ContentSource{}, resourceErr
+		}
+		if resource.Content() != content {
+			return source.ContentSource{}, &source.InvalidContentResourceError{}
+		}
+		return resource, nil
+	}
+	return restored, nil
 }
 
 func encodeSourceObservation(value source.SourceObservation) ([]byte, error) {

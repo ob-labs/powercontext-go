@@ -46,6 +46,7 @@ type Application struct {
 	review            *pcruntime.ReviewApplication
 	externalSkills    *pcruntime.ExternalSkillApplication
 	scopes            *pcruntime.ScopeApplication
+	sources           *pcruntime.SourceApplication
 	agentSkillTargets []skill.AgentSkillTarget
 
 	readinessMu   sync.Mutex
@@ -92,6 +93,7 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 		config: config, runtime: foundation.lifecycle, capabilities: capabilities,
 		readiness: readiness, metrics: foundation.metrics, tracing: foundation.tracing, logger: dependencies.Logger,
 		review: services.review, externalSkills: services.externalSkills, scopes: services.scopes,
+		sources:           services.sources,
 		agentSkillTargets: foundation.assembled.agentSkillTargets,
 	}
 	application.endpoint = endpoint.NewHandler(endpoint.HandlerOptions{
@@ -135,10 +137,11 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 	return NewHTTPHandler(a.endpoint, HTTPOptions{
 		BearerToken: token, HandoffReportRoutes: a.config.HandoffReport.Enabled,
 		metrics: a.metrics, TracerProvider: a.tracing, Logger: a.logger, AccessLog: a.config.Logging.Access,
-		MCP:             MCPOptions{Enabled: a.config.MCP.Enabled, Path: a.config.MCP.Path},
-		webUI:           webOptions,
-		scopeBindings:   a.scopes,
-		canonicalScopes: endpoint.NewCanonicalScopeHandler(a.scopes),
+		MCP:              MCPOptions{Enabled: a.config.MCP.Enabled, Path: a.config.MCP.Path},
+		webUI:            webOptions,
+		scopeBindings:    a.scopes,
+		canonicalScopes:  endpoint.NewCanonicalScopeHandler(a.scopes),
+		canonicalSources: endpoint.NewCanonicalSourceHandler(a.sources),
 	})
 }
 

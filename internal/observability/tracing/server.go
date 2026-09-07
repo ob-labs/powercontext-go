@@ -293,6 +293,19 @@ type outcomeSpan struct {
 	done   atomic.Bool
 }
 
+// RecordError prevents generated transports from exporting raw validation or
+// storage diagnostics while retaining exception events and caller options.
+func (s *outcomeSpan) RecordError(err error, options ...trace.EventOption) {
+	if err == nil {
+		return
+	}
+	s.Span.RecordError(recordedOperationError{}, options...)
+}
+
+type recordedOperationError struct{}
+
+func (recordedOperationError) Error() string { return "PowerContext operation failed." }
+
 func (s *outcomeSpan) SetStatus(code codes.Code, description string) {
 	if code == codes.Error {
 		s.failed.Store(true)

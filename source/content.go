@@ -57,6 +57,7 @@ type ContentSource struct {
 	description     *string
 	content         string
 	metadata        map[string]any
+	wireContent     []byte
 }
 
 func (s ContentSource) SourceName() string { return s.name }
