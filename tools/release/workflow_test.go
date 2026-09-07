@@ -30,6 +30,106 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+func TestScorecardWorkflowContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "scorecard.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkScorecardWorkflow(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNightlyReliabilityWorkflowContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "nightly-reliability.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkNightlyReliabilityWorkflow(payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSupplyChainWorkflowsRejectContractMutants(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	tests := []struct {
+		name        string
+		workflow    string
+		old         string
+		replacement string
+		check       func([]byte) error
+	}{
+		{name: "Scorecard token permission", workflow: "scorecard.yml", old: "      id-token: write\n", check: checkScorecardWorkflow},
+		{name: "Scorecard immutable action", workflow: "scorecard.yml", old: "ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc", replacement: "ossf/scorecard-action@v2.4.4", check: checkScorecardWorkflow},
+		{name: "Scorecard SARIF upload", workflow: "scorecard.yml", old: "github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938", replacement: "github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938", check: checkScorecardWorkflow},
+		{name: "Scorecard result publication", workflow: "scorecard.yml", old: "publish_results: true", replacement: "publish_results: false", check: checkScorecardWorkflow},
+		{name: "nightly fuzz inventory", workflow: "nightly-reliability.yml", old: "          - package: ./internal/httpapi\n            target: FuzzValidJSONUnicodeNeverPanics\n", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly fuzz duration", workflow: "nightly-reliability.yml", old: "-fuzztime=4m", replacement: "-fuzztime=3s", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly non-fail-fast matrix", workflow: "nightly-reliability.yml", old: "fail-fast: false", replacement: "fail-fast: true", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly race detector", workflow: "nightly-reliability.yml", old: "go test -json -race -shuffle=on -count=25", replacement: "go test -json -shuffle=on -count=25", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly repetition count", workflow: "nightly-reliability.yml", old: "go test -json -race -shuffle=on -count=25", replacement: "go test -json -race -shuffle=on", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly pipeline status", workflow: "nightly-reliability.yml", old: "test_status=\"${PIPESTATUS[0]}\"", replacement: "test_status=\"$?\"", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly bounded output", workflow: "nightly-reliability.yml", old: "tail -c 1048576", replacement: "cp", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly failure-only output", workflow: "nightly-reliability.yml", old: "- name: Upload bounded failing test output\n        if: failure()", replacement: "- name: Upload bounded failing test output\n        if: always()", check: checkNightlyReliabilityWorkflow},
+		{name: "nightly aggregate cancellation", workflow: "nightly-reliability.yml", old: "test \"$FUZZ_RESULT\" = success", replacement: "test \"$FUZZ_RESULT\" != failure", check: checkNightlyReliabilityWorkflow},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", test.workflow))
+			if err != nil {
+				t.Fatal(err)
+			}
+			mutant := strings.Replace(string(payload), test.old, test.replacement, 1)
+			if mutant == string(payload) {
+				t.Fatalf("mutant did not change %s", test.workflow)
+			}
+			if err := test.check([]byte(mutant)); err == nil {
+				t.Fatalf("contract accepted %s mutant", test.name)
+			}
+		})
+	}
+}
+
+func checkScorecardWorkflow(payload []byte) error {
+	return checkWorkflowPhrases(payload, "scorecard.yml", []string{
+		"name: Scorecard supply-chain security", "branch_protection_rule:", "branches: [main]", "schedule:", "workflow_dispatch:",
+		"permissions: {}", "timeout-minutes: 15", "contents: read", "security-events: write", "id-token: write",
+		"ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc", "results_file: results.sarif",
+		"results_format: sarif", "publish_results: true", "retention-days: 5",
+		"github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938", "sarif_file: results.sarif",
+	})
+}
+
+func checkNightlyReliabilityWorkflow(payload []byte) error {
+	return checkWorkflowPhrases(payload, "nightly-reliability.yml", []string{
+		"name: Nightly reliability", "schedule:", "workflow_dispatch:", "contents: read", "fail-fast: false",
+		"FuzzMarshalCanonicalJSONIsIdempotent", "FuzzRestrictedPickleJobDecoder", "FuzzAgentSkillFrontmatterParser",
+		"FuzzTruncateUTF8PreservesRuneBoundariesAndBudget", "FuzzValidJSONUnicodeNeverPanics", "-fuzztime=4m",
+		"- name: Upload failing fuzz corpus\n        if: failure()", "if-no-files-found: warn",
+		"fuzzing-status:", "needs: [fuzz]", "if: always()", "test \"$FUZZ_RESULT\" = success",
+		"go test -json -race -shuffle=on -count=25", "./internal/runtime ./internal/sqlstore ./source ./server",
+		"test_status=\"${PIPESTATUS[0]}\"", "GITHUB_STEP_SUMMARY", "tail -c 1048576",
+		"- name: Upload bounded stability summary\n        if: always()",
+		"- name: Upload bounded failing test output\n        if: failure()", "retention-days: 14",
+	})
+}
+
+func checkWorkflowPhrases(payload []byte, name string, required []string) error {
+	var document any
+	if err := yaml.Unmarshal(payload, &document); err != nil {
+		return fmt.Errorf("%s is invalid YAML: %w", name, err)
+	}
+	contents := string(payload)
+	for _, phrase := range required {
+		if !strings.Contains(contents, phrase) {
+			return fmt.Errorf("%s is missing %q", name, phrase)
+		}
+	}
+	return nil
+}
+
 func TestGoPrimaryMonorepoLinguistPolicy(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	payload, err := os.ReadFile(filepath.Join(repository, ".gitattributes"))
@@ -82,10 +182,12 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"release.yml":         true,
 	}
 	goAssurance := map[string]bool{
-		"codeql.yml":           true,
-		"migration-gates.yml":  true,
-		"provider-smoke.yml":   true,
-		"windows-contract.yml": true,
+		"codeql.yml":              true,
+		"migration-gates.yml":     true,
+		"nightly-reliability.yml": true,
+		"provider-smoke.yml":      true,
+		"scorecard.yml":           true,
+		"windows-contract.yml":    true,
 	}
 	paths, err := filepath.Glob(filepath.Join(workflows, "*.yml"))
 	if err != nil {
@@ -130,6 +232,14 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 		"provider-smoke.yml": {
 			"name: Provider smoke", "workflow_dispatch:", "environment: provider-smoke",
 			"TestRealProviderSmoke", "timeout-minutes: 10",
+		},
+		"scorecard.yml": {
+			"name: Scorecard supply-chain security", "branch_protection_rule:", "schedule:", "workflow_dispatch:",
+			"ossf/scorecard-action@", "github/codeql-action/upload-sarif@",
+		},
+		"nightly-reliability.yml": {
+			"name: Nightly reliability", "schedule:", "workflow_dispatch:", "Fuzzing", "-fuzztime=4m",
+			"go test -json -race -shuffle=on -count=25",
 		},
 		"windows-contract.yml": {
 			"name: Windows contract checkout", "runs-on: windows-2025", "timeout-minutes: 10",
