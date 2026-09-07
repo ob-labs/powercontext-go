@@ -15,20 +15,22 @@
 package sqlstore
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 
 	"github.com/ob-labs/powercontext-go/artifact"
 )
 
-// ArtifactCodec is an exact family/content route for one persisted Artifact
-// schema. It is immutable after construction.
+// ArtifactCodec is an exact family route with a finite set of persisted
+// content schemas. It is immutable after construction.
 type ArtifactCodec struct {
 	family        string
-	contentType   reflect.Type
+	contentTypes  map[reflect.Type]struct{}
 	encode        func(any) ([]byte, error)
 	decodeContent func([]byte) (any, error)
-	decode        func(artifact.Ref, artifact.Lineage, []byte) (artifact.Snapshot, error)
+	decodeScoped  func(context.Context, DBTX, string, []byte) (any, error)
+	decode        func(context.Context, DBTX, string, artifact.Ref, artifact.Lineage, []byte) (artifact.Snapshot, error)
 }
 
 // NewArtifactCodec constructs an exact concrete content codec.
@@ -48,8 +50,8 @@ func NewArtifactCodec[T any](
 		return ArtifactCodec{}, fmt.Errorf("sqlstore: Artifact codec functions must not be nil")
 	}
 	return ArtifactCodec{
-		family:      family,
-		contentType: contentType,
+		family:       family,
+		contentTypes: map[reflect.Type]struct{}{contentType: {}},
 		encode: func(value any) ([]byte, error) {
 			if reflect.TypeOf(value) != contentType {
 				return nil, fmt.Errorf("sqlstore: Artifact codec %q expected %s, got %T", family, contentType, value)
@@ -59,7 +61,10 @@ func NewArtifactCodec[T any](
 		decodeContent: func(payload []byte) (any, error) {
 			return decode(payload)
 		},
-		decode: func(ref artifact.Ref, lineage artifact.Lineage, payload []byte) (artifact.Snapshot, error) {
+		decodeScoped: func(_ context.Context, _ DBTX, _ string, payload []byte) (any, error) {
+			return decode(payload)
+		},
+		decode: func(_ context.Context, _ DBTX, _ string, ref artifact.Ref, lineage artifact.Lineage, payload []byte) (artifact.Snapshot, error) {
 			content, err := decode(payload)
 			if err != nil {
 				return nil, err
@@ -67,4 +72,9 @@ func NewArtifactCodec[T any](
 			return artifact.Restore(ref, content, lineage)
 		},
 	}, nil
+}
+
+func (c ArtifactCodec) supportsContent(value any) bool {
+	_, ok := c.contentTypes[reflect.TypeOf(value)]
+	return ok
 }

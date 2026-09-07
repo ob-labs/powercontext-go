@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 
 	"github.com/ob-labs/powercontext-go/artifact/skill"
@@ -204,20 +203,10 @@ func sameSkillPackageRecord(record skillPackageRecord, snapshot skill.PackageSna
 }
 
 func validateSkillPackageReference(ref skill.PackageRef) error {
-	if !validSkillPackageDigest(ref.TreeDigest()) || !validSkillPackageDigest(ref.ArchiveDigest()) ||
-		ref.FileCount() < 1 || ref.FileCount() > skill.MaxPackageFiles || ref.UncompressedSize() < 0 ||
-		ref.UncompressedSize() > skill.MaxPackageBytes || ref.ArchiveSize() < 1 || ref.ArchiveSize() > skill.MaxPackageArchiveBytes {
+	if err := ref.Validate(); err != nil {
 		return &InvalidRepositoryArgumentError{Field: "package_ref", Detail: "must be a canonical managed Skill package reference"}
 	}
 	return nil
-}
-
-func validSkillPackageDigest(value string) bool {
-	if len(value) != 64 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
 }
 
 func storedSkillPackageString(value any, column string) (string, error) {

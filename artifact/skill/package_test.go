@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -311,6 +312,58 @@ func TestPackageSnapshotOperationsRejectArchiveMismatch(t *testing.T) {
 			var packageErr *PackageError
 			if err := operation.run(); !errors.As(err, &packageErr) {
 				t.Fatalf("operation error = %T %v, want PackageError", err, err)
+			}
+		})
+	}
+}
+
+func TestPackageRefRestoresOnlyCanonicalIdentity(t *testing.T) {
+	snapshot, err := CapturePackageArchive(zipEntries(t, []zipEntry{{
+		name:    "SKILL.md",
+		content: []byte("---\nname: restore-ref\ndescription: Restore a canonical reference.\n---\n"),
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := snapshot.Reference()
+
+	restored, err := NewPackageRef(
+		want.TreeDigest(), want.ArchiveDigest(), want.FileCount(), want.UncompressedSize(), want.ArchiveSize(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored != want {
+		t.Fatalf("restored reference = %#v, want %#v", restored, want)
+	}
+
+	for _, test := range []struct {
+		name string
+		ref  PackageRef
+	}{
+		{
+			name: "noncanonical digest",
+			ref: PackageRef{
+				treeDigest: strings.ToUpper(want.TreeDigest()), archiveDigest: want.ArchiveDigest(),
+				fileCount: want.FileCount(), uncompressedSize: want.UncompressedSize(), archiveSize: want.ArchiveSize(),
+			},
+		},
+		{
+			name: "impossible file count",
+			ref: PackageRef{
+				treeDigest: want.TreeDigest(), archiveDigest: want.ArchiveDigest(),
+				fileCount: 0, uncompressedSize: want.UncompressedSize(), archiveSize: want.ArchiveSize(),
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, restoreErr := NewPackageRef(
+				test.ref.TreeDigest(), test.ref.ArchiveDigest(),
+				test.ref.FileCount(), test.ref.UncompressedSize(), test.ref.ArchiveSize(),
+			)
+			var packageErr *PackageError
+			if !errors.As(restoreErr, &packageErr) {
+				t.Fatalf("NewPackageRef() error = %T %v, want PackageError", restoreErr, restoreErr)
 			}
 		})
 	}

@@ -79,11 +79,22 @@ func (c PackageContent) Reference() PackageRef { return c.snapshot.Reference() }
 func (c PackageContent) Snapshot() PackageSnapshot { return clonePackageSnapshot(c.snapshot) }
 
 type (
-	Skill = artifact.Artifact[Content]
-	Draft = artifact.Draft[Content]
+	Skill        = artifact.Artifact[Content]
+	Draft        = artifact.Draft[Content]
+	PackageSkill = artifact.Artifact[PackageContent]
+	PackageDraft = artifact.Draft[PackageContent]
 )
 
 func NewDraft(content Content, sources []source.Ref, artifacts []artifact.Ref) (Draft, error) {
+	return artifact.NewDraft(Family, content, sources, artifacts)
+}
+
+// NewPackageDraft creates a v2 package-backed managed Skill draft.
+func NewPackageDraft(
+	content PackageContent,
+	sources []source.Ref,
+	artifacts []artifact.Ref,
+) (PackageDraft, error) {
 	return artifact.NewDraft(Family, content, sources, artifacts)
 }
 

@@ -73,11 +73,49 @@ type PackageRef struct {
 	archiveSize      int
 }
 
+// NewPackageRef restores a canonical immutable package identity from stored
+// metadata. It validates every indexed field without accepting package bytes.
+func NewPackageRef(
+	treeDigest, archiveDigest string,
+	fileCount, uncompressedSize, archiveSize int,
+) (PackageRef, error) {
+	ref := PackageRef{
+		treeDigest:       treeDigest,
+		archiveDigest:    archiveDigest,
+		fileCount:        fileCount,
+		uncompressedSize: uncompressedSize,
+		archiveSize:      archiveSize,
+	}
+	if err := ref.Validate(); err != nil {
+		return PackageRef{}, err
+	}
+	return ref, nil
+}
+
 func (r PackageRef) TreeDigest() string    { return r.treeDigest }
 func (r PackageRef) ArchiveDigest() string { return r.archiveDigest }
 func (r PackageRef) FileCount() int        { return r.fileCount }
 func (r PackageRef) UncompressedSize() int { return r.uncompressedSize }
 func (r PackageRef) ArchiveSize() int      { return r.archiveSize }
+
+// Validate reports whether r can name a canonical immutable package.
+func (r PackageRef) Validate() error {
+	if !canonicalPackageDigest(r.treeDigest) || !canonicalPackageDigest(r.archiveDigest) ||
+		r.fileCount < 1 || r.fileCount > MaxPackageFiles ||
+		r.uncompressedSize < 1 || r.uncompressedSize > MaxPackageBytes ||
+		r.archiveSize < 1 || r.archiveSize > MaxPackageArchiveBytes {
+		return packageErrorf("managed Skill package reference is not canonical")
+	}
+	return nil
+}
+
+func canonicalPackageDigest(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	decoded, err := hex.DecodeString(value)
+	return err == nil && hex.EncodeToString(decoded) == value
+}
 
 // PackageEntry is one regular file retained by an immutable package.
 type PackageEntry struct {

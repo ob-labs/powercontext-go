@@ -153,7 +153,8 @@ func (r *ArtifactRepository) Revise(
 	if err != nil {
 		return nil, err
 	}
-	if reflect.TypeOf(current.ContentValue()) != codec.contentType {
+	if !codec.supportsContent(current.ContentValue()) || !codec.supportsContent(draft.ContentValue()) ||
+		reflect.TypeOf(current.ContentValue()) != reflect.TypeOf(draft.ContentValue()) {
 		return nil, &artifact.FamilyMismatchError{
 			ArtifactFamily: current.Ref().Family(),
 			DraftFamily:    draft.Family(),
@@ -297,7 +298,7 @@ func (r *ArtifactRepository) codecForDraft(draft artifact.DraftSnapshot) (Artifa
 	if !ok {
 		return ArtifactCodec{}, &RepositoryNotFoundError{Kind: "artifact-family", Identity: draft.Family()}
 	}
-	if reflect.TypeOf(draft.ContentValue()) != codec.contentType {
+	if !codec.supportsContent(draft.ContentValue()) {
 		return ArtifactCodec{}, &artifact.FamilyMismatchError{
 			ArtifactFamily: codec.family,
 			DraftFamily:    draft.Family(),
@@ -341,7 +342,7 @@ func (r *ArtifactRepository) insertRevision(
 			return nil, artifactErr
 		}
 	}
-	created, err := codec.decode(ref, lineage, payload)
+	created, err := codec.decode(ctx, db, scopeID, ref, lineage, payload)
 	if err != nil {
 		return nil, &InvalidStoredPayloadError{Kind: "artifact", Name: codec.family, Issue: "payload does not match the model"}
 	}
@@ -410,7 +411,7 @@ func (r *ArtifactRepository) decode(
 	if err != nil {
 		return nil, err
 	}
-	decoded, err := codec.decode(ref, lineage, row.content)
+	decoded, err := codec.decode(ctx, db, row.scopeID, ref, lineage, row.content)
 	if err != nil {
 		return nil, &InvalidStoredPayloadError{Kind: "artifact", Name: row.family, Issue: "payload does not match the model"}
 	}
