@@ -243,8 +243,12 @@ func TestWorkBuddyHookExplicitOverridePreservesPresenceAndRawValue(t *testing.T)
 }
 
 func TestWorkBuddyHookMCPResolverClosesExpiredSessionWithinCleanupBudget(t *testing.T) {
+	// Regression: wait until the tool is handling a request before cancellation so
+	// a slow session handshake cannot masquerade as a missing cleanup DELETE.
+	toolStarted := make(chan struct{})
 	server := mcp.NewServer(&mcp.Implementation{Name: "workbuddy-hook-test", Version: "1"}, nil)
 	server.AddTool(&mcp.Tool{Name: "scope_binding_resolve", InputSchema: map[string]any{"type": "object"}}, func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		toolStarted <- struct{}{}
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
@@ -265,18 +269,41 @@ func TestWorkBuddyHookMCPResolverClosesExpiredSessionWithinCleanupBudget(t *test
 		}
 		return response.Result(), nil
 	})}
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-	defer cancel()
-	resolver, ok := newWorkBuddyHookMCPScopeResolver(ctx, workBuddyConfiguration{
+	connectCtx, cancelConnect := context.WithTimeout(t.Context(), time.Second)
+	defer cancelConnect()
+	resolver, ok := newWorkBuddyHookMCPScopeResolver(connectCtx, workBuddyConfiguration{
 		ServerURL: "http://127.0.0.1:8000", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
 		RequestTimeoutSeconds: 1,
 	}, func(string) string { return "" }, client, time.Now)
 	if !ok {
 		t.Fatal("newWorkBuddyHookMCPScopeResolver() failed")
 	}
+	resolveCtx, cancelResolve := context.WithCancel(t.Context())
+	defer cancelResolve()
+	type resolution struct {
+		scope    string
+		resolved bool
+	}
+	result := make(chan resolution, 1)
+	go func() {
+		scope, resolved := resolver.Resolve(resolveCtx, nil, []workBuddyHookScopeBindingKey{{Integration: "workbuddy", Kind: "workspace", ExternalID: "hash"}})
+		result <- resolution{scope: scope, resolved: resolved}
+	}()
+	select {
+	case <-toolStarted:
+	case <-connectCtx.Done():
+		t.Fatal("scope binding resolve did not reach the established MCP session")
+	}
 	started := time.Now()
-	if scope, resolved := resolver.Resolve(ctx, nil, []workBuddyHookScopeBindingKey{{Integration: "workbuddy", Kind: "workspace", ExternalID: "hash"}}); resolved || scope != "" {
-		t.Fatalf("Resolve() = %q, %t, want empty fail-closed", scope, resolved)
+	cancelResolve()
+	var resolved resolution
+	select {
+	case resolved = <-result:
+	case <-time.After(2 * workBuddyHookCloseTimeout):
+		t.Fatal("Resolve() did not close the expired MCP session within the strict cleanup budget")
+	}
+	if resolved.resolved || resolved.scope != "" {
+		t.Fatalf("Resolve() = %q, %t, want empty fail-closed", resolved.scope, resolved.resolved)
 	}
 	if elapsed := time.Since(started); elapsed > 2*workBuddyHookCloseTimeout {
 		t.Fatalf("Resolve() elapsed = %s, cleanup exceeded strict budget", elapsed)
