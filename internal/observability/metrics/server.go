@@ -23,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/ogen-go/ogen/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
@@ -75,6 +76,12 @@ func New() (*Server, error) {
 			Help: "Scope compositions currently active or retained by the built-in Runtime.",
 		}, []string{"state"}),
 	}
+	if err := server.registry.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
+		return nil, err
+	}
+	if err := server.registry.Register(collectors.NewGoCollector()); err != nil {
+		return nil, err
+	}
 	if err := server.registry.Register(server.transportRequests); err != nil {
 		return nil, err
 	}
@@ -100,8 +107,8 @@ func New() (*Server, error) {
 	return server, nil
 }
 
-// Handler renders only this Server's registry and does not expose Go process
-// or runtime collectors unless they are explicitly registered later.
+// Handler renders only this Server's registry, including its standard process
+// and Go runtime collectors.
 func (s *Server) Handler() http.Handler {
 	return promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError})
 }
