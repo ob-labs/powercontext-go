@@ -25,6 +25,7 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -117,7 +118,7 @@ def _free_loopback_port() -> int:
         return int(listener.getsockname()[1])
 
 
-def _isolated_environment(home: Path, *, enable_mcp: bool) -> dict[str, str]:
+def _isolated_environment(home: Path) -> dict[str, str]:
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -131,7 +132,7 @@ def _isolated_environment(home: Path, *, enable_mcp: bool) -> dict[str, str]:
             "POWERCONTEXT_SERVER_LOGGING_ACCESS": "false",
             "POWERCONTEXT_SERVER_LOGGING_FORMAT": "json",
             "POWERCONTEXT_SERVER_LOGGING_LEVEL": "ERROR",
-            "POWERCONTEXT_SERVER_MCP_ENABLED": "true" if enable_mcp else "false",
+            "POWERCONTEXT_SERVER_MCP_ENABLED": "false",
             "POWERCONTEXT_SERVER_METRICS_ENABLED": "false",
             "POWERCONTEXT_SERVER_TRACING_ENABLED": "false",
         }
@@ -145,8 +146,6 @@ def _server(
     cwd: Path,
     home: Path,
     startup_timeout: float,
-    *,
-    enable_mcp: bool,
 ) -> Iterator[str]:
     if not executable.is_file():
         raise ComparisonFailure(f"server executable does not exist: {executable}")
@@ -167,7 +166,7 @@ def _server(
         process = subprocess.Popen(
             command,
             cwd=cwd,
-            env=_isolated_environment(home, enable_mcp=enable_mcp),
+            env=_isolated_environment(home),
             stdin=subprocess.DEVNULL,
             stdout=output,
             stderr=subprocess.STDOUT,
@@ -302,10 +301,7 @@ def _normalize_json(value: Any) -> Any:
 
 
 def _scenario(base_url: str) -> dict[str, Any]:
-    return _scenario_for_scope(base_url, "differential:scope")
-
-
-def _scenario_for_scope(base_url: str, scope: str) -> dict[str, Any]:
+    scope = "differential:scope"
     source_citation = {
         "kind": "source",
         "source_ref": {"name": "content", "source_id": "evidence-1"},
@@ -600,176 +596,46 @@ def _run_one(
     root: Path,
     startup_timeout: float,
     *,
-    resolve_go_scope: bool,
+    seed_go_scope: bool,
 ) -> dict[str, Any]:
     home = root / "home"
     home.mkdir(parents=True, mode=0o700)
+    if seed_go_scope:
+        with _server(executable.resolve(), cwd.resolve(), home, startup_timeout):
+            pass
+        _seed_go_durable_scope(home)
     with _server(
         executable.resolve(),
         cwd.resolve(),
         home,
         startup_timeout,
-        enable_mcp=resolve_go_scope,
     ) as base_url:
-        if not resolve_go_scope:
-            return _scenario(base_url)
-        scope = _resolve_go_default_scope(base_url)
-        # The frozen v0.1 server accepts first-write Scope identities. Go now
-        # resolves a durable default first, so preserve every observation while
-        # mapping only that one runtime-generated identity to the fixture value.
-        return _normalize_go_scope(_scenario_for_scope(base_url, scope), scope)
+        return _scenario(base_url)
 
 
-def _resolve_go_default_scope(base_url: str) -> str:
-    session_id: str | None = None
-    protocol_version = "2025-11-25"
+def _seed_go_durable_scope(home: Path) -> None:
+    # The frozen scenario owns this public identity. Seed it only before the Go
+    # process starts so the compared HTTP calls and their selection digests stay
+    # byte-for-byte comparable with the v0.1 Oracle.
+    database = home / "powercontext.db"
+    if not database.is_file():
+        raise ComparisonFailure("Go bootstrap did not create the SQLite database")
     try:
-        initialized, headers = _mcp_request(
-            base_url,
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": protocol_version,
-                    "capabilities": {},
-                    "clientInfo": {"name": "frozen-differential", "version": "1"},
-                },
-            },
-            session_id=None,
-            protocol_version=None,
-            allow_empty=False,
-        )
-        result = _mcp_result(initialized, 1)
-        negotiated = result.get("protocolVersion")
-        if not isinstance(negotiated, str) or not negotiated:
-            raise ComparisonFailure("Go MCP did not negotiate a protocol version")
-        protocol_version = negotiated
-        session_id = headers.get("mcp-session-id")
-        if session_id is not None and (not session_id or len(session_id) > 256):
-            raise ComparisonFailure("Go MCP returned an invalid session identity")
-        _mcp_request(
-            base_url,
-            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            session_id=session_id,
-            protocol_version=protocol_version,
-            allow_empty=True,
-        )
-        response, _headers = _mcp_request(
-            base_url,
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {"name": "scope_binding_resolve", "arguments": {}},
-            },
-            session_id=session_id,
-            protocol_version=protocol_version,
-            allow_empty=False,
-        )
-        tool_result = _mcp_result(response, 2)
-        if tool_result.get("isError") is True:
-            raise ComparisonFailure("Go MCP default Scope resolution failed")
-        content = tool_result.get("structuredContent")
-        if not isinstance(content, dict):
-            raise ComparisonFailure("Go MCP default Scope resolution has no structured result")
-        scope = content.get("scope_id")
-        if not isinstance(scope, str) or not scope or scope.strip() != scope:
-            raise ComparisonFailure("Go MCP default Scope resolution returned an invalid identity")
-        return scope
-    finally:
-        if session_id:
-            _close_mcp_session(base_url, session_id, protocol_version)
-
-
-def _mcp_request(
-    base_url: str,
-    payload: Mapping[str, object],
-    *,
-    session_id: str | None,
-    protocol_version: str | None,
-    allow_empty: bool,
-) -> tuple[dict[str, object], dict[str, str]]:
-    headers = {
-        "Accept": "application/json, text/event-stream",
-        "Content-Type": "application/json",
-        "User-Agent": "powercontext-frozen-differential/1",
-    }
-    if protocol_version is not None:
-        headers["Mcp-Protocol-Version"] = protocol_version
-    if session_id is not None:
-        headers["Mcp-Session-Id"] = session_id
-    request = Request(
-        base_url + "/mcp/",
-        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    try:
-        response = _LOOPBACK_OPENER.open(request, timeout=10)
-    except HTTPError as error:
-        response = error
-    with response:
-        raw = response.read(1_048_577)
-        status = int(response.status)
-        response_headers = {key.lower(): value for key, value in response.headers.items()}
-    if len(raw) > 1_048_576:
-        raise ComparisonFailure("Go MCP response exceeded the differential limit")
-    if status == 202 and allow_empty:
-        return {}, response_headers
-    if status != 200:
-        raise ComparisonFailure(f"Go MCP returned HTTP {status} during Scope resolution")
-    content_type = response_headers.get("content-type", "")
-    if "application/json" in content_type:
-        decoded = json.loads(raw)
-    elif "text/event-stream" in content_type:
-        events = [
-            line.removeprefix(b"data:").lstrip()
-            for line in raw.splitlines()
-            if line.startswith(b"data:")
-        ]
-        if len(events) != 1:
-            raise ComparisonFailure("Go MCP Scope resolution returned an invalid event stream")
-        decoded = json.loads(events[0])
-    else:
-        raise ComparisonFailure("Go MCP Scope resolution returned an unknown content type")
-    if not isinstance(decoded, dict):
-        raise ComparisonFailure("Go MCP Scope resolution returned a non-object response")
-    return decoded, response_headers
-
-
-def _mcp_result(response: Mapping[str, object], request_id: int) -> Mapping[str, object]:
-    if response.get("jsonrpc") != "2.0" or response.get("id") != request_id or "error" in response:
-        raise ComparisonFailure("Go MCP Scope resolution returned an invalid JSON-RPC response")
-    result = response.get("result")
-    if not isinstance(result, dict):
-        raise ComparisonFailure("Go MCP Scope resolution returned no result")
-    return result
-
-
-def _close_mcp_session(base_url: str, session_id: str, protocol_version: str) -> None:
-    request = Request(
-        base_url + "/mcp/",
-        headers={
-            "Accept": "application/json, text/event-stream",
-            "Mcp-Protocol-Version": protocol_version,
-            "Mcp-Session-Id": session_id,
-        },
-        method="DELETE",
-    )
-    with contextlib.suppress(OSError, HTTPError):
-        with _LOOPBACK_OPENER.open(request, timeout=10):
-            pass
-
-
-def _normalize_go_scope(value: Any, scope: str) -> Any:
-    if isinstance(value, list):
-        return [_normalize_go_scope(item, scope) for item in value]
-    if isinstance(value, dict):
-        return {key: _normalize_go_scope(item, scope) for key, item in value.items()}
-    if value == scope:
-        return "differential:scope"
-    return value
+        with sqlite3.connect(database) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                """INSERT INTO pc_scopes (scope_id, title, summary, parent_scope_id, version)
+                VALUES (?, ?, ?, NULL, 1)""",
+                ("differential:scope", "Differential", "Frozen differential Scope"),
+            )
+            updated = connection.execute(
+                "UPDATE pc_scope_settings SET scope_id = ? WHERE name = 'default'",
+                ("differential:scope",),
+            )
+            if updated.rowcount != 1:
+                raise ComparisonFailure("Go bootstrap did not persist one default Scope setting")
+    except sqlite3.Error as error:
+        raise ComparisonFailure("seed durable Go differential Scope") from error
 
 
 def _canonical(value: Any) -> str:
@@ -785,14 +651,14 @@ def main() -> int:
             args.python_cwd,
             root / "python",
             args.startup_timeout,
-            resolve_go_scope=False,
+            seed_go_scope=False,
         )
         go_observation = _run_one(
             args.go_executable,
             args.go_cwd,
             root / "go",
             args.startup_timeout,
-            resolve_go_scope=True,
+            seed_go_scope=True,
         )
     if python_observation != go_observation:
         difference = "".join(
