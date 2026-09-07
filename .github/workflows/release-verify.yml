@@ -15,6 +15,7 @@ on:
         type: string
 
 permissions:
+  attestations: read
   contents: read
   packages: read
 
@@ -91,6 +92,9 @@ jobs:
           }
           checksum_has_exactly_once IMAGE-DIGESTS.json
           for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            platform_checksums="SHA256SUMS-$target"
+            test -f "$ASSET_DIR/$platform_checksums"
+            checksum_has_exactly_once "$platform_checksums"
             for product in powercontext powercontext-full; do
               archive="${product}-${VERSION}-${target}.tar.gz"
               sbom="${product}-${VERSION}-${target}.spdx.json"
@@ -100,9 +104,39 @@ jobs:
               checksum_has_exactly_once "$sbom"
             done
           done
-          test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 17
+          test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 21
           cd "$ASSET_DIR"
           sha256sum --check --strict SHA256SUMS
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            sha256sum --check --strict "SHA256SUMS-$target"
+          done
+
+      - name: Verify signed GitHub Release provenance
+        shell: bash
+        env:
+          ASSET_DIR: ${{ runner.temp }}/powercontext-release-assets
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          verify_subject() {
+            subject="$1"
+            gh attestation verify "$ASSET_DIR/$subject" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+          }
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            subject="SHA256SUMS-$target"
+            verify_subject "$subject"
+            for product in powercontext powercontext-full; do
+              subject="${product}-${VERSION}-${target}.tar.gz"
+              verify_subject "$subject"
+              subject="${product}-${VERSION}-${target}.spdx.json"
+              verify_subject "$subject"
+            done
+          done
+          for subject in SHA256SUMS IMAGE-DIGESTS.json; do
+            verify_subject "$subject"
+          done
 
       - name: Verify extracted Linux release contracts
         id: archives
@@ -180,17 +214,21 @@ jobs:
         shell: bash
         env:
           DIGESTS: ${{ runner.temp }}/powercontext-release-assets/IMAGE-DIGESTS.json
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           owner="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           image_tag="${VERSION//+/-}"
-          jq -e '.schema_version == 1 and .sbom_attestations == true' "$DIGESTS" >/dev/null
+          jq -e '.schema_version == 1 and .sbom_attestations == true and .github_provenance_attestations == true' "$DIGESTS" >/dev/null
           standard="$(jq -er '.images.standard' "$DIGESTS")"
           full="$(jq -er '.images.full' "$DIGESTS")"
           for value in "$standard" "$full"; do
             digest="${value##*@}"
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            gh attestation verify "oci://$value" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
             docker buildx imagetools inspect "$value" >/dev/null
           done
           case "$standard" in
