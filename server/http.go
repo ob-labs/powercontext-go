@@ -47,6 +47,7 @@ type HTTPOptions struct {
 	MCP                 MCPOptions
 	metrics             *servermetrics.Server
 	webUI               *webui.Options
+	scopeBindings       mcpapi.ScopeBindingOperations
 }
 
 // MCPOptions controls the optional MCP Streamable HTTP route. Path defaults to
@@ -138,6 +139,7 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		mcpServer, mcpErr := mcpapi.NewServer(handler, mcpapi.Options{
 			Version:              options.MCP.Version,
 			HandoffReportEnabled: options.HandoffReportRoutes,
+			ScopeBindings:        options.scopeBindings,
 			ApplicationObserver:  options.metrics,
 			ApplicationLogger:    applicationLogger,
 			TracerProvider:       options.TracerProvider,

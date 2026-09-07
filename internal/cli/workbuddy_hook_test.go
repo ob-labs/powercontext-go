@@ -28,12 +28,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
@@ -65,7 +65,21 @@ func TestWorkBuddyHookCommandWritesStableEmptyContext(t *testing.T) {
 }
 
 func TestWorkBuddyHookRecallCaptureFlush(t *testing.T) {
+	const scope = "durable-workbuddy-scope"
 	var paths []string
+	resolver := workBuddyHookScopeResolverFunc(func(_ context.Context, explicit *string, keys []workBuddyHookScopeBindingKey) (string, bool) {
+		if explicit != nil {
+			t.Fatalf("explicit scope = %q, want omitted", *explicit)
+		}
+		want := []workBuddyHookScopeBindingKey{
+			{Integration: "workbuddy", Kind: "session", ExternalID: "session"},
+			{Integration: "workbuddy", Kind: "workspace", ExternalID: workBuddyHookWorkspaceHash("C:/workspace")},
+		}
+		if diff := cmp.Diff(want, keys); diff != "" {
+			t.Fatalf("resolver keys (-want +got):\n%s", diff)
+		}
+		return scope, true
+	})
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		paths = append(paths, request.URL.Path)
 		switch request.URL.Path {
@@ -77,7 +91,7 @@ func TestWorkBuddyHookRecallCaptureFlush(t *testing.T) {
 			if err := json.UnmarshalRead(request.Body, &body); err != nil {
 				t.Fatal(err)
 			}
-			if body.ScopeID != "workbuddy:agent" || body.MaxBytes != 8000 {
+			if body.ScopeID != scope || body.MaxBytes != 8000 {
 				t.Fatalf("prepare = %#v", body)
 			}
 			writer.Header().Set("Content-Type", "application/json")
@@ -93,11 +107,11 @@ func TestWorkBuddyHookRecallCaptureFlush(t *testing.T) {
 			if err := json.UnmarshalRead(request.Body, &body); err != nil {
 				t.Fatal(err)
 			}
-			sum := sha256.Sum256([]byte("workbuddy:agent\x00session\x00request\x00hello"))
+			sum := sha256.Sum256([]byte(scope + "\x00session\x00request\x00hello"))
 			want := captureBody{
-				ScopeID: "workbuddy:agent", SourceID: "workbuddy-user-prompt:" + hex.EncodeToString(sum[:]), Content: "hello",
+				ScopeID: scope, SourceID: "workbuddy-user-prompt:" + hex.EncodeToString(sum[:]), Content: "hello",
 				Metadata: map[string]string{
-					"origin": "workbuddy", "event": "user_prompt_submit", "cwd": "C:/workspace",
+					"origin": "workbuddy", "event": "user_prompt_submit",
 					"session_id": "session", "prompt_id": "request",
 				},
 			}
@@ -127,7 +141,7 @@ func TestWorkBuddyHookRecallCaptureFlush(t *testing.T) {
 	err := runWorkBuddyHook(t.Context(), strings.NewReader(`{"hook_event_name":"UserPromptSubmit","prompt":"hello","cwd":"C:/workspace","session_id":"session","request_id":"request"}`), &output, &diagnostics, workBuddyHookRuntime{configuration: workBuddyConfiguration{
 		Schema: workBuddyConfigSchema, ServerURL: "http://127.0.0.1:8000", ScopeMode: "agent", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
 		RequestTimeoutSeconds: 1, RequestBudgetSeconds: 2, PrepareMaxBytes: 8000, SourceMaxBytes: 16384,
-	}, httpClient: client})
+	}, httpClient: client, scopeResolver: resolver})
 	if err != nil {
 		t.Fatalf("runWorkBuddyHook() error = %v", err)
 	}
@@ -137,6 +151,138 @@ func TestWorkBuddyHookRecallCaptureFlush(t *testing.T) {
 	wantPaths := []string{"/v1/context/prepare", "/v1/sources/content", "/v1/memory/flush"}
 	if diff := cmp.Diff(wantPaths, paths); diff != "" {
 		t.Fatalf("request paths (-want +got):\n%s", diff)
+	}
+}
+
+func TestWorkBuddyHookResolverFailureDoesNotReachScopeOperations(t *testing.T) {
+	requests := 0
+	client := &http.Client{Transport: workBuddyHookRoundTripper(func(*http.Request) (*http.Response, error) {
+		requests++
+		return nil, errors.New("scope operation must not run")
+	})}
+	resolver := workBuddyHookScopeResolverFunc(func(context.Context, *string, []workBuddyHookScopeBindingKey) (string, bool) {
+		return "", false
+	})
+	var output, diagnostics bytes.Buffer
+	err := runWorkBuddyHook(t.Context(), strings.NewReader(`{"hook_event_name":"UserPromptSubmit","prompt":"hello","cwd":"C:/private/workbuddy-checkout"}`), &output, &diagnostics, workBuddyHookRuntime{configuration: workBuddyConfiguration{
+		Schema: workBuddyConfigSchema, ServerURL: "http://127.0.0.1:8000", ScopeMode: "project", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
+		RequestTimeoutSeconds: 1, RequestBudgetSeconds: 2, PrepareMaxBytes: 8000, SourceMaxBytes: 16384,
+	}, httpClient: client, scopeResolver: resolver})
+	if err != nil {
+		t.Fatalf("runWorkBuddyHook() error = %v", err)
+	}
+	if got := output.String(); got != workBuddyHookEmptyResponse {
+		t.Fatalf("output = %q, want empty context", got)
+	}
+	if requests != 0 {
+		t.Fatalf("scope operation requests = %d, want 0", requests)
+	}
+}
+
+func TestWorkBuddyHookPassesExplicitOverrideOnlyToResolver(t *testing.T) {
+	const override = "durable-user-override"
+	resolver := workBuddyHookScopeResolverFunc(func(_ context.Context, explicit *string, _ []workBuddyHookScopeBindingKey) (string, bool) {
+		if explicit == nil || *explicit != override {
+			t.Fatalf("explicit Scope = %#v, want %q", explicit, override)
+		}
+		return "", false
+	})
+	var output, diagnostics bytes.Buffer
+	err := runWorkBuddyHook(t.Context(), strings.NewReader(`{"hook_event_name":"UserPromptSubmit","prompt":"hello","cwd":"C:/private/workbuddy-checkout"}`), &output, &diagnostics, workBuddyHookRuntime{configuration: workBuddyConfiguration{
+		Schema: workBuddyConfigSchema, ServerURL: "http://127.0.0.1:8000", ScopeMode: "project", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
+		RequestTimeoutSeconds: 1, RequestBudgetSeconds: 2, PrepareMaxBytes: 8000, SourceMaxBytes: 16384,
+	}, lookupEnv: func(name string) (string, bool) { return override, name == workBuddyHookScopeEnvironment }, scopeResolver: resolver})
+	if err != nil {
+		t.Fatalf("runWorkBuddyHook() error = %v", err)
+	}
+	if got := output.String(); got != workBuddyHookEmptyResponse {
+		t.Fatalf("output = %q, want empty context", got)
+	}
+}
+
+func TestWorkBuddyHookExplicitOverridePreservesPresenceAndRawValue(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		value   string
+		present bool
+	}{
+		{name: "unset"},
+		{name: "empty", present: true},
+		{name: "space", value: " ", present: true},
+		{name: "overlength", value: strings.Repeat("x", 257), present: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resolver := workBuddyHookScopeResolverFunc(func(_ context.Context, explicit *string, _ []workBuddyHookScopeBindingKey) (string, bool) {
+				if !test.present {
+					if explicit != nil {
+						t.Fatalf("explicit Scope = %q, want omitted", *explicit)
+					}
+				} else if explicit == nil || *explicit != test.value {
+					t.Fatalf("explicit Scope = %#v, want raw %q", explicit, test.value)
+				}
+				return "", false
+			})
+			var output, diagnostics bytes.Buffer
+			err := runWorkBuddyHook(t.Context(), strings.NewReader(`{"hook_event_name":"UserPromptSubmit","prompt":"secret-prompt","cwd":"C:/private/workbuddy-checkout"}`), &output, &diagnostics, workBuddyHookRuntime{configuration: workBuddyConfiguration{
+				Schema: workBuddyConfigSchema, ServerURL: "http://127.0.0.1:8000", ScopeMode: "project", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
+				RequestTimeoutSeconds: 1, RequestBudgetSeconds: 2, PrepareMaxBytes: 8000, SourceMaxBytes: 16384,
+			}, lookupEnv: func(name string) (string, bool) {
+				return test.value, test.present && name == workBuddyHookScopeEnvironment
+			}, scopeResolver: resolver})
+			if err != nil {
+				t.Fatalf("runWorkBuddyHook() error = %v", err)
+			}
+			if got := output.String(); got != workBuddyHookEmptyResponse {
+				t.Fatalf("output = %q, want empty context", got)
+			}
+			if strings.Contains(output.String(), "secret-prompt") || strings.Contains(diagnostics.String(), "secret-prompt") || (test.value != "" && strings.Contains(diagnostics.String(), test.value)) {
+				t.Fatalf("hook output leaked protected input: stdout=%q stderr=%q", output.String(), diagnostics.String())
+			}
+		})
+	}
+}
+
+func TestWorkBuddyHookMCPResolverClosesExpiredSessionWithinCleanupBudget(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "workbuddy-hook-test", Version: "1"}, nil)
+	server.AddTool(&mcp.Tool{Name: "scope_binding_resolve", InputSchema: map[string]any{"type": "object"}}, func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	var sessionID string
+	deleted := false
+	client := &http.Client{Transport: workBuddyHookRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method == http.MethodDelete {
+			deleted = true
+			if request.Header.Get("Mcp-Session-Id") != sessionID {
+				t.Fatalf("DELETE session ID = %q, want %q", request.Header.Get("Mcp-Session-Id"), sessionID)
+			}
+		}
+		response := httptest.NewRecorder()
+		mcpHandler.ServeHTTP(response, request)
+		if id := response.Header().Get("Mcp-Session-Id"); id != "" {
+			sessionID = id
+		}
+		return response.Result(), nil
+	})}
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	resolver, ok := newWorkBuddyHookMCPScopeResolver(ctx, workBuddyConfiguration{
+		ServerURL: "http://127.0.0.1:8000", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
+		RequestTimeoutSeconds: 1,
+	}, func(string) string { return "" }, client, time.Now)
+	if !ok {
+		t.Fatal("newWorkBuddyHookMCPScopeResolver() failed")
+	}
+	started := time.Now()
+	if scope, resolved := resolver.Resolve(ctx, nil, []workBuddyHookScopeBindingKey{{Integration: "workbuddy", Kind: "workspace", ExternalID: "hash"}}); resolved || scope != "" {
+		t.Fatalf("Resolve() = %q, %t, want empty fail-closed", scope, resolved)
+	}
+	if elapsed := time.Since(started); elapsed > 2*workBuddyHookCloseTimeout {
+		t.Fatalf("Resolve() elapsed = %s, cleanup exceeded strict budget", elapsed)
+	}
+	if sessionID == "" || !deleted {
+		t.Fatalf("MCP session/DELETE = %q/%t, want established session and cleanup DELETE", sessionID, deleted)
 	}
 }
 
@@ -189,7 +335,7 @@ func TestWorkBuddyHookPrepareFailureStillCapturesAndFlushes(t *testing.T) {
 	err := runWorkBuddyHook(t.Context(), strings.NewReader(`{"hook_event_name":"UserPromptSubmit","prompt":"hello","cwd":"C:/workspace","session_id":"session","prompt_id":"prompt"}`), &output, &diagnostics, workBuddyHookRuntime{configuration: workBuddyConfiguration{
 		Schema: workBuddyConfigSchema, ServerURL: "http://127.0.0.1:8000", ScopeMode: "agent", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
 		RequestTimeoutSeconds: 1, RequestBudgetSeconds: 2, PrepareMaxBytes: 8000, SourceMaxBytes: 16384,
-	}, httpClient: client})
+	}, httpClient: client, scopeResolver: workBuddyHookTestResolver()})
 	if err != nil {
 		t.Fatalf("runWorkBuddyHook() error = %v", err)
 	}
@@ -226,7 +372,7 @@ func TestWorkBuddyHookOverLimitPrepareResponseFailsOpenBeforeDecode(t *testing.T
 			Schema: workBuddyConfigSchema, ServerURL: "http://127.0.0.1:8000", ScopeMode: "agent", AuthorizationEnvironment: workBuddyDefaultAuthorizationEnvironment,
 			RequestTimeoutSeconds: 1, RequestBudgetSeconds: 2, PrepareMaxBytes: 8000, SourceMaxBytes: 64,
 		},
-		getenv: getenv, httpClient: client,
+		getenv: getenv, httpClient: client, scopeResolver: workBuddyHookTestResolver(),
 	})
 	if err != nil {
 		t.Fatalf("runWorkBuddyHook() error = %v", err)
@@ -286,7 +432,7 @@ func TestWorkBuddyHookUnknownLengthResponseStopsAtLimitBeforeDecode(t *testing.T
 			}
 			return ""
 		},
-		httpClient: client,
+		httpClient: client, scopeResolver: workBuddyHookTestResolver(),
 	})
 	if err != nil {
 		t.Fatalf("runWorkBuddyHook() error = %v", err)
@@ -366,7 +512,7 @@ func TestWorkBuddyHookPrepareFailuresStillCapture(t *testing.T) {
 					}
 					return ""
 				},
-				httpClient: client,
+				httpClient: client, scopeResolver: workBuddyHookTestResolver(),
 			})
 			if err != nil {
 				t.Fatalf("runWorkBuddyHook() error = %v", err)
@@ -387,158 +533,40 @@ func workBuddyHookJSONResponse(request *http.Request, status int, body string) *
 	}
 }
 
-func TestResolveWorkBuddyHookScope(t *testing.T) {
-	getenv := func(string) string { return "" }
-
-	for _, test := range []struct {
-		name   string
-		mode   string
-		getenv func(string) string
-		setup  func(*testing.T, string)
-		want   func(*testing.T, string) string
-	}{
-		{
-			name: "explicit scope retains 256 byte boundary",
-			mode: "project",
-			getenv: func(name string) string {
-				if name == "POWERCONTEXT_WORKBUDDY_SCOPE_ID" {
-					return strings.Repeat("e", 256)
-				}
-				return ""
-			},
-			want: func(*testing.T, string) string { return strings.Repeat("e", 256) },
-		},
-		{
-			name: "explicit scope hashes above 256 byte boundary",
-			mode: "project",
-			getenv: func(name string) string {
-				if name == "POWERCONTEXT_WORKBUDDY_SCOPE_ID" {
-					return strings.Repeat("e", 257)
-				}
-				return ""
-			},
-			want: func(*testing.T, string) string {
-				sum := sha256.Sum256([]byte(strings.Repeat("e", 257)))
-				return "sha256:" + hex.EncodeToString(sum[:])
-			},
-		},
-		{name: "agent mode", mode: "agent", getenv: getenv, want: func(*testing.T, string) string { return "workbuddy:agent" }},
-		{
-			name:   "git private binding",
-			mode:   "project",
-			getenv: getenv,
-			setup: func(t *testing.T, project string) {
-				gitDirectory := workBuddyHookGitOutput(t, project, "rev-parse", "--absolute-git-dir")
-				writeTestFile(t, filepath.Join(gitDirectory, "powercontext", "codex-workspace.json"), `{"schema":"powercontext.codex-workspace.v1","scope_id":"bound-scope"}`)
-			},
-			want: func(*testing.T, string) string { return "bound-scope" },
-		},
-		{
-			name:   "normalized remote",
-			mode:   "project",
-			getenv: getenv,
-			setup: func(t *testing.T, project string) {
-				workBuddyHookGit(t, project, "config", "remote.origin.url", "ssh://user@GitHub.COM:8443/ob-labs/powercontext-go.git")
-			},
-			want: func(*testing.T, string) string { return "git:github.com:8443/ob-labs/powercontext-go" },
-		},
-		{
-			name:   "local path fallback",
-			mode:   "project",
-			getenv: getenv,
-			want:   workBuddyHookLocalScope,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			project := newWorkBuddyHookGitProject(t)
-			if test.setup != nil {
-				test.setup(t, project)
-			}
-			got, ok := resolveWorkBuddyHookScope(t.Context(), project, test.mode, test.getenv)
-			if want := test.want(t, project); !ok || got != want {
-				t.Fatalf("resolveWorkBuddyHookScope() = %q, %t, want %q, true", got, ok, want)
-			}
-		})
-	}
+func workBuddyHookTestResolver() workBuddyHookScopeResolver {
+	return workBuddyHookScopeResolverFunc(func(context.Context, *string, []workBuddyHookScopeBindingKey) (string, bool) {
+		return "workbuddy:test", true
+	})
 }
 
-func TestResolveWorkBuddyHookScopeUTF8ByteBoundaries(t *testing.T) {
-	exactly256 := strings.Repeat("界", 85) + "a"
-	over256 := exactly256 + "b"
-	if got := len([]byte(exactly256)); got != 256 {
-		t.Fatalf("exactly256 byte length = %d, want 256", got)
+func TestWorkBuddyHookBindingKeysHashGitRootBeforeNestedCWD(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(project, 0o700); err != nil {
+		t.Fatal(err)
 	}
-	if got := len([]byte(over256)); got != 257 {
-		t.Fatalf("over256 byte length = %d, want 257", got)
+	command := exec.CommandContext(t.Context(), "git", "init")
+	command.Dir = project
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, output)
 	}
-
-	for _, test := range []struct {
-		name  string
-		value string
-		want  string
-	}{
-		{name: "explicit exact boundary", value: exactly256, want: exactly256},
-		{
-			name:  "explicit above boundary",
-			value: over256,
-			want: func() string {
-				sum := sha256.Sum256([]byte(over256))
-				return "sha256:" + hex.EncodeToString(sum[:])
-			}(),
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			got, ok := resolveWorkBuddyHookScope(t.Context(), t.TempDir(), "project", func(name string) string {
-				if name == workBuddyHookScopeEnvironment {
-					return test.value
-				}
-				return ""
-			})
-			if !ok || got != test.want {
-				t.Fatalf("resolveWorkBuddyHookScope() = %q, %t, want %q, true", got, ok, test.want)
-			}
-		})
+	nested := filepath.Join(project, "nested")
+	if err := os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
 	}
-
-	project := newWorkBuddyHookGitProject(t)
-	gitDirectory := workBuddyHookGitOutput(t, project, "rev-parse", "--absolute-git-dir")
-	writeTestFile(t, filepath.Join(gitDirectory, "powercontext", "codex-workspace.json"), `{"schema":"powercontext.codex-workspace.v1","scope_id":`+strconv.Quote(exactly256)+`}`)
-	got, ok := resolveWorkBuddyHookScope(t.Context(), project, "project", func(string) string { return "" })
-	if !ok || got != exactly256 {
-		t.Fatalf("Git-private UTF-8 boundary scope = %q, %t, want %q, true", got, ok, exactly256)
+	rootCommand := exec.CommandContext(t.Context(), "git", "rev-parse", "--show-toplevel")
+	rootCommand.Dir = nested
+	rootOutput, err := rootCommand.Output()
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestResolveWorkBuddyHookScopeInvalidGitPrivateBindingFallsThrough(t *testing.T) {
-	remote := "git@GitHub.COM:ob-labs/powercontext-go.git"
-	const wantRemote = "git:github.com/ob-labs/powercontext-go"
-	over256 := strings.Repeat("界", 85) + "ab"
-
-	for _, test := range []struct {
-		name    string
-		payload string
-		remote  bool
-		want    func(*testing.T, string) string
-	}{
-		{name: "wrong schema", payload: `{"schema":"wrong","scope_id":"bound"}`, remote: true, want: func(*testing.T, string) string { return wantRemote }},
-		{name: "empty scope", payload: `{"schema":"powercontext.codex-workspace.v1","scope_id":""}`, remote: true, want: func(*testing.T, string) string { return wantRemote }},
-		{name: "whitespace padded scope", payload: `{"schema":"powercontext.codex-workspace.v1","scope_id":" bound "}`, remote: true, want: func(*testing.T, string) string { return wantRemote }},
-		{name: "malformed JSON", payload: `{`, remote: true, want: func(*testing.T, string) string { return wantRemote }},
-		{name: "UTF-8 scope above boundary", payload: `{"schema":"powercontext.codex-workspace.v1","scope_id":` + strconv.Quote(over256) + `}`, remote: true, want: func(*testing.T, string) string { return wantRemote }},
-		{name: "no remote uses local fallback", payload: `{`, want: workBuddyHookLocalScope},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			project := newWorkBuddyHookGitProject(t)
-			gitDirectory := workBuddyHookGitOutput(t, project, "rev-parse", "--absolute-git-dir")
-			writeTestFile(t, filepath.Join(gitDirectory, "powercontext", "codex-workspace.json"), test.payload)
-			if test.remote {
-				workBuddyHookGit(t, project, "config", "remote.origin.url", remote)
-			}
-			got, ok := resolveWorkBuddyHookScope(t.Context(), project, "project", func(string) string { return "" })
-			if want := test.want(t, project); !ok || got != want {
-				t.Fatalf("resolveWorkBuddyHookScope() = %q, %t, want %q, true", got, ok, want)
-			}
-		})
+	gitRoot := strings.TrimSuffix(strings.TrimSuffix(string(rootOutput), "\n"), "\r")
+	keys := workBuddyHookScopeBindingKeys(t.Context(), workBuddyHookPayload{CWD: nested, SessionID: "session"})
+	want := []workBuddyHookScopeBindingKey{
+		{Integration: "workbuddy", Kind: "session", ExternalID: "session"},
+		{Integration: "workbuddy", Kind: "workspace", ExternalID: workBuddyHookWorkspaceHash(gitRoot)},
+	}
+	if diff := cmp.Diff(want, keys); diff != "" {
+		t.Fatalf("binding keys (-want +got):\n%s", diff)
 	}
 }
 
@@ -571,79 +599,6 @@ func TestWorkBuddyHookRequestTimeoutUsesRemainingBudget(t *testing.T) {
 	if remaining < 100*time.Millisecond || remaining > 500*time.Millisecond {
 		t.Fatalf("request deadline remaining = %s, want timeout capped near 250ms", remaining)
 	}
-}
-
-func TestNormalizeWorkBuddyHookGitRemote(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		remote string
-		want   string
-	}{
-		{name: "scp", remote: "git@GitHub.COM:ob-labs/powercontext-go.git", want: "github.com/ob-labs/powercontext-go"},
-		{name: "http strips credentials and retains port", remote: "http://user:secret@GitHub.COM:8443/ob-labs\\powercontext-go.git", want: "github.com:8443/ob-labs/powercontext-go"},
-		{name: "https", remote: "https://GitHub.COM/ob-labs/powercontext-go.git", want: "github.com/ob-labs/powercontext-go"},
-		{name: "ssh", remote: "ssh://git@GitHub.COM/ob-labs/powercontext-go.git", want: "github.com/ob-labs/powercontext-go"},
-		{name: "git", remote: "git://GitHub.COM/ob-labs/powercontext-go.git", want: "github.com/ob-labs/powercontext-go"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := normalizeWorkBuddyHookGitRemote(test.remote); got != test.want {
-				t.Fatalf("normalizeWorkBuddyHookGitRemote() = %q, want %q", got, test.want)
-			}
-		})
-	}
-}
-
-func TestResolveWorkBuddyHookScopeHashesLongRemote(t *testing.T) {
-	project := newWorkBuddyHookGitProject(t)
-	path := strings.Repeat("x", 300)
-	workBuddyHookGit(t, project, "config", "remote.origin.url", "git@github.com:"+path+".git")
-
-	got, ok := resolveWorkBuddyHookScope(t.Context(), project, "project", func(string) string { return "" })
-	sum := sha256.Sum256([]byte("github.com/" + path))
-	want := "git:sha256:" + hex.EncodeToString(sum[:])
-	if !ok || got != want {
-		t.Fatalf("resolveWorkBuddyHookScope() = %q, %t, want %q, true", got, ok, want)
-	}
-}
-
-func newWorkBuddyHookGitProject(t *testing.T) string {
-	t.Helper()
-	project := filepath.Join(t.TempDir(), "project")
-	if err := os.MkdirAll(project, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	workBuddyHookGit(t, project, "init")
-	return project
-}
-
-func workBuddyHookGit(t *testing.T, directory string, arguments ...string) {
-	t.Helper()
-	command := exec.CommandContext(t.Context(), "git", arguments...)
-	command.Dir = directory
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(arguments, " "), err, output)
-	}
-}
-
-func workBuddyHookGitOutput(t *testing.T, directory string, arguments ...string) string {
-	t.Helper()
-	command := exec.CommandContext(t.Context(), "git", arguments...)
-	command.Dir = directory
-	output, err := command.Output()
-	if err != nil {
-		t.Fatalf("git %s: %v", strings.Join(arguments, " "), err)
-	}
-	return strings.TrimSpace(string(output))
-}
-
-func workBuddyHookLocalScope(t *testing.T, project string) string {
-	t.Helper()
-	resolved, err := filepath.EvalSymlinks(project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256([]byte(resolved))
-	return "local:" + hex.EncodeToString(sum[:])
 }
 
 type workBuddyHookRoundTripper func(*http.Request) (*http.Response, error)

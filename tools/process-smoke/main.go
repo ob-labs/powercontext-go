@@ -74,6 +74,9 @@ var baseToolNames = []string{
 	"revise_artifact_candidate",
 	"revise_memory_entry",
 	"search_memory",
+	"scope_binding_clear",
+	"scope_binding_resolve",
+	"scope_binding_set",
 }
 
 type options struct {
@@ -101,7 +104,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf(
-		"Verified PowerContext %s CLI, HTTP, authenticated Dashboard, MCP 20/24-tool surfaces, SQLite restart persistence, and graceful shutdown.\n",
+		"Verified PowerContext %s CLI, HTTP, authenticated Dashboard, MCP 23/27-tool surfaces, SQLite restart persistence, and graceful shutdown.\n",
 		*version,
 	)
 }

@@ -94,6 +94,43 @@ func TestScopeApplicationRejectsInvalidRelationships(t *testing.T) {
 	}
 }
 
+func TestScopeApplicationClearBindingIsIdempotent(t *testing.T) {
+	store := &memoryScopeStore{scopes: map[string]scope.Descriptor{}}
+	application, err := NewScopeApplication(New(), store, func() string { return "scope-created" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := scope.NewDraft("title", "summary", "", nil, nil, "clear-binding")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := application.Create(t.Context(), draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := scope.NewBindingKey("codex", "project", "repository")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, bindErr := application.Bind(t.Context(), key, created.ID()); bindErr != nil {
+		t.Fatal(bindErr)
+	}
+
+	cleared, err := application.ClearBinding(t.Context(), key)
+	if err != nil || !cleared {
+		t.Fatalf("first clear = (%t, %v), want (true, nil)", cleared, err)
+	}
+	if _, resolveErr := application.Resolve(t.Context(), nil, []scope.BindingKey{key}); resolveErr == nil {
+		t.Fatal("cleared binding resolved a Scope")
+	} else if _, ok := resolveErr.(*scope.BindingNotFoundError); !ok {
+		t.Fatalf("resolve after clear error = %T %v, want BindingNotFoundError", resolveErr, resolveErr)
+	}
+	repeated, err := application.ClearBinding(t.Context(), key)
+	if err != nil || repeated {
+		t.Fatalf("repeated clear = (%t, %v), want (false, nil)", repeated, err)
+	}
+}
+
 type memoryScopeStore struct {
 	scopes    map[string]scope.Descriptor
 	defaultID string
@@ -176,6 +213,14 @@ func (s *memoryScopeStore) SetBinding(_ context.Context, key scope.BindingKey, i
 	}
 	s.bindings[key] = binding
 	return binding, nil
+}
+
+func (s *memoryScopeStore) ClearBinding(_ context.Context, key scope.BindingKey) (bool, error) {
+	if _, found := s.bindings[key]; !found {
+		return false, nil
+	}
+	delete(s.bindings, key)
+	return true, nil
 }
 
 func (s *memoryScopeStore) Binding(_ context.Context, key scope.BindingKey) (scope.Binding, bool, error) {
