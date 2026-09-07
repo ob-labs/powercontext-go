@@ -103,18 +103,8 @@ func (c ProcessConfig) Validate() error {
 	default:
 		return errors.New("server: SQLite journal mode is invalid")
 	}
-	if c.Inference.GenerationTimeout <= 0 || c.Inference.GenerationMaxRequests < 1 || c.Inference.EmbeddingTimeout <= 0 || c.Inference.EmbeddingBatchSize < 1 {
-		return errors.New("server: inference limits are invalid")
-	}
-	if c.Inference.EmbeddingNormalization != "none" && c.Inference.EmbeddingNormalization != "unit" {
-		return errors.New("server: embedding normalization must be none or unit")
-	}
-	embeddingConfigured := []bool{c.Inference.EmbeddingModel != "", c.Inference.EmbeddingProfileID != "", c.Inference.EmbeddingDimension != 0}
-	if (embeddingConfigured[0] || embeddingConfigured[1] || embeddingConfigured[2]) && !(embeddingConfigured[0] && embeddingConfigured[1] && embeddingConfigured[2]) {
-		return errors.New("server: embedding model, profile ID, and dimension must be configured together")
-	}
-	if c.Inference.EmbeddingDimension < 0 || (c.Inference.EmbeddingModel != "" && c.Inference.EmbeddingDimension < 1) {
-		return errors.New("server: embedding dimension must be positive")
+	if err := c.Inference.validate(); err != nil {
+		return err
 	}
 	if c.Runtime.MemoryRerankEnabled && c.Inference.GenerationModel == "" {
 		return errors.New("server: Memory reranking requires a generation model")
@@ -215,6 +205,17 @@ func optionalPositiveSeconds(field, value string) (*time.Duration, error) {
 		return nil, err
 	}
 	return &duration, nil
+}
+
+func optionalPositiveInt(field, value string) (*int, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed < 1 {
+		return nil, fmt.Errorf("server: %s must be positive", field)
+	}
+	return &parsed, nil
 }
 
 func optionalDuration(field, value string) (time.Duration, error) {
