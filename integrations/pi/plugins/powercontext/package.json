@@ -27,7 +27,7 @@
     "@earendil-works/pi-coding-agent": "^0.82.0",
     "@types/node": "^24.3.0",
     "typebox": "1.1.38",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vitest": "^3.2.4"
   },
   "engines": {
