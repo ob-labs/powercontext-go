@@ -18,18 +18,49 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/ghodss/yaml"
 )
 
 const (
-	legacyOperationCount       = 53
-	canonicalOperationCount    = 77
-	upstreamOnlyOperationCount = 38
-	retainedExtensionCount     = 14
-	explicitMCPToolCount       = 23
+	compatibilitySurfaceSchemaVersion = 2
+	legacyBaselineOperationCount      = 53
+	canonicalOperationCount           = 77
+	upstreamOnlyOperationCount        = 38
+	retainedExtensionCount            = 14
+	explicitMCPToolCount              = 23
+
+	compatibilityStatusDeferred             = "deferred"
+	compatibilityStatusImplementedCanonical = "implemented-canonical"
 )
+
+var generatedOpenAPIToolAllowlist = map[string]struct{}{
+	"acknowledge_handoff":              {},
+	"activate_handoff":                 {},
+	"approve_artifact_candidate":       {},
+	"capture_content_source":           {},
+	"commit_handoff":                   {},
+	"continue_handoff":                 {},
+	"create_work_contract":             {},
+	"finalize_handoff":                 {},
+	"get_artifact_candidate":           {},
+	"get_handoff_report":               {},
+	"get_handoff_report_workspace":     {},
+	"get_memory_entry":                 {},
+	"handoff_current_work":             {},
+	"list_artifact_candidates":         {},
+	"list_handoff_report_known_scopes": {},
+	"list_memory_entries":              {},
+	"record_task_outcome":              {},
+	"reject_artifact_candidate":        {},
+	"remember_memory":                  {},
+	"retire_memory_entry":              {},
+	"revise_artifact_candidate":        {},
+	"revise_memory_entry":              {},
+	"search_memory":                    {},
+}
 
 // compatibilitySurface records a pinned upstream operation inventory without
 // claiming that every canonical operation has a generated Go transport yet.
@@ -51,18 +82,30 @@ type compatibilityUpstream struct {
 }
 
 type compatibilityLegacy struct {
-	OperationCount int `json:"operation_count"`
+	BaselineOperationCount int                      `json:"baseline_operation_count"`
+	BaselineOperations     []compatibilityOperation `json:"baseline_operations"`
 }
 
 type compatibilityCanonical struct {
-	OperationCount         int                      `json:"operation_count"`
-	UpstreamOnlyOperations []compatibilityOperation `json:"upstream_only_operations"`
+	OperationCount         int                            `json:"operation_count"`
+	UpstreamOnlyOperations []compatibilityStagedOperation `json:"upstream_only_operations"`
 }
 
 type compatibilityOperation struct {
 	OperationID string `json:"operation_id"`
 	Method      string `json:"method"`
 	Path        string `json:"path"`
+}
+
+type compatibilityStagedOperation struct {
+	OperationID string `json:"operation_id"`
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	Status      string `json:"status"`
+}
+
+type compatibilityStagedOperations struct {
+	All map[string]compatibilityOperation
 }
 
 type compatibilityMigration struct {
@@ -142,35 +185,160 @@ func parseOpenAPIOperations(specification []byte) (map[string]compatibilityEndpo
 }
 
 func (surface compatibilitySurface) validate(legacy map[string]compatibilityEndpoint) error {
-	if surface.SchemaVersion != 1 {
-		return fmt.Errorf("compatibility surface schema_version = %d, want 1", surface.SchemaVersion)
+	if surface.SchemaVersion != compatibilitySurfaceSchemaVersion {
+		return fmt.Errorf("compatibility surface schema_version = %d, want %d", surface.SchemaVersion, compatibilitySurfaceSchemaVersion)
 	}
 	if surface.Upstream.Repository != "oceanbase/powercontext" ||
 		surface.Upstream.Commit != "74b961fbb07165595314726715d412a3d0d90589" {
 		return fmt.Errorf("unexpected upstream snapshot %q at %q", surface.Upstream.Repository, surface.Upstream.Commit)
 	}
-	if surface.Legacy.OperationCount != legacyOperationCount || len(legacy) != legacyOperationCount {
-		return fmt.Errorf("legacy operation count = %d/%d, want %d", surface.Legacy.OperationCount, len(legacy), legacyOperationCount)
-	}
 	if surface.Canonical.OperationCount != canonicalOperationCount {
 		return fmt.Errorf("canonical operation count = %d, want %d", surface.Canonical.OperationCount, canonicalOperationCount)
 	}
 
+	baseline, err := validateLegacyBaseline(surface.Legacy)
+	if err != nil {
+		return err
+	}
+	staged, err := validateStagedOperations(surface.Canonical.UpstreamOnlyOperations, baseline)
+	if err != nil {
+		return err
+	}
+	if legacyErr := validateLegacyOperations(legacy, baseline, staged); legacyErr != nil {
+		return legacyErr
+	}
 	retained, err := validateRetainedExtensions(surface.RetainedGoExtensions, legacy)
 	if err != nil {
 		return err
 	}
-	upstreamOnly, err := validateUpstreamOnlyOperations(surface.Canonical.UpstreamOnlyOperations, legacy)
+	if migrationErr := validateMethodMigrations(surface.MethodMigrations, legacy, staged.All); migrationErr != nil {
+		return migrationErr
+	}
+	canonical, err := surface.projectCanonical(legacy)
 	if err != nil {
 		return err
 	}
-	if len(legacy)-len(retained)+len(upstreamOnly) != surface.Canonical.OperationCount {
-		return fmt.Errorf("canonical operation calculation = %d, want %d", len(legacy)-len(retained)+len(upstreamOnly), surface.Canonical.OperationCount)
+	if len(canonical) != surface.Canonical.OperationCount {
+		return fmt.Errorf("canonical operation count = %d, want %d", len(canonical), surface.Canonical.OperationCount)
 	}
-	if err := validateMethodMigrations(surface.MethodMigrations, legacy, upstreamOnly); err != nil {
+	if err := validateDistinctEndpoints(canonical); err != nil {
 		return err
 	}
-	return validateGeneratedOpenAPITools(surface.MCPGeneratedOpenAPIOperations, legacy, upstreamOnly)
+	if len(retained) != retainedExtensionCount {
+		return fmt.Errorf("retained Go extensions = %d, want %d", len(retained), retainedExtensionCount)
+	}
+	return validateGeneratedOpenAPITools(surface.MCPGeneratedOpenAPIOperations, legacy)
+}
+
+func validateLegacyBaseline(legacy compatibilityLegacy) (map[string]compatibilityEndpoint, error) {
+	if legacy.BaselineOperationCount != legacyBaselineOperationCount ||
+		len(legacy.BaselineOperations) != legacyBaselineOperationCount {
+		return nil, fmt.Errorf("legacy baseline operation count = %d/%d, want %d",
+			legacy.BaselineOperationCount, len(legacy.BaselineOperations), legacyBaselineOperationCount)
+	}
+	operations := make(map[string]compatibilityEndpoint, len(legacy.BaselineOperations))
+	for _, operation := range legacy.BaselineOperations {
+		if err := validateOperation(operation); err != nil {
+			return nil, fmt.Errorf("legacy baseline operation: %w", err)
+		}
+		if _, found := operations[operation.OperationID]; found {
+			return nil, fmt.Errorf("duplicate legacy baseline operation %q", operation.OperationID)
+		}
+		operations[operation.OperationID] = compatibilityEndpoint{Method: operation.Method, Path: operation.Path}
+	}
+	return operations, nil
+}
+
+func validateStagedOperations(
+	entries []compatibilityStagedOperation,
+	baseline map[string]compatibilityEndpoint,
+) (compatibilityStagedOperations, error) {
+	if len(entries) != upstreamOnlyOperationCount {
+		return compatibilityStagedOperations{}, fmt.Errorf("upstream-only operations = %d, want %d", len(entries), upstreamOnlyOperationCount)
+	}
+	staged := compatibilityStagedOperations{
+		All: make(map[string]compatibilityOperation, len(entries)),
+	}
+	for _, entry := range entries {
+		operation := compatibilityOperation{OperationID: entry.OperationID, Method: entry.Method, Path: entry.Path}
+		if err := validateOperation(operation); err != nil {
+			return compatibilityStagedOperations{}, fmt.Errorf("upstream-only operation: %w", err)
+		}
+		if _, found := staged.All[operation.OperationID]; found {
+			return compatibilityStagedOperations{}, fmt.Errorf("duplicate upstream-only operation %q", operation.OperationID)
+		}
+		if _, found := baseline[operation.OperationID]; found {
+			return compatibilityStagedOperations{}, fmt.Errorf("staged operation %q already exists in the legacy baseline", operation.OperationID)
+		}
+		staged.All[operation.OperationID] = operation
+		switch entry.Status {
+		case compatibilityStatusDeferred, compatibilityStatusImplementedCanonical:
+		default:
+			return compatibilityStagedOperations{}, fmt.Errorf("upstream-only operation %q has unknown status %q", operation.OperationID, entry.Status)
+		}
+	}
+	return staged, nil
+}
+
+func validateLegacyOperations(
+	legacy, expected map[string]compatibilityEndpoint,
+	staged compatibilityStagedOperations,
+) error {
+	for operationID := range staged.All {
+		if _, found := legacy[operationID]; found {
+			return fmt.Errorf("upstream-only operation %q is present in frozen legacy OpenAPI", operationID)
+		}
+	}
+	if len(legacy) != len(expected) {
+		return fmt.Errorf("legacy operation count = %d, want %d", len(legacy), len(expected))
+	}
+	for operationID, endpoint := range expected {
+		if legacy[operationID] != endpoint {
+			return fmt.Errorf("legacy operation %q endpoint = %#v, want %#v", operationID, legacy[operationID], endpoint)
+		}
+	}
+	return nil
+}
+
+func (surface compatibilitySurface) projectCanonical(
+	legacy map[string]compatibilityEndpoint,
+) (map[string]compatibilityEndpoint, error) {
+	baseline, err := validateLegacyBaseline(surface.Legacy)
+	if err != nil {
+		return nil, err
+	}
+	staged, err := validateStagedOperations(surface.Canonical.UpstreamOnlyOperations, baseline)
+	if err != nil {
+		return nil, err
+	}
+	retained, err := validateRetainedExtensions(surface.RetainedGoExtensions, legacy)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMethodMigrations(surface.MethodMigrations, legacy, staged.All); err != nil {
+		return nil, err
+	}
+	canonical := maps.Clone(legacy)
+	for operationID := range retained {
+		delete(canonical, operationID)
+	}
+	migration := surface.MethodMigrations[0]
+	canonical[migration.OperationID] = migration.Canonical
+	for operationID, operation := range staged.All {
+		canonical[operationID] = compatibilityEndpoint{Method: operation.Method, Path: operation.Path}
+	}
+	return canonical, nil
+}
+
+func validateDistinctEndpoints(operations map[string]compatibilityEndpoint) error {
+	seen := make(map[compatibilityEndpoint]string, len(operations))
+	for operationID, endpoint := range operations {
+		if previous, found := seen[endpoint]; found {
+			return fmt.Errorf("canonical operations %q and %q share endpoint %s %s", previous, operationID, endpoint.Method, endpoint.Path)
+		}
+		seen[endpoint] = operationID
+	}
+	return nil
 }
 
 func validateRetainedExtensions(
@@ -200,33 +368,10 @@ func validateRetainedExtensions(
 	return result, nil
 }
 
-func validateUpstreamOnlyOperations(
-	entries []compatibilityOperation,
-	legacy map[string]compatibilityEndpoint,
-) (map[string]struct{}, error) {
-	if len(entries) != upstreamOnlyOperationCount {
-		return nil, fmt.Errorf("upstream-only operations = %d, want %d", len(entries), upstreamOnlyOperationCount)
-	}
-	result := make(map[string]struct{}, len(entries))
-	for _, entry := range entries {
-		if err := validateOperation(entry); err != nil {
-			return nil, fmt.Errorf("upstream-only operation: %w", err)
-		}
-		if _, exists := result[entry.OperationID]; exists {
-			return nil, fmt.Errorf("duplicate upstream-only operation %q", entry.OperationID)
-		}
-		if _, exists := legacy[entry.OperationID]; exists {
-			return nil, fmt.Errorf("upstream-only operation %q already exists in legacy OpenAPI", entry.OperationID)
-		}
-		result[entry.OperationID] = struct{}{}
-	}
-	return result, nil
-}
-
 func validateMethodMigrations(
 	entries []compatibilityMigration,
 	legacy map[string]compatibilityEndpoint,
-	upstreamOnly map[string]struct{},
+	staged map[string]compatibilityOperation,
 ) error {
 	if len(entries) != 1 {
 		return fmt.Errorf("method migrations = %d, want 1", len(entries))
@@ -240,7 +385,7 @@ func validateMethodMigrations(
 	if legacy[migration.OperationID] != migration.Legacy {
 		return errors.New("legacy GET /v1/stats is not preserved")
 	}
-	if _, found := upstreamOnly[migration.OperationID]; found {
+	if _, found := staged[migration.OperationID]; found {
 		return errors.New("get_stats migration cannot be upstream-only")
 	}
 	if migration.CanonicalMethodName == operationMethodName(migration.OperationID) {
@@ -252,9 +397,8 @@ func validateMethodMigrations(
 func validateGeneratedOpenAPITools(
 	operations []string,
 	legacy map[string]compatibilityEndpoint,
-	upstreamOnly map[string]struct{},
 ) error {
-	if len(operations) != explicitMCPToolCount {
+	if len(operations) != explicitMCPToolCount || len(generatedOpenAPIToolAllowlist) != explicitMCPToolCount {
 		return fmt.Errorf("generated OpenAPI MCP tools = %d, want %d", len(operations), explicitMCPToolCount)
 	}
 	seen := make(map[string]struct{}, len(operations))
@@ -265,10 +409,15 @@ func validateGeneratedOpenAPITools(
 		if _, found := legacy[operationID]; !found {
 			return fmt.Errorf("generated OpenAPI MCP tool %q is absent from the implemented legacy contract", operationID)
 		}
-		if _, found := upstreamOnly[operationID]; found {
-			return fmt.Errorf("generated OpenAPI MCP tool %q is not implemented", operationID)
+		if _, allowed := generatedOpenAPIToolAllowlist[operationID]; !allowed {
+			return fmt.Errorf("generated OpenAPI MCP tool %q is outside the curated legacy set", operationID)
 		}
 		seen[operationID] = struct{}{}
+	}
+	for operationID := range generatedOpenAPIToolAllowlist {
+		if _, found := seen[operationID]; !found {
+			return fmt.Errorf("curated generated OpenAPI MCP tool %q is absent", operationID)
+		}
 	}
 	return nil
 }

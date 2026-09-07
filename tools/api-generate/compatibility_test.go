@@ -16,6 +16,7 @@ package main
 
 import (
 	"encoding/json/v2"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -52,6 +53,109 @@ func TestCompatibilitySurfaceProtectsLegacyContract(t *testing.T) {
 	}
 }
 
+func TestCompatibilitySurfaceSeparatesCanonicalImplementationFromLegacy(t *testing.T) {
+	t.Parallel()
+	specification, err := os.ReadFile("../../openapi/powercontext.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile("../../openapi/compatibility-surface.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	surface, err := decodeCompatibilitySurface(contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	index := stagedOperationIndex(t, surface, "create_scope")
+	entry := surface.Canonical.UpstreamOnlyOperations[index]
+	surface.Canonical.UpstreamOnlyOperations[index].Status = compatibilityStatusImplementedCanonical
+	canonicalContents, err := json.Marshal(surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validationErr := validateCompatibilitySurface(specification, canonicalContents); validationErr != nil {
+		t.Fatalf("canonical implementation without a legacy route was rejected: %v", validationErr)
+	}
+	legacy, err := parseOpenAPIOperations(specification)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := surface.projectCanonical(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(canonical) != canonicalOperationCount {
+		t.Fatalf("canonical operation count = %d, want %d", len(canonical), canonicalOperationCount)
+	}
+	if canonical[entry.OperationID] != (compatibilityEndpoint{Method: entry.Method, Path: entry.Path}) {
+		t.Fatalf("implemented canonical operation = %#v", canonical[entry.OperationID])
+	}
+	if canonical["get_stats"] != (compatibilityEndpoint{Method: "post", Path: "/v1/stats"}) {
+		t.Fatalf("canonical get_stats endpoint = %#v", canonical["get_stats"])
+	}
+
+	t.Run("rejects a canonical operation in frozen legacy", func(t *testing.T) {
+		implementedSpecification := addSyntheticOpenAPIOperation(t, specification, entry)
+		if err := validateCompatibilitySurface(implementedSpecification, canonicalContents); err == nil {
+			t.Fatal("canonical operation present in frozen legacy OpenAPI was accepted")
+		}
+	})
+	t.Run("rejects an implemented scope operation as a generated MCP tool", func(t *testing.T) {
+		mcpMutant, cloneErr := cloneCompatibilitySurface(surface)
+		if cloneErr != nil {
+			t.Fatal(cloneErr)
+		}
+		mcpMutant.MCPGeneratedOpenAPIOperations[0] = entry.OperationID
+		mcpContents, marshalErr := json.Marshal(mcpMutant)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		if err := validateCompatibilitySurface(specification, mcpContents); err == nil {
+			t.Fatal("implemented scope operation was accepted as a generated MCP tool")
+		}
+	})
+	t.Run("rejects an unknown staged status", func(t *testing.T) {
+		unknown, cloneErr := cloneCompatibilitySurface(surface)
+		if cloneErr != nil {
+			t.Fatal(cloneErr)
+		}
+		unknown.Canonical.UpstreamOnlyOperations[index].Status = "unknown"
+		unknownContents, marshalErr := json.Marshal(unknown)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		if err := validateCompatibilitySurface(specification, unknownContents); err == nil {
+			t.Fatal("unknown staged status was accepted")
+		}
+	})
+}
+
+func stagedOperationIndex(t *testing.T, surface compatibilitySurface, operationID string) int {
+	t.Helper()
+	for index, operation := range surface.Canonical.UpstreamOnlyOperations {
+		if operation.OperationID == operationID {
+			return index
+		}
+	}
+	t.Fatalf("missing staged operation %q", operationID)
+	return 0
+}
+
+func addSyntheticOpenAPIOperation(
+	t *testing.T,
+	specification []byte,
+	operation compatibilityStagedOperation,
+) []byte {
+	t.Helper()
+	paths, components, found := strings.Cut(string(specification), "components:\n")
+	if !found {
+		t.Fatal("OpenAPI specification does not contain components")
+	}
+	return []byte(fmt.Sprintf("%s  %s:\n    %s:\n      operationId: %s\ncomponents:\n%s",
+		paths, operation.Path, operation.Method, operation.OperationID, components))
+}
+
 func TestCompatibilitySurfaceMatchesPinnedUpstreamLedger(t *testing.T) {
 	t.Parallel()
 	contents, err := os.ReadFile("../../openapi/compatibility-surface.json")
@@ -71,10 +175,11 @@ func TestCompatibilitySurfaceMatchesPinnedUpstreamLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	if surface.Upstream != ledger.Upstream || surface.Canonical.OperationCount != ledger.OperationCounts.Common+ledger.OperationCounts.UpstreamOnly ||
-		surface.Legacy.OperationCount != ledger.OperationCounts.Common+ledger.OperationCounts.GoOnly {
+		surface.Legacy.BaselineOperationCount != ledger.OperationCounts.Common+ledger.OperationCounts.GoOnly ||
+		len(surface.Legacy.BaselineOperations) != ledger.OperationCounts.Common+ledger.OperationCounts.GoOnly {
 		t.Fatalf("compatibility surface does not match pinned ledger: %#v", surface)
 	}
-	if !sameCompatibilityOperations(surface.Canonical.UpstreamOnlyOperations, ledger.UpstreamOnly) ||
+	if !sameCompatibilityOperations(stagedCompatibilityOperations(surface.Canonical.UpstreamOnlyOperations), ledger.UpstreamOnly) ||
 		!sameCompatibilityOperations(surface.RetainedGoExtensions, ledger.GoOnly) {
 		t.Fatal("compatibility operation inventory does not match pinned ledger")
 	}
@@ -93,8 +198,8 @@ func TestCompatibilitySurfaceRejectsAmbiguousJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mutant := range []string{
-		strings.Replace(string(contents), `"schema_version": 1,`, `"schema_version": 1, "unknown": true,`, 1),
-		strings.Replace(string(contents), `"schema_version": 1,`, `"schema_version": 2, "schema_version": 1,`, 1),
+		strings.Replace(string(contents), `"schema_version": 2,`, `"schema_version": 2, "unknown": true,`, 1),
+		strings.Replace(string(contents), `"schema_version": 2,`, `"schema_version": 1, "schema_version": 2,`, 1),
 	} {
 		if _, err := decodeCompatibilitySurface([]byte(mutant)); err == nil {
 			t.Fatal("accepted ambiguous compatibility surface JSON")
@@ -136,6 +241,18 @@ func TestCompatibilitySurfaceRejectsContractMutants(t *testing.T) {
 			name: "canonical stats keeps legacy method name",
 			mutate: func(surface *compatibilitySurface, _ *[]byte) {
 				surface.MethodMigrations[0].CanonicalMethodName = "GetStats"
+			},
+		},
+		{
+			name: "legacy replaces a baseline operation",
+			mutate: func(_ *compatibilitySurface, specification *[]byte) {
+				before := string(*specification)
+				after := strings.Replace(before, "operationId: get_liveness", "operationId: unexpected_liveness", 1)
+				if before == after {
+					*specification = []byte("not: OpenAPI")
+					return
+				}
+				*specification = []byte(after)
 			},
 		},
 		{
@@ -192,4 +309,16 @@ func sameCompatibilityOperations(left, right []compatibilityOperation) bool {
 		}
 	}
 	return true
+}
+
+func stagedCompatibilityOperations(entries []compatibilityStagedOperation) []compatibilityOperation {
+	operations := make([]compatibilityOperation, len(entries))
+	for index, entry := range entries {
+		operations[index] = compatibilityOperation{
+			OperationID: entry.OperationID,
+			Method:      entry.Method,
+			Path:        entry.Path,
+		}
+	}
+	return operations
 }
