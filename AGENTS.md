@@ -582,6 +582,6 @@ source / artifact / trigger / inference
   configuration representation.
 - When an exported portable native-manager contract stores an injected
   boundary or validated plan, reject zero-value or manually formed invalid
-  values with an existing typed redacted error before constructing or invoking
-  native command vectors. Verify every public lifecycle command fails closed
-  without a panic.
+  values with an existing typed redacted error before invoking the native
+  boundary. Verify every public lifecycle command fails closed without a
+  panic.
