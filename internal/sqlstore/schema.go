@@ -351,6 +351,32 @@ var builtinSchema = []string{
     )`,
 }
 
+var sqliteBuiltinSchemaTables = []string{
+	"pc_scopes",
+	"pc_scope_context_references",
+	"pc_scope_external_references",
+	"pc_scope_creation_requests",
+	"pc_scope_settings",
+	"pc_scope_bindings",
+	"pc_connector_checkpoints",
+	"pc_source_definition_manifests",
+	"pc_source_journal_heads",
+	"pc_sources",
+	"pc_source_observation_acceptances",
+	"pc_artifacts",
+	"pc_artifact_heads",
+	"pc_artifact_lineage_sources",
+	"pc_artifact_lineage_artifacts",
+	"pc_artifact_candidate_versions",
+	"pc_artifact_candidate_heads",
+	"pc_source_cursors",
+	"pc_external_skill_registrations",
+	"pc_memory_entry_versions",
+	"pc_memory_entry_heads",
+	"pc_model_usage_daily",
+	"pc_recall_token_daily",
+}
+
 // EnsureBuiltinSchema creates only absent Python-compatible core tables.
 func EnsureBuiltinSchema(ctx context.Context, db DBTX) error {
 	return EnsureBuiltinSchemaForDialect(ctx, db, SQLiteDialect)
@@ -372,6 +398,22 @@ func EnsureBuiltinSchemaForDialect(ctx context.Context, db DBTX, dialect Dialect
 		}
 		if _, err := db.ExecContext(ctx, statement); err != nil {
 			return err
+		}
+	}
+	if dialect == SQLiteDialect {
+		return ensureSQLiteBuiltinSchemaTables(ctx, db)
+	}
+	return nil
+}
+
+func ensureSQLiteBuiltinSchemaTables(ctx context.Context, db DBTX) error {
+	for _, name := range sqliteBuiltinSchemaTables {
+		var objectType string
+		if err := db.QueryRowContext(ctx, "SELECT type FROM sqlite_master WHERE name = ?", name).Scan(&objectType); err != nil {
+			return fmt.Errorf("sqlstore: find SQLite schema object %q: %w", name, err)
+		}
+		if objectType != "table" {
+			return fmt.Errorf("sqlstore: SQLite schema object %q must be a table", name)
 		}
 	}
 	return nil

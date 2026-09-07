@@ -537,3 +537,7 @@ source / artifact / trigger / inference
   HTTP rejects an unknown Scope with a redacted 404 before any Source or Memory
   persistence, and verify a process consumer resolves the same default Scope
   across restart.
+- When SQLite initialization uses `CREATE TABLE IF NOT EXISTS`, verify every
+  expected `sqlite_master` object is a table in the same transaction. Prove a
+  same-named view fails without leaving a partial schema or changing existing
+  persisted data.
