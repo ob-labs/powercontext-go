@@ -95,6 +95,7 @@ type dependabotConfig struct {
 type dependabotUpdate struct {
 	PackageEcosystem      string                     `yaml:"package-ecosystem"`
 	Directory             string                     `yaml:"directory"`
+	Directories           []string                   `yaml:"directories"`
 	Schedule              dependabotSchedule         `yaml:"schedule"`
 	OpenPullRequestsLimit int                        `yaml:"open-pull-requests-limit"`
 	Groups                map[string]dependabotGroup `yaml:"groups"`
@@ -111,9 +112,10 @@ type dependabotGroup struct {
 }
 
 type dependabotExpectation struct {
-	Ecosystem string
-	Day       string
-	Group     string
+	Ecosystem   string
+	Directories []string
+	Day         string
+	Group       string
 }
 
 type releaseNotesConfig struct {
@@ -353,11 +355,29 @@ func checkDependabotConfig(root string) error {
 		return fmt.Errorf("%s must use version 2", name)
 	}
 	expectations := []dependabotExpectation{
-		{Ecosystem: "gomod", Day: "monday", Group: "go-minor-patch"},
-		{Ecosystem: "github-actions", Day: "tuesday", Group: "actions-minor-patch"},
+		{Ecosystem: "gomod", Directories: []string{"/", "/test/downstream"}, Day: "monday", Group: "go-minor-patch"},
+		{Ecosystem: "github-actions", Directories: []string{"/"}, Day: "tuesday", Group: "actions-minor-patch"},
+		{
+			Ecosystem: "uv",
+			Directories: []string{
+				"/evaluation", "/integrations/bub", "/integrations/codex/plugins/powercontext",
+				"/integrations/langchain", "/integrations/langgraph", "/integrations/pydantic-ai", "/tools/docs",
+			},
+			Day: "wednesday", Group: "uv-minor-patch",
+		},
+		{
+			Ecosystem: "npm",
+			Directories: []string{
+				"/evaluation/web", "/integrations/dsh/plugins/powercontext",
+				"/integrations/openclaw/plugins/memory-powercontext", "/integrations/opencode/plugins/powercontext",
+				"/integrations/pi/plugins/powercontext",
+			},
+			Day: "thursday", Group: "npm-minor-patch",
+		},
+		{Ecosystem: "docker", Directories: []string{"/"}, Day: "friday", Group: "docker-minor-patch"},
 	}
 	if len(config.Updates) != len(expectations) {
-		return fmt.Errorf("%s must configure exactly gomod and github-actions", name)
+		return fmt.Errorf("%s must configure exactly gomod, github-actions, uv, npm, and docker", name)
 	}
 	updates := make(map[string][]dependabotUpdate, len(config.Updates))
 	for _, update := range config.Updates {
@@ -376,8 +396,16 @@ func checkDependabotConfig(root string) error {
 }
 
 func checkDependabotUpdate(update dependabotUpdate, expectation dependabotExpectation) error {
-	if update.Directory != "/" {
-		return fmt.Errorf("package ecosystem %q must monitor directory %q", expectation.Ecosystem, "/")
+	directories, err := dependabotDirectories(update)
+	if err != nil {
+		return fmt.Errorf("package ecosystem %q %w", expectation.Ecosystem, err)
+	}
+	got := slices.Clone(directories)
+	want := slices.Clone(expectation.Directories)
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		return fmt.Errorf("package ecosystem %q must monitor exactly %q", expectation.Ecosystem, want)
 	}
 	if update.Schedule.Interval != "weekly" {
 		return fmt.Errorf("package ecosystem %q must use a weekly schedule", expectation.Ecosystem)
@@ -399,6 +427,32 @@ func checkDependabotUpdate(update dependabotUpdate, expectation dependabotExpect
 		return fmt.Errorf("group %q must contain only minor and patch updates", expectation.Group)
 	}
 	return nil
+}
+
+func dependabotDirectories(update dependabotUpdate) ([]string, error) {
+	hasDirectory := update.Directory != ""
+	hasDirectories := update.Directories != nil
+	if hasDirectory == hasDirectories {
+		return nil, errors.New("must use exactly one of directory or directories")
+	}
+	directories := update.Directories
+	if hasDirectory {
+		directories = []string{update.Directory}
+	}
+	if len(directories) == 0 {
+		return nil, errors.New("must monitor at least one directory")
+	}
+	seen := make(map[string]struct{}, len(directories))
+	for _, directory := range directories {
+		if strings.TrimSpace(directory) == "" {
+			return nil, errors.New("contains a blank directory")
+		}
+		if _, exists := seen[directory]; exists {
+			return nil, fmt.Errorf("contains duplicate directory %q", directory)
+		}
+		seen[directory] = struct{}{}
+	}
+	return directories, nil
 }
 
 func checkReleasePolicy(root string) error {
