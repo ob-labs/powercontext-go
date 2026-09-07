@@ -36,8 +36,9 @@ from typing_extensions import override
 _PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PLUGIN_ROOT))
 
-from hooks import prepared_context as _prepared_context  # noqa: E402
+from hooks import diagnostics as _diagnostics  # noqa: E402
 from hooks import mcp_client as _mcp_client  # noqa: E402
+from hooks import prepared_context as _prepared_context  # noqa: E402
 from scripts.project_scope import scope_binding_keys  # noqa: E402
 from settings import CodexPluginSettings, _is_loopback_host  # noqa: E402
 
@@ -448,6 +449,8 @@ def _emit_context_event(
     context_status: str | None = None,
     content_bytes: int | None = None,
 ) -> None:
+    if not _diagnostics.should_emit(outcome):
+        return
     event: dict[str, object] = {
         "component": "powercontext.codex.recall",
         "event": "context_prepare",

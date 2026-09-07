@@ -3,6 +3,7 @@ integrations/codex/README.md
 integrations/codex/plugins/powercontext/.codex-plugin/plugin.json
 integrations/codex/plugins/powercontext/.mcp.json
 integrations/codex/plugins/powercontext/README.md
+integrations/codex/plugins/powercontext/hooks/diagnostics.py
 integrations/codex/plugins/powercontext/hooks/hooks.json
 integrations/codex/plugins/powercontext/hooks/mcp_client.py
 integrations/codex/plugins/powercontext/hooks/prepared_context.py
@@ -16,9 +17,11 @@ integrations/codex/plugins/powercontext/uv.lock
 integrations/codex/tests/__init__.py
 integrations/codex/tests/conftest.py
 integrations/codex/tests/test_contract.py
+integrations/codex/tests/test_diagnostics.py
 integrations/codex/tests/test_recall.py
 integrations/workbuddy/README.md
 integrations/workbuddy/plugins/powercontext/.mcp.json
+integrations/workbuddy/plugins/powercontext/hooks/diagnostics.py
 integrations/workbuddy/plugins/powercontext/hooks/hooks.workbuddy.json
 integrations/workbuddy/plugins/powercontext/hooks/powercontext_project_scope.py
 integrations/workbuddy/plugins/powercontext/hooks/prepared_context.py
@@ -32,5 +35,6 @@ integrations/workbuddy/tests/test_artifacts.py
 integrations/workbuddy/tests/test_config.py
 integrations/workbuddy/tests/test_configuration_contract.py
 integrations/workbuddy/tests/test_configuration_template.py
+integrations/workbuddy/tests/test_diagnostics.py
 integrations/workbuddy/tests/test_scope.py
 integrations/workbuddy/tests/test_service_chain.py

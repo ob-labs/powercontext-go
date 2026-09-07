@@ -517,10 +517,6 @@ source / artifact / trigger / inference
   load, provider run, or save, and an unknown scheduled scope acquires no lease
   or process callback while direct context references are all resolved before
   any recall begins.
-- When a Server owns a private Prometheus registry, register standard process
-  and Go runtime collectors in that registry instead of relying on global
-  registration. Verify the real metrics handler emits unlabelled CPU, RSS, and
-  Go runtime samples without exposing scope, content, or credential labels.
 - When a host-native MCP command distinguishes a caller-provided Scope from a
   durable resolved Scope, encode the former only as `explicit_scope_id` and
   return the latter only as `scope_id`. Verify an explicit override reaches the
@@ -556,3 +552,10 @@ source / artifact / trigger / inference
   attestation before extraction or execution, and prove missing permissions,
   incorrect subjects, mutable image references, and reversed verification
   order with workflow-contract mutants.
+- When a short-lived supported host hook emits a classified failure diagnostic,
+  limit each outcome across independent processes for the documented interval
+  with a nonblocking state lock and an atomic content-free state replacement.
+  Treat unreadable or unwritable state as fail-open, and never render a state
+  path or request-sensitive value. Verify real hook processes emit only the
+  first repeated failure, a corrupted state recovers, and lock contention
+  returns within the hook budget.
