@@ -29,13 +29,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/client"
 	"github.com/ob-labs/powercontext-go/inference"
 )
 
 const (
-	downstreamScope           = "project:downstream-consumer"
 	downstreamSourceID        = "downstream-work-boundary"
 	downstreamReceiptSourceID = "downstream-receipt"
 	maximumServerLogBytes     = 32 * 1024
@@ -50,9 +51,10 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create public client: %v", err)
 	}
+	scopeID := resolveDefaultScope(t, ctx, serverURL)
 
 	if _, createErr := api.CreateWorkContract(ctx, &v1.CreateWorkContractRequest{
-		ScopeID:  downstreamScope,
+		ScopeID:  scopeID,
 		SourceID: "downstream-contract",
 		Contract: v1.WorkContract{
 			Schema:             v1.WorkContractSchemaPowercontextWorkContractV1,
@@ -68,7 +70,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}); createErr != nil {
 		t.Fatalf("create work contract through public client: %v", createErr)
 	}
-	preparedResult, err := api.HandoffCurrentWork(ctx, currentWorkHandoffRequest())
+	preparedResult, err := api.HandoffCurrentWork(ctx, currentWorkHandoffRequest(scopeID))
 	if err != nil {
 		t.Fatalf("prepare current-work Handoff through public client: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}
 
 	committedResult, err := api.CommitHandoff(ctx, &v1.CommitHandoffRequest{
-		ScopeID: downstreamScope,
+		ScopeID: scopeID,
 		Handoff: prepared.Response.Handoff,
 	})
 	if err != nil {
@@ -90,7 +92,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 	}
 
 	acknowledgedResult, err := api.AcknowledgeHandoff(ctx, &v1.AcknowledgeHandoffRequest{
-		ScopeID:   downstreamScope,
+		ScopeID:   scopeID,
 		SourceID:  downstreamReceiptSourceID,
 		Receiver:  "downstream-consumer",
 		Status:    v1.HandoffReceiptStatusAccepted,
@@ -111,7 +113,7 @@ func TestPublicClientCompletesCurrentWorkHandoff(t *testing.T) {
 }
 
 func TestCurrentWorkHandoffRequestUsesPublicContract(t *testing.T) {
-	if err := currentWorkHandoffRequest().Validate(); err != nil {
+	if err := currentWorkHandoffRequest("project:downstream-consumer").Validate(); err != nil {
 		t.Fatalf("current-work Handoff request violates the public contract: %v", err)
 	}
 }
@@ -173,9 +175,10 @@ func TestPublicClientMemoryPersistsAcrossGracefulServerRestart(t *testing.T) {
 			t.Fatalf("empty Memory request error = %#v", rememberErr)
 		}
 	}
+	firstScopeID := resolveDefaultScope(t, ctx, firstURL)
 
 	rememberedResult, err := firstClient.RememberMemory(ctx, &v1.RememberMemoryRequest{
-		ScopeID: downstreamScope,
+		ScopeID: firstScopeID,
 		Kind:    "fact",
 		Text:    "A public client persisted this Memory entry.",
 	})
@@ -193,7 +196,11 @@ func TestPublicClientMemoryPersistsAcrossGracefulServerRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create restarted public client: %v", err)
 	}
-	listedResult, err := secondClient.ListMemoryEntries(ctx, &v1.ListMemoryEntriesRequest{ScopeID: downstreamScope})
+	secondScopeID := resolveDefaultScope(t, ctx, secondURL)
+	if secondScopeID != firstScopeID {
+		t.Fatalf("default Scope changed across restart")
+	}
+	listedResult, err := secondClient.ListMemoryEntries(ctx, &v1.ListMemoryEntriesRequest{ScopeID: secondScopeID})
 	if err != nil {
 		t.Fatalf("list Memory through restarted public client: %v", err)
 	}
@@ -249,9 +256,9 @@ func TestServerLogBufferRetainsLatestBoundedOutput(t *testing.T) {
 	}
 }
 
-func currentWorkHandoffRequest() *v1.HandoffCurrentWorkRequest {
+func currentWorkHandoffRequest(scopeID string) *v1.HandoffCurrentWorkRequest {
 	return &v1.HandoffCurrentWorkRequest{
-		ScopeID:  downstreamScope,
+		ScopeID:  scopeID,
 		SourceID: downstreamSourceID,
 		Handoff: v1.CurrentWorkHandoff{
 			Schema:      v1.CurrentWorkHandoffSchemaPowercontextCurrentWorkHandoffV1,
@@ -263,6 +270,33 @@ func currentWorkHandoffRequest() *v1.HandoffCurrentWorkRequest {
 			Omissions:   []string{},
 		},
 	}
+}
+
+func resolveDefaultScope(t *testing.T, ctx context.Context, serverURL string) string {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "downstream-public-consumer", Version: "1"}, nil)
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint: serverURL + "/mcp/", HTTPClient: &http.Client{Timeout: 5 * time.Second}, DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("connect public MCP client: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "scope_binding_resolve", Arguments: map[string]any{},
+	})
+	if err != nil || result.IsError {
+		t.Fatalf("resolve default Scope through MCP: %#v, %v", result, err)
+	}
+	content, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("default Scope result = %T", result.StructuredContent)
+	}
+	scopeID, ok := content["scope_id"].(string)
+	if !ok || strings.TrimSpace(scopeID) != scopeID || scopeID == "" {
+		t.Fatalf("default Scope identity is invalid: %#v", content)
+	}
+	return scopeID
 }
 
 func startServer(t *testing.T, ctx context.Context) string {

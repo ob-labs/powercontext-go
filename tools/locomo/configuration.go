@@ -17,11 +17,15 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -29,6 +33,9 @@ import (
 	"github.com/ob-labs/powercontext-go/inference"
 	"github.com/ob-labs/powercontext-go/internal/benchmark/locomo"
 	"github.com/ob-labs/powercontext-go/internal/modelprovider"
+	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/scope"
+	"github.com/ob-labs/powercontext-go/internal/sqlstore"
 	"github.com/ob-labs/powercontext-go/server"
 )
 
@@ -58,9 +65,10 @@ func publicConfiguration(config server.ProcessConfig) (locomo.PublicConfiguratio
 }
 
 type benchmarkApplication struct {
-	application *server.Application
-	operations  endpointOperations
-	model       inference.TextModel
+	application   *server.Application
+	scopeDatabase *sqlstore.Database
+	operations    endpointOperations
+	model         inference.TextModel
 }
 
 func openBenchmarkApplication(
@@ -69,6 +77,7 @@ func openBenchmarkApplication(
 	rerank locomo.RerankMode,
 	candidateLimit int,
 	needAnswerModel bool,
+	scopeIDs []string,
 ) (*benchmarkApplication, error) {
 	config.Runtime.SourceWindowLimit = 1
 	config.Runtime.SourceWindowInterval = nil
@@ -101,22 +110,120 @@ func openBenchmarkApplication(
 		recorder = &recordingReranker{next: reranker}
 		dependencies.MemoryReranker = recorder
 	}
-	application, err := server.OpenApplication(ctx, config, dependencies)
+	scopeDatabase, err := registerBenchmarkScopes(ctx, config, scopeIDs)
 	if err != nil {
 		return nil, err
 	}
+	application, err := server.OpenApplication(ctx, config, dependencies)
+	if err != nil {
+		_ = scopeDatabase.Close(ctx)
+		return nil, err
+	}
 	return &benchmarkApplication{
-		application: application,
-		operations:  endpointOperations{handler: application.Endpoint(), recorder: recorder},
-		model:       model,
+		application:   application,
+		scopeDatabase: scopeDatabase,
+		operations:    endpointOperations{handler: application.Endpoint(), recorder: recorder},
+		model:         model,
 	}, nil
 }
 
 func (a *benchmarkApplication) Close(ctx context.Context) error {
-	if a == nil || a.application == nil {
+	if a == nil {
 		return nil
 	}
-	return a.application.Close(ctx)
+	var closeErrors []error
+	if a.application != nil {
+		closeErrors = append(closeErrors, a.application.Close(ctx))
+	}
+	if a.scopeDatabase != nil {
+		closeErrors = append(closeErrors, a.scopeDatabase.Close(ctx))
+	}
+	return errors.Join(closeErrors...)
+}
+
+func benchmarkScopeIDs(dataset locomo.Dataset, runID string) ([]string, error) {
+	values := make(map[string]struct{})
+	for _, conversation := range dataset.Conversations() {
+		scopeID, err := locomo.ScopeID(runID, conversation.SampleID())
+		if err != nil {
+			return nil, err
+		}
+		values[scopeID] = struct{}{}
+	}
+	for _, question := range dataset.Questions() {
+		scopeID, err := locomo.ScopeID(runID, question.SampleID())
+		if err != nil {
+			return nil, err
+		}
+		values[scopeID] = struct{}{}
+	}
+	return slices.Sorted(maps.Keys(values)), nil
+}
+
+func registerBenchmarkScopes(
+	ctx context.Context,
+	config server.ProcessConfig,
+	scopeIDs []string,
+) (*sqlstore.Database, error) {
+	dsn, err := server.SQLiteDSN(config.Database.SQLite.URL)
+	if err != nil {
+		return nil, err
+	}
+	database, err := sqlstore.OpenSQLite(ctx, sqlstore.SQLiteConfig{
+		DSN: dsn, BusyTimeout: config.Database.SQLite.BusyTimeout,
+		JournalMode: config.Database.SQLite.JournalMode, ForeignKeys: config.Database.SQLite.ForeignKeys,
+		MaxOpenConns: config.Database.SQLite.MaxOpenConns, MaxIdleConns: config.Database.SQLite.MaxIdleConns,
+	})
+	if err != nil {
+		return nil, err
+	}
+	closeWithError := func(cause error) (*sqlstore.Database, error) {
+		return nil, errors.Join(cause, database.Close(ctx))
+	}
+	ids := slices.Sorted(maps.Keys(scopeIDSet(scopeIDs)))
+	index := 0
+	store, err := sqlstore.NewRuntimeScopeStore(database, sqlstore.ScopeRepository{})
+	if err != nil {
+		return closeWithError(err)
+	}
+	application, err := pcruntime.NewScopeApplication(pcruntime.New(), store, func() string {
+		id := ids[index]
+		index++
+		return id
+	})
+	if err != nil {
+		return closeWithError(err)
+	}
+	for _, id := range ids {
+		draft, draftErr := scope.NewDraft(
+			"LoCoMo benchmark", "An isolated durable Scope for one LoCoMo sample.", "", nil, nil,
+			benchmarkScopeIdempotencyKey(id),
+		)
+		if draftErr != nil {
+			return closeWithError(draftErr)
+		}
+		created, createErr := application.Create(ctx, draft)
+		if createErr != nil {
+			return closeWithError(createErr)
+		}
+		if created.ID() != id {
+			return closeWithError(errors.New("benchmark Scope registration returned a different identity"))
+		}
+	}
+	return database, nil
+}
+
+func scopeIDSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		result[value] = struct{}{}
+	}
+	return result
+}
+
+func benchmarkScopeIdempotencyKey(scopeID string) string {
+	sum := sha256.Sum256([]byte(scopeID))
+	return "locomo.scope." + hex.EncodeToString(sum[:])
 }
 
 func textModel(modelID string, client *http.Client) (inference.TextModel, error) {

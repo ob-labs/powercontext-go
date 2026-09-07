@@ -144,11 +144,15 @@ func run(ctx context.Context, opts options) (runErr error) {
 		if err := exerciseCLI(ctx, binary, baseEnvironment, baseURL, ""); err != nil {
 			return err
 		}
-		if err := exerciseMemory(ctx, baseURL, "", true); err != nil {
-			return err
+		scopeID, scopeErr := resolveDefaultScope(ctx, baseURL, "")
+		if scopeErr != nil {
+			return scopeErr
 		}
-		if err := exerciseMCP(ctx, baseURL, "", true); err != nil {
-			return err
+		if memoryErr := exerciseMemory(ctx, baseURL, "", scopeID, true); memoryErr != nil {
+			return memoryErr
+		}
+		if mcpErr := exerciseMCP(ctx, baseURL, "", scopeID, true); mcpErr != nil {
+			return mcpErr
 		}
 		response, err := request(ctx, http.MethodPost, baseURL+"/v1/handoff-reports/projects/list", "", `{}`)
 		if err != nil {
@@ -181,10 +185,14 @@ func run(ctx context.Context, opts options) (runErr error) {
 		if err := exerciseCLI(ctx, binary, secureEnvironment, baseURL, smokeToken); err != nil {
 			return err
 		}
-		if err := exerciseMemory(ctx, baseURL, smokeToken, false); err != nil {
-			return err
+		scopeID, scopeErr := resolveDefaultScope(ctx, baseURL, smokeToken)
+		if scopeErr != nil {
+			return scopeErr
 		}
-		return exerciseMCP(ctx, baseURL, smokeToken, true)
+		if memoryErr := exerciseMemory(ctx, baseURL, smokeToken, scopeID, false); memoryErr != nil {
+			return memoryErr
+		}
+		return exerciseMCP(ctx, baseURL, smokeToken, scopeID, true)
 	}); err != nil {
 		return withLog(err, secondLog)
 	}
@@ -198,8 +206,12 @@ func run(ctx context.Context, opts options) (runErr error) {
 	)
 	thirdLog := filepath.Join(root, "server-reports-disabled.log")
 	if err := runPhase(ctx, binary, root, thirdLog, disabledEnvironment, opts.timeout, func(baseURL string) error {
-		if err := exerciseMCP(ctx, baseURL, "", false); err != nil {
-			return err
+		scopeID, scopeErr := resolveDefaultScope(ctx, baseURL, "")
+		if scopeErr != nil {
+			return scopeErr
+		}
+		if mcpErr := exerciseMCP(ctx, baseURL, "", scopeID, false); mcpErr != nil {
+			return mcpErr
 		}
 		response, err := request(ctx, http.MethodPost, baseURL+"/v1/handoff-reports/projects/list", "", `{}`)
 		if err != nil {
@@ -461,7 +473,7 @@ func exerciseCLI(ctx context.Context, binary string, environment []string, baseU
 	return nil
 }
 
-func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) error {
+func exerciseMemory(ctx context.Context, baseURL, token, scopeID string, remember bool) error {
 	api, err := pcclient.New(baseURL, pcclient.Options{BearerToken: token, Timeout: 10 * time.Second})
 	if err != nil {
 		return err
@@ -476,7 +488,7 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 	}
 	if remember {
 		result, rememberErr := api.RememberMemory(ctx, &v1.RememberMemoryRequest{
-			ScopeID: smokeScope, Kind: "fact", Text: smokeText,
+			ScopeID: scopeID, Kind: "fact", Text: smokeText,
 		})
 		if rememberErr != nil {
 			return fmt.Errorf("remember through Go Client: %w", rememberErr)
@@ -491,7 +503,7 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 		}
 	}
 	result, err := api.SearchMemory(ctx, &v1.SearchMemoryRequest{
-		ScopeID: smokeScope,
+		ScopeID: scopeID,
 		Query:   "release verification retrieves private memory",
 		Mode:    v1.NewOptMemorySearchMode(v1.MemorySearchModeFts),
 	})
@@ -508,17 +520,10 @@ func exerciseMemory(ctx context.Context, baseURL, token string, remember bool) e
 	return nil
 }
 
-func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) (returnErr error) {
-	httpClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}
-	if token != "" {
-		httpClient.Transport = bearerTransport{token: token, next: http.DefaultTransport}
-	}
-	client := mcp.NewClient(&mcp.Implementation{Name: "powercontext-process-smoke", Version: "1"}, nil)
-	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
-		Endpoint: baseURL + "/mcp/", HTTPClient: httpClient, DisableStandaloneSSE: true,
-	}, nil)
+func exerciseMCP(ctx context.Context, baseURL, token, scopeID string, reports bool) (returnErr error) {
+	session, err := connectMCP(ctx, baseURL, token)
 	if err != nil {
-		return fmt.Errorf("connect MCP: %w", err)
+		return err
 	}
 	defer func() {
 		if closeErr := session.Close(); closeErr != nil {
@@ -552,7 +557,7 @@ func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) (retu
 		return fmt.Errorf("MCP tools are %v, want %v", actual, expected)
 	}
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name: "list_memory_entries", Arguments: map[string]any{"scope_id": smokeScope},
+		Name: "list_memory_entries", Arguments: map[string]any{"scope_id": scopeID},
 	})
 	if err != nil {
 		return fmt.Errorf("call MCP tool: %w", err)
@@ -569,6 +574,51 @@ func exerciseMCP(ctx context.Context, baseURL, token string, reports bool) (retu
 		return fmt.Errorf("MCP prompts are not the frozen empty surface: %w", err)
 	}
 	return nil
+}
+
+func resolveDefaultScope(ctx context.Context, baseURL, token string) (scopeID string, returnErr error) {
+	session, err := connectMCP(ctx, baseURL, token)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if closeErr := session.Close(); closeErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("close MCP session: %w", closeErr))
+		}
+	}()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "scope_binding_resolve", Arguments: map[string]any{},
+	})
+	if err != nil {
+		return "", fmt.Errorf("resolve default Scope through MCP: %w", err)
+	}
+	if result.IsError {
+		return "", errors.New("MCP default Scope resolution returned an error")
+	}
+	content, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return "", errors.New("MCP default Scope resolution did not return structured content")
+	}
+	scopeID, ok = content["scope_id"].(string)
+	if !ok || scopeID == "" || strings.TrimSpace(scopeID) != scopeID {
+		return "", errors.New("MCP default Scope resolution did not return a valid identity")
+	}
+	return scopeID, nil
+}
+
+func connectMCP(ctx context.Context, baseURL, token string) (*mcp.ClientSession, error) {
+	httpClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}
+	if token != "" {
+		httpClient.Transport = bearerTransport{token: token, next: http.DefaultTransport}
+	}
+	client := mcp.NewClient(&mcp.Implementation{Name: "powercontext-process-smoke", Version: "1"}, nil)
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint: baseURL + "/mcp/", HTTPClient: httpClient, DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("connect MCP: %w", err)
+	}
+	return session, nil
 }
 
 func exerciseSecureHTTP(ctx context.Context, baseURL string) error {
