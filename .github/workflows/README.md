@@ -15,12 +15,14 @@ counterpart or enforces a Go release constraint that does not exist in Python.
 | `release.yml` | `release.yml` | GitHub binary assets and GHCR replace PyPI; release verification and documentation deployment keep the same gates. |
 | `release-verify.yml` | `release-verify.yml` | Verification exercises published Go archives and image digests instead of Python distributions. |
 
-Four Go-specific workflows extend, rather than replace, that Python topology:
+Six Go-specific workflows extend, rather than replace, that Python topology:
 
 | Go workflow | Purpose |
 | --- | --- |
 | `migration-gates.yml` | Reusable PR assurance called by `master.yml`: explicit owned-module integrity, fresh generated-consumer builds, public API compatibility, online verification of the recorded upstream tag, release bytes, and PyPI provenance, frozen Python Oracle and exact v0.1.0 release-fixture regeneration, Python↔Go interoperability, HTTP differential, race/fuzz, Codex/WorkBuddy host-adapter evidence, Codex/SQLite evaluation, four-platform standard/Full builds, CGO-disabled portable SDK cross-builds, and the isolated downstream public-consumer workflow. |
 | `codeql.yml` | Go CodeQL analysis on pull requests, pushes to `main`, a weekly schedule, and manual dispatch. Pull request runs check out the exact submitted head commit before the explicit Go build. |
+| `scorecard.yml` | Advisory OpenSSF Scorecard analysis on default-branch, branch-protection, scheduled, and manual events. It publishes pinned-action supply-chain findings as SARIF without turning a mutable numeric score into a merge contract. |
+| `nightly-reliability.yml` | Scheduled and manually dispatched long-running reliability evidence: five independent four-minute fuzz targets, a stable aggregate fuzz result, and repeated race/shuffle tests with bounded flaky-test statistics and failure output. |
 | `provider-smoke.yml` | Explicitly dispatched, credentialed, bounded real-provider verification; never required on an ordinary pull request. |
 | `windows-contract.yml` | Windows checkout-only contract guard: verifies LF attributes, both versioned fixture SHA-256 inventories, and generated-contract cleanliness without claiming Windows binary support. |
 
@@ -50,6 +52,16 @@ workflow checks.
 
 All third-party GitHub Actions are pinned to reviewed 40-character commit SHAs. The adjacent version comments retain
 the human-readable update intent while preventing a mutable tag from changing executable CI code.
+
+Dependabot monitors every tracked Go module, npm/pnpm project, uv project, the root Dockerfile, and GitHub Actions.
+The exact owned directory sets and staggered weekly schedules are enforced by `make governance-check`; adding or
+removing a tracked dependency surface requires updating that explicit contract in the same reviewed change.
+
+The release workflow retains BuildKit's maximum OCI provenance and SBOM attestations, and additionally creates signed
+GitHub build provenance in the jobs that produce the final archive bytes, checksum manifests, and image digests. A
+manual release must be dispatched from the exact release tag ref so the signer identity cannot drift from the released
+source. `release-verify.yml` binds verification to this repository and `release.yml`, verifies every downloaded subject
+and immutable OCI digest before extraction or execution, and only then runs the published process surfaces.
 
 The `coverage` job instruments every normal Go package with race detection and `covermode=atomic`; it does not exclude
 generated packages or low-coverage command surfaces. The measured baseline is 16.1% statement coverage. CI requires at

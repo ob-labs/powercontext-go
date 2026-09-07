@@ -477,6 +477,9 @@ func checkReleasePolicy(root string) error {
 		"generator",
 		"adapter",
 		"binary versions",
+		"signed build provenance",
+		"immutable artifact digest",
+		"verify the attestation before execution",
 		"DCO sign-off is not required",
 	})
 }

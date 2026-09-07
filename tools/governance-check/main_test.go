@@ -187,6 +187,13 @@ func TestCheckRepositoryEnforcesGovernanceContract(t *testing.T) {
 			wantError: "read docs/release/POLICY.md",
 		},
 		{
+			name: "release policy permits execution before attestation verification",
+			mutate: func(t *testing.T, root string) {
+				replaceFixtureText(t, root, "docs/release/POLICY.md", "verify the attestation before execution", "verify the artifact after execution")
+			},
+			wantError: "verify the attestation before execution",
+		},
+		{
 			name: "missing code of conduct",
 			mutate: func(t *testing.T, root string) {
 				if err := os.Remove(filepath.Join(root, "CODE_OF_CONDUCT.md")); err != nil {
@@ -710,6 +717,9 @@ func validReleasePolicy() string {
 		"generator",
 		"adapter",
 		"binary versions",
+		"signed build provenance",
+		"immutable artifact digest",
+		"verify the attestation before execution",
 		"DCO sign-off is not required",
 	}, "\n")
 }
