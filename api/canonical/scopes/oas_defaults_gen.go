@@ -3,9 +3,33 @@
 package scopes
 
 // setDefaults set default value of fields.
+func (s *CreateScopeRequest) setDefaults() {
+	{
+		var defaultVal0 []string
+		s.ContextReferences = defaultVal0
+	}
+	{
+		var defaultVal0 []ScopeExternalReference
+		s.ExternalReferences = defaultVal0
+	}
+}
+
+// setDefaults set default value of fields.
 func (s *ResolveScopeBindingRequest) setDefaults() {
 	{
 		var defaultVal0 []ScopeBindingKey
 		s.BindingKeys = defaultVal0
+	}
+}
+
+// setDefaults set default value of fields.
+func (s *UpdateScopeRequest) setDefaults() {
+	{
+		var defaultVal0 []string
+		s.ContextReferences = defaultVal0
+	}
+	{
+		var defaultVal0 []ScopeExternalReference
+		s.ExternalReferences = defaultVal0
 	}
 }

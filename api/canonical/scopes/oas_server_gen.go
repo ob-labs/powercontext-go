@@ -8,6 +8,12 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CreateScope implements create_scope operation.
+	//
+	// Create an independent Scope boundary.
+	//
+	// POST /v1/scopes
+	CreateScope(ctx context.Context, req *CreateScopeRequest) (CreateScopeRes, error)
 	// GetDefaultScope implements get_default_scope operation.
 	//
 	// Get the default Scope binding target.
@@ -38,6 +44,18 @@ type Handler interface {
 	//
 	// POST /v1/scopes/selection/resolve
 	ResolveScopeSelection(ctx context.Context, req *ResolveScopeSelectionRequest) (ResolveScopeSelectionRes, error)
+	// SetDefaultScope implements set_default_scope operation.
+	//
+	// Change the default Scope binding target.
+	//
+	// PUT /v1/scopes/default
+	SetDefaultScope(ctx context.Context, req *SetDefaultScopeRequest) (SetDefaultScopeRes, error)
+	// UpdateScope implements update_scope operation.
+	//
+	// Replace mutable Scope metadata and relationships.
+	//
+	// PUT /v1/scopes/{scope_id}
+	UpdateScope(ctx context.Context, req *UpdateScopeRequest, params UpdateScopeParams) (UpdateScopeRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

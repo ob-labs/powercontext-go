@@ -45,8 +45,74 @@ func TestCanonicalScopeHandlerRejectsUnsupportedBindingBeforeResolution(t *testi
 	}
 }
 
+func TestCanonicalScopeHandlerRejectsInvalidMetadataWritesBeforeRuntime(t *testing.T) {
+	operations := &canonicalScopeOperationsStub{}
+	handler := NewCanonicalScopeHandler(operations)
+
+	for _, test := range []struct {
+		name  string
+		call  func() (any, error)
+		calls func() int
+	}{
+		{
+			name: "create external reference",
+			call: func() (any, error) {
+				return handler.CreateScope(t.Context(), &canonicalscopec.CreateScopeRequest{
+					Title: "title", Summary: "summary", IdempotencyKey: "request",
+					ExternalReferences: []canonicalscopec.ScopeExternalReference{{Kind: " ", Value: "private-reference"}},
+				})
+			},
+			calls: func() int { return operations.createCalls },
+		},
+		{
+			name: "update Scope ID",
+			call: func() (any, error) {
+				return handler.UpdateScope(t.Context(), &canonicalscopec.UpdateScopeRequest{
+					ExpectedVersion: 1, Title: "title", Summary: "summary",
+				}, canonicalscopec.UpdateScopeParams{ScopeID: " "})
+			},
+			calls: func() int { return operations.updateCalls },
+		},
+		{
+			name: "default Scope ID",
+			call: func() (any, error) {
+				return handler.SetDefaultScope(t.Context(), &canonicalscopec.SetDefaultScopeRequest{ScopeID: " "})
+			},
+			calls: func() int { return operations.setDefaultCalls },
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response, err := test.call()
+			if response != nil {
+				t.Fatalf("response = %T, want nil", response)
+			}
+			if _, ok := errors.AsType[*scope.ValidationError](err); !ok {
+				t.Fatalf("error = %T %v, want ValidationError", err, err)
+			}
+			if calls := test.calls(); calls != 0 {
+				t.Fatalf("runtime calls = %d, want 0", calls)
+			}
+		})
+	}
+}
+
 type canonicalScopeOperationsStub struct {
-	resolveCalls int
+	createCalls, updateCalls, setDefaultCalls, resolveCalls int
+}
+
+func (s *canonicalScopeOperationsStub) Create(context.Context, scope.Draft) (scope.Descriptor, error) {
+	s.createCalls++
+	return scope.Descriptor{}, nil
+}
+
+func (s *canonicalScopeOperationsStub) Update(context.Context, string, scope.Mutation) (scope.Descriptor, error) {
+	s.updateCalls++
+	return scope.Descriptor{}, nil
+}
+
+func (s *canonicalScopeOperationsStub) SetDefault(context.Context, string) (scope.Descriptor, error) {
+	s.setDefaultCalls++
+	return scope.Descriptor{}, nil
 }
 
 func (s *canonicalScopeOperationsStub) List(context.Context) ([]scope.Descriptor, error) {

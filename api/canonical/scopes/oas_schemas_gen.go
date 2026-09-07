@@ -81,6 +81,105 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// ConflictHeaders wraps ErrorResponse with response headers.
+type ConflictHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ErrorResponse
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *ConflictHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ConflictHeaders) GetResponse() ErrorResponse {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *ConflictHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ConflictHeaders) SetResponse(val ErrorResponse) {
+	s.Response = val
+}
+
+func (*ConflictHeaders) createScopeRes() {}
+func (*ConflictHeaders) updateScopeRes() {}
+
+// Ref: #/components/schemas/CreateScopeRequest
+type CreateScopeRequest struct {
+	ContextReferences  []string                 `json:"context_references"`
+	ExternalReferences []ScopeExternalReference `json:"external_references"`
+	IdempotencyKey     string                   `json:"idempotency_key"`
+	ParentScopeID      OptNilString             `json:"parent_scope_id"`
+	Summary            string                   `json:"summary"`
+	Title              string                   `json:"title"`
+}
+
+// GetContextReferences returns the value of ContextReferences.
+func (s *CreateScopeRequest) GetContextReferences() []string {
+	return s.ContextReferences
+}
+
+// GetExternalReferences returns the value of ExternalReferences.
+func (s *CreateScopeRequest) GetExternalReferences() []ScopeExternalReference {
+	return s.ExternalReferences
+}
+
+// GetIdempotencyKey returns the value of IdempotencyKey.
+func (s *CreateScopeRequest) GetIdempotencyKey() string {
+	return s.IdempotencyKey
+}
+
+// GetParentScopeID returns the value of ParentScopeID.
+func (s *CreateScopeRequest) GetParentScopeID() OptNilString {
+	return s.ParentScopeID
+}
+
+// GetSummary returns the value of Summary.
+func (s *CreateScopeRequest) GetSummary() string {
+	return s.Summary
+}
+
+// GetTitle returns the value of Title.
+func (s *CreateScopeRequest) GetTitle() string {
+	return s.Title
+}
+
+// SetContextReferences sets the value of ContextReferences.
+func (s *CreateScopeRequest) SetContextReferences(val []string) {
+	s.ContextReferences = val
+}
+
+// SetExternalReferences sets the value of ExternalReferences.
+func (s *CreateScopeRequest) SetExternalReferences(val []ScopeExternalReference) {
+	s.ExternalReferences = val
+}
+
+// SetIdempotencyKey sets the value of IdempotencyKey.
+func (s *CreateScopeRequest) SetIdempotencyKey(val string) {
+	s.IdempotencyKey = val
+}
+
+// SetParentScopeID sets the value of ParentScopeID.
+func (s *CreateScopeRequest) SetParentScopeID(val OptNilString) {
+	s.ParentScopeID = val
+}
+
+// SetSummary sets the value of Summary.
+func (s *CreateScopeRequest) SetSummary(val string) {
+	s.Summary = val
+}
+
+// SetTitle sets the value of Title.
+func (s *CreateScopeRequest) SetTitle(val string) {
+	s.Title = val
+}
+
 // Ref: #/components/schemas/ErrorDetail
 type ErrorDetail struct {
 	Code    string                `json:"code"`
@@ -230,8 +329,10 @@ func (s *InvalidRequestHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
+func (*InvalidRequestHeaders) createScopeRes()           {}
 func (*InvalidRequestHeaders) resolveScopeBindingRes()   {}
 func (*InvalidRequestHeaders) resolveScopeSelectionRes() {}
+func (*InvalidRequestHeaders) updateScopeRes()           {}
 
 // NewNilErrorDetailDetails returns new NilErrorDetailDetails with value set to v.
 func NewNilErrorDetailDetails(v ErrorDetailDetails) NilErrorDetailDetails {
@@ -304,10 +405,13 @@ func (s *NotFoundHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
+func (*NotFoundHeaders) createScopeRes()           {}
 func (*NotFoundHeaders) getDefaultScopeRes()       {}
 func (*NotFoundHeaders) getScopeRes()              {}
 func (*NotFoundHeaders) resolveScopeBindingRes()   {}
 func (*NotFoundHeaders) resolveScopeSelectionRes() {}
+func (*NotFoundHeaders) setDefaultScopeRes()       {}
+func (*NotFoundHeaders) updateScopeRes()           {}
 
 // NewOptNilString returns new OptNilString with value set to v.
 func NewOptNilString(v string) OptNilString {
@@ -623,9 +727,12 @@ func (s *ScopeDescriptor) SetVersion(val int) {
 	s.Version = val
 }
 
+func (*ScopeDescriptor) createScopeRes()         {}
 func (*ScopeDescriptor) getDefaultScopeRes()     {}
 func (*ScopeDescriptor) getScopeRes()            {}
 func (*ScopeDescriptor) resolveScopeBindingRes() {}
+func (*ScopeDescriptor) setDefaultScopeRes()     {}
+func (*ScopeDescriptor) updateScopeRes()         {}
 
 // Ref: #/components/schemas/ScopeExternalReference
 type ScopeExternalReference struct {
@@ -767,6 +874,21 @@ func NewSubtreeScopeSelectionScopeSelection(v SubtreeScopeSelection) ScopeSelect
 	return s
 }
 
+// Ref: #/components/schemas/SetDefaultScopeRequest
+type SetDefaultScopeRequest struct {
+	ScopeID string `json:"scope_id"`
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *SetDefaultScopeRequest) GetScopeID() string {
+	return s.ScopeID
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *SetDefaultScopeRequest) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
 // Ref: #/components/schemas/SubtreeScopeSelection
 type SubtreeScopeSelection struct {
 	Mode        SubtreeScopeSelectionMode `json:"mode"`
@@ -864,11 +986,14 @@ func (s *UnauthorizedHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
+func (*UnauthorizedHeaders) createScopeRes()           {}
 func (*UnauthorizedHeaders) getDefaultScopeRes()       {}
 func (*UnauthorizedHeaders) getScopeRes()              {}
 func (*UnauthorizedHeaders) listScopesRes()            {}
 func (*UnauthorizedHeaders) resolveScopeBindingRes()   {}
 func (*UnauthorizedHeaders) resolveScopeSelectionRes() {}
+func (*UnauthorizedHeaders) setDefaultScopeRes()       {}
+func (*UnauthorizedHeaders) updateScopeRes()           {}
 
 // UnavailableHeaders wraps ErrorResponse with response headers.
 type UnavailableHeaders struct {
@@ -897,3 +1022,73 @@ func (s *UnavailableHeaders) SetResponse(val ErrorResponse) {
 }
 
 func (*UnavailableHeaders) listScopesRes() {}
+
+// Ref: #/components/schemas/UpdateScopeRequest
+type UpdateScopeRequest struct {
+	ContextReferences  []string                 `json:"context_references"`
+	ExpectedVersion    int                      `json:"expected_version"`
+	ExternalReferences []ScopeExternalReference `json:"external_references"`
+	ParentScopeID      OptNilString             `json:"parent_scope_id"`
+	Summary            string                   `json:"summary"`
+	Title              string                   `json:"title"`
+}
+
+// GetContextReferences returns the value of ContextReferences.
+func (s *UpdateScopeRequest) GetContextReferences() []string {
+	return s.ContextReferences
+}
+
+// GetExpectedVersion returns the value of ExpectedVersion.
+func (s *UpdateScopeRequest) GetExpectedVersion() int {
+	return s.ExpectedVersion
+}
+
+// GetExternalReferences returns the value of ExternalReferences.
+func (s *UpdateScopeRequest) GetExternalReferences() []ScopeExternalReference {
+	return s.ExternalReferences
+}
+
+// GetParentScopeID returns the value of ParentScopeID.
+func (s *UpdateScopeRequest) GetParentScopeID() OptNilString {
+	return s.ParentScopeID
+}
+
+// GetSummary returns the value of Summary.
+func (s *UpdateScopeRequest) GetSummary() string {
+	return s.Summary
+}
+
+// GetTitle returns the value of Title.
+func (s *UpdateScopeRequest) GetTitle() string {
+	return s.Title
+}
+
+// SetContextReferences sets the value of ContextReferences.
+func (s *UpdateScopeRequest) SetContextReferences(val []string) {
+	s.ContextReferences = val
+}
+
+// SetExpectedVersion sets the value of ExpectedVersion.
+func (s *UpdateScopeRequest) SetExpectedVersion(val int) {
+	s.ExpectedVersion = val
+}
+
+// SetExternalReferences sets the value of ExternalReferences.
+func (s *UpdateScopeRequest) SetExternalReferences(val []ScopeExternalReference) {
+	s.ExternalReferences = val
+}
+
+// SetParentScopeID sets the value of ParentScopeID.
+func (s *UpdateScopeRequest) SetParentScopeID(val OptNilString) {
+	s.ParentScopeID = val
+}
+
+// SetSummary sets the value of Summary.
+func (s *UpdateScopeRequest) SetSummary(val string) {
+	s.Summary = val
+}
+
+// SetTitle sets the value of Title.
+func (s *UpdateScopeRequest) SetTitle(val string) {
+	s.Title = val
+}

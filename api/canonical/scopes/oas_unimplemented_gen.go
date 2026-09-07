@@ -13,6 +13,15 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// CreateScope implements create_scope operation.
+//
+// Create an independent Scope boundary.
+//
+// POST /v1/scopes
+func (UnimplementedHandler) CreateScope(ctx context.Context, req *CreateScopeRequest) (r CreateScopeRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetDefaultScope implements get_default_scope operation.
 //
 // Get the default Scope binding target.
@@ -55,5 +64,23 @@ func (UnimplementedHandler) ResolveScopeBinding(ctx context.Context, req *Resolv
 //
 // POST /v1/scopes/selection/resolve
 func (UnimplementedHandler) ResolveScopeSelection(ctx context.Context, req *ResolveScopeSelectionRequest) (r ResolveScopeSelectionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SetDefaultScope implements set_default_scope operation.
+//
+// Change the default Scope binding target.
+//
+// PUT /v1/scopes/default
+func (UnimplementedHandler) SetDefaultScope(ctx context.Context, req *SetDefaultScopeRequest) (r SetDefaultScopeRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// UpdateScope implements update_scope operation.
+//
+// Replace mutable Scope metadata and relationships.
+//
+// PUT /v1/scopes/{scope_id}
+func (UnimplementedHandler) UpdateScope(ctx context.Context, req *UpdateScopeRequest, params UpdateScopeParams) (r UpdateScopeRes, _ error) {
 	return r, ht.ErrNotImplemented
 }

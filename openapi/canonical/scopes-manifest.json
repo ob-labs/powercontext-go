@@ -8,8 +8,11 @@
   },
   "operations": [
     {"operation_id": "list_scopes", "method": "get", "path": "/v1/scopes"},
+    {"operation_id": "create_scope", "method": "post", "path": "/v1/scopes"},
     {"operation_id": "get_scope", "method": "get", "path": "/v1/scopes/{scope_id}"},
+    {"operation_id": "update_scope", "method": "put", "path": "/v1/scopes/{scope_id}"},
     {"operation_id": "get_default_scope", "method": "get", "path": "/v1/scopes/default"},
+    {"operation_id": "set_default_scope", "method": "put", "path": "/v1/scopes/default"},
     {"operation_id": "resolve_scope_selection", "method": "post", "path": "/v1/scopes/selection/resolve"},
     {"operation_id": "resolve_scope_binding", "method": "post", "path": "/v1/scope-bindings/resolve"}
   ],

@@ -21,27 +21,66 @@ import (
 	"github.com/ob-labs/powercontext-go/internal/scope"
 )
 
-// ScopeReadOperations is the consumer-owned read surface required by the
+// ScopeOperations is the consumer-owned metadata surface required by the
 // canonical Scope sidecar. Runtime owns the operation lifecycle; this adapter
 // only validates transport input and projects immutable domain values.
-type ScopeReadOperations interface {
+type ScopeOperations interface {
+	Create(context.Context, scope.Draft) (scope.Descriptor, error)
+	Update(context.Context, string, scope.Mutation) (scope.Descriptor, error)
 	List(context.Context) ([]scope.Descriptor, error)
 	Get(context.Context, string) (scope.Descriptor, error)
 	Default(context.Context) (scope.Descriptor, error)
+	SetDefault(context.Context, string) (scope.Descriptor, error)
 	Resolve(context.Context, *string, []scope.BindingKey) (scope.Descriptor, error)
 	ResolveSelection(context.Context, scope.Selection) ([]scope.Descriptor, error)
 }
 
-// CanonicalScopeHandler projects durable Scope reads onto the generated
-// canonical Scope contract. It deliberately does not own Scope mutations.
+// CanonicalScopeHandler projects durable Scope metadata onto the generated
+// canonical Scope contract. Runtime retains mutation lifecycle ownership.
 type CanonicalScopeHandler struct {
-	operations ScopeReadOperations
+	operations ScopeOperations
 }
 
 var _ canonicalscopec.Handler = (*CanonicalScopeHandler)(nil)
 
-func NewCanonicalScopeHandler(operations ScopeReadOperations) *CanonicalScopeHandler {
+func NewCanonicalScopeHandler(operations ScopeOperations) *CanonicalScopeHandler {
 	return &CanonicalScopeHandler{operations: operations}
+}
+
+func (h *CanonicalScopeHandler) CreateScope(
+	ctx context.Context,
+	request *canonicalscopec.CreateScopeRequest,
+) (canonicalscopec.CreateScopeRes, error) {
+	if err := h.available(); err != nil {
+		return nil, err
+	}
+	if request == nil {
+		return nil, &scope.ValidationError{}
+	}
+	parent, err := canonicalParentScopeID(request.ParentScopeID)
+	if err != nil {
+		return nil, err
+	}
+	external, err := canonicalScopeExternalReferences(request.ExternalReferences)
+	if err != nil {
+		return nil, err
+	}
+	draft, err := scope.NewDraft(
+		request.Title,
+		request.Summary,
+		parent,
+		request.ContextReferences,
+		external,
+		request.IdempotencyKey,
+	)
+	if err != nil {
+		return nil, &scope.ValidationError{}
+	}
+	created, err := h.operations.Create(ctx, draft)
+	if err != nil {
+		return nil, err
+	}
+	return scopeDescriptor(created)
 }
 
 func (h *CanonicalScopeHandler) ListScopes(ctx context.Context) (canonicalscopec.ListScopesRes, error) {
@@ -81,6 +120,66 @@ func (h *CanonicalScopeHandler) GetDefaultScope(ctx context.Context) (canonicals
 		return nil, err
 	}
 	return scopeDescriptor(value)
+}
+
+func (h *CanonicalScopeHandler) SetDefaultScope(
+	ctx context.Context,
+	request *canonicalscopec.SetDefaultScopeRequest,
+) (canonicalscopec.SetDefaultScopeRes, error) {
+	if err := h.available(); err != nil {
+		return nil, err
+	}
+	if request == nil {
+		return nil, &scope.ValidationError{}
+	}
+	if _, err := scope.NewExactSelection([]string{request.ScopeID}); err != nil {
+		return nil, &scope.ValidationError{}
+	}
+	value, err := h.operations.SetDefault(ctx, request.ScopeID)
+	if err != nil {
+		return nil, err
+	}
+	return scopeDescriptor(value)
+}
+
+func (h *CanonicalScopeHandler) UpdateScope(
+	ctx context.Context,
+	request *canonicalscopec.UpdateScopeRequest,
+	params canonicalscopec.UpdateScopeParams,
+) (canonicalscopec.UpdateScopeRes, error) {
+	if err := h.available(); err != nil {
+		return nil, err
+	}
+	if request == nil {
+		return nil, &scope.ValidationError{}
+	}
+	if _, err := scope.NewExactSelection([]string{params.ScopeID}); err != nil {
+		return nil, &scope.ValidationError{}
+	}
+	parent, err := canonicalParentScopeID(request.ParentScopeID)
+	if err != nil {
+		return nil, err
+	}
+	external, err := canonicalScopeExternalReferences(request.ExternalReferences)
+	if err != nil {
+		return nil, err
+	}
+	mutation, err := scope.NewMutation(
+		int64(request.ExpectedVersion),
+		request.Title,
+		request.Summary,
+		parent,
+		request.ContextReferences,
+		external,
+	)
+	if err != nil {
+		return nil, &scope.ValidationError{}
+	}
+	updated, err := h.operations.Update(ctx, params.ScopeID, mutation)
+	if err != nil {
+		return nil, err
+	}
+	return scopeDescriptor(updated)
 }
 
 func (h *CanonicalScopeHandler) ResolveScopeSelection(
@@ -175,6 +274,32 @@ func canonicalScopeBindingKeys(values []canonicalscopec.ScopeBindingKey) ([]scop
 		keys = append(keys, key)
 	}
 	return keys, nil
+}
+
+func canonicalParentScopeID(value canonicalscopec.OptNilString) (string, error) {
+	if value.IsEmpty() || value.IsNull() {
+		return "", nil
+	}
+	parent, found := value.Get()
+	if !found {
+		return "", &scope.ValidationError{}
+	}
+	if _, err := scope.NewExactSelection([]string{parent}); err != nil {
+		return "", &scope.ValidationError{}
+	}
+	return parent, nil
+}
+
+func canonicalScopeExternalReferences(values []canonicalscopec.ScopeExternalReference) ([]scope.ExternalReference, error) {
+	references := make([]scope.ExternalReference, 0, len(values))
+	for _, value := range values {
+		reference, err := scope.NewExternalReference(value.Kind, value.Value)
+		if err != nil {
+			return nil, &scope.ValidationError{}
+		}
+		references = append(references, reference)
+	}
+	return references, nil
 }
 
 func scopePage(values []scope.Descriptor) (*canonicalscopec.ScopePage, error) {

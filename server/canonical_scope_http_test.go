@@ -171,6 +171,78 @@ func TestOpenApplicationServesCanonicalScopeSidecar(t *testing.T) {
 	if value, ok := resolved.(*canonicalscopec.ScopeDescriptor); !ok || value.ScopeID != defaultScope.ID() {
 		t.Fatalf("explicit Scope binding = %#v, want %q", resolved, defaultScope.ID())
 	}
+
+	const privateCreationKey = "canonical-private-creation-key"
+	createdResult, err := client.CreateScope(t.Context(), &canonicalscopec.CreateScopeRequest{
+		Title:          "Canonical",
+		Summary:        "created through canonical HTTP",
+		IdempotencyKey: privateCreationKey,
+		ParentScopeID:  canonicalscopec.NewOptNilString(root.ID()),
+		ContextReferences: []string{
+			child.ID(),
+		},
+		ExternalReferences: []canonicalscopec.ScopeExternalReference{{
+			Kind: "repository", Value: "powercontext-go",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, ok := createdResult.(*canonicalscopec.ScopeDescriptor)
+	if !ok || created.ScopeID == "" || created.Version != 1 || created.Title != "Canonical" {
+		t.Fatalf("CreateScope() = %#v, want version-one canonical Scope", createdResult)
+	}
+
+	updatedResult, err := client.UpdateScope(t.Context(), &canonicalscopec.UpdateScopeRequest{
+		ExpectedVersion:   created.Version,
+		Title:             "Canonical updated",
+		Summary:           "updated through canonical HTTP",
+		ParentScopeID:     canonicalscopec.NewOptNilString(root.ID()),
+		ContextReferences: []string{child.ID()},
+		ExternalReferences: []canonicalscopec.ScopeExternalReference{{
+			Kind: "repository", Value: "powercontext-go",
+		}},
+	}, canonicalscopec.UpdateScopeParams{ScopeID: created.ScopeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, ok := updatedResult.(*canonicalscopec.ScopeDescriptor)
+	if !ok || updated.ScopeID != created.ScopeID || updated.Version != 2 || updated.Title != "Canonical updated" {
+		t.Fatalf("UpdateScope() = %#v, want version-two canonical Scope", updatedResult)
+	}
+
+	staleResult, err := client.UpdateScope(t.Context(), &canonicalscopec.UpdateScopeRequest{
+		ExpectedVersion: 1,
+		Title:           "stale",
+		Summary:         "stale update",
+	}, canonicalscopec.UpdateScopeParams{ScopeID: created.ScopeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCanonicalScopeConflictRedacted(t, staleResult, "scope_version_conflict", created.ScopeID)
+
+	idempotencyResult, err := client.CreateScope(t.Context(), &canonicalscopec.CreateScopeRequest{
+		Title: "different", Summary: "different metadata", IdempotencyKey: privateCreationKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCanonicalScopeConflictRedacted(t, idempotencyResult, "scope_idempotency_conflict", privateCreationKey, created.ScopeID)
+
+	setDefaultResult, err := client.SetDefaultScope(t.Context(), &canonicalscopec.SetDefaultScopeRequest{ScopeID: created.ScopeID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value, ok := setDefaultResult.(*canonicalscopec.ScopeDescriptor); !ok || value.ScopeID != created.ScopeID {
+		t.Fatalf("SetDefaultScope() = %#v, want %q", setDefaultResult, created.ScopeID)
+	}
+	defaultResult, err = client.GetDefaultScope(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value, ok := defaultResult.(*canonicalscopec.ScopeDescriptor); !ok || value.ScopeID != created.ScopeID {
+		t.Fatalf("GetDefaultScope() after update = %#v, want %q", defaultResult, created.ScopeID)
+	}
 }
 
 func TestCanonicalScopeSidecarRejectsMalformedRequestsBeforeLegacyFallback(t *testing.T) {
@@ -226,7 +298,7 @@ func TestCanonicalScopeSidecarReservesOnlyExactScopeOperations(t *testing.T) {
 	for _, request := range []struct {
 		name, method, path string
 	}{
-		{name: "list wrong method", method: http.MethodPost, path: "/v1/scopes"},
+		{name: "scopes wrong method", method: http.MethodDelete, path: "/v1/scopes"},
 		{name: "default wrong method", method: http.MethodPost, path: "/v1/scopes/default"},
 		{name: "deferred Scope path", method: http.MethodPost, path: "/v1/scopes/create"},
 		{name: "binding wrong method", method: http.MethodGet, path: "/v1/scope-bindings/resolve"},
@@ -376,6 +448,23 @@ func assertCanonicalScopeIDs(t *testing.T, result canonicalscopec.ResolveScopeSe
 	for index, id := range want {
 		if page.Items[index].ScopeID != id {
 			t.Fatalf("selection item %d = %q, want %q", index, page.Items[index].ScopeID, id)
+		}
+	}
+}
+
+func assertCanonicalScopeConflictRedacted(t *testing.T, result any, code string, private ...string) {
+	t.Helper()
+	conflict, ok := result.(*canonicalscopec.ConflictHeaders)
+	if !ok || conflict.Response.Error.Code != code {
+		t.Fatalf("conflict = %#v, want %q", result, code)
+	}
+	encoded, err := json.Marshal(conflict.Response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range private {
+		if strings.Contains(string(encoded), value) {
+			t.Fatalf("conflict response leaked private value %q: %s", value, encoded)
 		}
 	}
 }
