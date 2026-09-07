@@ -526,3 +526,7 @@ source / artifact / trigger / inference
   release process-smoke inventory independently from direct-handler tool tests.
   Verify the configured production Server lists the exact additional tools and
   the Handoff Report variant retains its own additive count.
+- When a Go platform matrix directly runs a test that starts a Python or uv
+  subprocess, provision the pinned Python and uv runtime in every job that
+  executes that target. Verify the workflow contract and the real target so a
+  clean runner cannot fail before the cross-language service chain begins.
