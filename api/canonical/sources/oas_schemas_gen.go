@@ -32,6 +32,43 @@ func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
 
+// Ref: #/components/schemas/CommitConnectorCheckpointRequest
+type CommitConnectorCheckpointRequest struct {
+	Binding    ConnectorBinding `json:"binding"`
+	Checkpoint jx.Raw           `json:"checkpoint"`
+	Expected   jx.Raw           `json:"expected"`
+}
+
+// GetBinding returns the value of Binding.
+func (s *CommitConnectorCheckpointRequest) GetBinding() ConnectorBinding {
+	return s.Binding
+}
+
+// GetCheckpoint returns the value of Checkpoint.
+func (s *CommitConnectorCheckpointRequest) GetCheckpoint() jx.Raw {
+	return s.Checkpoint
+}
+
+// GetExpected returns the value of Expected.
+func (s *CommitConnectorCheckpointRequest) GetExpected() jx.Raw {
+	return s.Expected
+}
+
+// SetBinding sets the value of Binding.
+func (s *CommitConnectorCheckpointRequest) SetBinding(val ConnectorBinding) {
+	s.Binding = val
+}
+
+// SetCheckpoint sets the value of Checkpoint.
+func (s *CommitConnectorCheckpointRequest) SetCheckpoint(val jx.Raw) {
+	s.Checkpoint = val
+}
+
+// SetExpected sets the value of Expected.
+func (s *CommitConnectorCheckpointRequest) SetExpected(val jx.Raw) {
+	s.Expected = val
+}
+
 // ConflictHeaders wraps ErrorResponse with response headers.
 type ConflictHeaders struct {
 	XPowerContextRequestID OptString
@@ -58,7 +95,88 @@ func (s *ConflictHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
-func (*ConflictHeaders) createSourceRes() {}
+func (*ConflictHeaders) commitConnectorCheckpointRes() {}
+func (*ConflictHeaders) createSourceRes()              {}
+func (*ConflictHeaders) getConnectorCheckpointRes()    {}
+func (*ConflictHeaders) registerSourceDefinitionRes()  {}
+func (*ConflictHeaders) submitSourceObservationRes()   {}
+
+// Ref: #/components/schemas/ConnectorBinding
+type ConnectorBinding struct {
+	BindingID        string `json:"binding_id"`
+	ConnectorName    string `json:"connector_name"`
+	ConnectorVersion string `json:"connector_version"`
+	ScopeID          string `json:"scope_id"`
+}
+
+// GetBindingID returns the value of BindingID.
+func (s *ConnectorBinding) GetBindingID() string {
+	return s.BindingID
+}
+
+// GetConnectorName returns the value of ConnectorName.
+func (s *ConnectorBinding) GetConnectorName() string {
+	return s.ConnectorName
+}
+
+// GetConnectorVersion returns the value of ConnectorVersion.
+func (s *ConnectorBinding) GetConnectorVersion() string {
+	return s.ConnectorVersion
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *ConnectorBinding) GetScopeID() string {
+	return s.ScopeID
+}
+
+// SetBindingID sets the value of BindingID.
+func (s *ConnectorBinding) SetBindingID(val string) {
+	s.BindingID = val
+}
+
+// SetConnectorName sets the value of ConnectorName.
+func (s *ConnectorBinding) SetConnectorName(val string) {
+	s.ConnectorName = val
+}
+
+// SetConnectorVersion sets the value of ConnectorVersion.
+func (s *ConnectorBinding) SetConnectorVersion(val string) {
+	s.ConnectorVersion = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *ConnectorBinding) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+// Ref: #/components/schemas/ConnectorCheckpointState
+type ConnectorCheckpointState struct {
+	Binding    ConnectorBinding `json:"binding"`
+	Checkpoint jx.Raw           `json:"checkpoint"`
+}
+
+// GetBinding returns the value of Binding.
+func (s *ConnectorCheckpointState) GetBinding() ConnectorBinding {
+	return s.Binding
+}
+
+// GetCheckpoint returns the value of Checkpoint.
+func (s *ConnectorCheckpointState) GetCheckpoint() jx.Raw {
+	return s.Checkpoint
+}
+
+// SetBinding sets the value of Binding.
+func (s *ConnectorCheckpointState) SetBinding(val ConnectorBinding) {
+	s.Binding = val
+}
+
+// SetCheckpoint sets the value of Checkpoint.
+func (s *ConnectorCheckpointState) SetCheckpoint(val jx.Raw) {
+	s.Checkpoint = val
+}
+
+func (*ConnectorCheckpointState) commitConnectorCheckpointRes() {}
+func (*ConnectorCheckpointState) getConnectorCheckpointRes()    {}
 
 // Ref: #/components/schemas/CreateSourceRequest
 type CreateSourceRequest struct {
@@ -184,6 +302,21 @@ func (s *ErrorResponse) SetError(val ErrorDetail) {
 	s.Error = val
 }
 
+// Ref: #/components/schemas/GetConnectorCheckpointRequest
+type GetConnectorCheckpointRequest struct {
+	Binding ConnectorBinding `json:"binding"`
+}
+
+// GetBinding returns the value of Binding.
+func (s *GetConnectorCheckpointRequest) GetBinding() ConnectorBinding {
+	return s.Binding
+}
+
+// SetBinding sets the value of Binding.
+func (s *GetConnectorCheckpointRequest) SetBinding(val ConnectorBinding) {
+	s.Binding = val
+}
+
 // GetSourceOKHeaders wraps SourceRecord with response headers.
 type GetSourceOKHeaders struct {
 	XPowerContextRequestID OptString
@@ -301,8 +434,12 @@ func (s *InvalidRequestHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
-func (*InvalidRequestHeaders) createSourceRes() {}
-func (*InvalidRequestHeaders) getSourceRes()    {}
+func (*InvalidRequestHeaders) commitConnectorCheckpointRes() {}
+func (*InvalidRequestHeaders) createSourceRes()              {}
+func (*InvalidRequestHeaders) getConnectorCheckpointRes()    {}
+func (*InvalidRequestHeaders) getSourceRes()                 {}
+func (*InvalidRequestHeaders) registerSourceDefinitionRes()  {}
+func (*InvalidRequestHeaders) submitSourceObservationRes()   {}
 
 // NewNilErrorDetailDetails returns new NilErrorDetailDetails with value set to v.
 func NewNilErrorDetailDetails(v ErrorDetailDetails) NilErrorDetailDetails {
@@ -375,7 +512,8 @@ func (s *NotFoundHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
-func (*NotFoundHeaders) getSourceRes() {}
+func (*NotFoundHeaders) getSourceRes()               {}
+func (*NotFoundHeaders) submitSourceObservationRes() {}
 
 // NewOptCreateSourceRequestSourceType returns new OptCreateSourceRequestSourceType with value set to v.
 func NewOptCreateSourceRequestSourceType(v CreateSourceRequestSourceType) OptCreateSourceRequestSourceType {
@@ -417,6 +555,74 @@ func (o OptCreateSourceRequestSourceType) Get() (v CreateSourceRequestSourceType
 
 // Or returns value if set, or given parameter if does not.
 func (o OptCreateSourceRequestSourceType) Or(d CreateSourceRequestSourceType) CreateSourceRequestSourceType {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptNilString returns new OptNilString with value set to v.
+func NewOptNilString(v string) OptNilString {
+	return OptNilString{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptNilString is optional nullable string.
+type OptNilString struct {
+	Value string
+	Set   bool
+	Null  bool
+}
+
+// IsSet returns true if OptNilString was set.
+func (o OptNilString) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptNilString) Reset() {
+	var v string
+	o.Value = v
+	o.Set = false
+	o.Null = false
+}
+
+// SetTo sets value to v.
+func (o *OptNilString) SetTo(v string) {
+	o.Set = true
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o OptNilString) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *OptNilString) SetToNull() {
+	o.Set = true
+	o.Null = true
+	var v string
+	o.Value = v
+}
+
+// IsEmpty returns true if the field was omitted from the payload (not Set and not Null).
+func (o OptNilString) IsEmpty() bool {
+	return !o.Set && !o.Null
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptNilString) Get() (v string, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptNilString) Or(d string) string {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -467,6 +673,347 @@ func (o OptString) Or(d string) string {
 		return v
 	}
 	return d
+}
+
+// Ref: #/components/schemas/RegisterSourceDefinitionRequest
+type RegisterSourceDefinitionRequest struct {
+	Manifest SourceDefinitionManifest `json:"manifest"`
+}
+
+// GetManifest returns the value of Manifest.
+func (s *RegisterSourceDefinitionRequest) GetManifest() SourceDefinitionManifest {
+	return s.Manifest
+}
+
+// SetManifest sets the value of Manifest.
+func (s *RegisterSourceDefinitionRequest) SetManifest(val SourceDefinitionManifest) {
+	s.Manifest = val
+}
+
+// Ref: #/components/schemas/SourceDefinitionManifest
+type SourceDefinitionManifest struct {
+	Fingerprint  string                               `json:"fingerprint"`
+	Name         string                               `json:"name"`
+	Projections  []SourceProjectionManifest           `json:"projections"`
+	SourceSchema SourceDefinitionManifestSourceSchema `json:"source_schema"`
+	Version      string                               `json:"version"`
+}
+
+// GetFingerprint returns the value of Fingerprint.
+func (s *SourceDefinitionManifest) GetFingerprint() string {
+	return s.Fingerprint
+}
+
+// GetName returns the value of Name.
+func (s *SourceDefinitionManifest) GetName() string {
+	return s.Name
+}
+
+// GetProjections returns the value of Projections.
+func (s *SourceDefinitionManifest) GetProjections() []SourceProjectionManifest {
+	return s.Projections
+}
+
+// GetSourceSchema returns the value of SourceSchema.
+func (s *SourceDefinitionManifest) GetSourceSchema() SourceDefinitionManifestSourceSchema {
+	return s.SourceSchema
+}
+
+// GetVersion returns the value of Version.
+func (s *SourceDefinitionManifest) GetVersion() string {
+	return s.Version
+}
+
+// SetFingerprint sets the value of Fingerprint.
+func (s *SourceDefinitionManifest) SetFingerprint(val string) {
+	s.Fingerprint = val
+}
+
+// SetName sets the value of Name.
+func (s *SourceDefinitionManifest) SetName(val string) {
+	s.Name = val
+}
+
+// SetProjections sets the value of Projections.
+func (s *SourceDefinitionManifest) SetProjections(val []SourceProjectionManifest) {
+	s.Projections = val
+}
+
+// SetSourceSchema sets the value of SourceSchema.
+func (s *SourceDefinitionManifest) SetSourceSchema(val SourceDefinitionManifestSourceSchema) {
+	s.SourceSchema = val
+}
+
+// SetVersion sets the value of Version.
+func (s *SourceDefinitionManifest) SetVersion(val string) {
+	s.Version = val
+}
+
+func (*SourceDefinitionManifest) registerSourceDefinitionRes() {}
+
+type SourceDefinitionManifestSourceSchema map[string]jx.Raw
+
+func (s *SourceDefinitionManifestSourceSchema) init() SourceDefinitionManifestSourceSchema {
+	m := *s
+	if m == nil {
+		m = map[string]jx.Raw{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/SourceObservation
+type SourceObservation struct {
+	DefinitionFingerprint string                           `json:"definition_fingerprint"`
+	DefinitionVersion     string                           `json:"definition_version"`
+	Description           OptNilString                     `json:"description"`
+	Materialization       SourceObservationMaterialization `json:"materialization"`
+	Name                  string                           `json:"name"`
+	Payload               SourceObservationPayload         `json:"payload"`
+	Projections           []SourceProjectionValue          `json:"projections"`
+	SourceType            string                           `json:"source_type"`
+}
+
+// GetDefinitionFingerprint returns the value of DefinitionFingerprint.
+func (s *SourceObservation) GetDefinitionFingerprint() string {
+	return s.DefinitionFingerprint
+}
+
+// GetDefinitionVersion returns the value of DefinitionVersion.
+func (s *SourceObservation) GetDefinitionVersion() string {
+	return s.DefinitionVersion
+}
+
+// GetDescription returns the value of Description.
+func (s *SourceObservation) GetDescription() OptNilString {
+	return s.Description
+}
+
+// GetMaterialization returns the value of Materialization.
+func (s *SourceObservation) GetMaterialization() SourceObservationMaterialization {
+	return s.Materialization
+}
+
+// GetName returns the value of Name.
+func (s *SourceObservation) GetName() string {
+	return s.Name
+}
+
+// GetPayload returns the value of Payload.
+func (s *SourceObservation) GetPayload() SourceObservationPayload {
+	return s.Payload
+}
+
+// GetProjections returns the value of Projections.
+func (s *SourceObservation) GetProjections() []SourceProjectionValue {
+	return s.Projections
+}
+
+// GetSourceType returns the value of SourceType.
+func (s *SourceObservation) GetSourceType() string {
+	return s.SourceType
+}
+
+// SetDefinitionFingerprint sets the value of DefinitionFingerprint.
+func (s *SourceObservation) SetDefinitionFingerprint(val string) {
+	s.DefinitionFingerprint = val
+}
+
+// SetDefinitionVersion sets the value of DefinitionVersion.
+func (s *SourceObservation) SetDefinitionVersion(val string) {
+	s.DefinitionVersion = val
+}
+
+// SetDescription sets the value of Description.
+func (s *SourceObservation) SetDescription(val OptNilString) {
+	s.Description = val
+}
+
+// SetMaterialization sets the value of Materialization.
+func (s *SourceObservation) SetMaterialization(val SourceObservationMaterialization) {
+	s.Materialization = val
+}
+
+// SetName sets the value of Name.
+func (s *SourceObservation) SetName(val string) {
+	s.Name = val
+}
+
+// SetPayload sets the value of Payload.
+func (s *SourceObservation) SetPayload(val SourceObservationPayload) {
+	s.Payload = val
+}
+
+// SetProjections sets the value of Projections.
+func (s *SourceObservation) SetProjections(val []SourceProjectionValue) {
+	s.Projections = val
+}
+
+// SetSourceType sets the value of SourceType.
+func (s *SourceObservation) SetSourceType(val string) {
+	s.SourceType = val
+}
+
+type SourceObservationMaterialization string
+
+const (
+	SourceObservationMaterializationCaptured SourceObservationMaterialization = "captured"
+)
+
+// AllValues returns all SourceObservationMaterialization values.
+func (SourceObservationMaterialization) AllValues() []SourceObservationMaterialization {
+	return []SourceObservationMaterialization{
+		SourceObservationMaterializationCaptured,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s SourceObservationMaterialization) MarshalText() ([]byte, error) {
+	switch s {
+	case SourceObservationMaterializationCaptured:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *SourceObservationMaterialization) UnmarshalText(data []byte) error {
+	switch SourceObservationMaterialization(data) {
+	case SourceObservationMaterializationCaptured:
+		*s = SourceObservationMaterializationCaptured
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type SourceObservationPayload map[string]jx.Raw
+
+func (s *SourceObservationPayload) init() SourceObservationPayload {
+	m := *s
+	if m == nil {
+		m = map[string]jx.Raw{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/SourceObservationReceipt
+type SourceObservationReceipt struct {
+	Position int             `json:"position"`
+	Source   SourceReference `json:"source"`
+}
+
+// GetPosition returns the value of Position.
+func (s *SourceObservationReceipt) GetPosition() int {
+	return s.Position
+}
+
+// GetSource returns the value of Source.
+func (s *SourceObservationReceipt) GetSource() SourceReference {
+	return s.Source
+}
+
+// SetPosition sets the value of Position.
+func (s *SourceObservationReceipt) SetPosition(val int) {
+	s.Position = val
+}
+
+// SetSource sets the value of Source.
+func (s *SourceObservationReceipt) SetSource(val SourceReference) {
+	s.Source = val
+}
+
+func (*SourceObservationReceipt) submitSourceObservationRes() {}
+
+// Ref: #/components/schemas/SourceProjectionKey
+type SourceProjectionKey struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// GetName returns the value of Name.
+func (s *SourceProjectionKey) GetName() string {
+	return s.Name
+}
+
+// GetVersion returns the value of Version.
+func (s *SourceProjectionKey) GetVersion() string {
+	return s.Version
+}
+
+// SetName sets the value of Name.
+func (s *SourceProjectionKey) SetName(val string) {
+	s.Name = val
+}
+
+// SetVersion sets the value of Version.
+func (s *SourceProjectionKey) SetVersion(val string) {
+	s.Version = val
+}
+
+// Ref: #/components/schemas/SourceProjectionManifest
+type SourceProjectionManifest struct {
+	Key    SourceProjectionKey            `json:"key"`
+	Schema SourceProjectionManifestSchema `json:"schema"`
+}
+
+// GetKey returns the value of Key.
+func (s *SourceProjectionManifest) GetKey() SourceProjectionKey {
+	return s.Key
+}
+
+// GetSchema returns the value of Schema.
+func (s *SourceProjectionManifest) GetSchema() SourceProjectionManifestSchema {
+	return s.Schema
+}
+
+// SetKey sets the value of Key.
+func (s *SourceProjectionManifest) SetKey(val SourceProjectionKey) {
+	s.Key = val
+}
+
+// SetSchema sets the value of Schema.
+func (s *SourceProjectionManifest) SetSchema(val SourceProjectionManifestSchema) {
+	s.Schema = val
+}
+
+type SourceProjectionManifestSchema map[string]jx.Raw
+
+func (s *SourceProjectionManifestSchema) init() SourceProjectionManifestSchema {
+	m := *s
+	if m == nil {
+		m = map[string]jx.Raw{}
+		*s = m
+	}
+	return m
+}
+
+// Ref: #/components/schemas/SourceProjectionValue
+type SourceProjectionValue struct {
+	Key   SourceProjectionKey `json:"key"`
+	Value jx.Raw              `json:"value"`
+}
+
+// GetKey returns the value of Key.
+func (s *SourceProjectionValue) GetKey() SourceProjectionKey {
+	return s.Key
+}
+
+// GetValue returns the value of Value.
+func (s *SourceProjectionValue) GetValue() jx.Raw {
+	return s.Value
+}
+
+// SetKey sets the value of Key.
+func (s *SourceProjectionValue) SetKey(val SourceProjectionKey) {
+	s.Key = val
+}
+
+// SetValue sets the value of Value.
+func (s *SourceProjectionValue) SetValue(val jx.Raw) {
+	s.Value = val
 }
 
 // Ref: #/components/schemas/SourceRecord
@@ -613,6 +1160,59 @@ func (s *SourceRecordSourceType) UnmarshalText(data []byte) error {
 	}
 }
 
+// Ref: #/components/schemas/SourceReference
+type SourceReference struct {
+	// Stable Source type.
+	Name     string `json:"name"`
+	SourceID string `json:"source_id"`
+}
+
+// GetName returns the value of Name.
+func (s *SourceReference) GetName() string {
+	return s.Name
+}
+
+// GetSourceID returns the value of SourceID.
+func (s *SourceReference) GetSourceID() string {
+	return s.SourceID
+}
+
+// SetName sets the value of Name.
+func (s *SourceReference) SetName(val string) {
+	s.Name = val
+}
+
+// SetSourceID sets the value of SourceID.
+func (s *SourceReference) SetSourceID(val string) {
+	s.SourceID = val
+}
+
+// Ref: #/components/schemas/SubmitSourceObservationRequest
+type SubmitSourceObservationRequest struct {
+	Observation SourceObservation `json:"observation"`
+	ScopeID     string            `json:"scope_id"`
+}
+
+// GetObservation returns the value of Observation.
+func (s *SubmitSourceObservationRequest) GetObservation() SourceObservation {
+	return s.Observation
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *SubmitSourceObservationRequest) GetScopeID() string {
+	return s.ScopeID
+}
+
+// SetObservation sets the value of Observation.
+func (s *SubmitSourceObservationRequest) SetObservation(val SourceObservation) {
+	s.Observation = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *SubmitSourceObservationRequest) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
 // UnauthorizedHeaders wraps ErrorResponse with response headers.
 type UnauthorizedHeaders struct {
 	WWWAuthenticate        OptString
@@ -650,8 +1250,12 @@ func (s *UnauthorizedHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
-func (*UnauthorizedHeaders) createSourceRes() {}
-func (*UnauthorizedHeaders) getSourceRes()    {}
+func (*UnauthorizedHeaders) commitConnectorCheckpointRes() {}
+func (*UnauthorizedHeaders) createSourceRes()              {}
+func (*UnauthorizedHeaders) getConnectorCheckpointRes()    {}
+func (*UnauthorizedHeaders) getSourceRes()                 {}
+func (*UnauthorizedHeaders) registerSourceDefinitionRes()  {}
+func (*UnauthorizedHeaders) submitSourceObservationRes()   {}
 
 // UnavailableHeaders wraps ErrorResponse with response headers.
 type UnavailableHeaders struct {

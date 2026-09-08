@@ -13,6 +13,15 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// CommitConnectorCheckpoint implements commit_connector_checkpoint operation.
+//
+// Replaces the checkpoint only when its expected starting value still matches.
+//
+// POST /v1/connector-checkpoints/commit
+func (UnimplementedHandler) CommitConnectorCheckpoint(ctx context.Context, req *CommitConnectorCheckpointRequest) (r CommitConnectorCheckpointRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // CreateSource implements create_source operation.
 //
 // Persist one Source without synchronously deriving Artifacts. The Server generates source_id.
@@ -22,11 +31,38 @@ func (UnimplementedHandler) CreateSource(ctx context.Context, req *CreateSourceR
 	return r, ht.ErrNotImplemented
 }
 
+// GetConnectorCheckpoint implements get_connector_checkpoint operation.
+//
+// Read a Connector binding checkpoint.
+//
+// POST /v1/connector-checkpoints/get
+func (UnimplementedHandler) GetConnectorCheckpoint(ctx context.Context, req *GetConnectorCheckpointRequest) (r GetConnectorCheckpointRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetSource implements get_source operation.
 //
 // Get one exact Source.
 //
 // GET /v1/scopes/{scope_id}/sources/{source_type}/{source_id}
 func (UnimplementedHandler) GetSource(ctx context.Context, params GetSourceParams) (r GetSourceRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RegisterSourceDefinition implements register_source_definition operation.
+//
+// Registers an immutable declarative manifest without loading worker plugin code.
+//
+// POST /v1/source-definitions/register
+func (UnimplementedHandler) RegisterSourceDefinition(ctx context.Context, req *RegisterSourceDefinitionRequest) (r RegisterSourceDefinitionRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// SubmitSourceObservation implements submit_source_observation operation.
+//
+// Validates the observation against its registered manifest and durably appends it before receipt.
+//
+// POST /v1/source-observations
+func (UnimplementedHandler) SubmitSourceObservation(ctx context.Context, req *SubmitSourceObservationRequest) (r SubmitSourceObservationRes, _ error) {
 	return r, ht.ErrNotImplemented
 }

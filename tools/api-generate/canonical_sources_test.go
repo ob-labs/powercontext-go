@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -43,7 +44,15 @@ func TestSourceSidecarProjectionAndIntegrity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(operations) != 2 || operations["create_source"].Method != "post" || operations["get_source"].Method != "get" {
+	wantOperations := map[string]compatibilityEndpoint{
+		"create_source":               {Method: "post", Path: "/v1/scopes/{scope_id}/sources"},
+		"get_source":                  {Method: "get", Path: "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}"},
+		"register_source_definition":  {Method: "post", Path: "/v1/source-definitions/register"},
+		"submit_source_observation":   {Method: "post", Path: "/v1/source-observations"},
+		"get_connector_checkpoint":    {Method: "post", Path: "/v1/connector-checkpoints/get"},
+		"commit_connector_checkpoint": {Method: "post", Path: "/v1/connector-checkpoints/commit"},
+	}
+	if !reflect.DeepEqual(operations, wantOperations) {
 		t.Fatalf("operations = %#v", operations)
 	}
 	var projectedDocument struct {
@@ -52,12 +61,43 @@ func TestSourceSidecarProjectionAndIntegrity(t *testing.T) {
 	if decodeErr := json.Unmarshal(projected, &projectedDocument, json.MatchCaseInsensitiveNames(true)); decodeErr != nil {
 		t.Fatal(decodeErr)
 	}
-	if len(projectedDocument.Components.Schemas) != 4 {
+	wantSchemas := []string{
+		"CreateSourceRequest", "SourceRecord", "ErrorDetail", "ErrorResponse",
+		"RegisterSourceDefinitionRequest", "SourceDefinitionManifest", "SourceProjectionManifest", "SourceProjectionKey",
+		"SubmitSourceObservationRequest", "SourceObservation", "SourceProjectionValue", "SourceObservationReceipt", "SourceReference",
+		"GetConnectorCheckpointRequest", "ConnectorBinding", "ConnectorCheckpointState", "CommitConnectorCheckpointRequest",
+	}
+	if len(projectedDocument.Components.Schemas) != len(wantSchemas) {
 		t.Fatalf("projected schemas = %#v", projectedDocument.Components.Schemas)
 	}
-	for _, name := range []string{"CreateSourceRequest", "SourceRecord", "ErrorDetail", "ErrorResponse"} {
+	for _, name := range wantSchemas {
 		if _, found := projectedDocument.Components.Schemas[name]; !found {
 			t.Fatalf("missing schema %s", name)
+		}
+	}
+	rawDocument, rawErr := decodeScopeSidecarDocument(upstream)
+	if rawErr != nil {
+		t.Fatal(rawErr)
+	}
+	projectionDocument, projectionErr := decodeScopeSidecarDocument(projected)
+	if projectionErr != nil {
+		t.Fatal(projectionErr)
+	}
+	// Every selected operation and reachable component must retain its raw schema,
+	// including opaque JSON and the checkpoint Get response's absent 404 variant.
+	for operationID, endpoint := range wantOperations {
+		rawPath := rawDocument["paths"].(map[string]any)[endpoint.Path].(map[string]any)
+		projectedPath := projectionDocument["paths"].(map[string]any)[endpoint.Path].(map[string]any)
+		if !reflect.DeepEqual(rawPath[endpoint.Method], projectedPath[endpoint.Method]) {
+			t.Fatalf("operation %s differs from the pinned raw schema", operationID)
+		}
+	}
+	for category, value := range projectionDocument["components"].(map[string]any) {
+		rawComponents := rawDocument["components"].(map[string]any)[category].(map[string]any)
+		for name, component := range value.(map[string]any) {
+			if !reflect.DeepEqual(component, rawComponents[name]) {
+				t.Fatalf("component %s/%s differs from the pinned raw schema", category, name)
+			}
 		}
 	}
 	committed, err := os.ReadFile(filepath.Join(root, "openapi", "canonical", "sources.json"))
@@ -73,7 +113,9 @@ func TestSourceSidecarProjectionAndIntegrity(t *testing.T) {
 		"extra operation": func(m *sourceSidecarManifest) {
 			m.Operations = append(m.Operations, scopeSidecarOperation{OperationID: "list_sources"})
 		},
-		"route": func(m *sourceSidecarManifest) { m.Operations[0].Path = "/v1/source" },
+		"route":             func(m *sourceSidecarManifest) { m.Operations[0].Path = "/v1/source" },
+		"ingestion route":   func(m *sourceSidecarManifest) { m.Operations[2].Path = "/v1/source-definitions" },
+		"checkpoint method": func(m *sourceSidecarManifest) { m.Operations[4].Method = "get" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			encoded, err := json.Marshal(manifest)
@@ -89,6 +131,48 @@ func TestSourceSidecarProjectionAndIntegrity(t *testing.T) {
 				t.Fatal("invalid projection accepted")
 			}
 		})
+	}
+	if _, digestErr := projectSourceSidecar(append(slices.Clone(upstream), '\n'), manifest, legacy, compatibility); digestErr == nil {
+		t.Fatal("changed raw upstream bytes accepted")
+	}
+}
+
+func TestSourceSidecarRejectsSelectedIngestionLedgerDrift(t *testing.T) {
+	root := repositoryRootForScopeSidecarTest(t)
+	upstream, _, legacy, compatibility := readScopeSidecarInputs(t, root)
+	manifest, err := loadSourceSidecarManifest(filepath.Join(root, "openapi", "canonical", "sources-manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, projectErr := projectSourceSidecar(upstream, manifest, legacy, compatibility); projectErr != nil {
+		t.Fatal(projectErr)
+	}
+	for _, operationID := range []string{"register_source_definition", "submit_source_observation", "get_connector_checkpoint", "commit_connector_checkpoint"} {
+		for name, mutate := range map[string]func(*compatibilityStagedOperation){
+			"deferred":     func(entry *compatibilityStagedOperation) { entry.Status = compatibilityStatusDeferred },
+			"method":       func(entry *compatibilityStagedOperation) { entry.Method = "get" },
+			"path":         func(entry *compatibilityStagedOperation) { entry.Path += "/wrong" },
+			"operation ID": func(entry *compatibilityStagedOperation) { entry.OperationID += "_wrong" },
+		} {
+			t.Run(operationID+"/"+name, func(t *testing.T) {
+				ledger, decodeErr := decodeCompatibilitySurface(compatibility)
+				if decodeErr != nil {
+					t.Fatal(decodeErr)
+				}
+				index := slices.IndexFunc(ledger.Canonical.UpstreamOnlyOperations, func(entry compatibilityStagedOperation) bool { return entry.OperationID == operationID })
+				if index < 0 || ledger.Canonical.UpstreamOnlyOperations[index].Status != compatibilityStatusImplementedCanonical {
+					t.Fatalf("%s is not implemented-canonical", operationID)
+				}
+				mutate(&ledger.Canonical.UpstreamOnlyOperations[index])
+				encoded, encodeErr := json.Marshal(ledger)
+				if encodeErr != nil {
+					t.Fatal(encodeErr)
+				}
+				if _, projectErr := projectSourceSidecar(upstream, manifest, legacy, encoded); projectErr == nil {
+					t.Fatal("selected operation ledger drift accepted")
+				}
+			})
+		}
 	}
 }
 
@@ -227,6 +311,12 @@ import (
 )
 var _ sources.Handler = sources.UnimplementedHandler{}
 var _ sources.Invoker = (*sources.Client)(nil)
+var (
+ _ = (*sources.Client).RegisterSourceDefinition
+ _ = (*sources.Client).SubmitSourceObservation
+ _ = (*sources.Client).GetConnectorCheckpoint
+ _ = (*sources.Client).CommitConnectorCheckpoint
+)
 func TestConsumer(t *testing.T) {
  request:=sources.CreateSourceRequest{Content:[]byte("null")}
  if err:=request.Validate();err!=nil{t.Fatal(err)}

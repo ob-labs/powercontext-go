@@ -11,11 +11,23 @@ import (
 )
 
 var (
-	rn3AllowedHeaders = map[string]string{
+	rn1AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 	rn7AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
+	rn5AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
+	rn11AllowedHeaders = map[string]string{
 		"GET": "Authorization",
+	}
+	rn13AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
+	rn15AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
 	}
 )
 
@@ -58,105 +70,261 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		switch elem[0] {
-		case '/': // Prefix: "/v1/scopes/"
+		case '/': // Prefix: "/v1/"
 
-			if l := len("/v1/scopes/"); len(elem) >= l && elem[0:l] == "/v1/scopes/" {
+			if l := len("/v1/"); len(elem) >= l && elem[0:l] == "/v1/" {
 				elem = elem[l:]
 			} else {
 				break
 			}
 
-			// Param: "scope_id"
-			// Match until "/"
-			idx := strings.IndexByte(elem, '/')
-			if idx < 0 {
-				idx = len(elem)
-			}
-			args[0] = elem[:idx]
-			elem = elem[idx:]
-
 			if len(elem) == 0 {
 				break
 			}
 			switch elem[0] {
-			case '/': // Prefix: "/sources"
+			case 'c': // Prefix: "connector-checkpoints/"
 
-				if l := len("/sources"); len(elem) >= l && elem[0:l] == "/sources" {
+				if l := len("connector-checkpoints/"); len(elem) >= l && elem[0:l] == "connector-checkpoints/" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					switch r.Method {
-					case "POST":
-						s.handleCreateSourceRequest([1]string{
-							args[0],
-						}, elemIsEscaped, w, r)
-					default:
-						s.notAllowed(w, r, notAllowedParams{
-							allowedMethods: "POST",
-							allowedHeaders: rn3AllowedHeaders,
-							acceptPost:     "application/json",
-							acceptPatch:    "",
-						})
-					}
-
-					return
+					break
 				}
 				switch elem[0] {
-				case '/': // Prefix: "/"
+				case 'c': // Prefix: "commit"
 
-					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+					if l := len("commit"); len(elem) >= l && elem[0:l] == "commit" {
 						elem = elem[l:]
 					} else {
 						break
 					}
 
-					// Param: "source_type"
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleCommitConnectorCheckpointRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn1AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				case 'g': // Prefix: "get"
+
+					if l := len("get"); len(elem) >= l && elem[0:l] == "get" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleGetConnectorCheckpointRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn7AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				}
+
+			case 's': // Prefix: "s"
+
+				if l := len("s"); len(elem) >= l && elem[0:l] == "s" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					break
+				}
+				switch elem[0] {
+				case 'c': // Prefix: "copes/"
+
+					if l := len("copes/"); len(elem) >= l && elem[0:l] == "copes/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "scope_id"
 					// Match until "/"
 					idx := strings.IndexByte(elem, '/')
 					if idx < 0 {
 						idx = len(elem)
 					}
-					args[1] = elem[:idx]
+					args[0] = elem[:idx]
 					elem = elem[idx:]
 
 					if len(elem) == 0 {
 						break
 					}
 					switch elem[0] {
-					case '/': // Prefix: "/"
+					case '/': // Prefix: "/sources"
 
-						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						if l := len("/sources"); len(elem) >= l && elem[0:l] == "/sources" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
-						// Param: "source_id"
-						// Leaf parameter, slashes are prohibited
-						idx := strings.IndexByte(elem, '/')
-						if idx >= 0 {
+						if len(elem) == 0 {
+							switch r.Method {
+							case "POST":
+								s.handleCreateSourceRequest([1]string{
+									args[0],
+								}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "POST",
+									allowedHeaders: rn5AllowedHeaders,
+									acceptPost:     "application/json",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+						switch elem[0] {
+						case '/': // Prefix: "/"
+
+							if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							// Param: "source_type"
+							// Match until "/"
+							idx := strings.IndexByte(elem, '/')
+							if idx < 0 {
+								idx = len(elem)
+							}
+							args[1] = elem[:idx]
+							elem = elem[idx:]
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case '/': // Prefix: "/"
+
+								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								// Param: "source_id"
+								// Leaf parameter, slashes are prohibited
+								idx := strings.IndexByte(elem, '/')
+								if idx >= 0 {
+									break
+								}
+								args[2] = elem
+								elem = ""
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch r.Method {
+									case "GET":
+										s.handleGetSourceRequest([3]string{
+											args[0],
+											args[1],
+											args[2],
+										}, elemIsEscaped, w, r)
+									default:
+										s.notAllowed(w, r, notAllowedParams{
+											allowedMethods: "GET",
+											allowedHeaders: rn11AllowedHeaders,
+											acceptPost:     "",
+											acceptPatch:    "",
+										})
+									}
+
+									return
+								}
+
+							}
+
+						}
+
+					}
+
+				case 'o': // Prefix: "ource-"
+
+					if l := len("ource-"); len(elem) >= l && elem[0:l] == "ource-" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case 'd': // Prefix: "definitions/register"
+
+						if l := len("definitions/register"); len(elem) >= l && elem[0:l] == "definitions/register" {
+							elem = elem[l:]
+						} else {
 							break
 						}
-						args[2] = elem
-						elem = ""
 
 						if len(elem) == 0 {
 							// Leaf node.
 							switch r.Method {
-							case "GET":
-								s.handleGetSourceRequest([3]string{
-									args[0],
-									args[1],
-									args[2],
-								}, elemIsEscaped, w, r)
+							case "POST":
+								s.handleRegisterSourceDefinitionRequest([0]string{}, elemIsEscaped, w, r)
 							default:
 								s.notAllowed(w, r, notAllowedParams{
-									allowedMethods: "GET",
-									allowedHeaders: rn7AllowedHeaders,
-									acceptPost:     "",
+									allowedMethods: "POST",
+									allowedHeaders: rn13AllowedHeaders,
+									acceptPost:     "application/json",
+									acceptPatch:    "",
+								})
+							}
+
+							return
+						}
+
+					case 'o': // Prefix: "observations"
+
+						if l := len("observations"); len(elem) >= l && elem[0:l] == "observations" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch r.Method {
+							case "POST":
+								s.handleSubmitSourceObservationRequest([0]string{}, elemIsEscaped, w, r)
+							default:
+								s.notAllowed(w, r, notAllowedParams{
+									allowedMethods: "POST",
+									allowedHeaders: rn15AllowedHeaders,
+									acceptPost:     "application/json",
 									acceptPatch:    "",
 								})
 							}
@@ -256,100 +424,256 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 			break
 		}
 		switch elem[0] {
-		case '/': // Prefix: "/v1/scopes/"
+		case '/': // Prefix: "/v1/"
 
-			if l := len("/v1/scopes/"); len(elem) >= l && elem[0:l] == "/v1/scopes/" {
+			if l := len("/v1/"); len(elem) >= l && elem[0:l] == "/v1/" {
 				elem = elem[l:]
 			} else {
 				break
 			}
 
-			// Param: "scope_id"
-			// Match until "/"
-			idx := strings.IndexByte(elem, '/')
-			if idx < 0 {
-				idx = len(elem)
-			}
-			args[0] = elem[:idx]
-			elem = elem[idx:]
-
 			if len(elem) == 0 {
 				break
 			}
 			switch elem[0] {
-			case '/': // Prefix: "/sources"
+			case 'c': // Prefix: "connector-checkpoints/"
 
-				if l := len("/sources"); len(elem) >= l && elem[0:l] == "/sources" {
+				if l := len("connector-checkpoints/"); len(elem) >= l && elem[0:l] == "connector-checkpoints/" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					switch method {
-					case "POST":
-						r.name = CreateSourceOperation
-						r.summary = "Create a durable Source"
-						r.operationID = "create_source"
-						r.operationGroup = ""
-						r.pathPattern = "/v1/scopes/{scope_id}/sources"
-						r.args = args
-						r.count = 1
-						return r, true
-					default:
-						return
-					}
+					break
 				}
 				switch elem[0] {
-				case '/': // Prefix: "/"
+				case 'c': // Prefix: "commit"
 
-					if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+					if l := len("commit"); len(elem) >= l && elem[0:l] == "commit" {
 						elem = elem[l:]
 					} else {
 						break
 					}
 
-					// Param: "source_type"
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = CommitConnectorCheckpointOperation
+							r.summary = "Commit a Connector binding checkpoint"
+							r.operationID = "commit_connector_checkpoint"
+							r.operationGroup = ""
+							r.pathPattern = "/v1/connector-checkpoints/commit"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				case 'g': // Prefix: "get"
+
+					if l := len("get"); len(elem) >= l && elem[0:l] == "get" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = GetConnectorCheckpointOperation
+							r.summary = "Read a Connector binding checkpoint"
+							r.operationID = "get_connector_checkpoint"
+							r.operationGroup = ""
+							r.pathPattern = "/v1/connector-checkpoints/get"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				}
+
+			case 's': // Prefix: "s"
+
+				if l := len("s"); len(elem) >= l && elem[0:l] == "s" {
+					elem = elem[l:]
+				} else {
+					break
+				}
+
+				if len(elem) == 0 {
+					break
+				}
+				switch elem[0] {
+				case 'c': // Prefix: "copes/"
+
+					if l := len("copes/"); len(elem) >= l && elem[0:l] == "copes/" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					// Param: "scope_id"
 					// Match until "/"
 					idx := strings.IndexByte(elem, '/')
 					if idx < 0 {
 						idx = len(elem)
 					}
-					args[1] = elem[:idx]
+					args[0] = elem[:idx]
 					elem = elem[idx:]
 
 					if len(elem) == 0 {
 						break
 					}
 					switch elem[0] {
-					case '/': // Prefix: "/"
+					case '/': // Prefix: "/sources"
 
-						if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+						if l := len("/sources"); len(elem) >= l && elem[0:l] == "/sources" {
 							elem = elem[l:]
 						} else {
 							break
 						}
 
-						// Param: "source_id"
-						// Leaf parameter, slashes are prohibited
-						idx := strings.IndexByte(elem, '/')
-						if idx >= 0 {
+						if len(elem) == 0 {
+							switch method {
+							case "POST":
+								r.name = CreateSourceOperation
+								r.summary = "Create a durable Source"
+								r.operationID = "create_source"
+								r.operationGroup = ""
+								r.pathPattern = "/v1/scopes/{scope_id}/sources"
+								r.args = args
+								r.count = 1
+								return r, true
+							default:
+								return
+							}
+						}
+						switch elem[0] {
+						case '/': // Prefix: "/"
+
+							if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+								elem = elem[l:]
+							} else {
+								break
+							}
+
+							// Param: "source_type"
+							// Match until "/"
+							idx := strings.IndexByte(elem, '/')
+							if idx < 0 {
+								idx = len(elem)
+							}
+							args[1] = elem[:idx]
+							elem = elem[idx:]
+
+							if len(elem) == 0 {
+								break
+							}
+							switch elem[0] {
+							case '/': // Prefix: "/"
+
+								if l := len("/"); len(elem) >= l && elem[0:l] == "/" {
+									elem = elem[l:]
+								} else {
+									break
+								}
+
+								// Param: "source_id"
+								// Leaf parameter, slashes are prohibited
+								idx := strings.IndexByte(elem, '/')
+								if idx >= 0 {
+									break
+								}
+								args[2] = elem
+								elem = ""
+
+								if len(elem) == 0 {
+									// Leaf node.
+									switch method {
+									case "GET":
+										r.name = GetSourceOperation
+										r.summary = "Get one exact Source"
+										r.operationID = "get_source"
+										r.operationGroup = ""
+										r.pathPattern = "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}"
+										r.args = args
+										r.count = 3
+										return r, true
+									default:
+										return
+									}
+								}
+
+							}
+
+						}
+
+					}
+
+				case 'o': // Prefix: "ource-"
+
+					if l := len("ource-"); len(elem) >= l && elem[0:l] == "ource-" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						break
+					}
+					switch elem[0] {
+					case 'd': // Prefix: "definitions/register"
+
+						if l := len("definitions/register"); len(elem) >= l && elem[0:l] == "definitions/register" {
+							elem = elem[l:]
+						} else {
 							break
 						}
-						args[2] = elem
-						elem = ""
 
 						if len(elem) == 0 {
 							// Leaf node.
 							switch method {
-							case "GET":
-								r.name = GetSourceOperation
-								r.summary = "Get one exact Source"
-								r.operationID = "get_source"
+							case "POST":
+								r.name = RegisterSourceDefinitionOperation
+								r.summary = "Register a worker-owned Source Definition manifest"
+								r.operationID = "register_source_definition"
 								r.operationGroup = ""
-								r.pathPattern = "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}"
+								r.pathPattern = "/v1/source-definitions/register"
 								r.args = args
-								r.count = 3
+								r.count = 0
+								return r, true
+							default:
+								return
+							}
+						}
+
+					case 'o': // Prefix: "observations"
+
+						if l := len("observations"); len(elem) >= l && elem[0:l] == "observations" {
+							elem = elem[l:]
+						} else {
+							break
+						}
+
+						if len(elem) == 0 {
+							// Leaf node.
+							switch method {
+							case "POST":
+								r.name = SubmitSourceObservationOperation
+								r.summary = "Submit a worker-materialized Source observation"
+								r.operationID = "submit_source_observation"
+								r.operationGroup = ""
+								r.pathPattern = "/v1/source-observations"
+								r.args = args
+								r.count = 0
 								return r, true
 							default:
 								return

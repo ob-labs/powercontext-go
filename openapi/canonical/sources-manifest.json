@@ -8,6 +8,10 @@
   },
   "operations": [
     {"operation_id": "create_source", "method": "post", "path": "/v1/scopes/{scope_id}/sources"},
-    {"operation_id": "get_source", "method": "get", "path": "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}"}
+    {"operation_id": "get_source", "method": "get", "path": "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}"},
+    {"operation_id": "register_source_definition", "method": "post", "path": "/v1/source-definitions/register"},
+    {"operation_id": "submit_source_observation", "method": "post", "path": "/v1/source-observations"},
+    {"operation_id": "get_connector_checkpoint", "method": "post", "path": "/v1/connector-checkpoints/get"},
+    {"operation_id": "commit_connector_checkpoint", "method": "post", "path": "/v1/connector-checkpoints/commit"}
   ]
 }
