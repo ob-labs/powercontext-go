@@ -100,8 +100,8 @@ func TestCanonicalSourceIngestionWireConversionsPreserveJSONValues(t *testing.T)
 		t.Fatal(err)
 	}
 	var requestManifest canonicalsource.SourceDefinitionManifest
-	if err := json.Unmarshal(manifestPayload, &requestManifest); err != nil {
-		t.Fatal(err)
+	if manifestUnmarshalErr := json.Unmarshal(manifestPayload, &requestManifest); manifestUnmarshalErr != nil {
+		t.Fatal(manifestUnmarshalErr)
 	}
 	parsedManifest, err := canonicalSourceDefinition(requestManifest)
 	if err != nil || parsedManifest.Fingerprint() != manifest.Fingerprint() {
@@ -128,8 +128,8 @@ func TestCanonicalSourceIngestionWireConversionsPreserveJSONValues(t *testing.T)
 		t.Fatal(err)
 	}
 	var requestObservation canonicalsource.SourceObservation
-	if err := json.Unmarshal(observationPayload, &requestObservation); err != nil {
-		t.Fatal(err)
+	if observationUnmarshalErr := json.Unmarshal(observationPayload, &requestObservation); observationUnmarshalErr != nil {
+		t.Fatal(observationUnmarshalErr)
 	}
 	parsedObservation, err := canonicalSourceObservation(requestObservation)
 	if err != nil || !bytes.Contains(parsedObservation.Payload(), []byte("9007199254740993")) {

@@ -22,6 +22,7 @@ import (
 	"net/url"
 
 	"github.com/go-faster/jx"
+
 	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/source"
