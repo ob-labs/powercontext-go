@@ -164,6 +164,36 @@ func TestExecutorOutputLimitTerminatesCommand(t *testing.T) {
 	assertExecutorResultRedacted(t, result, err)
 }
 
+func TestExecutorCombinedOutputLimitFailsClosed(t *testing.T) {
+	t.Setenv(helperProcessEnvironment, "split-overflow")
+	executor := executorForTest(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	result, err := executor.Execute(ctx, "schtasks.exe", []string{"/Query", "/XML"})
+	if !errors.Is(err, errExecutorOutputLimit) {
+		t.Fatalf("Execute() error = %v, want output-limit error", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("Execute() waited for caller cancellation: %v", ctx.Err())
+	}
+	assertExecutorResultRedacted(t, result, err)
+}
+
+func TestExecutorAllowsExactCombinedOutputLimit(t *testing.T) {
+	t.Setenv(helperProcessEnvironment, "split-at-limit")
+	executor := executorForTest(t)
+
+	result, err := executor.Execute(t.Context(), "schtasks.exe", []string{"/Query", "/XML"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil at the combined output limit", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("Execute() exit code = %#x, want 0", result.ExitCode)
+	}
+	assertExecutorResultRedacted(t, result, err)
+}
+
 func TestExecutorInvalidBoundaryFailsClosed(t *testing.T) {
 	for _, test := range []struct {
 		name     string
@@ -286,6 +316,12 @@ func runExecutorHelperProcess() {
 	case "overflow-block":
 		_, _ = os.Stdout.Write(bytesOf('x', maxCommandOutputBytes+1))
 		time.Sleep(24 * time.Hour)
+	case "split-overflow":
+		_, _ = os.Stdout.Write(bytesOf('x', maxCommandOutputBytes/2+1))
+		_, _ = os.Stderr.Write(bytesOf('y', maxCommandOutputBytes/2+1))
+	case "split-at-limit":
+		_, _ = os.Stdout.Write(bytesOf('x', maxCommandOutputBytes/2))
+		_, _ = os.Stderr.Write(bytesOf('y', maxCommandOutputBytes/2))
 	default:
 		os.Exit(123)
 	}
