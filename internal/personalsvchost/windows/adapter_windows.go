@@ -221,7 +221,7 @@ func (a *Adapter) Probe(ctx context.Context, endpoint string) (personalsvc.Probe
 		}
 		return personalsvc.ProbeUnreachable, nil
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxProbeBytes+1))
 	if err != nil {
 		if ctx.Err() != nil {

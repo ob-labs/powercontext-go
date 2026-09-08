@@ -44,34 +44,34 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adapter.Write(t.Context(), plan.Registration()); err != nil {
-		t.Fatal(err)
+	if writeErr := adapter.Write(t.Context(), plan.Registration()); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := adapter.Enable(t.Context()); err != nil {
-		t.Fatal(err)
+	if enableErr := adapter.Enable(t.Context()); enableErr != nil {
+		t.Fatal(enableErr)
 	}
 	fixture.created = true
 	manager, err := adapter.InspectManager(t.Context())
 	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
 		t.Fatalf("registered manager = %s, %v; want owned", manager.Ownership(), err)
 	}
-	if err := adapter.Start(t.Context()); err != nil {
-		t.Fatal(err)
+	if startErr := adapter.Start(t.Context()); startErr != nil {
+		t.Fatal(startErr)
 	}
 	waitForFile(t, sentinel, 15*time.Second)
 	waitForManagerState(t, adapter, personalsvc.ManagerActive, 10*time.Second)
 	if probe, probeErr := adapter.Probe(t.Context(), plan.Registration().Definition().Endpoint()); probeErr != nil || probe != personalsvc.ProbeUnreachable {
 		t.Fatalf("harmless child liveness = %s, %v; want unreachable", probe, probeErr)
 	}
-	if err := adapter.Stop(t.Context()); err != nil {
-		t.Fatal(err)
+	if stopErr := adapter.Stop(t.Context()); stopErr != nil {
+		t.Fatal(stopErr)
 	}
 	waitForManagerState(t, adapter, personalsvc.ManagerInactive, 10*time.Second)
-	if err := adapter.Disable(t.Context()); err != nil {
-		t.Fatal(err)
+	if disableErr := adapter.Disable(t.Context()); disableErr != nil {
+		t.Fatal(disableErr)
 	}
-	if err := adapter.Remove(t.Context()); err != nil {
-		t.Fatal(err)
+	if removeErr := adapter.Remove(t.Context()); removeErr != nil {
+		t.Fatal(removeErr)
 	}
 	state, _, err := scheduler.Query(t.Context())
 	if err != nil || state != personalsvc.TaskSchedulerAbsent {
@@ -90,11 +90,11 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 		t.Fatal("cannot decode owned task fixture")
 	}
 	foreignDocument := encodeTaskDocument(strings.Replace(text, personalsvc.OwnershipMarker, "foreign.owner", 1))
-	if err := os.WriteFile(foreignPath, foreignDocument, 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(foreignPath, foreignDocument, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := scheduler.Create(t.Context(), foreignPath); err != nil {
-		t.Fatal(err)
+	if createErr := scheduler.Create(t.Context(), foreignPath); createErr != nil {
+		t.Fatal(createErr)
 	}
 	fixture.created = true
 	state, before, err := scheduler.Query(t.Context())
@@ -105,15 +105,15 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipForeign {
 		t.Fatalf("foreign manager = %s, %v; want foreign", manager.Ownership(), err)
 	}
-	if err := adapter.Remove(t.Context()); err == nil {
+	if removeErr := adapter.Remove(t.Context()); removeErr == nil {
 		t.Fatal("Remove() accepted the intentional foreign task")
 	}
 	state, after, err := scheduler.Query(t.Context())
 	if err != nil || state != personalsvc.TaskSchedulerPresent || !bytes.Equal(before, after) {
 		t.Fatalf("foreign task changed after refusal: state = %s, error = %v", state, err)
 	}
-	if err := scheduler.Delete(t.Context()); err != nil {
-		t.Fatal(err)
+	if deleteErr := scheduler.Delete(t.Context()); deleteErr != nil {
+		t.Fatal(deleteErr)
 	}
 	state, _, err = scheduler.Query(t.Context())
 	if err != nil || state != personalsvc.TaskSchedulerAbsent {
@@ -142,11 +142,11 @@ func TestNativeTaskSchedulerLoginTriggerUsesCurrentUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := adapter.Write(t.Context(), plan.Registration()); err != nil {
-		t.Fatal(err)
+	if writeErr := adapter.Write(t.Context(), plan.Registration()); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := adapter.Enable(t.Context()); err != nil {
-		t.Fatal(err)
+	if enableErr := adapter.Enable(t.Context()); enableErr != nil {
+		t.Fatal(enableErr)
 	}
 	fixture.created = true
 	manager, err := adapter.InspectManager(t.Context())

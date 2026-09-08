@@ -64,33 +64,33 @@ func TestAdapterCompletesOwnedTaskLifecycleThroughExplicitBoundaries(t *testing.
 	if err != nil || artifact.State() != personalsvc.RegistrationNotInstalled {
 		t.Fatalf("initial artifact = %s, %v; want not installed", artifact.State(), err)
 	}
-	if err := adapter.Write(t.Context(), plan.Registration()); err != nil {
-		t.Fatal(err)
+	if writeErr := adapter.Write(t.Context(), plan.Registration()); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := adapter.Reload(t.Context()); err != nil {
-		t.Fatal(err)
+	if reloadErr := adapter.Reload(t.Context()); reloadErr != nil {
+		t.Fatal(reloadErr)
 	}
-	if err := adapter.Enable(t.Context()); err != nil {
-		t.Fatal(err)
+	if enableErr := adapter.Enable(t.Context()); enableErr != nil {
+		t.Fatal(enableErr)
 	}
 	manager, err := adapter.InspectManager(t.Context())
 	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
 		t.Fatalf("manager = %s, %v; want owned", manager.Ownership(), err)
 	}
-	if err := adapter.Start(t.Context()); err != nil {
-		t.Fatal(err)
+	if startErr := adapter.Start(t.Context()); startErr != nil {
+		t.Fatal(startErr)
 	}
 	if state, stateErr := adapter.ManagerState(t.Context()); stateErr != nil || state != personalsvc.ManagerActive {
 		t.Fatalf("manager state = %s, %v; want active", state, stateErr)
 	}
-	if err := adapter.Stop(t.Context()); err != nil {
-		t.Fatal(err)
+	if stopErr := adapter.Stop(t.Context()); stopErr != nil {
+		t.Fatal(stopErr)
 	}
-	if err := adapter.Disable(t.Context()); err != nil {
-		t.Fatal(err)
+	if disableErr := adapter.Disable(t.Context()); disableErr != nil {
+		t.Fatal(disableErr)
 	}
-	if err := adapter.Remove(t.Context()); err != nil {
-		t.Fatal(err)
+	if removeErr := adapter.Remove(t.Context()); removeErr != nil {
+		t.Fatal(removeErr)
 	}
 
 	wantPath := filepath.Join(root, "PowerContext", "Services", "personal-server.xml")
@@ -465,7 +465,7 @@ func TestControllerRestoresPreviouslyInspectedTaskAfterEnableFailure(t *testing.
 		t.Fatal(err)
 	}
 
-	if _, err := controller.Install(t.Context(), desired.Registration()); err == nil {
+	if _, installErr := controller.Install(t.Context(), desired.Registration()); installErr == nil {
 		t.Fatal("Install() unexpectedly survived the injected enable failure")
 	}
 	artifact, err := adapter.InspectArtifact(t.Context())
@@ -730,8 +730,8 @@ func TestRestoreKeepsRoleSpecificSpecsAfterLaterStatusInspection(t *testing.T) {
 			t.Fatal(statusErr)
 		}
 	}
-	if err := adapter.Restore(t.Context(), artifactSnapshot, managerSnapshot); err != nil {
-		t.Fatal(err)
+	if restoreErr := adapter.Restore(t.Context(), artifactSnapshot, managerSnapshot); restoreErr != nil {
+		t.Fatal(restoreErr)
 	}
 
 	artifactDocument, exists, err := files.Read(t.Context(), adapter.artifactPath)
@@ -795,11 +795,11 @@ func TestNativeArtifactStoreReplacesExactArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(root, "PowerContext", "Services", "personal-server.xml")
-	if err := store.Write(t.Context(), path, []byte("first")); err != nil {
-		t.Fatal(err)
+	if firstWriteErr := store.Write(t.Context(), path, []byte("first")); firstWriteErr != nil {
+		t.Fatal(firstWriteErr)
 	}
-	if err := store.Write(t.Context(), path, []byte("second")); err != nil {
-		t.Fatal(err)
+	if secondWriteErr := store.Write(t.Context(), path, []byte("second")); secondWriteErr != nil {
+		t.Fatal(secondWriteErr)
 	}
 	content, exists, err := store.Read(t.Context(), path)
 	if err != nil || !exists || string(content) != "second" {

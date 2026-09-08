@@ -34,9 +34,9 @@ const helperProcessEnvironment = "POWERCONTEXT_WINDOWS_EXECUTOR_HELPER"
 func TestMain(m *testing.M) {
 	if os.Getenv(helperProcessEnvironment) != "" {
 		runExecutorHelperProcess()
-		os.Exit(0)
+		return
 	}
-	os.Exit(m.Run())
+	m.Run()
 }
 
 func TestExecutorPassesArgumentsWithoutShell(t *testing.T) {

@@ -345,14 +345,14 @@ func TestTaskSchedulerBuildsCompleteAdapterCommandSet(t *testing.T) {
 	if err != nil || state != personalsvc.TaskSchedulerPresent || !bytes.Equal(queried, document) {
 		t.Fatalf("QueryXML() = %s, %x, %v", state, queried, err)
 	}
-	if err := scheduler.End(t.Context()); err != nil {
-		t.Fatal(err)
+	if endErr := scheduler.End(t.Context()); endErr != nil {
+		t.Fatal(endErr)
 	}
-	if err := scheduler.Enable(t.Context()); err != nil {
-		t.Fatal(err)
+	if enableErr := scheduler.Enable(t.Context()); enableErr != nil {
+		t.Fatal(enableErr)
 	}
-	if err := scheduler.Disable(t.Context()); err != nil {
-		t.Fatal(err)
+	if disableErr := scheduler.Disable(t.Context()); disableErr != nil {
+		t.Fatal(disableErr)
 	}
 	status, err := scheduler.QueryStatus(t.Context())
 	if err != nil || !bytes.Equal(status, []byte("status")) {

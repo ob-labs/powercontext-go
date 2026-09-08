@@ -23,8 +23,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 	golangwindows "golang.org/x/sys/windows"
+
+	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 )
 
 const (

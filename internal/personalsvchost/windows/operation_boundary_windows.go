@@ -21,8 +21,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 	golangwindows "golang.org/x/sys/windows"
+
+	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 )
 
 const operationLockPollInterval = 10 * time.Millisecond
@@ -73,8 +74,8 @@ func (b *OperationBoundary) Run(ctx context.Context, operation func(context.Cont
 	if err != nil {
 		return newError("operation lock", nil)
 	}
-	defer lock.Close()
-	if info, err := lock.Stat(); err != nil || !info.Mode().IsRegular() {
+	defer func() { _ = lock.Close() }()
+	if info, statErr := lock.Stat(); statErr != nil || !info.Mode().IsRegular() {
 		return newError("operation lock", nil)
 	}
 

@@ -24,8 +24,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 	golangwindows "golang.org/x/sys/windows"
+
+	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 )
 
 const maxArtifactBytes = 1 << 20
@@ -160,7 +161,7 @@ func (s *nativeArtifactStore) Read(ctx context.Context, path string) ([]byte, bo
 	if err != nil {
 		return nil, false, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > maxArtifactBytes {
 		return nil, false, errors.New("unsafe personal service artifact")
@@ -192,7 +193,7 @@ func (s *nativeArtifactStore) Write(ctx context.Context, path string, content []
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() { _ = os.Remove(temporaryPath) }()
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err
