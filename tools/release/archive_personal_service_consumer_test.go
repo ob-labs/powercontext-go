@@ -17,6 +17,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	json "encoding/json/v2"
 	"errors"
 	"net"
@@ -146,9 +148,14 @@ func releasePersonalServiceFailureClass(output []byte, commandErr error) string 
 		return "unsupported"
 	}
 	if exitError, found := errors.AsType[*exec.ExitError](commandErr); found {
-		return "redacted_exit_" + strconv.Itoa(exitError.ExitCode()) + "_bytes_" + strconv.Itoa(len(output))
+		return "redacted_exit_" + strconv.Itoa(exitError.ExitCode()) + "_bytes_" + strconv.Itoa(len(output)) + "_sha256_" + releasePersonalServiceFailureDigest(output)
 	}
-	return "redacted_non_exit_bytes_" + strconv.Itoa(len(output))
+	return "redacted_non_exit_bytes_" + strconv.Itoa(len(output)) + "_sha256_" + releasePersonalServiceFailureDigest(output)
+}
+
+func releasePersonalServiceFailureDigest(output []byte) string {
+	digest := sha256.Sum256(output)
+	return hex.EncodeToString(digest[:8])
 }
 
 func runReleasePersonalService(t *testing.T, binary string, arguments ...string) ([]byte, error) {
