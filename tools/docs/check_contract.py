@@ -41,7 +41,8 @@ SIDECAR_PIN_POLICY = (
 DEFERRED_E4_POLICY = (
     "The e4 Artifact revision-history, Artifact tag, Prompt, and Access "
     "clusters remain deferred. This rebaseline does not implement Artifact "
-    "writes, managed Skills, remote Skills, or native personal services."
+    "writes, managed Skill generation or lifecycle, remote Skills, or native "
+    "personal services."
 )
 LEGACY_SINGLE_PIN_PATTERNS = (
     re.compile(r"\b77\s+canonical\s+operations\b", re.IGNORECASE),
@@ -69,6 +70,15 @@ PROHIBITED_E4_CLAIMS = {
     "Source receipt": affirmative_claim_pattern(r"e4\s+Source\s+receipt"),
     "Artifact writes": affirmative_claim_pattern(r"Artifact\s+writes?"),
     "managed Skills": affirmative_claim_pattern(r"managed\s+Skills?"),
+    "managed Skill generation": affirmative_claim_pattern(
+        r"managed\s+Skills?\s+generation"
+    ),
+    "managed Skill lifecycle": affirmative_claim_pattern(
+        r"managed\s+Skills?\s+lifecycle"
+    ),
+    "managed Skill remote distribution": affirmative_claim_pattern(
+        r"managed\s+Skills?\s+(?:package\s+)?remote(?:\s+distribution)?"
+    ),
     "remote Skills": affirmative_claim_pattern(r"remote\s+Skills?"),
     "native personal services": affirmative_claim_pattern(
         r"native\s+personal\s+services?"

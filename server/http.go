@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	canonicalartifact "github.com/ob-labs/powercontext-go/api/canonical/artifacts"
+	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
 	canonicalscopec "github.com/ob-labs/powercontext-go/api/canonical/scopes"
 	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
@@ -54,6 +55,7 @@ type HTTPOptions struct {
 	canonicalScopes     canonicalscopec.Handler
 	canonicalSources    canonicalsource.Handler
 	canonicalArtifacts  canonicalartifact.Handler
+	canonicalSkills     managedskills.Handler
 }
 
 // MCPOptions controls the optional MCP Streamable HTTP route. Path defaults to
@@ -162,6 +164,21 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 			return nil, err
 		}
 	}
+	var managedSkillGenerated *managedskills.Server
+	if options.canonicalSkills != nil {
+		managedSkillOptions := []managedskills.ServerOption{
+			managedskills.WithTracerProvider(httpapi.TracerProvider(options.TracerProvider)),
+			managedskills.WithMiddleware(middlewares...),
+			managedskills.WithErrorHandler(httpapi.ErrorHandler(mapApplicationError)),
+		}
+		if options.MeterProvider != nil {
+			managedSkillOptions = append(managedSkillOptions, managedskills.WithMeterProvider(options.MeterProvider))
+		}
+		managedSkillGenerated, err = managedskills.NewServer(options.canonicalSkills, canonicalManagedSkillSecurity{}, managedSkillOptions...)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if options.MCP.Enabled {
 		mcpPath, err = normalizeMCPPath(options.MCP.Path)
 		if err != nil {
@@ -177,6 +194,9 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 	}
 	if artifactGenerated != nil {
 		openAPI = canonicalArtifactSidecar{next: openAPI, artifacts: artifactGenerated}
+	}
+	if managedSkillGenerated != nil {
+		openAPI = canonicalManagedSkillSidecar{next: openAPI, skills: managedSkillGenerated}
 	}
 	validatedOpenAPI := httpapi.ValidateJSONUnicode(openAPI)
 	var application http.Handler = validatedOpenAPI
@@ -224,49 +244,76 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		mux.Handle(mcpPath+"/", http.StripPrefix(mcpPath, mcpHandler))
 		mux.Handle(mcpPath, http.RedirectHandler(mcpPath+"/", http.StatusTemporaryRedirect))
 	}
-	var access *httpapi.AccessLogOptions
-	if options.AccessLog && accessLogger != nil {
-		access = &httpapi.AccessLogOptions{
-			Logger: accessLogger,
-			ResolveOperation: func(request *http.Request) string {
-				if artifactGenerated != nil {
-					if route, found := artifactGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				if sourceGenerated != nil {
-					if route, found := sourceGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				if !options.HandoffReportRoutes && strings.HasPrefix(request.URL.Path, "/v1/handoff-reports/") {
-					return "unmatched"
-				}
-				if canonicalGenerated != nil {
-					if route, found := canonicalGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				route, found := generated.FindPath(request.Method, request.URL)
-				if !found {
-					return "unmatched"
-				}
-				return route.OperationID()
-			},
-			Skip: func(request *http.Request) bool {
-				for _, prefix := range []string{"/health/live", "/health/ready", "/metrics"} {
-					if strings.HasPrefix(request.URL.Path, prefix) {
-						return true
-					}
-				}
-				return mcpPath != "" && strings.HasPrefix(request.URL.Path, mcpPath)
-			},
-		}
-	}
+	access := newAccessLogOptions(
+		options,
+		accessLogger,
+		mcpPath,
+		generated,
+		canonicalGenerated,
+		sourceGenerated,
+		artifactGenerated,
+		managedSkillGenerated,
+	)
 	return httpapi.Wrap(application, httpapi.Options{
 		BearerToken: options.BearerToken, HandoffReportRoutes: options.HandoffReportRoutes,
 		Access: access,
 	})
+}
+
+func newAccessLogOptions(
+	options HTTPOptions,
+	accessLogger *slog.Logger,
+	mcpPath string,
+	generated *v1.Server,
+	canonicalGenerated *canonicalscopec.Server,
+	sourceGenerated *canonicalsource.Server,
+	artifactGenerated *canonicalartifact.Server,
+	managedSkillGenerated *managedskills.Server,
+) *httpapi.AccessLogOptions {
+	if !options.AccessLog || accessLogger == nil {
+		return nil
+	}
+	return &httpapi.AccessLogOptions{
+		Logger: accessLogger,
+		ResolveOperation: func(request *http.Request) string {
+			if managedSkillGenerated != nil {
+				if route, found := managedSkillGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			if artifactGenerated != nil {
+				if route, found := artifactGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			if sourceGenerated != nil {
+				if route, found := sourceGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			if !options.HandoffReportRoutes && strings.HasPrefix(request.URL.Path, "/v1/handoff-reports/") {
+				return "unmatched"
+			}
+			if canonicalGenerated != nil {
+				if route, found := canonicalGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			route, found := generated.FindPath(request.Method, request.URL)
+			if !found {
+				return "unmatched"
+			}
+			return route.OperationID()
+		},
+		Skip: func(request *http.Request) bool {
+			for _, prefix := range []string{"/health/live", "/health/ready", "/metrics"} {
+				if strings.HasPrefix(request.URL.Path, prefix) {
+					return true
+				}
+			}
+			return mcpPath != "" && strings.HasPrefix(request.URL.Path, mcpPath)
+		},
+	}
 }
 
 // canonicalScopeSecurity is intentionally permissive: httpapi.Wrap owns the
@@ -281,11 +328,38 @@ func (canonicalScopeSecurity) HandleBearerAuth(
 	return ctx, nil
 }
 
+// canonicalManagedSkillSecurity is intentionally permissive: httpapi.Wrap
+// enforces the process-wide bearer boundary before generated sidecars run.
+type canonicalManagedSkillSecurity struct{}
+
+func (canonicalManagedSkillSecurity) HandleBearerAuth(
+	ctx context.Context,
+	_ managedskills.OperationName,
+	_ managedskills.BearerAuth,
+) (context.Context, error) {
+	return ctx, nil
+}
+
 // canonicalScopeSidecar reserves only exact generated Scope operation paths.
 // All other method/path pairs remain on the frozen legacy handler.
 type canonicalScopeSidecar struct {
 	legacy    http.Handler
 	canonical *canonicalscopec.Server
+}
+
+// canonicalManagedSkillSidecar reserves only exact generated managed-Skill
+// operation paths. All other method/path pairs stay on preceding handlers.
+type canonicalManagedSkillSidecar struct {
+	next   http.Handler
+	skills *managedskills.Server
+}
+
+func (handler canonicalManagedSkillSidecar) ServeHTTP(w http.ResponseWriter, request *http.Request) {
+	if _, found := handler.skills.FindPath(request.Method, request.URL); found {
+		handler.skills.ServeHTTP(w, request)
+		return
+	}
+	handler.next.ServeHTTP(w, request)
 }
 
 func (handler canonicalScopeSidecar) ServeHTTP(w http.ResponseWriter, request *http.Request) {

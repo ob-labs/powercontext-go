@@ -149,6 +149,41 @@
       "evidence": ["tools/api-generate/canonical_artifacts_test.go#func TestArtifactSidecarGenerationIsIsolatedAndFreshConsumerBuilds("]
     },
     {
+      "name": "canonical-managed-skill-sidecar",
+      "command": "go run ./tools/api-generate -managed-skill-sidecar-manifest openapi/canonical/managed-skills-manifest.json",
+      "inputs": [
+        "openapi/canonical/upstream-powercontext.yaml",
+        "openapi/canonical/managed-skills-manifest.json",
+        "openapi/compatibility-surface.json",
+        "openapi/powercontext.yaml"
+      ],
+      "outputs": [
+        "openapi/canonical/managed-skills.json",
+        "api/canonical/managedskills/oas_cfg_gen.go",
+        "api/canonical/managedskills/oas_client_gen.go",
+        "api/canonical/managedskills/oas_handlers_gen.go",
+        "api/canonical/managedskills/oas_interfaces_gen.go",
+        "api/canonical/managedskills/oas_json_gen.go",
+        "api/canonical/managedskills/oas_labeler_gen.go",
+        "api/canonical/managedskills/oas_middleware_gen.go",
+        "api/canonical/managedskills/oas_operations_gen.go",
+        "api/canonical/managedskills/oas_request_decoders_gen.go",
+        "api/canonical/managedskills/oas_request_encoders_gen.go",
+        "api/canonical/managedskills/oas_response_decoders_gen.go",
+        "api/canonical/managedskills/oas_response_encoders_gen.go",
+        "api/canonical/managedskills/oas_router_gen.go",
+        "api/canonical/managedskills/oas_schemas_gen.go",
+        "api/canonical/managedskills/oas_security_gen.go",
+        "api/canonical/managedskills/oas_server_gen.go",
+        "api/canonical/managedskills/oas_unimplemented_gen.go",
+        "api/canonical/managedskills/oas_validators_gen.go",
+        "api/canonical/managedskills/time.go"
+      ],
+      "evidence": [
+        "tools/api-generate/canonical_managed_skills_test.go#func TestManagedSkillSidecarGenerationIsIsolatedAndFreshConsumerBuilds("
+      ]
+    },
+    {
       "name": "traceability",
       "command": "go run ./tools/traceability-generate",
       "inputs": ["test/conformance/testdata/python-v0.0.2/manifest.json", "test/conformance/traceability-rules.json"],

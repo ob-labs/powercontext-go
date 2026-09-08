@@ -36,6 +36,7 @@ func main() {
 	var scopeSidecarManifest string
 	var sourceSidecarManifest string
 	var artifactSidecarManifest string
+	var managedSkillSidecarManifest string
 	var legacySpecification string
 	flag.StringVar(&specification, "spec", "powercontext.yaml", "canonical OpenAPI document")
 	flag.StringVar(&target, "target", "../api/v1", "generated package directory")
@@ -45,11 +46,20 @@ func main() {
 	flag.StringVar(&scopeSidecarManifest, "scope-sidecar-manifest", "", "optional Scope sidecar projection manifest")
 	flag.StringVar(&sourceSidecarManifest, "source-sidecar-manifest", "", "optional Source sidecar projection manifest")
 	flag.StringVar(&artifactSidecarManifest, "artifact-sidecar-manifest", "", "optional Artifact sidecar projection manifest")
+	flag.StringVar(&managedSkillSidecarManifest, "managed-skill-sidecar-manifest", "", "optional managed Skill package read projection manifest")
 	flag.StringVar(&legacySpecification, "legacy-spec", "", "legacy OpenAPI document required for Scope sidecar generation")
 	flag.Parse()
 	var err error
-	if (scopeSidecarManifest != "" && sourceSidecarManifest != "") || (artifactSidecarManifest != "" && (scopeSidecarManifest != "" || sourceSidecarManifest != "")) {
+	selectedManifests := 0
+	for _, manifest := range []string{scopeSidecarManifest, sourceSidecarManifest, artifactSidecarManifest, managedSkillSidecarManifest} {
+		if manifest != "" {
+			selectedManifests++
+		}
+	}
+	if selectedManifests > 1 {
 		err = errors.New("select exactly one sidecar manifest")
+	} else if managedSkillSidecarManifest != "" {
+		err = runManagedSkillSidecar(specification, managedSkillSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
 	} else if artifactSidecarManifest != "" {
 		err = runArtifactSidecar(specification, artifactSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
 	} else if sourceSidecarManifest != "" {

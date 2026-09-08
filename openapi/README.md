@@ -29,7 +29,7 @@ operation's ID, method, path, and `implemented-canonical` status against the
 e4 inventory. They do not require a stable 74 schema source to contain every
 new e4 deferred operation. The e4 Artifact revision-history, Artifact tag,
 Prompt, and Access clusters remain deferred. This rebaseline does not implement
-Artifact writes, managed Skills, remote Skills, or native personal services.
+Artifact writes, managed Skill generation or lifecycle, remote Skills, or native personal services.
 
 `canonical/upstream-powercontext.yaml` is the immutable raw OpenAPI blob for
 the three sidecars. `canonical/scopes-manifest.json` explicitly projects only
@@ -81,6 +81,17 @@ Artifact resource digests use RFC 8785 without extra Unicode normalization, as
 the pinned upstream `builtin/persistence/records.py` does. NFC and NFD domain
 content remain distinct. Existing domain validation, including Memory reason
 normalization during decoding, is preserved.
+
+`canonical/managed-skills-manifest.json` projects only the exact package
+manifest and download reads. Those reads are verified only for a Go-persisted
+immutable package snapshot: `archive_base64` decodes to the exact stored archive
+bytes, and its manifest and package reference describe that same verified
+snapshot. They do not define a shared cross-language ZIP canonicalization or
+establish an archive/reference produced by another implementation as equivalent.
+Python Receiver/CLI archive-reference interoperability remains unimplemented
+because their full package-reference calculation uses different ZIP byte
+canonicalization. Archive writer canonicalization and immutable-record migration
+remain separate future work.
 
 The [Issue #202 lineage policy](https://github.com/ob-labs/powercontext-go/issues/202#issuecomment-5575546837)
 overlays only this sidecar's `ArtifactRevision` and `ArtifactCollectionItem` source lineage to preserve

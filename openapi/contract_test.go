@@ -29,6 +29,75 @@ import (
 
 const activeOpenAPISHA256 = "ab78caf229a61568675dbc9176ad0e1a48d6d48aa860fc7f3b5993ea69268ccb"
 
+func TestREADMEStatesManagedSkillPackageArchiveBoundary(t *testing.T) {
+	t.Parallel()
+	contents, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := managedSkillPackageArchiveBoundaryError(string(contents)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManagedSkillPackageArchiveBoundaryHandlesInteroperabilityClaimPolarity(t *testing.T) {
+	t.Parallel()
+	contents, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		claim  string
+		reject bool
+	}{
+		{"Cross-language ZIP canonicalization is implemented.", true},
+		{"Cross-language ZIP canonicalization is supported.", true},
+		{"Python Receiver archive-reference interoperability is implemented.", true},
+		{"Python Receiver archive-reference interoperability is supported.", true},
+		{"Python CLI archive-reference interoperability is implemented.", true},
+		{"Python CLI archive-reference interoperability is supported.", true},
+		{"Cross-language ZIP canonicalization is not implemented.", false},
+		{"Python Receiver archive-reference interoperability is not implemented.", false},
+		{"Python CLI archive-reference interoperability is not supported.", false},
+		{"Managed Skill package reads are implemented.", false},
+		{"This rebaseline does not implement Artifact writes, managed Skills, remote Skills, or native personal services.", true},
+	} {
+		err := managedSkillPackageArchiveBoundaryError(string(contents) + "\n" + test.claim)
+		if test.reject != (err != nil) {
+			t.Fatalf("managed Skill package archive boundary claim %q reject=%t, error=%v", test.claim, test.reject, err)
+		}
+	}
+}
+
+func managedSkillPackageArchiveBoundaryError(contents string) error {
+	text := strings.Join(strings.Fields(contents), " ")
+	for _, required := range []string{
+		"This rebaseline does not implement Artifact writes, managed Skill generation or lifecycle, remote Skills, or native personal services.",
+		"Go-persisted immutable package snapshot",
+		"`archive_base64` decodes to the exact stored archive bytes",
+		"Python Receiver/CLI archive-reference interoperability remains unimplemented",
+		"do not define a shared cross-language ZIP canonicalization",
+	} {
+		if !strings.Contains(text, required) {
+			return fmt.Errorf("README.md does not state managed Skill package archive boundary %q", required)
+		}
+	}
+	for _, prohibited := range []string{
+		"this rebaseline does not implement artifact writes, managed skills, remote skills, or native personal services.",
+		"cross-language zip canonicalization is implemented",
+		"cross-language zip canonicalization is supported",
+		"python receiver archive-reference interoperability is implemented",
+		"python receiver archive-reference interoperability is supported",
+		"python cli archive-reference interoperability is implemented",
+		"python cli archive-reference interoperability is supported",
+	} {
+		if strings.Contains(strings.ToLower(text), prohibited) {
+			return fmt.Errorf("README.md falsely claims managed Skill package interoperability %q", prohibited)
+		}
+	}
+	return nil
+}
+
 func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	t.Parallel()
 	contents, err := os.ReadFile("powercontext.yaml")

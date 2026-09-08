@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "oceanbase/powercontext",
+    "commit": "74b961fbb07165595314726715d412a3d0d90589",
+    "path": "openapi/powercontext.yaml",
+    "sha256": "aca2a9dedfc4733176df3f7e27861deedcc751e0042515e3014ee9c36a017ec3"
+  },
+  "operations": [
+    {"operation_id": "get_skill_package_manifest", "method": "post", "path": "/v1/skill/package/manifest"},
+    {"operation_id": "download_skill_package", "method": "post", "path": "/v1/skill/package/download"}
+  ]
+}
