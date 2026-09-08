@@ -25,6 +25,7 @@ import (
 var managedSkillSidecarOperations = []scopeSidecarOperation{
 	{OperationID: "get_skill_package_manifest", Method: "post", Path: "/v1/skill/package/manifest"},
 	{OperationID: "download_skill_package", Method: "post", Path: "/v1/skill/package/download"},
+	{OperationID: "record_skill_usage", Method: "post", Path: "/v1/skill/usage"},
 }
 
 type managedSkillSidecarManifest struct {

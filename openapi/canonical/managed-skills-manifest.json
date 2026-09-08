@@ -8,6 +8,7 @@
   },
   "operations": [
     {"operation_id": "get_skill_package_manifest", "method": "post", "path": "/v1/skill/package/manifest"},
-    {"operation_id": "download_skill_package", "method": "post", "path": "/v1/skill/package/download"}
+    {"operation_id": "download_skill_package", "method": "post", "path": "/v1/skill/package/download"},
+    {"operation_id": "record_skill_usage", "method": "post", "path": "/v1/skill/usage"}
   ]
 }

@@ -51,6 +51,7 @@ type Application struct {
 	connectorCheckpoints *pcruntime.ConnectorCheckpointApplication
 	artifacts            *pcruntime.ArtifactResourceApplication
 	skillPackages        *pcruntime.SkillPackageResourceApplication
+	skillUsage           *pcruntime.SkillUsageApplication
 	statistics           *pcruntime.StatisticsApplication
 	agentSkillTargets    []skill.AgentSkillTarget
 
@@ -99,7 +100,7 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 		readiness: readiness, metrics: foundation.metrics, tracing: foundation.tracing, logger: dependencies.Logger,
 		review: services.review, externalSkills: services.externalSkills, scopes: services.scopes,
 		sources: services.sources, remoteIngestion: services.remoteIngestion, connectorCheckpoints: services.connectorCheckpoints,
-		artifacts: services.artifacts, skillPackages: services.skillPackages, statistics: services.statistics, agentSkillTargets: foundation.assembled.agentSkillTargets,
+		artifacts: services.artifacts, skillPackages: services.skillPackages, skillUsage: services.skillUsage, statistics: services.statistics, agentSkillTargets: foundation.assembled.agentSkillTargets,
 	}
 	application.endpoint = endpoint.NewHandler(endpoint.HandlerOptions{
 		Capabilities: application.getCapabilities,
@@ -148,7 +149,7 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 		canonicalScopes:    endpoint.NewCanonicalScopeHandler(a.scopes),
 		canonicalSources:   endpoint.NewCanonicalSourceHandler(a.sources, a.remoteIngestion, a.connectorCheckpoints),
 		canonicalArtifacts: endpoint.NewCanonicalArtifactHandler(a.artifacts),
-		canonicalSkills:    endpoint.NewCanonicalManagedSkillHandler(a.skillPackages),
+		canonicalSkills:    endpoint.NewCanonicalManagedSkillHandler(managedSkillOperations{packages: a.skillPackages, usage: a.skillUsage}),
 		canonicalStats:     endpoint.NewCanonicalStatsHandler(a.statistics),
 	})
 }

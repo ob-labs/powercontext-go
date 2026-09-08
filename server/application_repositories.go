@@ -46,7 +46,7 @@ func buildApplicationRepositories(
 	}
 	sources, err := sqlstore.NewSourceRepository(
 		dialect,
-		sqlstore.ContentSourceCodec(), sqlstore.ExternalSkillSnapshotSourceCodec(),
+		sqlstore.ContentSourceCodec(), sqlstore.ExternalSkillSnapshotSourceCodec(), sqlstore.SkillUsageSourceCodec(),
 	)
 	if err != nil {
 		return applicationRepositories{}, err

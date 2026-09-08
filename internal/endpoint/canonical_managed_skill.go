@@ -22,24 +22,88 @@ import (
 	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/source"
 )
 
-// ManagedSkillPackageOperations is the Runtime-owned exact package-read
-// surface used by the canonical managed-Skill sidecar.
-type ManagedSkillPackageOperations interface {
+// ManagedSkillOperations is the Runtime-owned exact package-read and bounded
+// usage-write surface used by the canonical managed-Skill sidecar.
+type ManagedSkillOperations interface {
 	ReadSkillPackage(context.Context, string, artifact.Ref) (skill.PackageSnapshot, error)
+	Record(context.Context, string, source.SkillUsageCapture) (runtime.SourceReceipt, error)
 }
 
 // CanonicalManagedSkillHandler projects verified immutable Skill package
-// snapshots onto the generated read-only sidecar contract.
+// snapshots and bounded immutable usage Source evidence onto the generated
+// managed-Skill sidecar contract.
 type CanonicalManagedSkillHandler struct {
-	operations ManagedSkillPackageOperations
+	operations ManagedSkillOperations
 }
 
 var _ managedskills.Handler = (*CanonicalManagedSkillHandler)(nil)
 
-func NewCanonicalManagedSkillHandler(operations ManagedSkillPackageOperations) *CanonicalManagedSkillHandler {
+func NewCanonicalManagedSkillHandler(operations ManagedSkillOperations) *CanonicalManagedSkillHandler {
 	return &CanonicalManagedSkillHandler{operations: operations}
+}
+
+func (h *CanonicalManagedSkillHandler) RecordSkillUsage(
+	ctx context.Context,
+	request *managedskills.RecordSkillUsageRequest,
+) (managedskills.RecordSkillUsageRes, error) {
+	if h == nil || h.operations == nil {
+		return nil, &RuntimeNotReadyError{}
+	}
+	if request == nil {
+		return nil, &InvalidRequestError{}
+	}
+	skillRef, err := source.NewSkillUsageArtifactReference(
+		request.SkillRef.Family,
+		request.SkillRef.ArtifactID,
+		int64(request.SkillRef.Revision),
+	)
+	if err != nil {
+		return nil, &InvalidRequestError{}
+	}
+	var taskSource *source.Ref
+	if value, found := request.TaskSource.Get(); found {
+		ref, refErr := source.NewRef(value.Name, value.SourceID)
+		if refErr != nil {
+			return nil, &InvalidRequestError{}
+		}
+		taskSource = &ref
+	}
+	var environmentFingerprint *string
+	if value, found := request.EnvironmentFingerprint.Get(); found {
+		environmentFingerprint = &value
+	}
+	capture, err := source.NewSkillUsageCapture(
+		request.ObservationID,
+		skillRef,
+		request.PackageDigest,
+		request.TargetID,
+		request.Selected,
+		source.ObservedInvocation(request.Invoked),
+		source.ObservedValidation(request.Validation),
+		source.ObservedOutcome(request.Outcome),
+		taskSource,
+		environmentFingerprint,
+	)
+	if err != nil {
+		return nil, &InvalidRequestError{}
+	}
+	receipt, err := h.operations.Record(ctx, request.ScopeID, capture)
+	if err != nil {
+		return nil, err
+	}
+	position := int(receipt.Sequence)
+	if receipt.Sequence < 1 || int64(position) != receipt.Sequence {
+		return nil, &RuntimeNotReadyError{}
+	}
+	return &managedskills.CaptureContentSourceResponse{
+		Status:   managedskills.CaptureStatusAccepted,
+		Source:   managedskills.SourceReference{Name: receipt.Ref.Type(), SourceID: receipt.Ref.ID()},
+		Position: position,
+	}, nil
 }
 
 func (h *CanonicalManagedSkillHandler) GetSkillPackageManifest(

@@ -30,3 +30,12 @@ func (UnimplementedHandler) DownloadSkillPackage(ctx context.Context, req *GetSk
 func (UnimplementedHandler) GetSkillPackageManifest(ctx context.Context, req *GetSkillPackageRequest) (r GetSkillPackageManifestRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
+
+// RecordSkillUsage implements record_skill_usage operation.
+//
+// Validate an exact managed Skill Revision and capture immutable bounded usage Source evidence.
+//
+// POST /v1/skill/usage
+func (UnimplementedHandler) RecordSkillUsage(ctx context.Context, req *RecordSkillUsageRequest) (r RecordSkillUsageRes, _ error) {
+	return r, ht.ErrNotImplemented
+}

@@ -20,6 +20,12 @@ type Handler interface {
 	//
 	// POST /v1/skill/package/manifest
 	GetSkillPackageManifest(ctx context.Context, req *GetSkillPackageRequest) (GetSkillPackageManifestRes, error)
+	// RecordSkillUsage implements record_skill_usage operation.
+	//
+	// Validate an exact managed Skill Revision and capture immutable bounded usage Source evidence.
+	//
+	// POST /v1/skill/usage
+	RecordSkillUsage(ctx context.Context, req *RecordSkillUsageRequest) (RecordSkillUsageRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

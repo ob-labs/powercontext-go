@@ -84,16 +84,19 @@ the pinned upstream `builtin/persistence/records.py` does. NFC and NFD domain
 content remain distinct. Existing domain validation, including Memory reason
 normalization during decoding, is preserved.
 
-`canonical/managed-skills-manifest.json` projects only the exact package
-manifest and download reads. Those reads are verified only for a Go-persisted
-immutable package snapshot: `archive_base64` decodes to the exact stored archive
-bytes, and its manifest and package reference describe that same verified
-snapshot. They do not define a shared cross-language ZIP canonicalization or
-establish an archive/reference produced by another implementation as equivalent.
-Python Receiver/CLI archive-reference interoperability remains unimplemented
-because their full package-reference calculation uses different ZIP byte
-canonicalization. Archive writer canonicalization and immutable-record migration
-remain separate future work.
+`canonical/managed-skills-manifest.json` projects two exact package reads and
+one bounded immutable usage-evidence write. The manifest and download reads are
+verified only for a Go-persisted immutable package snapshot: `archive_base64`
+decodes to the exact stored archive bytes, and its manifest and package reference
+describe that same verified snapshot. `record_skill_usage` first verifies the
+exact package-backed Skill Revision and tree digest, then records only bounded
+Source journal evidence; it does not materialize, publish, or replace an
+Artifact, and it never becomes an MCP tool. These routes do not define a shared
+cross-language ZIP canonicalization or establish an archive/reference produced
+by another implementation as equivalent. Python Receiver/CLI archive-reference
+interoperability remains unimplemented because their full package-reference
+calculation uses different ZIP byte canonicalization. Archive writer
+canonicalization and immutable-record migration remain separate future work.
 
 The [Issue #202 lineage policy](https://github.com/ob-labs/powercontext-go/issues/202#issuecomment-5575546837)
 overlays only this sidecar's `ArtifactRevision` and `ArtifactCollectionItem` source lineage to preserve

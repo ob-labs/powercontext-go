@@ -17,6 +17,7 @@ package endpoint
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,12 +25,34 @@ import (
 	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/source"
 )
 
 type managedSkillPackageOperationsFunc func(context.Context, string, artifact.Ref) (skill.PackageSnapshot, error)
 
 func (function managedSkillPackageOperationsFunc) ReadSkillPackage(ctx context.Context, scopeID string, ref artifact.Ref) (skill.PackageSnapshot, error) {
 	return function(ctx, scopeID, ref)
+}
+
+func (managedSkillPackageOperationsFunc) Record(context.Context, string, source.SkillUsageCapture) (runtime.SourceReceipt, error) {
+	return runtime.SourceReceipt{}, errors.New("usage record was not expected")
+}
+
+type managedSkillUsageOperations struct {
+	record func(context.Context, string, source.SkillUsageCapture) (runtime.SourceReceipt, error)
+}
+
+func (managedSkillUsageOperations) ReadSkillPackage(context.Context, string, artifact.Ref) (skill.PackageSnapshot, error) {
+	return skill.PackageSnapshot{}, errors.New("package read was not expected")
+}
+
+func (operations managedSkillUsageOperations) Record(
+	ctx context.Context,
+	scopeID string,
+	capture source.SkillUsageCapture,
+) (runtime.SourceReceipt, error) {
+	return operations.record(ctx, scopeID, capture)
 }
 
 func TestCanonicalManagedSkillHandlerProjectsVerifiedSnapshot(t *testing.T) {
@@ -88,6 +111,56 @@ func TestCanonicalManagedSkillHandlerClassifiesInvalidAndMissingReads(t *testing
 	}
 	if _, unavailableErr := (*CanonicalManagedSkillHandler)(nil).DownloadSkillPackage(t.Context(), nil); MapError(unavailableErr).Code != "runtime_not_ready" {
 		t.Fatalf("nil handler error = %v", unavailableErr)
+	}
+}
+
+func TestCanonicalManagedSkillHandlerRecordsBoundedUsage(t *testing.T) {
+	observed := false
+	handler := NewCanonicalManagedSkillHandler(managedSkillUsageOperations{
+		record: func(_ context.Context, scopeID string, capture source.SkillUsageCapture) (runtime.SourceReceipt, error) {
+			observed = true
+			if scopeID != "scope" || capture.ObservationID() != "usage-1" || capture.SkillRef().Family() != skill.Family ||
+				capture.SkillRef().ID() != "package" || capture.SkillRef().Revision() != 2 ||
+				capture.PackageDigest() != "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ||
+				capture.TargetID() != "workbuddy-target" || !capture.Selected() ||
+				capture.Invoked() != source.ObservedInvocationTrue || capture.Validation() != source.ObservedValidationPassed ||
+				capture.Outcome() != source.ObservedOutcomeSuccess {
+				t.Fatalf("usage capture = %#v", capture)
+			}
+			taskSource, found := capture.TaskSource()
+			if !found || taskSource.Type() != "content" || taskSource.ID() != "task-1" {
+				t.Fatalf("task Source = %#v, found=%t", taskSource, found)
+			}
+			fingerprint, found := capture.EnvironmentFingerprint()
+			if !found || fingerprint != "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+				t.Fatalf("environment fingerprint = %q, found=%t", fingerprint, found)
+			}
+			ref, err := source.NewRef(source.SkillUsageType, "usage-1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return runtime.SourceReceipt{Ref: ref, Sequence: 4}, nil
+		},
+	})
+	request := &managedskills.RecordSkillUsageRequest{
+		ScopeID: "scope", ObservationID: "usage-1",
+		SkillRef:      managedskills.ArtifactReference{Family: skill.Family, ArtifactID: "package", Revision: 2},
+		PackageDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TargetID:      "workbuddy-target", Selected: true,
+		Invoked:                managedskills.RecordSkillUsageRequestInvokedTrue,
+		Validation:             managedskills.RecordSkillUsageRequestValidationPassed,
+		Outcome:                managedskills.RecordSkillUsageRequestOutcomeSuccess,
+		TaskSource:             managedskills.NewOptSourceReference(managedskills.SourceReference{Name: "content", SourceID: "task-1"}),
+		EnvironmentFingerprint: managedskills.NewOptNilString("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+	}
+	result, err := handler.RecordSkillUsage(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, ok := result.(*managedskills.CaptureContentSourceResponse)
+	if !ok || !observed || response.Status != managedskills.CaptureStatusAccepted || response.Position != 4 ||
+		response.Source.Name != source.SkillUsageType || response.Source.SourceID != "usage-1" {
+		t.Fatalf("usage result = %#v, observed=%t", result, observed)
 	}
 }
 
