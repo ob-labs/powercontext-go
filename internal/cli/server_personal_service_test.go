@@ -65,12 +65,15 @@ func TestServerPersonalServiceCommandsRejectMissingOrBlankValuesBeforeNativeEffe
 	for _, arguments := range [][]string{
 		{"server", "install"},
 		{"server", "install", "--env-file="},
+		{"server", "install", "--env-file", " /etc/powercontext/server.env"},
 		{"server", "install", "--env-file", "/etc/powercontext/server.env", "--data-dir="},
+		{"server", "install", "--env-file", "/etc/powercontext/server.env", "--data-dir", "/var/lib/powercontext "},
 		{"server", "_service-run", "--endpoint", "http://127.0.0.1:7614", "--data-dir", "/var/lib/powercontext"},
 		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--data-dir", "/var/lib/powercontext"},
 		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint", "http://127.0.0.1:7614"},
 		{"server", "_service-run", "--env-file=", "--endpoint", "http://127.0.0.1:7614", "--data-dir", "/var/lib/powercontext"},
 		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint=", "--data-dir", "/var/lib/powercontext"},
+		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint", " http://127.0.0.1:7614", "--data-dir", "/var/lib/powercontext"},
 		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint", "http://127.0.0.1:7614", "--data-dir="},
 	} {
 		t.Run(strings.Join(arguments[1:], " "), func(t *testing.T) {

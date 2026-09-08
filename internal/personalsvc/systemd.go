@@ -459,7 +459,7 @@ func (a *SystemdUserAdapter) render(registration Registration) ([]byte, error) {
 		"StartLimitBurst=3\n" +
 		"\n" +
 		"[Service]\n" +
-		"Type=simple\n" +
+		"Type=exec\n" +
 		"Environment=POWERCONTEXT_SERVICE_OWNED=true\n" +
 		"Environment=POWERCONTEXT_SERVICE_METADATA=" + metadata + "\n" +
 		"ExecStart=" + strings.Join(quoted, " ") + "\n" +

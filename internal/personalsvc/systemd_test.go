@@ -52,7 +52,7 @@ func TestSystemdUserAdapterWritesDeterministicOwnedUnit(t *testing.T) {
 		"StartLimitBurst=3\n" +
 		"\n" +
 		"[Service]\n" +
-		"Type=simple\n" +
+		"Type=exec\n" +
 		"Environment=POWERCONTEXT_SERVICE_OWNED=true\n" +
 		"Environment=POWERCONTEXT_SERVICE_METADATA=" + "PLACEHOLDER" + "\n" +
 		"ExecStart=\"/opt/powercontext/bin/powercontext\" \"server\" \"_service-run\" \"--env-file\" \"/home/alice/.config/powercontext/server.env\" \"--endpoint\" \"http://127.0.0.1:8123\" \"--data-dir\" \"/home/alice/.local/share/powercontext\"\n" +
@@ -118,6 +118,24 @@ func TestSystemdUserAdapterRefusesForeignOrMalformedArtifactsWithoutMutation(t *
 				t.Fatalf("unverified artifact reached the manager: %q", boundary.commandArguments())
 			}
 		})
+	}
+}
+
+func TestSystemdUserAdapterRejectsLegacySimpleUnitArtifact(t *testing.T) {
+	registration := systemdRegistration(t)
+	boundary := newSystemdBoundary()
+	adapter := newSystemdAdapter(t, boundary)
+	if err := adapter.Write(t.Context(), registration); err != nil {
+		t.Fatal(err)
+	}
+	boundary.content = []byte(strings.Replace(string(boundary.content), "Type=exec", "Type=simple", 1))
+
+	artifact, err := adapter.InspectArtifact(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifact.State() != personalsvc.RegistrationInvalid {
+		t.Fatalf("artifact state = %s, want invalid", artifact.State())
 	}
 }
 

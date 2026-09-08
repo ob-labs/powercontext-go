@@ -634,3 +634,9 @@ source / artifact / trigger / inference
   marker exactly once. Verify a middle-directory symlink to an owner-private
   target, concurrent parent replacement, and a whitespace-combined marker
   assignment cannot substitute a trusted artifact or manager registration.
+
+- When a hidden service command forwards persistent paths or endpoints into a
+  managed unit, reject a changed flag value with leading or trailing whitespace
+  as a usage error before any platform boundary. Render and parse the exact
+  supported systemd service type, and verify legacy type variants remain
+  unowned artifacts.

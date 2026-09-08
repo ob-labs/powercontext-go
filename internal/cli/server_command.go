@@ -140,7 +140,7 @@ func requiredServiceArgs(requirements ...serviceFlagRequirement) cobra.Positiona
 }
 
 func requireServiceFlag(command *cobra.Command, name, value string) error {
-	if command.Flags().Changed(name) && strings.TrimSpace(value) == "" {
+	if command.Flags().Changed(name) && (strings.TrimSpace(value) == "" || strings.TrimSpace(value) != value) {
 		return usageError(fmt.Errorf("server: --%s must be a non-empty trimmed value", name))
 	}
 	return nil
