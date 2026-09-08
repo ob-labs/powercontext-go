@@ -70,7 +70,7 @@ func newLinuxPrivateFiles(roots linuxPersonalServiceRoots) (*linuxPrivateFiles, 
 	if err != nil {
 		return nil, newPersonalServicePlatformError("configuration")
 	}
-	defer unix.Close(descriptor)
+	defer func() { _ = unix.Close(descriptor) }()
 	var stat unix.Stat_t
 	if owner == 0 || unix.Fstat(descriptor, &stat) != nil || !safeLinuxUserHomeStat(stat, owner) {
 		return nil, newPersonalServicePlatformError("configuration")
@@ -89,7 +89,7 @@ func (f *linuxPrivateFiles) Read(ctx context.Context, name string) ([]byte, bool
 	if err != nil {
 		return nil, false, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	content, err := io.ReadAll(io.LimitReader(file, maximumPersonalServiceFileSize+1))
 	if err != nil || len(content) > maximumPersonalServiceFileSize {
 		return nil, false, errors.New("private file cannot be read")
@@ -116,7 +116,7 @@ func (f *linuxPrivateFiles) Write(ctx context.Context, name string, content []by
 	if err != nil {
 		return err
 	}
-	defer unix.Close(parent)
+	defer func() { _ = unix.Close(parent) }()
 	before, exists, err := f.privateAt(parent, base)
 	if err != nil {
 		return err
@@ -164,7 +164,7 @@ func (f *linuxPrivateFiles) Remove(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(parent)
+	defer func() { _ = unix.Close(parent) }()
 	identity, exists, err := f.privateAt(parent, base)
 	if err != nil || !exists {
 		return err
@@ -408,7 +408,7 @@ func (l *linuxOperationFileLock) WithLock(ctx context.Context, operation func(co
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	descriptor := int(file.Fd())
 	var stat unix.Stat_t
 	if err := unix.Fstat(descriptor, &stat); err != nil || !validLinuxPrivateFileObservation(linuxPrivateIdentityFromStat(stat), l.files.owner) {

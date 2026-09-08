@@ -27,5 +27,3 @@ func (*UnsupportedPersonalServiceError) Error() string {
 	}
 	return "personal Server service is supported only on Linux"
 }
-
-func unsupportedPersonalService() error { return &UnsupportedPersonalServiceError{} }

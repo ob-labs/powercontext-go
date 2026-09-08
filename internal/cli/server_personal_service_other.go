@@ -19,5 +19,5 @@ package cli
 // newCurrentLinuxSystemdBoundary is a non-Linux no-side-effect stub. Public
 // personal-service commands remain typed unsupported outside Linux.
 func newCurrentLinuxSystemdBoundary() (*linuxSystemdBoundary, error) {
-	return nil, unsupportedPersonalService()
+	return nil, &UnsupportedPersonalServiceError{}
 }
