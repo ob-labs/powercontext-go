@@ -42,7 +42,7 @@ func TestRegistrationEncodesAnImmutableCanonicalDefinition(t *testing.T) {
 	if decodeErr != nil {
 		t.Fatalf("DecodeString() error = %v", decodeErr)
 	}
-	const want = `{"binary":"/opt/powercontext/bin/powercontext","data_dir":"/var/lib/powercontext","definition_version":2,"endpoint":"http://127.0.0.1:7614","ownership":"powercontext.personal-server","package_version":"0.2.0"}`
+	const want = `{"binary":"/opt/powercontext/bin/powercontext","data_dir":"/var/lib/powercontext","definition_version":3,"endpoint":"http://127.0.0.1:7614","env_file":"/etc/powercontext/server.env","ownership":"powercontext.personal-server","package_version":"0.2.0"}`
 	if string(payload) != want {
 		t.Fatalf("canonical payload = %q, want %q", payload, want)
 	}
@@ -164,6 +164,49 @@ func TestDefinitionAcceptsTransportPolicyLoopbackEndpoints(t *testing.T) {
 	}
 }
 
+func TestDefinitionRequiresANormalizedAbsoluteEnvironmentFileIdentity(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		envFile string
+		wantErr bool
+	}{
+		{name: "POSIX", envFile: "/etc/powercontext/server.env"},
+		{name: "Windows drive", envFile: `C:\ProgramData\PowerContext\server.env`},
+		{name: "UNC", envFile: `\\server\share\server.env`},
+		{name: "relative", envFile: "config/server.env", wantErr: true},
+		{name: "empty", envFile: "", wantErr: true},
+		{name: "POSIX dot", envFile: "/etc/./powercontext/server.env", wantErr: true},
+		{name: "POSIX parent", envFile: "/etc/powercontext/../server.env", wantErr: true},
+		{name: "POSIX repeated separator", envFile: "/etc//powercontext/server.env", wantErr: true},
+		{name: "Windows dot", envFile: `C:\ProgramData\.\server.env`, wantErr: true},
+		{name: "Windows repeated separator", envFile: `C:\ProgramData\\server.env`, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := testDefinitionInput()
+			input.EnvFile = test.envFile
+			definition, err := personalsvc.NewDefinition(input)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("NewDefinition() accepted an invalid environment file identity")
+				}
+				if _, ok := errors.AsType[*personalsvc.InvalidMetadataError](err); !ok {
+					t.Fatalf("NewDefinition() error type = %T, want *InvalidMetadataError", err)
+				}
+				if test.envFile != "" && strings.Contains(err.Error(), test.envFile) {
+					t.Fatalf("NewDefinition() error exposed environment file: %q", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewDefinition() error = %v", err)
+			}
+			if definition.EnvFile() != test.envFile {
+				t.Fatalf("EnvFile() = %q, want %q", definition.EnvFile(), test.envFile)
+			}
+		})
+	}
+}
+
 func TestDecodeRegistrationRejectsNonCanonicalUnknownDuplicateAndSensitiveMetadata(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -203,6 +246,17 @@ func TestDecodeRegistrationRejectsNonCanonicalUnknownDuplicateAndSensitiveMetada
 				t.Fatalf("DecodeRegistration() error exposed sensitive value: %q", err)
 			}
 		})
+	}
+}
+
+func TestDecodeRegistrationRejectsLegacyV2WithoutEnvironmentFile(t *testing.T) {
+	payload := `{"binary":"/opt/powercontext/bin/powercontext","data_dir":"/var/lib/powercontext","definition_version":2,"endpoint":"http://127.0.0.1:7614","ownership":"powercontext.personal-server","package_version":"0.2.0"}`
+	_, err := personalsvc.DecodeRegistration(base64.RawURLEncoding.EncodeToString([]byte(payload)))
+	if err == nil {
+		t.Fatal("DecodeRegistration() accepted a legacy v2 registration")
+	}
+	if _, ok := errors.AsType[*personalsvc.InvalidMetadataError](err); !ok {
+		t.Fatalf("DecodeRegistration() error type = %T, want *InvalidMetadataError", err)
 	}
 }
 
@@ -255,5 +309,6 @@ func testDefinitionInput() personalsvc.DefinitionInput {
 		Binary:            "/opt/powercontext/bin/powercontext",
 		Endpoint:          "http://127.0.0.1:7614",
 		DataDir:           "/var/lib/powercontext",
+		EnvFile:           "/etc/powercontext/server.env",
 	}
 }

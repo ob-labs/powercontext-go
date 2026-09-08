@@ -397,6 +397,7 @@ func testRegistration(t *testing.T, packageVersion string) personalsvc.Registrat
 		Binary:            `C:\\Program Files\\PowerContext\\powercontext.exe`,
 		Endpoint:          "http://127.0.0.1:8123",
 		DataDir:           `C:\\Users\\person\\AppData\\Local\\PowerContext`,
+		EnvFile:           `C:\Users\person\AppData\Local\PowerContext\server.env`,
 	})
 	if err != nil {
 		t.Fatal(err)

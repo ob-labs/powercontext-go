@@ -36,13 +36,14 @@ const (
 	// DefinitionVersion is the currently supported registration metadata
 	// format. A newer value must be deliberately introduced with a parser and
 	// migration decision rather than silently accepted.
-	DefinitionVersion uint = 2
+	DefinitionVersion uint = 3
 
 	MaxOwnershipLength      = 128
 	MaxPackageVersionLength = 128
 	MaxBinaryLength         = 4096
 	MaxEndpointLength       = 2048
 	MaxDataDirLength        = 4096
+	MaxEnvFileLength        = 4096
 
 	maxDecodedRegistrationLength = 12 * 1024
 	maxEncodedRegistrationLength = 16 * 1024
@@ -69,6 +70,7 @@ type DefinitionInput struct {
 	Binary            string
 	Endpoint          string
 	DataDir           string
+	EnvFile           string
 }
 
 // Definition is an immutable, side-effect-free declaration that a native
@@ -80,6 +82,7 @@ type Definition struct {
 	binary            string
 	endpoint          string
 	dataDir           string
+	envFile           string
 }
 
 // NewDefinition validates an owned personal-service declaration.
@@ -91,6 +94,7 @@ func NewDefinition(input DefinitionInput) (Definition, error) {
 		binary:            input.Binary,
 		endpoint:          input.Endpoint,
 		dataDir:           input.DataDir,
+		envFile:           input.EnvFile,
 	}
 	if err := definition.Validate(); err != nil {
 		return Definition{}, err
@@ -104,6 +108,7 @@ func (d Definition) PackageVersion() string { return d.packageVersion }
 func (d Definition) Binary() string         { return d.binary }
 func (d Definition) Endpoint() string       { return d.endpoint }
 func (d Definition) DataDir() string        { return d.dataDir }
+func (d Definition) EnvFile() string        { return d.envFile }
 
 // Validate rejects zero-value, unsupported, and unsafe definitions.
 func (d Definition) Validate() error {
@@ -125,7 +130,10 @@ func (d Definition) Validate() error {
 	if err := validateEndpoint(d.endpoint); err != nil {
 		return err
 	}
-	return validateAbsolutePath("data_dir", d.dataDir, MaxDataDirLength)
+	if err := validateAbsolutePath("data_dir", d.dataDir, MaxDataDirLength); err != nil {
+		return err
+	}
+	return validateNormalizedAbsolutePath("env_file", d.envFile, MaxEnvFileLength)
 }
 
 // CanonicalJSON returns the RFC 8785 canonical registration definition.
@@ -140,6 +148,7 @@ func (d Definition) CanonicalJSON() ([]byte, error) {
 		Binary:            d.binary,
 		Endpoint:          d.endpoint,
 		DataDir:           d.dataDir,
+		EnvFile:           d.envFile,
 	})
 	if err != nil {
 		return nil, invalidMetadata("payload", "cannot be encoded")
@@ -219,6 +228,7 @@ type definitionWire struct {
 	Binary            string `json:"binary"`
 	Endpoint          string `json:"endpoint"`
 	DataDir           string `json:"data_dir"`
+	EnvFile           string `json:"env_file"`
 }
 
 func decodeDefinition(payload []byte) (Definition, error) {
@@ -229,7 +239,7 @@ func decodeDefinition(payload []byte) (Definition, error) {
 	if err := json.Unmarshal(payload, &object); err != nil {
 		return Definition{}, invalidMetadata("payload", "must be valid JSON without duplicate members or trailing data")
 	}
-	if len(object) != 6 {
+	if len(object) != 7 {
 		for name := range object {
 			if !definitionField(name) && sensitiveMetadataName(name) {
 				return Definition{}, invalidMetadata("metadata", "must not contain sensitive members")
@@ -270,6 +280,10 @@ func decodeDefinition(payload []byte) (Definition, error) {
 	if err != nil {
 		return Definition{}, err
 	}
+	envFile, err := requiredString(object["env_file"], "env_file")
+	if err != nil {
+		return Definition{}, err
+	}
 	return NewDefinition(DefinitionInput{
 		Ownership:         ownership,
 		DefinitionVersion: version,
@@ -277,6 +291,7 @@ func decodeDefinition(payload []byte) (Definition, error) {
 		Binary:            binary,
 		Endpoint:          endpoint,
 		DataDir:           dataDir,
+		EnvFile:           envFile,
 	})
 }
 
@@ -353,6 +368,16 @@ func validateAbsolutePath(field, value string, maximum int) error {
 	return nil
 }
 
+func validateNormalizedAbsolutePath(field, value string, maximum int) error {
+	if err := validateAbsolutePath(field, value, maximum); err != nil {
+		return err
+	}
+	if !normalizedAbsolutePath(value) {
+		return invalidMetadata(field, "must be normalized")
+	}
+	return nil
+}
+
 // absolutePath accepts a portable POSIX absolute path and the stable Windows
 // drive and UNC forms. It deliberately does not inspect the host filesystem.
 func absolutePath(value string) bool {
@@ -362,13 +387,45 @@ func absolutePath(value string) bool {
 	return len(value) >= 3 && asciiLetter(value[0]) && value[1] == ':' && (value[2] == '/' || value[2] == '\\')
 }
 
+func normalizedAbsolutePath(value string) bool {
+	separator := "/"
+	var remainder string
+	switch {
+	case strings.HasPrefix(value, "/"):
+		if strings.HasPrefix(value, "//") {
+			return false
+		}
+		remainder = value[1:]
+	case strings.HasPrefix(value, `\\`):
+		separator = `\`
+		remainder = value[2:]
+	case len(value) >= 3 && asciiLetter(value[0]) && value[1] == ':' && (value[2] == '/' || value[2] == '\\'):
+		separator = value[2:3]
+		remainder = value[3:]
+	default:
+		return false
+	}
+	if remainder == "" || strings.Contains(remainder, separator+separator) {
+		return false
+	}
+	if separator == "/" && strings.ContainsRune(remainder, '\\') || separator == `\` && strings.ContainsRune(remainder, '/') {
+		return false
+	}
+	for segment := range strings.SplitSeq(remainder, separator) {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
 func asciiLetter(value byte) bool {
 	return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
 }
 
 func definitionField(name string) bool {
 	switch name {
-	case "ownership", "definition_version", "package_version", "binary", "endpoint", "data_dir":
+	case "ownership", "definition_version", "package_version", "binary", "endpoint", "data_dir", "env_file":
 		return true
 	default:
 		return false

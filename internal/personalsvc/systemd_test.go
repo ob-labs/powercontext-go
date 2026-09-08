@@ -522,6 +522,7 @@ func systemdRegistration(t *testing.T) personalsvc.Registration {
 		Binary:            "/opt/powercontext/bin/powercontext",
 		Endpoint:          "http://127.0.0.1:8123",
 		DataDir:           "/home/alice/.local/share/powercontext",
+		EnvFile:           "/home/alice/.config/powercontext/server.env",
 	})
 	if err != nil {
 		t.Fatal(err)
