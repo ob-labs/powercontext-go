@@ -59,6 +59,8 @@ func TestManagedSkillPackageArchiveBoundaryHandlesInteroperabilityClaimPolarity(
 		{"Cross-language ZIP canonicalization is not implemented.", false},
 		{"Python Receiver archive-reference interoperability is not implemented.", false},
 		{"Python CLI archive-reference interoperability is not supported.", false},
+		{"Managed Skill package reads are implemented.", false},
+		{"This rebaseline does not implement Artifact writes, managed Skills, remote Skills, or native personal services.", true},
 	} {
 		err := managedSkillPackageArchiveBoundaryError(string(contents) + "\n" + test.claim)
 		if test.reject != (err != nil) {
@@ -70,7 +72,7 @@ func TestManagedSkillPackageArchiveBoundaryHandlesInteroperabilityClaimPolarity(
 func managedSkillPackageArchiveBoundaryError(contents string) error {
 	text := strings.Join(strings.Fields(contents), " ")
 	for _, required := range []string{
-		"This rebaseline does not implement Artifact writes, managed Skill generation, remote Skills, or native personal services.",
+		"This rebaseline does not implement Artifact writes, managed Skill generation or lifecycle, remote Skills, or native personal services.",
 		"Go-persisted immutable package snapshot",
 		"`archive_base64` decodes to the exact stored archive bytes",
 		"Python Receiver/CLI archive-reference interoperability remains unimplemented",

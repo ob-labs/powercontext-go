@@ -103,6 +103,11 @@ class DocumentationContractTest(unittest.TestCase):
             "Source receipt": "The e4 Source receipt is implemented.",
             "Artifact writes": "Artifact writes are supported.",
             "managed Skills": "Managed Skills are available.",
+            "managed Skill generation": "Managed Skill generation is available.",
+            "managed Skill lifecycle": "Managed Skill lifecycle is supported.",
+            "managed Skill remote distribution": (
+                "Managed Skill package remote distribution is available."
+            ),
             "remote Skills": "Remote Skills now support installation.",
             "native personal services": "Native personal services provide e4 targets.",
         }
@@ -130,7 +135,8 @@ class DocumentationContractTest(unittest.TestCase):
             "The e4 Artifact revision-history read remains deferred. "
             "The e4 Source receipt identity is not available. "
             "Artifact writes are not supported. "
-            "Managed Skills remain deferred. "
+            "Managed Skill generation remains deferred. "
+            "Managed Skill lifecycle is not implemented. "
             "Remote Skills do not provide targets. "
             "Native personal services are not implemented."
         )
@@ -139,6 +145,21 @@ class DocumentationContractTest(unittest.TestCase):
             index_version="1.27.0",
             architecture="# Architecture\n",
             openapi_readme=self.valid_openapi_readme() + "\n" + permitted,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_managed_skill_package_reads_are_allowed_while_writers_remain_deferred(
+        self,
+    ) -> None:
+        result = self.run_checker(
+            go_version="1.27.0",
+            index_version="1.27.0",
+            architecture="# Architecture\n",
+            openapi_readme=(
+                self.valid_openapi_readme()
+                + "\nManaged Skill package reads are implemented."
+            ),
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -184,7 +205,7 @@ class DocumentationContractTest(unittest.TestCase):
             (
                 "The current-master inventory is pinned to `oceanbase/powercontext@e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c`: 94 canonical operations, 55 upstream-only operations, and 17 newly deferred operations.",
                 "Scope, Source, and Artifact sidecars remain independently pinned to `oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`.",
-                "The e4 Artifact revision-history, Artifact tag, Prompt, and Access clusters remain deferred. This rebaseline does not implement Artifact writes, managed Skills, remote Skills, or native personal services.",
+                "The e4 Artifact revision-history, Artifact tag, Prompt, and Access clusters remain deferred. This rebaseline does not implement Artifact writes, managed Skill generation or lifecycle, remote Skills, or native personal services.",
             )
         )
 

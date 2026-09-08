@@ -244,54 +244,76 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		mux.Handle(mcpPath+"/", http.StripPrefix(mcpPath, mcpHandler))
 		mux.Handle(mcpPath, http.RedirectHandler(mcpPath+"/", http.StatusTemporaryRedirect))
 	}
-	var access *httpapi.AccessLogOptions
-	if options.AccessLog && accessLogger != nil {
-		access = &httpapi.AccessLogOptions{
-			Logger: accessLogger,
-			ResolveOperation: func(request *http.Request) string {
-				if managedSkillGenerated != nil {
-					if route, found := managedSkillGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				if artifactGenerated != nil {
-					if route, found := artifactGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				if sourceGenerated != nil {
-					if route, found := sourceGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				if !options.HandoffReportRoutes && strings.HasPrefix(request.URL.Path, "/v1/handoff-reports/") {
-					return "unmatched"
-				}
-				if canonicalGenerated != nil {
-					if route, found := canonicalGenerated.FindPath(request.Method, request.URL); found {
-						return route.OperationID()
-					}
-				}
-				route, found := generated.FindPath(request.Method, request.URL)
-				if !found {
-					return "unmatched"
-				}
-				return route.OperationID()
-			},
-			Skip: func(request *http.Request) bool {
-				for _, prefix := range []string{"/health/live", "/health/ready", "/metrics"} {
-					if strings.HasPrefix(request.URL.Path, prefix) {
-						return true
-					}
-				}
-				return mcpPath != "" && strings.HasPrefix(request.URL.Path, mcpPath)
-			},
-		}
-	}
+	access := newAccessLogOptions(
+		options,
+		accessLogger,
+		mcpPath,
+		generated,
+		canonicalGenerated,
+		sourceGenerated,
+		artifactGenerated,
+		managedSkillGenerated,
+	)
 	return httpapi.Wrap(application, httpapi.Options{
 		BearerToken: options.BearerToken, HandoffReportRoutes: options.HandoffReportRoutes,
 		Access: access,
 	})
+}
+
+func newAccessLogOptions(
+	options HTTPOptions,
+	accessLogger *slog.Logger,
+	mcpPath string,
+	generated *v1.Server,
+	canonicalGenerated *canonicalscopec.Server,
+	sourceGenerated *canonicalsource.Server,
+	artifactGenerated *canonicalartifact.Server,
+	managedSkillGenerated *managedskills.Server,
+) *httpapi.AccessLogOptions {
+	if !options.AccessLog || accessLogger == nil {
+		return nil
+	}
+	return &httpapi.AccessLogOptions{
+		Logger: accessLogger,
+		ResolveOperation: func(request *http.Request) string {
+			if managedSkillGenerated != nil {
+				if route, found := managedSkillGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			if artifactGenerated != nil {
+				if route, found := artifactGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			if sourceGenerated != nil {
+				if route, found := sourceGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			if !options.HandoffReportRoutes && strings.HasPrefix(request.URL.Path, "/v1/handoff-reports/") {
+				return "unmatched"
+			}
+			if canonicalGenerated != nil {
+				if route, found := canonicalGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
+			route, found := generated.FindPath(request.Method, request.URL)
+			if !found {
+				return "unmatched"
+			}
+			return route.OperationID()
+		},
+		Skip: func(request *http.Request) bool {
+			for _, prefix := range []string{"/health/live", "/health/ready", "/metrics"} {
+				if strings.HasPrefix(request.URL.Path, prefix) {
+					return true
+				}
+			}
+			return mcpPath != "" && strings.HasPrefix(request.URL.Path, mcpPath)
+		},
+	}
 }
 
 // canonicalScopeSecurity is intentionally permissive: httpapi.Wrap owns the
