@@ -188,6 +188,29 @@ jobs:
         run: |
           cmp --silent <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.standard_root }}/DEPENDENCIES.json") <(jq -S '.redistributed_integrations' "${{ steps.archives.outputs.full_root }}/DEPENDENCIES.json")
 
+      - name: Exercise published Linux personal-service archive
+        id: personal_service
+        shell: bash
+        env:
+          ASSET_DIR: ${{ runner.temp }}/powercontext-release-assets
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          go test -c -tags systemd_user_consumer \
+            -o "$RUNNER_TEMP/powercontext-systemd-user-consumer.test" ./tools/release
+          archive="$ASSET_DIR/powercontext-${VERSION}-linux-amd64.tar.gz"
+          test/systemd-user-consumer/run.sh \
+            --archive "$archive" \
+            --test-binary "$RUNNER_TEMP/powercontext-systemd-user-consumer.test"
+
+      - name: Upload bounded published personal-service consumer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: published-linux-personal-service-consumer-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-systemd-user-consumer.*/summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Exercise the released standard binary
         id: standard_smoke
         env:
@@ -330,6 +353,7 @@ jobs:
           FULL_SMOKE: ${{ steps.full_smoke.outcome }}
           FULL_IMAGE_RUNTIME: ${{ steps.full_image_runtime.outcome }}
           IMAGES: ${{ steps.images.outcome }}
+          PERSONAL_SERVICE: ${{ steps.personal_service.outcome }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           VERSION: ${{ steps.release.outputs.version }}
           STANDARD_SMOKE: ${{ steps.standard_smoke.outcome }}
@@ -345,6 +369,7 @@ jobs:
             echo "- Standard process contract: **$STANDARD_SMOKE**"
             echo "- Full process contract: **$FULL_SMOKE**"
             echo "- Immutable GHCR manifests: **$IMAGES**"
+            echo "- Linux personal-service archive consumer: **$PERSONAL_SERVICE**"
             echo "- Published standard image runtime: **$STANDARD_IMAGE_RUNTIME**"
             echo "- Published Full image runtime: **$FULL_IMAGE_RUNTIME**"
           } >> "$GITHUB_STEP_SUMMARY"

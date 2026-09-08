@@ -319,7 +319,7 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 	if objectResult.exitCode != 0 {
 		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
 	}
-	if err := parseBusctlObjectPath(objectResult.stdout); err != nil {
+	if parseErr := parseBusctlObjectPath(objectResult.stdout); parseErr != nil {
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
 	unitProperties, err := b.busctl(ctx,
@@ -386,7 +386,7 @@ func (b *linuxSystemdBoundary) Probe(ctx context.Context, endpoint string) (pers
 		}
 		return personalsvc.ProbeUnreachable, nil
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	content, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<10))
 	if response.StatusCode != http.StatusOK || readErr != nil {
 		return personalsvc.ProbeConflict, nil

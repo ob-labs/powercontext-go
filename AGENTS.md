@@ -202,6 +202,9 @@ source / artifact / trigger / inference
   merge only `Rows.Close`; do not call a helper that reads `Rows.Err` again.
   Verify injected iteration and close failures remain matchable while each
   root error appears only once.
+- When a health probe consumes an HTTP response but its outcome intentionally
+  does not model close failure, explicitly discard `Body.Close` in a deferred
+  function. Verify the probe outcome and the pinned `errcheck` policy.
 - When a CI end-to-end test starts a compiled Go service under a readiness
   deadline, build the binary once before the deadline and pass its absolute
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and

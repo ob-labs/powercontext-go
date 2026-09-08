@@ -70,8 +70,13 @@ func TestReleaseArchiveProvidesConsumablePersonalService(t *testing.T) {
 	}
 	dataDir := filepath.Join(t.TempDir(), "data")
 	if _, err := runReleasePersonalService(t, binary, "server", "install", "--env-file", environment, "--data-dir", dataDir); err != nil {
-		// A post-commit liveness observation can race the new Type=exec process.
-		// The persisted registration is checked below through the same archive binary.
+		// Type=exec may report the post-commit liveness observation before the
+		// new process is ready. Do not hide an install failure unless the same
+		// archive already observes the only durable state that permits a retry.
+		postCommit := readReleasePersonalServiceStatus(t, binary)
+		if postCommit.Registration != "installed" || postCommit.Definition != "current" || postCommit.ManagerOwnership != "owned" {
+			t.Fatal("release personal service install did not establish an owned current registration")
+		}
 	}
 	t.Cleanup(func() {
 		_, _ = runReleasePersonalService(t, binary, "server", "uninstall")
@@ -79,6 +84,10 @@ func TestReleaseArchiveProvidesConsumablePersonalService(t *testing.T) {
 
 	endpoint := "http://127.0.0.1:" + strconv.Itoa(port)
 	awaitReleasePersonalService(t, endpoint)
+	data, err := os.Stat(filepath.Join(dataDir, "powercontext.db"))
+	if err != nil || !data.Mode().IsRegular() {
+		t.Fatal("release personal service did not create a SQLite database file")
+	}
 	installed := readReleasePersonalServiceStatus(t, binary)
 	if installed.Registration != "installed" || installed.Definition != "current" || installed.ManagerOwnership != "owned" ||
 		installed.Manager != "active" || installed.Liveness != "live" || installed.Recovery != "" {
@@ -132,14 +141,26 @@ func awaitReleasePersonalService(t *testing.T, endpoint string) {
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		response, err := client.Get(endpoint + "/health/live")
-		if err == nil {
-			_ = response.Body.Close()
-			if response.StatusCode == http.StatusOK {
-				return
+		ready := true
+		for _, path := range []string{"/health/live", "/health/ready"} {
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint+path, nil)
+			if err != nil {
+				t.Fatal("construct release health request")
 			}
+			response, requestErr := client.Do(request)
+			if requestErr != nil {
+				ready = false
+				continue
+			}
+			_ = response.Body.Close()
+			if response.StatusCode != http.StatusOK {
+				ready = false
+			}
+		}
+		if ready {
+			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatal("release personal service did not become live")
+	t.Fatal("release personal service did not become live and ready")
 }

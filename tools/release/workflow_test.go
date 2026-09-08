@@ -2146,6 +2146,198 @@ func TestReleaseWorkflowsExcludeUnsupportedConsumers(t *testing.T) {
 	}
 }
 
+func TestLinuxPersonalServiceConsumerWorkflowContract(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	workflows := filepath.Join(repository, ".github", "workflows")
+	master, err := os.ReadFile(filepath.Join(workflows, "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := os.ReadFile(filepath.Join(workflows, "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verification, err := os.ReadFile(filepath.Join(workflows, "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := os.ReadFile(filepath.Join(repository, "test", "systemd-user-consumer", "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateLinuxPersonalServiceConsumerWorkflow(master, release, verification, runner); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	workflows := filepath.Join(repository, ".github", "workflows")
+	master, err := os.ReadFile(filepath.Join(workflows, "master.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := os.ReadFile(filepath.Join(workflows, "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verification, err := os.ReadFile(filepath.Join(workflows, "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := os.ReadFile(filepath.Join(repository, "test", "systemd-user-consumer", "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mutant := range []struct {
+		name    string
+		payload []byte
+		old     string
+		replace string
+		which   string
+	}{
+		{name: "master consumer tag", payload: master, old: "-tags systemd_user_consumer", replace: "-tags archive_consumer", which: "master"},
+		{name: "master archive build", payload: master, old: "make package-standard", replace: "make package-full", which: "master"},
+		{name: "release consumer platform", payload: release, old: "matrix.target == 'linux-amd64'", replace: "matrix.target == 'linux-arm64'", which: "release"},
+		{name: "verify provenance order", payload: verification, old: "Verify signed GitHub Release provenance", replace: "Verify signed GitHub Release provenance removed", which: "verification"},
+		{name: "runner isolation", payload: runner, old: "env -i", replace: "env", which: "runner"},
+		{name: "runner manager", payload: runner, old: "systemd --user", replace: "systemd --system", which: "runner"},
+	} {
+		t.Run(mutant.name, func(t *testing.T) {
+			changed := strings.Replace(string(mutant.payload), mutant.old, mutant.replace, 1)
+			if changed == string(mutant.payload) {
+				t.Fatal("mutant did not change the contract")
+			}
+			changedMaster, changedRelease, changedVerification, changedRunner := master, release, verification, runner
+			switch mutant.which {
+			case "master":
+				changedMaster = []byte(changed)
+			case "release":
+				changedRelease = []byte(changed)
+			case "verification":
+				changedVerification = []byte(changed)
+			case "runner":
+				changedRunner = []byte(changed)
+			default:
+				t.Fatal("unknown consumer workflow mutant")
+			}
+			if err := validateLinuxPersonalServiceConsumerWorkflow(changedMaster, changedRelease, changedVerification, changedRunner); err == nil {
+				t.Fatal("consumer workflow accepted a weakened mutation")
+			}
+		})
+	}
+}
+
+func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload, verificationPayload, runnerPayload []byte) error {
+	var master, release, verification releaseIntegrationWorkflow
+	for _, workflow := range []struct {
+		name        string
+		payload     []byte
+		destination *releaseIntegrationWorkflow
+	}{
+		{name: "master.yml", payload: masterPayload, destination: &master},
+		{name: "release.yml", payload: releasePayload, destination: &release},
+		{name: "release-verify.yml", payload: verificationPayload, destination: &verification},
+	} {
+		if err := yaml.Unmarshal(workflow.payload, workflow.destination); err != nil {
+			return fmt.Errorf("%s: %w", workflow.name, err)
+		}
+	}
+	consumer, ok := master.Jobs["linux-personal-service-consumer"]
+	if !ok {
+		return errors.New("master.yml has no Linux personal-service consumer job")
+	}
+	if consumer.RunsOn != "ubuntu-24.04" || consumer.TimeoutMinutes != 45 {
+		return fmt.Errorf("master consumer runner = (%q, %d)", consumer.RunsOn, consumer.TimeoutMinutes)
+	}
+	if err := requireWorkflowPermissions("master consumer", consumer.Permissions, map[string]string{"contents": "read"}); err != nil {
+		return err
+	}
+	if continueOnErrorEnabled(consumer.ContinueOnError) {
+		return errors.New("master consumer job tolerates failure")
+	}
+	masterArchiveIndex, archiveStep := findReleaseIntegrationWorkflowStep(consumer.Steps, "Build Standard Linux archive for personal-service consumer")
+	consumerBuildIndex, _ := findReleaseIntegrationWorkflowStep(consumer.Steps, "Build Linux personal-service consumer")
+	consumerExerciseIndex, _ := findReleaseIntegrationWorkflowStep(consumer.Steps, "Exercise Standard Linux personal-service archive")
+	if archiveStep == nil || !strings.Contains(archiveStep.Run, "make package-standard") ||
+		consumerBuildIndex <= masterArchiveIndex || consumerExerciseIndex <= consumerBuildIndex {
+		return errors.New("master consumer does not build and consume the Standard archive in order")
+	}
+	if err := requirePersonalServiceConsumerBuild(consumer.Steps, ""); err != nil {
+		return fmt.Errorf("master.yml: %w", err)
+	}
+	if err := requirePersonalServiceConsumerStep(consumer.Steps, "", "Exercise Standard Linux personal-service archive"); err != nil {
+		return fmt.Errorf("master.yml: %w", err)
+	}
+
+	binaries, ok := release.Jobs["binaries"]
+	if !ok {
+		return errors.New("release.yml has no binaries job")
+	}
+	packagingIndex, packaging := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build and package both editions")
+	buildIndex, _ := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build Linux personal-service consumer")
+	exerciseIndex, _ := findReleaseIntegrationWorkflowStep(binaries.Steps, "Exercise Standard Linux personal-service archive")
+	if packaging == nil || buildIndex <= packagingIndex || exerciseIndex <= buildIndex {
+		return errors.New("release.yml does not run the consumer after packaging")
+	}
+	if err := requirePersonalServiceConsumerBuild(binaries.Steps, "matrix.target == 'linux-amd64'"); err != nil {
+		return fmt.Errorf("release.yml: %w", err)
+	}
+	if err := requirePersonalServiceConsumerStep(binaries.Steps, "matrix.target == 'linux-amd64'", "Exercise Standard Linux personal-service archive"); err != nil {
+		return fmt.Errorf("release.yml: %w", err)
+	}
+
+	verify, ok := verification.Jobs["verify"]
+	if !ok {
+		return errors.New("release-verify.yml has no verify job")
+	}
+	provenanceIndex, _ := findReleaseIntegrationWorkflowStep(verify.Steps, "Verify signed GitHub Release provenance")
+	archiveIndex, _ := findReleaseIntegrationWorkflowStep(verify.Steps, "Verify extracted Linux release contracts")
+	consumerIndex, consumerStep := findReleaseIntegrationWorkflowStep(verify.Steps, "Exercise published Linux personal-service archive")
+	if provenanceIndex < 0 || archiveIndex <= provenanceIndex || consumerIndex <= archiveIndex || consumerStep == nil {
+		return errors.New("release-verify.yml does not run the consumer after provenance and archive checks")
+	}
+	if !strings.Contains(consumerStep.Run, "systemd-user-consumer/run.sh") ||
+		!strings.Contains(consumerStep.Run, "--archive") || !strings.Contains(consumerStep.Run, "--test-binary") ||
+		!strings.Contains(consumerStep.Run, "-tags systemd_user_consumer") {
+		return fmt.Errorf("release-verify consumer step = %#v", consumerStep)
+	}
+
+	runner := string(runnerPayload)
+	for _, required := range []string{
+		"env -i", "dbus-run-session", "systemd --user", "systemctl --user exit", "busctl --user", "timeout 90",
+		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "POWERCONTEXT_SYSTEMD_TEST_BINARY", "mktemp -d", "chmod 0700",
+	} {
+		if !strings.Contains(runner, required) {
+			return fmt.Errorf("systemd user consumer runner is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"sudo", "linger", "--system", "--global", "--privileged", "journalctl"} {
+		if strings.Contains(runner, forbidden) {
+			return fmt.Errorf("systemd user consumer runner contains forbidden %q", forbidden)
+		}
+	}
+	return nil
+}
+
+func requirePersonalServiceConsumerStep(steps []releaseIntegrationWorkflowStep, condition, name string) error {
+	_, step := findReleaseIntegrationWorkflowStep(steps, name)
+	if step == nil || step.If != condition || !strings.Contains(step.Run, "systemd-user-consumer/run.sh") ||
+		!strings.Contains(step.Run, "--archive") || !strings.Contains(step.Run, "--test-binary") {
+		return fmt.Errorf("missing personal-service consumer step %q", name)
+	}
+	return nil
+}
+
+func requirePersonalServiceConsumerBuild(steps []releaseIntegrationWorkflowStep, condition string) error {
+	_, step := findReleaseIntegrationWorkflowStep(steps, "Build Linux personal-service consumer")
+	if step == nil || step.If != condition || !strings.Contains(step.Run, "go test -c -tags systemd_user_consumer") ||
+		!strings.Contains(step.Run, "powercontext-systemd-user-consumer.test") {
+		return errors.New("missing personal-service consumer build step")
+	}
+	return nil
+}
+
 func validateReleaseIntegrationWorkflows(releasePayload, verificationPayload []byte) error {
 	var releaseWorkflow, verificationWorkflow releaseIntegrationWorkflow
 	if err := yaml.Unmarshal(releasePayload, &releaseWorkflow); err != nil {
@@ -2209,6 +2401,8 @@ type releaseIntegrationWorkflow struct {
 }
 
 type releaseIntegrationWorkflowJob struct {
+	RunsOn          string                           `yaml:"runs-on"`
+	TimeoutMinutes  int                              `yaml:"timeout-minutes"`
 	Permissions     map[string]string                `yaml:"permissions"`
 	ContinueOnError any                              `yaml:"continue-on-error"`
 	Steps           []releaseIntegrationWorkflowStep `yaml:"steps"`

@@ -389,7 +389,7 @@ func absolutePath(value string) bool {
 
 func normalizedAbsolutePath(value string) bool {
 	separator := "/"
-	remainder := ""
+	var remainder string
 	switch {
 	case strings.HasPrefix(value, "/"):
 		if strings.HasPrefix(value, "//") {
