@@ -46,6 +46,7 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 	want := map[string]compatibilityEndpoint{
 		"get_skill_package_manifest": {Method: "post", Path: "/v1/skill/package/manifest"},
 		"download_skill_package":     {Method: "post", Path: "/v1/skill/package/download"},
+		"propose_skill_package":      {Method: "post", Path: "/v1/skill/package/propose"},
 		"record_skill_usage":         {Method: "post", Path: "/v1/skill/usage"},
 	}
 	if len(operations) != len(want) {
@@ -62,8 +63,9 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 	}
 	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
 	expectedSchemas := []string{
-		"GetSkillPackageRequest", "ArtifactReference", "SkillPackageManifest", "SkillPackageDownload", "SkillPackageReference", "SkillPackageFile",
-		"RecordSkillUsageRequest", "CaptureContentSourceResponse", "CaptureStatus", "SourceReference", "ErrorResponse", "ErrorDetail",
+		"ArtifactCandidate", "ArtifactReference", "CandidateFamily", "CandidateStatus", "CaptureContentSourceResponse", "CaptureStatus",
+		"ErrorDetail", "ErrorResponse", "ExperienceProposal", "GetSkillPackageRequest", "ProposeSkillPackageRequest", "RecordSkillUsageRequest",
+		"SkillPackageDownload", "SkillPackageFile", "SkillPackageManifest", "SkillPackageReference", "SkillProposal", "SkillValidationItem", "SourceReference",
 	}
 	if len(schemas) != len(expectedSchemas) {
 		t.Fatalf("unexpected schemas: %v", schemas)
@@ -84,7 +86,7 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 		"pin":    func(m *managedSkillSidecarManifest) { m.Upstream.Commit = "main" },
 		"digest": func(m *managedSkillSidecarManifest) { m.Upstream.SHA256 = strings.Repeat("0", 64) },
 		"extra operation": func(m *managedSkillSidecarManifest) {
-			m.Operations = append(m.Operations, scopeSidecarOperation{OperationID: "propose_skill_package"})
+			m.Operations = append(m.Operations, scopeSidecarOperation{OperationID: "invented_operation"})
 		},
 		"wrong route": func(m *managedSkillSidecarManifest) { m.Operations[0].Path = "/v1/skill/remote/package/manifest" },
 	} {
@@ -100,7 +102,7 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 	if _, projectErr := projectManagedSkillSidecar(append(slices.Clone(upstream), '\n'), manifest, legacy, compatibility); projectErr == nil {
 		t.Fatal("modified source bytes accepted")
 	}
-	for _, id := range []string{"get_skill_package_manifest", "download_skill_package", "record_skill_usage"} {
+	for _, id := range []string{"get_skill_package_manifest", "download_skill_package", "propose_skill_package", "record_skill_usage"} {
 		for _, field := range []string{"status", "method", "path", "operation_id"} {
 			t.Run(id+"/"+field, func(t *testing.T) {
 				ledger, decodeErr := decodeCompatibilitySurface(compatibility)

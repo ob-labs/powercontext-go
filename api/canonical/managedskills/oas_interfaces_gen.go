@@ -9,6 +9,10 @@ type GetSkillPackageManifestRes interface {
 	getSkillPackageManifestRes()
 }
 
+type ProposeSkillPackageRes interface {
+	proposeSkillPackageRes()
+}
+
 type RecordSkillUsageRes interface {
 	recordSkillUsageRes()
 }

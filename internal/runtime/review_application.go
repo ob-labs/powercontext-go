@@ -104,6 +104,28 @@ func (a *ReviewApplication) ProposePackageSkill(
 	return result, err
 }
 
+// ProposeUploadedPackage admits one package upload through the scope's write
+// lane before package canonicalization and its transactional persistence.
+func (a *ReviewApplication) ProposeUploadedPackage(
+	ctx context.Context,
+	scopeID string,
+	archive []byte,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (review.Snapshot, error) {
+	var result review.Snapshot
+	err := a.runtime.ScopedWrite(ctx, scopeID, func(ctx context.Context, scope string) error {
+		service, err := a.service(scope)
+		if err != nil {
+			return err
+		}
+		result, err = service.ProposeUploadedPackage(ctx, archive, artifacts, target, reason)
+		return err
+	})
+	return result, err
+}
+
 func (a *ReviewApplication) GetCandidate(ctx context.Context, scopeID, candidateID string) (review.Snapshot, error) {
 	var result review.Snapshot
 	err := a.runtime.ScopedRead(ctx, scopeID, func(ctx context.Context, scope string) error {

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/mattn/go-sqlite3"
+
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/experience"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
@@ -94,6 +96,55 @@ func (r *ReviewBackend) Propose(
 			ctx, tx, r.scopeID, candidateID, family, proposal, sources, artifacts, target, reason,
 		)
 		return err
+	})
+	return result, err
+}
+
+// ProposeUploadedPackage persists one canonical package, its immutable upload
+// Source, and its pending Candidate in a single SQLite transaction.
+func (r *ReviewBackend) ProposeUploadedPackage(
+	ctx context.Context,
+	candidateID string,
+	proposal skill.PackageContent,
+	upload source.SkillPackageUploadCapture,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (review.Snapshot, error) {
+	if r == nil || r.database == nil || r.database.db == nil {
+		return nil, errors.New("sqlstore: Skill package upload is unavailable")
+	}
+	if _, ok := r.database.db.Driver().(*sqlite3.SQLiteDriver); !ok {
+		return nil, errors.New("sqlstore: Skill package upload requires a SQLite database")
+	}
+	if err := uploadMatchesPackage(proposal, upload); err != nil {
+		return nil, err
+	}
+	uploadSource, err := (source.SkillPackageUploadSourceAdapter{}).Resolve(ctx, upload)
+	if err != nil {
+		return nil, err
+	}
+	var result review.Snapshot
+	err = r.database.Transaction(ctx, func(tx DBTX) error {
+		if _, addErr := r.skillPackages.Add(ctx, tx, r.scopeID, proposal.Snapshot()); addErr != nil {
+			return addErr
+		}
+		stored, addErr := r.sources.Add(ctx, tx, r.scopeID, uploadSource)
+		if addErr != nil {
+			return addErr
+		}
+		sources := []source.Ref{stored.Ref}
+		if evidenceErr := r.validateEvidence(ctx, tx, sources, artifacts); evidenceErr != nil {
+			return evidenceErr
+		}
+		if targetErr := r.validateTarget(ctx, tx, skill.Family, target, artifacts); targetErr != nil {
+			return targetErr
+		}
+		var createErr error
+		result, createErr = r.candidates.Create(
+			ctx, tx, r.scopeID, candidateID, skill.Family, proposal, sources, artifacts, target, reason,
+		)
+		return createErr
 	})
 	return result, err
 }
@@ -430,6 +481,21 @@ func (r *ReviewBackend) revalidatePackageProposal(
 	}
 	_, err := r.skillPackages.Get(ctx, tx, r.scopeID, content.Reference())
 	return err
+}
+
+func uploadMatchesPackage(proposal skill.PackageContent, upload source.SkillPackageUploadCapture) error {
+	packageRef := proposal.Reference()
+	uploadRef := upload.Package()
+	metadata := proposal.Snapshot().Metadata()
+	if packageRef.TreeDigest() != uploadRef.TreeDigest() ||
+		packageRef.ArchiveDigest() != uploadRef.ArchiveDigest() ||
+		packageRef.FileCount() != uploadRef.FileCount() ||
+		packageRef.UncompressedSize() != uploadRef.UncompressedSize() ||
+		packageRef.ArchiveSize() != uploadRef.ArchiveSize() ||
+		metadata.Name() != upload.SkillName() || metadata.Description() != upload.SkillDescription() {
+		return &review.InvalidCandidateError{Field: "package", Detail: "upload evidence must match the canonical package"}
+	}
+	return nil
 }
 
 func equalOptionalRef(left, right *artifact.Ref) bool {

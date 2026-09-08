@@ -7,6 +7,204 @@ import (
 	"github.com/go-faster/jx"
 )
 
+// Ref: #/components/schemas/ArtifactCandidate
+type ArtifactCandidate struct {
+	// Exact Artifact evidence. Counted with source_refs toward a combined maximum of 32 references.
+	ArtifactRefs   []ArtifactReference       `json:"artifact_refs"`
+	CandidateID    string                    `json:"candidate_id"`
+	DecisionReason NilString                 `json:"decision_reason"`
+	Family         CandidateFamily           `json:"family"`
+	Proposal       ArtifactCandidateProposal `json:"proposal"`
+	Reason         NilString                 `json:"reason"`
+	ResultArtifact NilArtifactReference      `json:"result_artifact"`
+	// Exact Source evidence. Counted with artifact_refs toward a combined maximum of 32 references.
+	SourceRefs []SourceReference    `json:"source_refs"`
+	Status     CandidateStatus      `json:"status"`
+	Target     NilArtifactReference `json:"target"`
+	Version    int                  `json:"version"`
+}
+
+// GetArtifactRefs returns the value of ArtifactRefs.
+func (s *ArtifactCandidate) GetArtifactRefs() []ArtifactReference {
+	return s.ArtifactRefs
+}
+
+// GetCandidateID returns the value of CandidateID.
+func (s *ArtifactCandidate) GetCandidateID() string {
+	return s.CandidateID
+}
+
+// GetDecisionReason returns the value of DecisionReason.
+func (s *ArtifactCandidate) GetDecisionReason() NilString {
+	return s.DecisionReason
+}
+
+// GetFamily returns the value of Family.
+func (s *ArtifactCandidate) GetFamily() CandidateFamily {
+	return s.Family
+}
+
+// GetProposal returns the value of Proposal.
+func (s *ArtifactCandidate) GetProposal() ArtifactCandidateProposal {
+	return s.Proposal
+}
+
+// GetReason returns the value of Reason.
+func (s *ArtifactCandidate) GetReason() NilString {
+	return s.Reason
+}
+
+// GetResultArtifact returns the value of ResultArtifact.
+func (s *ArtifactCandidate) GetResultArtifact() NilArtifactReference {
+	return s.ResultArtifact
+}
+
+// GetSourceRefs returns the value of SourceRefs.
+func (s *ArtifactCandidate) GetSourceRefs() []SourceReference {
+	return s.SourceRefs
+}
+
+// GetStatus returns the value of Status.
+func (s *ArtifactCandidate) GetStatus() CandidateStatus {
+	return s.Status
+}
+
+// GetTarget returns the value of Target.
+func (s *ArtifactCandidate) GetTarget() NilArtifactReference {
+	return s.Target
+}
+
+// GetVersion returns the value of Version.
+func (s *ArtifactCandidate) GetVersion() int {
+	return s.Version
+}
+
+// SetArtifactRefs sets the value of ArtifactRefs.
+func (s *ArtifactCandidate) SetArtifactRefs(val []ArtifactReference) {
+	s.ArtifactRefs = val
+}
+
+// SetCandidateID sets the value of CandidateID.
+func (s *ArtifactCandidate) SetCandidateID(val string) {
+	s.CandidateID = val
+}
+
+// SetDecisionReason sets the value of DecisionReason.
+func (s *ArtifactCandidate) SetDecisionReason(val NilString) {
+	s.DecisionReason = val
+}
+
+// SetFamily sets the value of Family.
+func (s *ArtifactCandidate) SetFamily(val CandidateFamily) {
+	s.Family = val
+}
+
+// SetProposal sets the value of Proposal.
+func (s *ArtifactCandidate) SetProposal(val ArtifactCandidateProposal) {
+	s.Proposal = val
+}
+
+// SetReason sets the value of Reason.
+func (s *ArtifactCandidate) SetReason(val NilString) {
+	s.Reason = val
+}
+
+// SetResultArtifact sets the value of ResultArtifact.
+func (s *ArtifactCandidate) SetResultArtifact(val NilArtifactReference) {
+	s.ResultArtifact = val
+}
+
+// SetSourceRefs sets the value of SourceRefs.
+func (s *ArtifactCandidate) SetSourceRefs(val []SourceReference) {
+	s.SourceRefs = val
+}
+
+// SetStatus sets the value of Status.
+func (s *ArtifactCandidate) SetStatus(val CandidateStatus) {
+	s.Status = val
+}
+
+// SetTarget sets the value of Target.
+func (s *ArtifactCandidate) SetTarget(val NilArtifactReference) {
+	s.Target = val
+}
+
+// SetVersion sets the value of Version.
+func (s *ArtifactCandidate) SetVersion(val int) {
+	s.Version = val
+}
+
+func (*ArtifactCandidate) proposeSkillPackageRes() {}
+
+// ArtifactCandidateProposal represents sum type.
+type ArtifactCandidateProposal struct {
+	// Type selects the active sum variant, switch on this field.
+	Type               ArtifactCandidateProposalType
+	ExperienceProposal ExperienceProposal
+	SkillProposal      SkillProposal
+}
+
+// ArtifactCandidateProposalType is oneOf type of ArtifactCandidateProposal.
+type ArtifactCandidateProposalType string
+
+// Possible values for ArtifactCandidateProposalType.
+const (
+	ExperienceProposalArtifactCandidateProposal ArtifactCandidateProposalType = "ExperienceProposal"
+	SkillProposalArtifactCandidateProposal      ArtifactCandidateProposalType = "SkillProposal"
+)
+
+// IsExperienceProposal reports whether ArtifactCandidateProposal is ExperienceProposal.
+func (s ArtifactCandidateProposal) IsExperienceProposal() bool {
+	return s.Type == ExperienceProposalArtifactCandidateProposal
+}
+
+// IsSkillProposal reports whether ArtifactCandidateProposal is SkillProposal.
+func (s ArtifactCandidateProposal) IsSkillProposal() bool {
+	return s.Type == SkillProposalArtifactCandidateProposal
+}
+
+// SetExperienceProposal sets ArtifactCandidateProposal to ExperienceProposal.
+func (s *ArtifactCandidateProposal) SetExperienceProposal(v ExperienceProposal) {
+	s.Type = ExperienceProposalArtifactCandidateProposal
+	s.ExperienceProposal = v
+}
+
+// GetExperienceProposal returns ExperienceProposal and true boolean if ArtifactCandidateProposal is ExperienceProposal.
+func (s ArtifactCandidateProposal) GetExperienceProposal() (v ExperienceProposal, ok bool) {
+	if !s.IsExperienceProposal() {
+		return v, false
+	}
+	return s.ExperienceProposal, true
+}
+
+// NewExperienceProposalArtifactCandidateProposal returns new ArtifactCandidateProposal from ExperienceProposal.
+func NewExperienceProposalArtifactCandidateProposal(v ExperienceProposal) ArtifactCandidateProposal {
+	var s ArtifactCandidateProposal
+	s.SetExperienceProposal(v)
+	return s
+}
+
+// SetSkillProposal sets ArtifactCandidateProposal to SkillProposal.
+func (s *ArtifactCandidateProposal) SetSkillProposal(v SkillProposal) {
+	s.Type = SkillProposalArtifactCandidateProposal
+	s.SkillProposal = v
+}
+
+// GetSkillProposal returns SkillProposal and true boolean if ArtifactCandidateProposal is SkillProposal.
+func (s ArtifactCandidateProposal) GetSkillProposal() (v SkillProposal, ok bool) {
+	if !s.IsSkillProposal() {
+		return v, false
+	}
+	return s.SkillProposal, true
+}
+
+// NewSkillProposalArtifactCandidateProposal returns new ArtifactCandidateProposal from SkillProposal.
+func NewSkillProposalArtifactCandidateProposal(v SkillProposal) ArtifactCandidateProposal {
+	var s ArtifactCandidateProposal
+	s.SetSkillProposal(v)
+	return s
+}
+
 // Ref: #/components/schemas/ArtifactReference
 type ArtifactReference struct {
 	ArtifactID string `json:"artifact_id"`
@@ -67,6 +265,97 @@ func (s *BearerAuth) SetToken(val string) {
 // SetRoles sets the value of Roles.
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
+}
+
+// Ref: #/components/schemas/CandidateFamily
+type CandidateFamily string
+
+const (
+	CandidateFamilyExperience CandidateFamily = "experience"
+	CandidateFamilySkill      CandidateFamily = "skill"
+)
+
+// AllValues returns all CandidateFamily values.
+func (CandidateFamily) AllValues() []CandidateFamily {
+	return []CandidateFamily{
+		CandidateFamilyExperience,
+		CandidateFamilySkill,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CandidateFamily) MarshalText() ([]byte, error) {
+	switch s {
+	case CandidateFamilyExperience:
+		return []byte(s), nil
+	case CandidateFamilySkill:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CandidateFamily) UnmarshalText(data []byte) error {
+	switch CandidateFamily(data) {
+	case CandidateFamilyExperience:
+		*s = CandidateFamilyExperience
+		return nil
+	case CandidateFamilySkill:
+		*s = CandidateFamilySkill
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/CandidateStatus
+type CandidateStatus string
+
+const (
+	CandidateStatusPending  CandidateStatus = "pending"
+	CandidateStatusApproved CandidateStatus = "approved"
+	CandidateStatusRejected CandidateStatus = "rejected"
+)
+
+// AllValues returns all CandidateStatus values.
+func (CandidateStatus) AllValues() []CandidateStatus {
+	return []CandidateStatus{
+		CandidateStatusPending,
+		CandidateStatusApproved,
+		CandidateStatusRejected,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CandidateStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case CandidateStatusPending:
+		return []byte(s), nil
+	case CandidateStatusApproved:
+		return []byte(s), nil
+	case CandidateStatusRejected:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CandidateStatus) UnmarshalText(data []byte) error {
+	switch CandidateStatus(data) {
+	case CandidateStatusPending:
+		*s = CandidateStatusPending
+		return nil
+	case CandidateStatusApproved:
+		*s = CandidateStatusApproved
+		return nil
+	case CandidateStatusRejected:
+		*s = CandidateStatusRejected
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/CaptureContentSourceResponse
@@ -169,7 +458,8 @@ func (s *ConflictHeaders) SetResponse(val ErrorResponse) {
 	s.Response = val
 }
 
-func (*ConflictHeaders) recordSkillUsageRes() {}
+func (*ConflictHeaders) proposeSkillPackageRes() {}
+func (*ConflictHeaders) recordSkillUsageRes()    {}
 
 // Ref: #/components/schemas/ErrorDetail
 type ErrorDetail struct {
@@ -234,6 +524,54 @@ func (s *ErrorResponse) SetError(val ErrorDetail) {
 	s.Error = val
 }
 
+// Ref: #/components/schemas/ExperienceProposal
+type ExperienceProposal struct {
+	Action    string `json:"action"`
+	Lesson    string `json:"lesson"`
+	Outcome   string `json:"outcome"`
+	Situation string `json:"situation"`
+}
+
+// GetAction returns the value of Action.
+func (s *ExperienceProposal) GetAction() string {
+	return s.Action
+}
+
+// GetLesson returns the value of Lesson.
+func (s *ExperienceProposal) GetLesson() string {
+	return s.Lesson
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *ExperienceProposal) GetOutcome() string {
+	return s.Outcome
+}
+
+// GetSituation returns the value of Situation.
+func (s *ExperienceProposal) GetSituation() string {
+	return s.Situation
+}
+
+// SetAction sets the value of Action.
+func (s *ExperienceProposal) SetAction(val string) {
+	s.Action = val
+}
+
+// SetLesson sets the value of Lesson.
+func (s *ExperienceProposal) SetLesson(val string) {
+	s.Lesson = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *ExperienceProposal) SetOutcome(val string) {
+	s.Outcome = val
+}
+
+// SetSituation sets the value of Situation.
+func (s *ExperienceProposal) SetSituation(val string) {
+	s.Situation = val
+}
+
 // Ref: #/components/schemas/GetSkillPackageRequest
 type GetSkillPackageRequest struct {
 	Artifact ArtifactReference `json:"artifact"`
@@ -288,6 +626,7 @@ func (s *InternalErrorHeaders) SetResponse(val ErrorResponse) {
 
 func (*InternalErrorHeaders) downloadSkillPackageRes()    {}
 func (*InternalErrorHeaders) getSkillPackageManifestRes() {}
+func (*InternalErrorHeaders) proposeSkillPackageRes()     {}
 func (*InternalErrorHeaders) recordSkillUsageRes()        {}
 
 // InvalidRequestHeaders wraps ErrorResponse with response headers.
@@ -318,7 +657,53 @@ func (s *InvalidRequestHeaders) SetResponse(val ErrorResponse) {
 
 func (*InvalidRequestHeaders) downloadSkillPackageRes()    {}
 func (*InvalidRequestHeaders) getSkillPackageManifestRes() {}
+func (*InvalidRequestHeaders) proposeSkillPackageRes()     {}
 func (*InvalidRequestHeaders) recordSkillUsageRes()        {}
+
+// NewNilArtifactReference returns new NilArtifactReference with value set to v.
+func NewNilArtifactReference(v ArtifactReference) NilArtifactReference {
+	return NilArtifactReference{
+		Value: v,
+	}
+}
+
+// NilArtifactReference is nullable ArtifactReference.
+type NilArtifactReference struct {
+	Value ArtifactReference
+	Null  bool
+}
+
+// SetTo sets value to v.
+func (o *NilArtifactReference) SetTo(v ArtifactReference) {
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o NilArtifactReference) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *NilArtifactReference) SetToNull() {
+	o.Null = true
+	var v ArtifactReference
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o NilArtifactReference) Get() (v ArtifactReference, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o NilArtifactReference) Or(d ArtifactReference) ArtifactReference {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // NewNilErrorDetailDetails returns new NilErrorDetailDetails with value set to v.
 func NewNilErrorDetailDetails(v ErrorDetailDetails) NilErrorDetailDetails {
@@ -365,6 +750,51 @@ func (o NilErrorDetailDetails) Or(d ErrorDetailDetails) ErrorDetailDetails {
 	return d
 }
 
+// NewNilString returns new NilString with value set to v.
+func NewNilString(v string) NilString {
+	return NilString{
+		Value: v,
+	}
+}
+
+// NilString is nullable string.
+type NilString struct {
+	Value string
+	Null  bool
+}
+
+// SetTo sets value to v.
+func (o *NilString) SetTo(v string) {
+	o.Null = false
+	o.Value = v
+}
+
+// IsNull returns true if value is Null.
+func (o NilString) IsNull() bool { return o.Null }
+
+// SetToNull sets value to null.
+func (o *NilString) SetToNull() {
+	o.Null = true
+	var v string
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o NilString) Get() (v string, ok bool) {
+	if o.Null {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o NilString) Or(d string) string {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NotFoundHeaders wraps ErrorResponse with response headers.
 type NotFoundHeaders struct {
 	XPowerContextRequestID OptString
@@ -394,6 +824,52 @@ func (s *NotFoundHeaders) SetResponse(val ErrorResponse) {
 func (*NotFoundHeaders) downloadSkillPackageRes()    {}
 func (*NotFoundHeaders) getSkillPackageManifestRes() {}
 func (*NotFoundHeaders) recordSkillUsageRes()        {}
+
+// NewOptArtifactReference returns new OptArtifactReference with value set to v.
+func NewOptArtifactReference(v ArtifactReference) OptArtifactReference {
+	return OptArtifactReference{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptArtifactReference is optional ArtifactReference.
+type OptArtifactReference struct {
+	Value ArtifactReference
+	Set   bool
+}
+
+// IsSet returns true if OptArtifactReference was set.
+func (o OptArtifactReference) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptArtifactReference) Reset() {
+	var v ArtifactReference
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptArtifactReference) SetTo(v ArtifactReference) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptArtifactReference) Get() (v ArtifactReference, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptArtifactReference) Or(d ArtifactReference) ArtifactReference {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
 
 // NewOptNilString returns new OptNilString with value set to v.
 func NewOptNilString(v string) OptNilString {
@@ -457,6 +933,98 @@ func (o OptNilString) Get() (v string, ok bool) {
 
 // Or returns value if set, or given parameter if does not.
 func (o OptNilString) Or(d string) string {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptSkillPackageReference returns new OptSkillPackageReference with value set to v.
+func NewOptSkillPackageReference(v SkillPackageReference) OptSkillPackageReference {
+	return OptSkillPackageReference{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptSkillPackageReference is optional SkillPackageReference.
+type OptSkillPackageReference struct {
+	Value SkillPackageReference
+	Set   bool
+}
+
+// IsSet returns true if OptSkillPackageReference was set.
+func (o OptSkillPackageReference) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptSkillPackageReference) Reset() {
+	var v SkillPackageReference
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptSkillPackageReference) SetTo(v SkillPackageReference) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptSkillPackageReference) Get() (v SkillPackageReference, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptSkillPackageReference) Or(d SkillPackageReference) SkillPackageReference {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptSkillProposalMetadata returns new OptSkillProposalMetadata with value set to v.
+func NewOptSkillProposalMetadata(v SkillProposalMetadata) OptSkillProposalMetadata {
+	return OptSkillProposalMetadata{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptSkillProposalMetadata is optional SkillProposalMetadata.
+type OptSkillProposalMetadata struct {
+	Value SkillProposalMetadata
+	Set   bool
+}
+
+// IsSet returns true if OptSkillProposalMetadata was set.
+func (o OptSkillProposalMetadata) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptSkillProposalMetadata) Reset() {
+	var v SkillProposalMetadata
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptSkillProposalMetadata) SetTo(v SkillProposalMetadata) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptSkillProposalMetadata) Get() (v SkillProposalMetadata, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptSkillProposalMetadata) Or(d SkillProposalMetadata) SkillProposalMetadata {
 	if v, ok := o.Get(); ok {
 		return v
 	}
@@ -553,6 +1121,55 @@ func (o OptString) Or(d string) string {
 		return v
 	}
 	return d
+}
+
+// Ref: #/components/schemas/ProposeSkillPackageRequest
+type ProposeSkillPackageRequest struct {
+	ArchiveBase64 string       `json:"archive_base64"`
+	Reason        OptNilString `json:"reason"`
+	ScopeID       string       `json:"scope_id"`
+	// Exact managed Skill Revision replaced by this complete package Candidate.
+	Target OptArtifactReference `json:"target"`
+}
+
+// GetArchiveBase64 returns the value of ArchiveBase64.
+func (s *ProposeSkillPackageRequest) GetArchiveBase64() string {
+	return s.ArchiveBase64
+}
+
+// GetReason returns the value of Reason.
+func (s *ProposeSkillPackageRequest) GetReason() OptNilString {
+	return s.Reason
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *ProposeSkillPackageRequest) GetScopeID() string {
+	return s.ScopeID
+}
+
+// GetTarget returns the value of Target.
+func (s *ProposeSkillPackageRequest) GetTarget() OptArtifactReference {
+	return s.Target
+}
+
+// SetArchiveBase64 sets the value of ArchiveBase64.
+func (s *ProposeSkillPackageRequest) SetArchiveBase64(val string) {
+	s.ArchiveBase64 = val
+}
+
+// SetReason sets the value of Reason.
+func (s *ProposeSkillPackageRequest) SetReason(val OptNilString) {
+	s.Reason = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *ProposeSkillPackageRequest) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+// SetTarget sets the value of Target.
+func (s *ProposeSkillPackageRequest) SetTarget(val OptArtifactReference) {
+	s.Target = val
 }
 
 // Ref: #/components/schemas/RecordSkillUsageRequest
@@ -1075,6 +1692,122 @@ func (s *SkillPackageReference) SetUncompressedSize(val int) {
 	s.UncompressedSize = val
 }
 
+// Ref: #/components/schemas/SkillProposal
+type SkillProposal struct {
+	AllowedTools  OptNilString             `json:"allowed_tools"`
+	Compatibility OptNilString             `json:"compatibility"`
+	Description   string                   `json:"description"`
+	Instructions  string                   `json:"instructions"`
+	License       OptNilString             `json:"license"`
+	Metadata      OptSkillProposalMetadata `json:"metadata"`
+	Name          string                   `json:"name"`
+	Package       OptSkillPackageReference `json:"package"`
+	Validation    []SkillValidationItem    `json:"validation"`
+}
+
+// GetAllowedTools returns the value of AllowedTools.
+func (s *SkillProposal) GetAllowedTools() OptNilString {
+	return s.AllowedTools
+}
+
+// GetCompatibility returns the value of Compatibility.
+func (s *SkillProposal) GetCompatibility() OptNilString {
+	return s.Compatibility
+}
+
+// GetDescription returns the value of Description.
+func (s *SkillProposal) GetDescription() string {
+	return s.Description
+}
+
+// GetInstructions returns the value of Instructions.
+func (s *SkillProposal) GetInstructions() string {
+	return s.Instructions
+}
+
+// GetLicense returns the value of License.
+func (s *SkillProposal) GetLicense() OptNilString {
+	return s.License
+}
+
+// GetMetadata returns the value of Metadata.
+func (s *SkillProposal) GetMetadata() OptSkillProposalMetadata {
+	return s.Metadata
+}
+
+// GetName returns the value of Name.
+func (s *SkillProposal) GetName() string {
+	return s.Name
+}
+
+// GetPackage returns the value of Package.
+func (s *SkillProposal) GetPackage() OptSkillPackageReference {
+	return s.Package
+}
+
+// GetValidation returns the value of Validation.
+func (s *SkillProposal) GetValidation() []SkillValidationItem {
+	return s.Validation
+}
+
+// SetAllowedTools sets the value of AllowedTools.
+func (s *SkillProposal) SetAllowedTools(val OptNilString) {
+	s.AllowedTools = val
+}
+
+// SetCompatibility sets the value of Compatibility.
+func (s *SkillProposal) SetCompatibility(val OptNilString) {
+	s.Compatibility = val
+}
+
+// SetDescription sets the value of Description.
+func (s *SkillProposal) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetInstructions sets the value of Instructions.
+func (s *SkillProposal) SetInstructions(val string) {
+	s.Instructions = val
+}
+
+// SetLicense sets the value of License.
+func (s *SkillProposal) SetLicense(val OptNilString) {
+	s.License = val
+}
+
+// SetMetadata sets the value of Metadata.
+func (s *SkillProposal) SetMetadata(val OptSkillProposalMetadata) {
+	s.Metadata = val
+}
+
+// SetName sets the value of Name.
+func (s *SkillProposal) SetName(val string) {
+	s.Name = val
+}
+
+// SetPackage sets the value of Package.
+func (s *SkillProposal) SetPackage(val OptSkillPackageReference) {
+	s.Package = val
+}
+
+// SetValidation sets the value of Validation.
+func (s *SkillProposal) SetValidation(val []SkillValidationItem) {
+	s.Validation = val
+}
+
+type SkillProposalMetadata map[string]string
+
+func (s *SkillProposalMetadata) init() SkillProposalMetadata {
+	m := *s
+	if m == nil {
+		m = map[string]string{}
+		*s = m
+	}
+	return m
+}
+
+type SkillValidationItem string
+
 // Ref: #/components/schemas/SourceReference
 type SourceReference struct {
 	// Stable Source type.
@@ -1141,6 +1874,7 @@ func (s *UnauthorizedHeaders) SetResponse(val ErrorResponse) {
 
 func (*UnauthorizedHeaders) downloadSkillPackageRes()    {}
 func (*UnauthorizedHeaders) getSkillPackageManifestRes() {}
+func (*UnauthorizedHeaders) proposeSkillPackageRes()     {}
 func (*UnauthorizedHeaders) recordSkillUsageRes()        {}
 
 // UnavailableHeaders wraps ErrorResponse with response headers.
@@ -1171,4 +1905,5 @@ func (s *UnavailableHeaders) SetResponse(val ErrorResponse) {
 
 func (*UnavailableHeaders) downloadSkillPackageRes()    {}
 func (*UnavailableHeaders) getSkillPackageManifestRes() {}
+func (*UnavailableHeaders) proposeSkillPackageRes()     {}
 func (*UnavailableHeaders) recordSkillUsageRes()        {}

@@ -149,8 +149,10 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 		canonicalScopes:    endpoint.NewCanonicalScopeHandler(a.scopes),
 		canonicalSources:   endpoint.NewCanonicalSourceHandler(a.sources, a.remoteIngestion, a.connectorCheckpoints),
 		canonicalArtifacts: endpoint.NewCanonicalArtifactHandler(a.artifacts),
-		canonicalSkills:    endpoint.NewCanonicalManagedSkillHandler(managedSkillOperations{packages: a.skillPackages, usage: a.skillUsage}),
-		canonicalStats:     endpoint.NewCanonicalStatsHandler(a.statistics),
+		canonicalSkills: endpoint.NewCanonicalManagedSkillHandler(managedSkillOperations{
+			packages: a.skillPackages, usage: a.skillUsage, review: a.review,
+		}),
+		canonicalStats: endpoint.NewCanonicalStatsHandler(a.statistics),
 	})
 }
 

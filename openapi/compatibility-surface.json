@@ -97,7 +97,7 @@
       {"operation_id": "list_managed_skills", "method": "post", "path": "/v1/skill/library", "status": "deferred"},
       {"operation_id": "list_remote_skill_targets", "method": "post", "path": "/v1/skill/remote/targets", "status": "deferred"},
       {"operation_id": "list_scopes", "method": "get", "path": "/v1/scopes", "status": "implemented-canonical"},
-      {"operation_id": "propose_skill_package", "method": "post", "path": "/v1/skill/package/propose", "status": "deferred"},
+      {"operation_id": "propose_skill_package", "method": "post", "path": "/v1/skill/package/propose", "status": "implemented-canonical"},
       {"operation_id": "publish_artifact", "method": "post", "path": "/v1/artifact-publications", "status": "deferred"},
       {"operation_id": "publish_remote_skill", "method": "post", "path": "/v1/skill/remote/publication/publish", "status": "deferred"},
       {"operation_id": "query_artifact_tags", "method": "post", "path": "/v1/scopes/{scope_id}/artifact-tags/query", "status": "deferred"},

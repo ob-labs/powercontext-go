@@ -20,6 +20,12 @@ type Handler interface {
 	//
 	// POST /v1/skill/package/manifest
 	GetSkillPackageManifest(ctx context.Context, req *GetSkillPackageRequest) (GetSkillPackageManifestRes, error)
+	// ProposeSkillPackage implements propose_skill_package operation.
+	//
+	// Canonicalize exact ZIP bytes, store them once, and create a pending Candidate without LLM rewriting.
+	//
+	// POST /v1/skill/package/propose
+	ProposeSkillPackage(ctx context.Context, req *ProposeSkillPackageRequest) (ProposeSkillPackageRes, error)
 	// RecordSkillUsage implements record_skill_usage operation.
 	//
 	// Validate an exact managed Skill Revision and capture immutable bounded usage Source evidence.

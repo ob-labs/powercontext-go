@@ -25,6 +25,7 @@ import (
 var managedSkillSidecarOperations = []scopeSidecarOperation{
 	{OperationID: "get_skill_package_manifest", Method: "post", Path: "/v1/skill/package/manifest"},
 	{OperationID: "download_skill_package", Method: "post", Path: "/v1/skill/package/download"},
+	{OperationID: "propose_skill_package", Method: "post", Path: "/v1/skill/package/propose"},
 	{OperationID: "record_skill_usage", Method: "post", Path: "/v1/skill/usage"},
 }
 
@@ -129,5 +130,62 @@ func runManagedSkillSidecar(sourcePath, manifestPath, target, packageName, clien
 	if err != nil {
 		return err
 	}
-	return runOgen(projected, absolute, packageName, true)
+	generatedInput, err := normalizeManagedSkillCandidateNullableReferences(projected)
+	if err != nil {
+		return err
+	}
+	return runOgen(generatedInput, absolute, packageName, true)
+}
+
+// normalizeManagedSkillCandidateNullableReferences fixes Ogen's handling of
+// required nullable response references without changing the canonical
+// sidecar document. Only ArtifactCandidate's target/result fields need this
+// normalization; request nullable fields and existing usage wire behavior are
+// deliberately left untouched.
+func normalizeManagedSkillCandidateNullableReferences(source []byte) ([]byte, error) {
+	document, err := decodeScopeSidecarDocument(source)
+	if err != nil {
+		return nil, err
+	}
+	components, err := scopeSidecarObject(document, "components")
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := scopeSidecarObject(components, "schemas")
+	if err != nil {
+		return nil, err
+	}
+	candidate, err := scopeSidecarObject(schemas, "ArtifactCandidate")
+	if err != nil {
+		return nil, err
+	}
+	properties, err := scopeSidecarObject(candidate, "properties")
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range []string{"target", "result_artifact"} {
+		property, propertyErr := scopeSidecarObject(properties, name)
+		if propertyErr != nil {
+			return nil, propertyErr
+		}
+		reference, ok := property["$ref"].(string)
+		if !ok || reference == "" || property["nullable"] != true {
+			return nil, errors.New("managed Skill Candidate nullable reference is invalid")
+		}
+		normalized := map[string]any{
+			"oneOf": []any{
+				map[string]any{"$ref": reference},
+				map[string]any{"type": "null"},
+			},
+		}
+		if description, found := property["description"]; found {
+			normalized["description"] = description
+		}
+		properties[name] = normalized
+	}
+	encoded, err := json.Marshal(document, json.Deterministic(true))
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
 }

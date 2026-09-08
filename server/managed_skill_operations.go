@@ -20,15 +20,18 @@ import (
 
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	"github.com/ob-labs/powercontext-go/internal/review"
 	pcruntime "github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/source"
 )
 
-// managedSkillOperations composes the two deliberately narrow Runtime use cases
-// behind the canonical managed-Skill sidecar without exposing generic writes.
+// managedSkillOperations composes deliberately narrow Runtime package read,
+// bounded usage, and package-proposal operations behind the canonical
+// managed-Skill sidecar without exposing generic Artifact writes.
 type managedSkillOperations struct {
 	packages *pcruntime.SkillPackageResourceApplication
 	usage    *pcruntime.SkillUsageApplication
+	review   *pcruntime.ReviewApplication
 }
 
 func (o managedSkillOperations) ReadSkillPackage(
@@ -51,4 +54,18 @@ func (o managedSkillOperations) Record(
 		return pcruntime.SourceReceipt{}, errors.New("server: Skill usage operations are unavailable")
 	}
 	return o.usage.Record(ctx, scopeID, capture)
+}
+
+func (o managedSkillOperations) ProposeUploadedPackage(
+	ctx context.Context,
+	scopeID string,
+	archive []byte,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (review.Snapshot, error) {
+	if o.review == nil {
+		return nil, errors.New("server: Skill package proposal operations are unavailable")
+	}
+	return o.review.ProposeUploadedPackage(ctx, scopeID, archive, artifacts, target, reason)
 }

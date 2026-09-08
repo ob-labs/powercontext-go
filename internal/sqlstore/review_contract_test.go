@@ -371,6 +371,79 @@ func TestPackageSkillRevisionPersistsExactReferenceAndRollsBackOnCandidateFailur
 	assertPendingCandidate(t, fixture.service, pending.ID())
 }
 
+func TestUploadedPackageSkillCreatesOnePackageUploadSourceAndPendingCandidate(t *testing.T) {
+	fixture := newReviewFixture(t, "package-upload", (&sequenceIDs{}).New)
+	snapshot := skillPackageSnapshot(t, "uploaded-package")
+	candidate, proposeErr := fixture.service.ProposeUploadedPackage(fixture.ctx, snapshot.Archive(), nil, nil, nil)
+	if proposeErr != nil {
+		t.Fatal(proposeErr)
+	}
+	if candidate.Family() != skill.Family || candidate.Status() != review.Pending || len(candidate.Sources()) != 1 || len(candidate.Artifacts()) != 0 {
+		t.Fatalf("uploaded package Candidate = %#v", candidate)
+	}
+	uploadRef := candidate.Sources()[0]
+	if uploadRef.Type() != source.SkillPackageUploadType || uploadRef.ID() != "skill_pkg_"+snapshot.Reference().TreeDigest() {
+		t.Fatalf("upload evidence ref = %#v", uploadRef)
+	}
+	assertPackageReviewRow(t, fixture, snapshot, 1)
+	var stored sqlstore.StoredSource
+	if transactionErr := fixture.database.Transaction(fixture.ctx, func(tx sqlstore.DBTX) error {
+		var getErr error
+		stored, getErr = fixture.sources.Get(fixture.ctx, tx, fixture.scope, uploadRef)
+		return getErr
+	}); transactionErr != nil {
+		t.Fatal(transactionErr)
+	}
+	upload, ok := stored.Value.(source.SkillPackageUploadSource)
+	if !ok || upload.Capture().Package().TreeDigest() != snapshot.Reference().TreeDigest() ||
+		upload.Capture().SkillName() != snapshot.Metadata().Name() || upload.Capture().SkillDescription() != snapshot.Metadata().Description() {
+		t.Fatalf("stored package upload = %#v", stored.Value)
+	}
+	var payload []byte
+	if queryErr := fixture.database.SQLDB().QueryRowContext(fixture.ctx, `SELECT payload FROM pc_sources
+        WHERE scope_id = ? AND source_type = ? AND source_id = ?`, fixture.scope, uploadRef.Type(), uploadRef.ID()).Scan(&payload); queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	if bytes.Contains(payload, snapshot.Archive()) {
+		t.Fatal("package upload Source duplicated archive bytes")
+	}
+
+	second, err := fixture.service.ProposeUploadedPackage(fixture.ctx, snapshot.Archive(), nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID() == candidate.ID() || second.Sources()[0] != uploadRef || countPackageUploadSources(t, fixture) != 1 {
+		t.Fatalf("repeated package upload = %#v", second)
+	}
+}
+
+func TestUploadedPackageSkillRollsBackPackageAndUploadSourceOnCandidateFailure(t *testing.T) {
+	fixture := newReviewFixture(t, "package-upload-rollback", (&sequenceIDs{}).New)
+	snapshot := skillPackageSnapshot(t, "uploaded-package-rollback")
+	if _, err := fixture.database.SQLDB().ExecContext(fixture.ctx, `CREATE TRIGGER pc_test_fail_uploaded_package_candidate
+        BEFORE INSERT ON pc_artifact_candidate_heads
+        BEGIN SELECT RAISE(ABORT, 'injected package Candidate failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.service.ProposeUploadedPackage(fixture.ctx, snapshot.Archive(), nil, nil, nil); err == nil {
+		t.Fatal("package upload survived Candidate failure")
+	}
+	assertPackageReviewRow(t, fixture, snapshot, 0)
+	if count := countPackageUploadSources(t, fixture); count != 0 {
+		t.Fatalf("rolled back package upload Sources = %d", count)
+	}
+}
+
+func countPackageUploadSources(t *testing.T, fixture reviewFixture) int {
+	t.Helper()
+	var count int
+	if err := fixture.database.SQLDB().QueryRowContext(fixture.ctx, `SELECT COUNT(*) FROM pc_sources
+        WHERE scope_id = ? AND source_type = ?`, fixture.scope, source.SkillPackageUploadType).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
 func TestPackageSkillCandidateRevisionRejectsCrossVariant(t *testing.T) {
 	fixture := newReviewFixture(t, "package-cross-variant", (&sequenceIDs{}).New)
 	evidence := fixture.capture(t, "package-evidence", "reviewed package evidence")

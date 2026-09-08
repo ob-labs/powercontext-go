@@ -308,7 +308,9 @@ func TestMemoryAndHandoffPayloadsMatchPythonFieldOrder(t *testing.T) {
 
 func repositories(t *testing.T) (*sqlstore.SourceRepository, *sqlstore.ArtifactRepository) {
 	t.Helper()
-	sources, err := sqlstore.NewSourceRepository(sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec())
+	sources, err := sqlstore.NewSourceRepository(
+		sqlstore.SQLiteDialect, sqlstore.ContentSourceCodec(), sqlstore.SkillPackageUploadSourceCodec(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
