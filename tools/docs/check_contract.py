@@ -46,17 +46,33 @@ DEFERRED_E4_POLICY = (
 LEGACY_SINGLE_PIN_PATTERNS = (
     re.compile(r"\b77\s+canonical\s+operations\b", re.IGNORECASE),
     re.compile(r"\b38\s+(?:pinned\s+)?upstream-only\s+operations\b", re.IGNORECASE),
+    re.compile(r"\b38\s+deferred\s+entries\b", re.IGNORECASE),
 )
+
+
+def affirmative_claim_pattern(category: str) -> re.Pattern[str]:
+    description = r"(?:\s+(?:cluster|schema|behavior|endpoints?|operations?|read|writes?|identity))*"
+    predicate = (
+        r"(?:is|are)\s+(?:now\s+)?(?:implemented|supported|available)"
+        r"|(?:now\s+)?(?:supports?|provides?|enables?)"
+    )
+    return re.compile(rf"\b{category}{description}\s+(?:{predicate})\b", re.IGNORECASE)
+
+
 PROHIBITED_E4_CLAIMS = {
-    "Access": re.compile(r"\be4\s+Access(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "Prompt": re.compile(r"\be4\s+Prompt(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "Artifact tags": re.compile(r"\be4\s+Artifact\s+tags?(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "Artifact revision-history": re.compile(r"\be4\s+Artifact\s+revision-history(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "Source receipt identity": re.compile(r"\be4\s+Source\s+receipt\s+identity\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "Artifact writes": re.compile(r"\bArtifact\s+writes?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "managed Skills": re.compile(r"\bmanaged\s+Skills?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "remote Skills": re.compile(r"\bremote\s+Skills?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
-    "native personal services": re.compile(r"\bnative\s+personal\s+services?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "Access": affirmative_claim_pattern(r"e4\s+Access"),
+    "Prompt": affirmative_claim_pattern(r"e4\s+Prompt"),
+    "Artifact tags": affirmative_claim_pattern(r"e4\s+Artifact\s+tags?"),
+    "Artifact revision-history": affirmative_claim_pattern(
+        r"e4\s+Artifact\s+revision-history"
+    ),
+    "Source receipt": affirmative_claim_pattern(r"e4\s+Source\s+receipt"),
+    "Artifact writes": affirmative_claim_pattern(r"Artifact\s+writes?"),
+    "managed Skills": affirmative_claim_pattern(r"managed\s+Skills?"),
+    "remote Skills": affirmative_claim_pattern(r"remote\s+Skills?"),
+    "native personal services": affirmative_claim_pattern(
+        r"native\s+personal\s+services?"
+    ),
 }
 
 
