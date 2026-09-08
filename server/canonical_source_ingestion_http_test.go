@@ -18,7 +18,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -327,7 +326,13 @@ func assertCanonicalCheckpoint(t *testing.T, result any, want string) {
 
 func assertCanonicalSourceError(t *testing.T, result any, want string, private ...string) {
 	t.Helper()
-	payload, err := json.Marshal(result)
+	response, ok := result.(interface {
+		GetResponse() canonicalsource.ErrorResponse
+	})
+	if !ok {
+		t.Fatalf("error response = %T, want %q", result, want)
+	}
+	payload, err := json.Marshal(response.GetResponse())
 	if err != nil {
 		t.Fatal(err)
 	}
