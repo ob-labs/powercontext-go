@@ -88,6 +88,29 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 container="powercontext-systemd-user-${RANDOM}${RANDOM}"
 image="powercontext-systemd-user-consumer:local"
 systemd_version=unknown
+recorded_stage=not_started
+stage_exit_code=0
+stage_stdout_bytes=0
+stage_stdout_sha256="$(printf '' | sha256sum | awk '{ print substr($1, 1, 16) }')"
+stage_output="$workspace/.stage-output"
+
+record_stage() {
+  local name="$1"
+  shift
+  local exit_code
+  : > "$stage_output"
+  if "$@" > "$stage_output" 2>/dev/null; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
+  recorded_stage="$name"
+  stage_exit_code="$exit_code"
+  stage_stdout_bytes="$(wc -c < "$stage_output" | tr -d '[:space:]')"
+  stage_stdout_sha256="$(sha256sum "$stage_output" | awk '{ print substr($1, 1, 16) }')"
+  rm -f -- "$stage_output"
+  return "$exit_code"
+}
 
 write_summary() {
   local result="$1"
@@ -106,20 +129,20 @@ write_summary() {
   local archive_sha
   archive_sha="$(sha256sum "$archive" | awk '{ print $1 }')"
   cat > "$diagnostics/summary.json" <<EOF
-{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"systemd_version":"$systemd_version","test_exit_code":$result}
+{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","systemd_version":"$systemd_version","test_exit_code":$result}
 EOF
 }
 
 result=0
-if ! docker build --quiet --file "$script_dir/Dockerfile" --tag "$image" "$script_dir" >/dev/null; then
+if ! record_stage image_build docker build --quiet --file "$script_dir/Dockerfile" --tag "$image" "$script_dir"; then
   result=1
-elif ! docker run --detach --privileged --tmpfs /run --tmpfs /run/lock \
-  --name "$container" --volume "$workspace:/work" "$image" >/dev/null; then
+elif ! record_stage container_start docker run --detach --privileged --tmpfs /run --tmpfs /run/lock \
+  --name "$container" --volume "$workspace:/work" "$image"; then
   result=1
 else
-  if ! docker exec "$container" install -d --owner=powercontext --group=powercontext --mode=0700 /run/user/1001; then
+  if ! record_stage user_runtime_directory docker exec "$container" install -d --owner=powercontext --group=powercontext --mode=0700 /run/user/1001; then
     result=1
-  elif ! docker exec "$container" systemctl start user@1001.service >/dev/null 2>&1; then
+  elif ! record_stage user_manager_start docker exec "$container" systemctl start user@1001.service; then
     result=1
   else
     systemd_version="$(docker exec "$container" systemd --version 2>/dev/null | awk 'NR == 1 { print $2 }')"
@@ -131,16 +154,20 @@ else
       PATH=/usr/sbin:/usr/bin:/sbin:/bin
       LC_ALL=C
     )
-    if ! docker exec --user powercontext "$container" env -i "${environment[@]}" systemctl --user show-environment >/dev/null 2>&1; then
+    if ! record_stage manager_environment docker exec --user powercontext "$container" env -i "${environment[@]}" systemctl --user show-environment; then
       result=1
-    elif ! docker exec --user powercontext "$container" env -i "${environment[@]}" \
-      busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.DBus.Peer Ping >/dev/null 2>&1; then
+    elif ! record_stage user_dbus_socket_start docker exec --user powercontext "$container" env -i "${environment[@]}" systemctl --user start dbus.socket; then
       result=1
-    elif ! docker exec "$container" test ! -e /home/powercontext/.config/systemd/user/powercontext.service; then
+    elif ! record_stage user_dbus_socket docker exec --user powercontext "$container" env -i "${environment[@]}" test -S /run/user/1001/bus; then
+      result=1
+    elif ! record_stage user_bus_ping docker exec --user powercontext "$container" env -i "${environment[@]}" \
+      busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.DBus.Peer Ping; then
+      result=1
+    elif ! record_stage unowned_unit_path docker exec "$container" test ! -e /home/powercontext/.config/systemd/user/powercontext.service; then
       result=1
     else
       touch "$workspace/manager-ready"
-      if ! docker exec --user powercontext "$container" env -i "${environment[@]}" \
+      if ! record_stage archive_consumer docker exec --user powercontext "$container" env -i "${environment[@]}" \
         POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE=/work/"$(basename "$archive")" \
         timeout 90 /work/"$(basename "$test_binary")" -test.v -test.run '^TestReleaseArchiveProvidesConsumablePersonalService$'; then
         result=1
