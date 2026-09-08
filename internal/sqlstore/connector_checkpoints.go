@@ -25,12 +25,16 @@ import (
 	"github.com/ob-labs/powercontext-go/source"
 )
 
-// CheckpointConflictError reports an optimistic Connector checkpoint mismatch.
+// CheckpointConflictError reports a Connector checkpoint or binding mismatch.
 type CheckpointConflictError struct{}
 
 func (*CheckpointConflictError) Error() string {
 	return "Connector checkpoint changed during the run"
 }
+
+// ConnectorCheckpointConflict classifies a conflict for consumers without
+// coupling the persistence adapter to Runtime or a transport.
+func (*CheckpointConflictError) ConnectorCheckpointConflict() {}
 
 // ConnectorCheckpointRepository persists opaque JSON checkpoint values.
 type ConnectorCheckpointRepository struct{}
@@ -74,9 +78,6 @@ func (ConnectorCheckpointRepository) load(
 	if err != nil {
 		return connectorCheckpointRow{}, false, err
 	}
-	if connectorName != binding.ConnectorName() || connectorVersion != binding.ConnectorVersion() {
-		return connectorCheckpointRow{}, false, invalidStoredCheckpoint("binding identity does not match request")
-	}
 	payload, err := storedBytes(checkpoint, "checkpoint")
 	if err != nil {
 		return connectorCheckpointRow{}, false, err
@@ -84,6 +85,9 @@ func (ConnectorCheckpointRepository) load(
 	value, err := decodeCheckpoint(payload)
 	if err != nil {
 		return connectorCheckpointRow{}, false, err
+	}
+	if connectorName != binding.ConnectorName() || connectorVersion != binding.ConnectorVersion() {
+		return connectorCheckpointRow{}, false, &CheckpointConflictError{}
 	}
 	return connectorCheckpointRow{value: value, payload: payload}, true, nil
 }
