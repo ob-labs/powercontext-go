@@ -133,6 +133,8 @@ else
     )
     if ! docker exec --user powercontext "$container" env -i "${environment[@]}" systemctl --user show-environment >/dev/null 2>&1; then
       result=1
+    elif ! docker exec "$container" test ! -e /home/powercontext/.config/systemd/user/powercontext.service; then
+      result=1
     else
       touch "$workspace/manager-ready"
       if ! docker exec --user powercontext "$container" env -i "${environment[@]}" \

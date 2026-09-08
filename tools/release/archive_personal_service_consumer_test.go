@@ -50,14 +50,6 @@ func TestReleaseArchiveProvidesConsumablePersonalService(t *testing.T) {
 		t.Fatalf("release archive has no executable bin/powercontext")
 	}
 
-	before := readReleasePersonalServiceStatus(t, binary)
-	if before.Support != "supported" {
-		t.Fatal("a usable systemd --user manager is required")
-	}
-	if before.Registration != "not_installed" {
-		t.Fatal("disposable user manager already has a personal service registration")
-	}
-
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal("reserve loopback port")
