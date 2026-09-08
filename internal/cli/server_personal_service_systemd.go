@@ -307,6 +307,12 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 	if !b.available() || name != personalServiceUnitName {
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
+	// systemctl show is the upstream-stable absent-unit classifier. It must run
+	// before the strict D-Bus ownership inspection because systemd can expose an
+	// unloaded unit through a property envelope the latter intentionally rejects.
+	if b.systemctlShowNotFound(ctx) {
+		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
+	}
 	objectResult, err := b.busctlResult(ctx,
 		"call", personalServiceManagerName, personalServiceManagerPath, personalServiceManagerName+".Manager", "LoadUnit", "s", personalServiceUnitName,
 	)
