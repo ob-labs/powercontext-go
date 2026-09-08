@@ -50,6 +50,7 @@ type Application struct {
 	remoteIngestion      *pcruntime.RemoteIngestionApplication
 	connectorCheckpoints *pcruntime.ConnectorCheckpointApplication
 	artifacts            *pcruntime.ArtifactResourceApplication
+	skillPackages        *pcruntime.SkillPackageResourceApplication
 	agentSkillTargets    []skill.AgentSkillTarget
 
 	readinessMu   sync.Mutex
@@ -97,7 +98,7 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 		readiness: readiness, metrics: foundation.metrics, tracing: foundation.tracing, logger: dependencies.Logger,
 		review: services.review, externalSkills: services.externalSkills, scopes: services.scopes,
 		sources: services.sources, remoteIngestion: services.remoteIngestion, connectorCheckpoints: services.connectorCheckpoints,
-		artifacts: services.artifacts, agentSkillTargets: foundation.assembled.agentSkillTargets,
+		artifacts: services.artifacts, skillPackages: services.skillPackages, agentSkillTargets: foundation.assembled.agentSkillTargets,
 	}
 	application.endpoint = endpoint.NewHandler(endpoint.HandlerOptions{
 		Capabilities: application.getCapabilities,
@@ -146,6 +147,7 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 		canonicalScopes:    endpoint.NewCanonicalScopeHandler(a.scopes),
 		canonicalSources:   endpoint.NewCanonicalSourceHandler(a.sources, a.remoteIngestion, a.connectorCheckpoints),
 		canonicalArtifacts: endpoint.NewCanonicalArtifactHandler(a.artifacts),
+		canonicalSkills:    endpoint.NewCanonicalManagedSkillHandler(a.skillPackages),
 	})
 }
 

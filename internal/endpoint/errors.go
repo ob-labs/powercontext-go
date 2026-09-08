@@ -66,6 +66,10 @@ func MapError(err error) ErrorMapping {
 	if errors.As(err, &invalidWire) {
 		return invalidRequest()
 	}
+	var managedSkillPackageMissing *managedSkillPackageNotFoundError
+	if errors.As(err, &managedSkillPackageMissing) {
+		return mapping(http.StatusNotFound, "not_found", "The requested resource was not found.", nil)
+	}
 
 	var notReady *RuntimeNotReadyError
 	var state *runtime.StateError
