@@ -284,7 +284,8 @@ func (r *lifecycleSystemdRunner) Run(_ context.Context, program string, argument
 					"POWERCONTEXT_SERVICE_OWNED=true", "POWERCONTEXT_SERVICE_METADATA=" + metadata,
 				}},
 				"ExecStart": map[string]any{"type": "a(sasbttttuii)", "data": []any{[]any{
-					lifecycleBinary, []any{lifecycleBinary, "server", "_service-run", "--env-file", lifecycleEnvFile, "--endpoint", lifecycleURL, "--data-dir", lifecycleDataDir},
+					lifecycleBinary,
+					[]any{lifecycleBinary, "server", "_service-run", "--env-file", lifecycleEnvFile, "--endpoint", lifecycleURL, "--data-dir", lifecycleDataDir},
 					false, 0, 0, 0, 0, 0, 0, 0,
 				}}},
 			},

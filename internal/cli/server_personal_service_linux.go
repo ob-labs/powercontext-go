@@ -180,7 +180,7 @@ func (f *linuxPrivateFiles) openPrivate(name string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer unix.Close(parent)
+	defer func() { _ = unix.Close(parent) }()
 	before, exists, err := f.privateAt(parent, base)
 	if err != nil {
 		return nil, err
@@ -213,7 +213,7 @@ func (f *linuxPrivateFiles) openOrCreatePrivate(name string, flags int) (*os.Fil
 	if err != nil {
 		return nil, err
 	}
-	defer unix.Close(parent)
+	defer func() { _ = unix.Close(parent) }()
 	before, existed, err := f.privateAt(parent, base)
 	if err != nil {
 		return nil, err
