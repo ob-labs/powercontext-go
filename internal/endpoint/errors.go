@@ -337,6 +337,9 @@ func mapDomainError(err error) ErrorMapping {
 	if _, ok := errors.AsType[*source.InvalidSkillUsageError](err); ok {
 		return invalidRequest()
 	}
+	if _, ok := errors.AsType[*source.InvalidSkillPackageUploadError](err); ok {
+		return invalidRequest()
+	}
 	if _, ok := errors.AsType[*source.SkillUsageTaskSourceNotFoundError](err); ok {
 		return mapping(http.StatusNotFound, "source_not_found", "The requested Source was not found.", nil)
 	}
@@ -384,13 +387,14 @@ func invalidDomainRequest(err error) bool {
 	var handoffRef *handoff.InvalidReferenceError
 	var sourceRef *source.InvalidReferenceError
 	var artifactRef *artifact.InvalidReferenceError
+	var packageError *skill.PackageError
 	var invalidWork *work.InvalidError
 	var invalidWorkRequest *work.InvalidRequestError
 	return errors.As(err, &candidate) || errors.As(err, &evidence) || errors.As(err, &citation) ||
 		errors.As(err, &operation) || errors.As(err, &canonical) || errors.As(err, &invalidScope) ||
 		errors.As(err, &scopeValidation) || errors.As(err, &scopeRelationship) ||
 		errors.As(err, &handoffScope) || errors.As(err, &handoffRef) || errors.As(err, &sourceRef) ||
-		errors.As(err, &artifactRef) || errors.As(err, &invalidWork) || errors.As(err, &invalidWorkRequest)
+		errors.As(err, &artifactRef) || errors.As(err, &packageError) || errors.As(err, &invalidWork) || errors.As(err, &invalidWorkRequest)
 }
 
 func invalidRequest() ErrorMapping {

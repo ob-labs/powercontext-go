@@ -37,6 +37,7 @@ func findAuthorization(h http.Header, prefix string) (string, bool) {
 var operationRolesBearerAuth = map[string][]string{
 	DownloadSkillPackageOperation:    []string{},
 	GetSkillPackageManifestOperation: []string{},
+	ProposeSkillPackageOperation:     []string{},
 	RecordSkillUsageOperation:        []string{},
 }
 

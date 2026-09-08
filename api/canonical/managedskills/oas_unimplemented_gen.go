@@ -31,6 +31,15 @@ func (UnimplementedHandler) GetSkillPackageManifest(ctx context.Context, req *Ge
 	return r, ht.ErrNotImplemented
 }
 
+// ProposeSkillPackage implements propose_skill_package operation.
+//
+// Canonicalize exact ZIP bytes, store them once, and create a pending Candidate without LLM rewriting.
+//
+// POST /v1/skill/package/propose
+func (UnimplementedHandler) ProposeSkillPackage(ctx context.Context, req *ProposeSkillPackageRequest) (r ProposeSkillPackageRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // RecordSkillUsage implements record_skill_usage operation.
 //
 // Validate an exact managed Skill Revision and capture immutable bounded usage Source evidence.

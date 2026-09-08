@@ -57,6 +57,21 @@ type Backend interface {
 	GetArtifact(context.Context, artifact.Ref) (artifact.Snapshot, error)
 }
 
+// uploadedPackageBackend owns the single transaction used by a package upload.
+// It stays narrower than Backend so existing review backends do not acquire a
+// generic package-write capability.
+type uploadedPackageBackend interface {
+	ProposeUploadedPackage(
+		context.Context,
+		string,
+		skill.PackageContent,
+		source.SkillPackageUploadCapture,
+		[]artifact.Ref,
+		*artifact.Ref,
+		*string,
+	) (Snapshot, error)
+}
+
 type Service struct {
 	backend   Backend
 	idFactory IDFactory
@@ -109,6 +124,53 @@ func (s *Service) ProposePackageSkill(
 	reason *string,
 ) (Candidate[skill.PackageContent], error) {
 	value, err := s.propose(ctx, skill.Family, proposal, sources, artifacts, target, reason)
+	if err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	return packageSkillCandidate(value)
+}
+
+// ProposeUploadedPackage canonicalizes one standard package after scope
+// admission and creates its package, immutable upload Source, and pending
+// Candidate through one storage transaction.
+func (s *Service) ProposeUploadedPackage(
+	ctx context.Context,
+	archive []byte,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (Candidate[skill.PackageContent], error) {
+	if err := validateReason(reason); err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	backend, ok := s.backend.(uploadedPackageBackend)
+	if !ok {
+		return Candidate[skill.PackageContent]{}, errors.New("review: package upload is unavailable")
+	}
+	snapshot, err := skill.CapturePackageArchive(archive)
+	if err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	proposal, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	metadata := snapshot.Metadata()
+	ref := snapshot.Reference()
+	upload, err := source.NewSkillPackageUploadCapture(
+		ref.TreeDigest(), ref.ArchiveDigest(), ref.FileCount(), ref.UncompressedSize(), ref.ArchiveSize(),
+		metadata.Name(), metadata.Description(),
+	)
+	if err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	id, err := s.idFactory("candidate")
+	if err != nil {
+		return Candidate[skill.PackageContent]{}, err
+	}
+	value, err := backend.ProposeUploadedPackage(
+		ctx, id, proposal, upload, uniqueArtifacts(artifacts), target, reason,
+	)
 	if err != nil {
 		return Candidate[skill.PackageContent]{}, err
 	}

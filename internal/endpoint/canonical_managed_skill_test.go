@@ -25,6 +25,7 @@ import (
 	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	"github.com/ob-labs/powercontext-go/internal/review"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/source"
 )
@@ -41,6 +42,29 @@ func (managedSkillPackageOperationsFunc) Record(context.Context, string, source.
 
 type managedSkillUsageOperations struct {
 	record func(context.Context, string, source.SkillUsageCapture) (runtime.SourceReceipt, error)
+}
+
+type managedSkillProposalOperationsStub struct {
+	propose func(context.Context, string, []byte, []artifact.Ref, *artifact.Ref, *string) (review.Snapshot, error)
+}
+
+func (managedSkillProposalOperationsStub) ReadSkillPackage(context.Context, string, artifact.Ref) (skill.PackageSnapshot, error) {
+	return skill.PackageSnapshot{}, errors.New("package read was not expected")
+}
+
+func (managedSkillProposalOperationsStub) Record(context.Context, string, source.SkillUsageCapture) (runtime.SourceReceipt, error) {
+	return runtime.SourceReceipt{}, errors.New("usage record was not expected")
+}
+
+func (operations managedSkillProposalOperationsStub) ProposeUploadedPackage(
+	ctx context.Context,
+	scopeID string,
+	archive []byte,
+	artifacts []artifact.Ref,
+	target *artifact.Ref,
+	reason *string,
+) (review.Snapshot, error) {
+	return operations.propose(ctx, scopeID, archive, artifacts, target, reason)
 }
 
 func (managedSkillUsageOperations) ReadSkillPackage(context.Context, string, artifact.Ref) (skill.PackageSnapshot, error) {
@@ -161,6 +185,67 @@ func TestCanonicalManagedSkillHandlerRecordsBoundedUsage(t *testing.T) {
 	if !ok || !observed || response.Status != managedskills.CaptureStatusAccepted || response.Position != 4 ||
 		response.Source.Name != source.SkillUsageType || response.Source.SourceID != "usage-1" {
 		t.Fatalf("usage result = %#v, observed=%t", result, observed)
+	}
+}
+
+func TestCanonicalManagedSkillHandlerProposesExactPackageCandidate(t *testing.T) {
+	snapshot := endpointManagedSkillSnapshot(t)
+	content, err := skill.NewPackageContent(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := source.NewRef(source.SkillPackageUploadType, "skill_pkg_"+snapshot.Reference().TreeDigest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reason := "Package review"
+	candidate, err := review.NewCandidate(
+		"candidate-1", 1, skill.Family, review.Pending, content, []source.Ref{ref}, nil, nil, &reason, nil, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	handler := NewCanonicalManagedSkillHandler(managedSkillProposalOperationsStub{
+		propose: func(_ context.Context, scopeID string, archive []byte, artifacts []artifact.Ref, target *artifact.Ref, receivedReason *string) (review.Snapshot, error) {
+			called = true
+			if scopeID != "scope" || string(archive) != string(snapshot.Archive()) || len(artifacts) != 0 || target != nil || receivedReason == nil || *receivedReason != reason {
+				t.Fatalf("proposal inputs: scope=%q archive=%d artifacts=%#v target=%#v reason=%#v", scopeID, len(archive), artifacts, target, receivedReason)
+			}
+			return candidate, nil
+		},
+	})
+	request := &managedskills.ProposeSkillPackageRequest{
+		ScopeID: "scope", ArchiveBase64: base64.StdEncoding.EncodeToString(snapshot.Archive()), Reason: managedskills.NewOptNilString(reason),
+	}
+	result, err := handler.ProposeSkillPackage(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, ok := result.(*managedskills.ArtifactCandidate)
+	if !ok || !called {
+		t.Fatalf("proposal result = %#v, called=%t", result, called)
+	}
+	proposal, found := response.Proposal.GetSkillProposal()
+	if !found || response.CandidateID != "candidate-1" || response.Status != managedskills.CandidateStatusPending ||
+		response.Target.IsNull() != true || response.ResultArtifact.IsNull() != true || response.Reason.Or("") != reason ||
+		len(response.SourceRefs) != 1 || response.SourceRefs[0].Name != source.SkillPackageUploadType ||
+		proposal.Package.IsSet() != true || proposal.Validation == nil || len(proposal.Validation) != 0 {
+		t.Fatalf("proposal response = %#v", response)
+	}
+}
+
+func TestCanonicalManagedSkillHandlerRejectsInvalidPackageEncoding(t *testing.T) {
+	called := false
+	handler := NewCanonicalManagedSkillHandler(managedSkillProposalOperationsStub{
+		propose: func(context.Context, string, []byte, []artifact.Ref, *artifact.Ref, *string) (review.Snapshot, error) {
+			called = true
+			return nil, nil
+		},
+	})
+	result, err := handler.ProposeSkillPackage(t.Context(), &managedskills.ProposeSkillPackageRequest{ScopeID: "scope", ArchiveBase64: "%%%"})
+	if err == nil || result != nil || MapError(err).Code != "invalid_request" || called {
+		t.Fatalf("invalid archive result=%#v error=%v called=%t", result, err, called)
 	}
 }
 

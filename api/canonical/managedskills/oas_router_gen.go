@@ -17,7 +17,10 @@ var (
 	rn3AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
-	rn5AllowedHeaders = map[string]string{
+	rn4AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
+	rn6AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
 )
@@ -134,6 +137,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 
+				case 'p': // Prefix: "propose"
+
+					if l := len("propose"); len(elem) >= l && elem[0:l] == "propose" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleProposeSkillPackageRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn4AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
 				}
 
 			case 'u': // Prefix: "usage"
@@ -152,7 +180,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					default:
 						s.notAllowed(w, r, notAllowedParams{
 							allowedMethods: "POST",
-							allowedHeaders: rn5AllowedHeaders,
+							allowedHeaders: rn6AllowedHeaders,
 							acceptPost:     "application/json",
 							acceptPatch:    "",
 						})
@@ -315,6 +343,31 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 							r.operationID = "get_skill_package_manifest"
 							r.operationGroup = ""
 							r.pathPattern = "/v1/skill/package/manifest"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				case 'p': // Prefix: "propose"
+
+					if l := len("propose"); len(elem) >= l && elem[0:l] == "propose" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = ProposeSkillPackageOperation
+							r.summary = "Propose an uploaded standard Skill package"
+							r.operationID = "propose_skill_package"
+							r.operationGroup = ""
+							r.pathPattern = "/v1/skill/package/propose"
 							r.args = args
 							r.count = 0
 							return r, true

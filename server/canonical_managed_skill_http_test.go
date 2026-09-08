@@ -227,6 +227,95 @@ func TestCanonicalManagedSkillUsageHTTPRecordsExactPackageEvidence(t *testing.T)
 	}
 }
 
+func TestCanonicalManagedSkillPackageProposalHTTPPersistsBoundedLineage(t *testing.T) {
+	config := applicationTestConfig(t)
+	config.Auth.Enabled = true
+	config.Auth.Token = "managed-skill-proposal-token"
+	application, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { closeScopeReaderApplication(t, application) })
+	scopeID := applicationDefaultScope(t, application).ID()
+	database := artifactTestDatabase(t, config)
+	snapshot := captureManagedSkillPackage(t, "propose package instruction")
+	client := managedSkillHTTPClient(t, application, config.Auth.Token)
+	request := &managedskills.ProposeSkillPackageRequest{
+		ScopeID: scopeID, ArchiveBase64: base64.StdEncoding.EncodeToString(snapshot.Archive()),
+	}
+	result, err := client.ProposeSkillPackage(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, ok := result.(*managedskills.ArtifactCandidate)
+	if !ok {
+		t.Fatalf("proposal result = %T", result)
+	}
+	proposal, found := candidate.Proposal.GetSkillProposal()
+	ref := snapshot.Reference()
+	if !found || candidate.Family != managedskills.CandidateFamilySkill || candidate.Status != managedskills.CandidateStatusPending ||
+		candidate.Target.IsNull() != true || candidate.ResultArtifact.IsNull() != true || candidate.Reason.IsNull() != true ||
+		len(candidate.SourceRefs) != 1 || candidate.SourceRefs[0].Name != "skill-package-upload" ||
+		candidate.SourceRefs[0].SourceID != "skill_pkg_"+ref.TreeDigest() || len(candidate.ArtifactRefs) != 0 ||
+		proposal.Name != "read-skill" || proposal.Description != "Package description" || proposal.Instructions != "propose package instruction" ||
+		proposal.Validation == nil || len(proposal.Validation) != 0 || !proposal.Package.IsSet() ||
+		proposal.Package.Value.TreeDigest != ref.TreeDigest() || !proposal.License.IsNull() || !proposal.Compatibility.IsNull() ||
+		!proposal.AllowedTools.IsNull() || !proposal.Metadata.IsSet() || len(proposal.Metadata.Value) != 0 {
+		t.Fatalf("proposal response = %#v", candidate)
+	}
+	if got := managedSkillTableCount(t, database, "pc_skill_packages"); got != 1 {
+		t.Fatalf("stored packages = %d", got)
+	}
+	if got := managedSkillTableCount(t, database, "pc_sources"); got != 1 {
+		t.Fatalf("stored Sources = %d", got)
+	}
+	if got := managedSkillCandidateCount(t, database); got != 1 {
+		t.Fatalf("stored Candidates = %d", got)
+	}
+
+	repeated, err := client.ProposeSkillPackage(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeatedCandidate, ok := repeated.(*managedskills.ArtifactCandidate)
+	if !ok || repeatedCandidate.CandidateID == candidate.CandidateID || repeatedCandidate.SourceRefs[0] != candidate.SourceRefs[0] {
+		t.Fatalf("repeated proposal = %#v", repeated)
+	}
+	if got := managedSkillTableCount(t, database, "pc_skill_packages"); got != 1 {
+		t.Fatalf("repeated proposal stored packages = %d", got)
+	}
+	if got := managedSkillTableCount(t, database, "pc_sources"); got != 1 {
+		t.Fatalf("repeated proposal stored Sources = %d", got)
+	}
+	if got := managedSkillCandidateCount(t, database); got != 2 {
+		t.Fatalf("repeated proposal stored Candidates = %d", got)
+	}
+
+	persistManagedSkillPackage(t, database, scopeID, "proposal-target", "previous package instruction")
+	targeted := *request
+	targeted.Target = managedskills.NewOptArtifactReference(managedskills.ArtifactReference{
+		Family: skill.Family, ArtifactID: "proposal-target", Revision: 1,
+	})
+	targetedResult, err := client.ProposeSkillPackage(t.Context(), &targeted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetedCandidate, ok := targetedResult.(*managedskills.ArtifactCandidate)
+	if !ok || targetedCandidate.Target.IsNull() || targetedCandidate.Target.Value.ArtifactID != "proposal-target" ||
+		len(targetedCandidate.ArtifactRefs) != 1 || targetedCandidate.ArtifactRefs[0] != targetedCandidate.Target.Value {
+		t.Fatalf("targeted proposal = %#v", targetedResult)
+	}
+	if got := managedSkillTableCount(t, database, "pc_skill_packages"); got != 2 {
+		t.Fatalf("targeted proposal stored packages = %d", got)
+	}
+	if got := managedSkillTableCount(t, database, "pc_sources"); got != 1 {
+		t.Fatalf("targeted proposal stored Sources = %d", got)
+	}
+	if got := managedSkillCandidateCount(t, database); got != 3 {
+		t.Fatalf("targeted proposal stored Candidates = %d", got)
+	}
+}
+
 func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testing.T) {
 	var logs bytes.Buffer
 	recorder := tracetest.NewSpanRecorder()
@@ -260,6 +349,7 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	beforeSources := managedSkillTableCount(t, database, "pc_sources")
 	requestBody := `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`
 	usageDigest := "sha256:" + snapshot.Reference().TreeDigest()
+	archiveBase64 := base64.StdEncoding.EncodeToString(snapshot.Archive())
 	usageBody := `{"scope_id":"` + scopeID + `","observation_id":"private-usage-observation","skill_ref":{"family":"skill","artifact_id":"private-package","revision":1},"package_digest":"` + usageDigest + `","target_id":"private-usage-target","selected":true,"invoked":"true","validation":"passed","outcome":"success","task_source":{"name":"content","source_id":"private-missing-task"}}`
 	for _, testCase := range []struct {
 		name, path, body, token, operation string
@@ -276,6 +366,9 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 		{"legacy Skill", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-legacy","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError, managedSkillAccessSpanIgnored},
 		{"persisted experience", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"experience","artifact_id":"private-other-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError, managedSkillAccessSpanIgnored},
 		{"missing usage task Source", "/v1/skill/usage", usageBody, config.Auth.Token, "record_skill_usage", http.StatusNotFound, managedSkillAccessSpanMatchesRequest},
+		{"invalid proposal archive", "/v1/skill/package/propose", `{"scope_id":"` + scopeID + `","archive_base64":"%%%"}`, config.Auth.Token, "propose_skill_package", http.StatusUnprocessableEntity, managedSkillAccessSpanMatchesRequest},
+		{"invalid proposal ZIP", "/v1/skill/package/propose", `{"scope_id":"` + scopeID + `","archive_base64":"YQ=="}`, config.Auth.Token, "propose_skill_package", http.StatusUnprocessableEntity, managedSkillAccessSpanMatchesRequest},
+		{"proposal unknown Scope", "/v1/skill/package/propose", `{"scope_id":"private-missing-scope","archive_base64":"` + archiveBase64 + `"}`, config.Auth.Token, "propose_skill_package", http.StatusNotFound, managedSkillAccessSpanMatchesRequest},
 		{"MCP remains isolated", "/mcp", requestBody, config.Auth.Token, "", http.StatusNotFound, managedSkillAccessSpanIgnored},
 		{"legacy route remains isolated", "/v1/skill/package/materialize", requestBody, config.Auth.Token, "", http.StatusNotFound, managedSkillAccessSpanIgnored},
 	} {
@@ -301,6 +394,9 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 						t.Fatalf("trace leaked %q", protected)
 					}
 				}
+			}
+			if strings.Contains(testCase.path, "/propose") && (strings.Contains(response.Body.String(), archiveBase64) || strings.Contains(logs.String(), archiveBase64)) {
+				t.Fatal("proposal failure leaked package archive encoding")
 			}
 		})
 	}
@@ -426,6 +522,15 @@ func managedSkillTableCount(t *testing.T, database *sql.DB, table string) int {
 	}
 	var count int
 	if err := database.QueryRowContext(t.Context(), query).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func managedSkillCandidateCount(t *testing.T, database *sql.DB) int {
+	t.Helper()
+	var count int
+	if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_artifact_candidate_heads").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	return count
