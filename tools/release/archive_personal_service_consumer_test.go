@@ -18,6 +18,7 @@ package main
 
 import (
 	json "encoding/json/v2"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -117,7 +118,7 @@ func readReleasePersonalServiceStatus(t *testing.T, binary string) releasePerson
 	t.Helper()
 	output, err := runReleasePersonalService(t, binary, "server", "status", "--json")
 	if err != nil {
-		t.Fatalf("inspect release personal service: %s", releasePersonalServiceFailureClass(output))
+		t.Fatalf("inspect release personal service: %s", releasePersonalServiceFailureClass(output, err))
 	}
 	var status releasePersonalServiceStatus
 	if err := json.Unmarshal(output, &status); err != nil {
@@ -126,19 +127,28 @@ func readReleasePersonalServiceStatus(t *testing.T, binary string) releasePerson
 	return status
 }
 
-func releasePersonalServiceFailureClass(output []byte) string {
+func releasePersonalServiceFailureClass(output []byte, commandErr error) string {
 	value := string(output)
 	switch {
+	case strings.Contains(value, "personal Server service registration failed"):
+		return "registration"
 	case strings.Contains(value, "systemd user service unit inspect failed"):
 		return "unit_inspect"
+	case strings.Contains(value, "systemd user service inspect manager failed"):
+		return "manager_inspect"
 	case strings.Contains(value, "systemd user service manager command failed"):
 		return "manager_command"
+	case strings.Contains(value, "systemd user service support failed"):
+		return "support"
 	case strings.Contains(value, "personal Server service configuration failed"):
 		return "configuration"
 	case strings.Contains(value, "personal Server service lifecycle is not available"):
 		return "unsupported"
 	}
-	return "redacted"
+	if exitError, found := errors.AsType[*exec.ExitError](commandErr); found {
+		return "redacted_exit_" + strconv.Itoa(exitError.ExitCode()) + "_bytes_" + strconv.Itoa(len(output))
+	}
+	return "redacted_non_exit_bytes_" + strconv.Itoa(len(output))
 }
 
 func runReleasePersonalService(t *testing.T, binary string, arguments ...string) ([]byte, error) {
