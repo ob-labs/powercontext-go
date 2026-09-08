@@ -2165,7 +2165,11 @@ func TestLinuxPersonalServiceConsumerWorkflowContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validateLinuxPersonalServiceConsumerWorkflow(master, release, verification, runner); err != nil {
+	image, err := os.ReadFile(filepath.Join(repository, "test", "systemd-user-consumer", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateLinuxPersonalServiceConsumerWorkflow(master, release, verification, runner, image); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2189,6 +2193,10 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	image, err := os.ReadFile(filepath.Join(repository, "test", "systemd-user-consumer", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mutant := range []struct {
 		name    string
 		payload []byte
@@ -2202,6 +2210,7 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 		{name: "verify provenance order", payload: verification, old: "Verify signed GitHub Release provenance", replace: "Verify signed GitHub Release provenance removed", which: "verification"},
 		{name: "runner isolation", payload: runner, old: "env -i", replace: "env", which: "runner"},
 		{name: "runner manager", payload: runner, old: "systemd --user", replace: "systemd --system", which: "runner"},
+		{name: "runner container privilege", payload: runner, old: "--privileged", replace: "--read-only", which: "runner"},
 	} {
 		t.Run(mutant.name, func(t *testing.T) {
 			changed := strings.Replace(string(mutant.payload), mutant.old, mutant.replace, 1)
@@ -2221,14 +2230,14 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 			default:
 				t.Fatal("unknown consumer workflow mutant")
 			}
-			if err := validateLinuxPersonalServiceConsumerWorkflow(changedMaster, changedRelease, changedVerification, changedRunner); err == nil {
+			if err := validateLinuxPersonalServiceConsumerWorkflow(changedMaster, changedRelease, changedVerification, changedRunner, image); err == nil {
 				t.Fatal("consumer workflow accepted a weakened mutation")
 			}
 		})
 	}
 }
 
-func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload, verificationPayload, runnerPayload []byte) error {
+func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload, verificationPayload, runnerPayload, imagePayload []byte) error {
 	var master, release, verification releaseIntegrationWorkflow
 	for _, workflow := range []struct {
 		name        string
@@ -2307,14 +2316,24 @@ func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload,
 	for _, required := range []string{
 		"env -i", "dbus-run-session", "systemd --user", "systemctl --user exit", "busctl --user", "timeout 90",
 		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "POWERCONTEXT_SYSTEMD_TEST_BINARY", "mktemp -d", "chmod 0700",
+		"docker run --detach --privileged", "--tmpfs /run", "--tmpfs /run/lock", "--volume \"$workspace:/work\"",
 	} {
 		if !strings.Contains(runner, required) {
 			return fmt.Errorf("systemd user consumer runner is missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"sudo", "linger", "--system", "--global", "--privileged", "journalctl"} {
+	for _, forbidden := range []string{"sudo", "linger", "--system", "--global", "journalctl"} {
 		if strings.Contains(runner, forbidden) {
 			return fmt.Errorf("systemd user consumer runner contains forbidden %q", forbidden)
+		}
+	}
+	image := string(imagePayload)
+	for _, required := range []string{
+		"FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
+		"dbus-user-session", "systemd-sysv", "useradd --create-home --shell /bin/bash --uid 1001 powercontext", "CMD [\"/sbin/init\"]",
+	} {
+		if !strings.Contains(image, required) {
+			return fmt.Errorf("systemd user consumer image is missing %q", required)
 		}
 	}
 	return nil
@@ -2465,6 +2484,10 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 			"header check",
 			"license-fix:",
 			"header fix",
+		},
+		filepath.Join("test", "systemd-user-consumer", "Dockerfile"): {
+			"Copyright (c) 2026 OceanBase.",
+			"FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
 		},
 		filepath.Join(".github", "workflows", "license-check.yml"): {
 			"pull_request:",

@@ -78,20 +78,22 @@ runner_temp="$(realpath -- "$runner_temp")"
 workspace="$(mktemp -d "$runner_temp/powercontext-systemd-user.XXXXXX")"
 diagnostics="$(mktemp -d "$runner_temp/powercontext-systemd-user-consumer.XXXXXX")"
 chmod 0700 "$workspace" "$diagnostics"
-home="$workspace/home"
-runtime="$workspace/runtime"
 temporary="$workspace/tmp"
-mkdir -m 0700 "$home" "$runtime" "$temporary"
+mkdir -m 0700 "$temporary"
+cp -- "$archive" "$workspace/$(basename "$archive")"
+cp -- "$test_binary" "$workspace/$(basename "$test_binary")"
+chmod 0400 "$workspace/$(basename "$archive")"
+chmod 0500 "$workspace/$(basename "$test_binary")"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+container="powercontext-systemd-user-${RANDOM}${RANDOM}"
+image="powercontext-systemd-user-consumer:local"
+systemd_version=unknown
 
 write_summary() {
   local result="$1"
   local manager_ready=false
   if [ -f "$workspace/manager-ready" ]; then
     manager_ready=true
-  fi
-  local systemd_version=unknown
-  if command -v systemd >/dev/null 2>&1; then
-    systemd_version="$(systemd --version 2>/dev/null | awk 'NR == 1 { print $2 }')"
   fi
   case "$systemd_version" in
     ''|*[!0-9.]* ) systemd_version=unknown ;;
@@ -140,19 +142,39 @@ EOF
 chmod 0700 "$session"
 
 result=0
-if ! env -i \
-  HOME="$home" \
-  TMPDIR="$temporary" \
-  XDG_RUNTIME_DIR="$runtime" \
-  PATH=/usr/sbin:/usr/bin:/sbin:/bin \
-  LC_ALL=C \
-  POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE="$archive" \
-  POWERCONTEXT_SYSTEMD_MANAGER_READY="$workspace/manager-ready" \
-  POWERCONTEXT_SYSTEMD_TEST_BINARY="$test_binary" \
-  dbus-run-session -- "$session"; then
+if ! docker build --quiet --file "$script_dir/Dockerfile" --tag "$image" "$script_dir" >/dev/null; then
   result=1
+elif ! docker run --detach --privileged --tmpfs /run --tmpfs /run/lock \
+  --name "$container" --volume "$workspace:/work" "$image" >/dev/null; then
+  result=1
+else
+  if ! docker exec "$container" install -d --owner=powercontext --group=powercontext --mode=0700 /run/user/1001; then
+    result=1
+  elif ! docker exec "$container" systemctl show-environment >/dev/null; then
+    result=1
+  else
+    systemd_version="$(docker exec "$container" systemd --version 2>/dev/null | awk 'NR == 1 { print $2 }')"
+    if ! docker exec --user powercontext \
+      --env HOME=/home/powercontext \
+      --env TMPDIR=/work/tmp \
+      --env XDG_RUNTIME_DIR=/run/user/1001 \
+      "$container" env -i \
+      HOME=/home/powercontext \
+      TMPDIR=/work/tmp \
+      XDG_RUNTIME_DIR=/run/user/1001 \
+      PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+      LC_ALL=C \
+      POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE=/work/"$(basename "$archive")" \
+      POWERCONTEXT_SYSTEMD_MANAGER_READY=/work/manager-ready \
+      POWERCONTEXT_SYSTEMD_TEST_BINARY=/work/"$(basename "$test_binary")" \
+      dbus-run-session -- /work/session.sh; then
+      result=1
+    fi
+  fi
 fi
 write_summary "$result"
+
+docker rm --force "$container" >/dev/null 2>&1 || true
 
 case "$workspace" in
   "$runner_temp"/*) rm -rf -- "$workspace" ;;

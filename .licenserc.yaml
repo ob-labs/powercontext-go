@@ -50,6 +50,7 @@ header:
     - '**/*.yaml'
     - '**/*.yml'
     - 'Dockerfile'
+    - 'test/systemd-user-consumer/Dockerfile'
 
   paths-ignore:
     # Workflows are supply-chain configuration rather than shipped source.
