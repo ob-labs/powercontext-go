@@ -532,6 +532,58 @@ func TestControllerCancellationAfterCreateRemovesNewTask(t *testing.T) {
 	}
 }
 
+func TestControllerCancellationAfterReplaceRestoresPreviousTask(t *testing.T) {
+	root := t.TempDir()
+	desired := adapterPlanForPackage(t, root, "2.0.0")
+	previous := adapterPlanForPackage(t, root, "1.0.0")
+	files := newMemoryArtifacts()
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler := &memoryScheduler{files: files, cancelAfterCreate: cancel, rejectCanceled: true}
+	adapter, err := newAdapter(
+		desired,
+		root,
+		`\PowerContext\Tests\unit-cancel-replace`,
+		testIdentity,
+		scheduler,
+		files,
+		http.DefaultClient,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousDocument, err := adapter.renderPlan(previous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files.content, files.exists = previousDocument, true
+	scheduler.document, scheduler.present = bytes.Clone(previousDocument), true
+	controller, err := personalsvc.NewController(adapter, directOperationBoundary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, installErr := controller.Install(ctx, desired.Registration())
+	if !errors.Is(installErr, context.Canceled) {
+		t.Fatalf("Install() error = %v; want context cancellation", installErr)
+	}
+	artifact, err := adapter.InspectArtifact(t.Context())
+	if err != nil || artifact.State() != personalsvc.RegistrationInstalled {
+		t.Fatalf("artifact after canceled replace = %s, %v", artifact.State(), err)
+	}
+	stored, found := artifact.Registration()
+	if !found || stored != previous.Registration() {
+		t.Fatal("canceled replace did not restore the previous artifact")
+	}
+	manager, err := adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
+		t.Fatalf("manager after canceled replace = %s, %v", manager.Ownership(), err)
+	}
+	loaded, found := manager.Registration()
+	if !found || loaded != previous.Registration() {
+		t.Fatal("canceled replace did not restore the previous loaded task")
+	}
+}
+
 func TestNativeArtifactStoreReplacesExactArtifact(t *testing.T) {
 	root := t.TempDir()
 	store, err := newNativeArtifactStore(root)
