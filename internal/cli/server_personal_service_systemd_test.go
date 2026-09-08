@@ -50,7 +50,7 @@ func TestLinuxSystemdBoundaryUsesFixedStructuredUserBusCommands(t *testing.T) {
 		t.Fatalf("InspectUnit() = %#v", unit)
 	}
 	want := [][]string{
-		{"systemctl", "--user", "show", "--property=LoadState", "--property=FragmentPath", "--property=DropInPaths", "--property=Environment", "--property=ExecStart", "powercontext.service"},
+		{"systemctl", "--user", "show", "--property=LoadState", "--value", "powercontext.service"},
 		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", "LoadUnit", "s", "powercontext.service"},
 		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1/unit/powercontext_2eservice", "org.freedesktop.DBus.Properties", "GetAll", "s", "org.freedesktop.systemd1.Unit"},
 		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1/unit/powercontext_2eservice", "org.freedesktop.DBus.Properties", "GetAll", "s", "org.freedesktop.systemd1.Service"},
@@ -88,7 +88,7 @@ func TestLinuxSystemdBoundaryClassifiesAbsentUnitAfterSupportAsNotLoaded(t *test
 		t.Fatalf("InspectUnit() = %#v, %v; want not-found, nil", unit, err)
 	}
 	if got := runner.arguments(); !slices.EqualFunc(got, [][]string{
-		{"systemctl", "--user", "show", "--property=LoadState", "--property=FragmentPath", "--property=DropInPaths", "--property=Environment", "--property=ExecStart", "powercontext.service"},
+		{"systemctl", "--user", "show", "--property=LoadState", "--value", "powercontext.service"},
 		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", "LoadUnit", "s", "powercontext.service"},
 	}, slices.Equal) {
 		t.Fatalf("absent-unit command = %q", got)
@@ -107,7 +107,7 @@ func TestLinuxSystemdBoundaryClassifiesLoadedAbsentUnitAsNotLoaded(t *testing.T)
 		t.Fatalf("InspectUnit() = %#v, %v; want not-found, nil", unit, err)
 	}
 	want := [][]string{
-		{"systemctl", "--user", "show", "--property=LoadState", "--property=FragmentPath", "--property=DropInPaths", "--property=Environment", "--property=ExecStart", "powercontext.service"},
+		{"systemctl", "--user", "show", "--property=LoadState", "--value", "powercontext.service"},
 		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", "LoadUnit", "s", "powercontext.service"},
 		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1/unit/powercontext_2eservice", "org.freedesktop.DBus.Properties", "GetAll", "s", "org.freedesktop.systemd1.Unit"},
 	}
@@ -118,13 +118,13 @@ func TestLinuxSystemdBoundaryClassifiesLoadedAbsentUnitAsNotLoaded(t *testing.T)
 
 func TestLinuxSystemdBoundaryClassifiesSystemctlShowNotFoundAsNotLoaded(t *testing.T) {
 	boundary, runner, _ := newTestLinuxSystemdBoundary(t)
-	runner.responses = []linuxSystemdCommandResult{{stdout: []byte("LoadState=not-found\nFragmentPath=\nDropInPaths=\nEnvironment=\nExecStart=\n")}}
+	runner.responses = []linuxSystemdCommandResult{{stdout: []byte("not-found\n")}}
 
 	unit, err := boundary.InspectUnit(t.Context(), "powercontext.service")
 	if err != nil || unit.LoadState() != "not-found" {
 		t.Fatalf("InspectUnit() = %#v, %v; want not-found, nil", unit, err)
 	}
-	want := [][]string{{"systemctl", "--user", "show", "--property=LoadState", "--property=FragmentPath", "--property=DropInPaths", "--property=Environment", "--property=ExecStart", personalServiceUnitName}}
+	want := [][]string{{"systemctl", "--user", "show", "--property=LoadState", "--value", personalServiceUnitName}}
 	if got := runner.arguments(); !slices.EqualFunc(got, want, slices.Equal) {
 		t.Fatalf("fallback command = %q, want %q", got, want)
 	}
@@ -356,10 +356,9 @@ func (c *testLinuxSystemdHTTPClient) Do(request *http.Request) (*http.Response, 
 func (r *testLinuxSystemdRunner) Run(_ context.Context, program string, arguments ...string) (linuxSystemdProcessResult, error) {
 	r.calls = append(r.calls, append([]string{program}, arguments...))
 	if program == "systemctl" && slices.Equal(arguments, []string{
-		"--user", "show", "--property=LoadState", "--property=FragmentPath", "--property=DropInPaths",
-		"--property=Environment", "--property=ExecStart", "powercontext.service",
-	}) && (len(r.responses) == 0 || !bytes.Contains(r.responses[0].stdout, []byte("LoadState="))) {
-		return linuxSystemdProcessResult{stdout: []byte("LoadState=loaded\n")}, nil
+		"--user", "show", "--property=LoadState", "--value", "powercontext.service",
+	}) && (len(r.responses) == 0 || !bytes.Equal(bytes.TrimSpace(r.responses[0].stdout), []byte("not-found"))) {
+		return linuxSystemdProcessResult{stdout: []byte("loaded\n")}, nil
 	}
 	if len(r.responses) == 0 {
 		return linuxSystemdProcessResult{}, errors.New("unexpected process")

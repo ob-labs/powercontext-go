@@ -482,34 +482,13 @@ func (b *linuxSystemdBoundary) systemctlShowNotFound(ctx context.Context) bool {
 		"--user",
 		"show",
 		"--property=LoadState",
-		"--property=FragmentPath",
-		"--property=DropInPaths",
-		"--property=Environment",
-		"--property=ExecStart",
+		"--value",
 		personalServiceUnitName,
 	)
 	if err != nil || result.exitCode != 0 || contextError(ctx) != nil {
 		return false
 	}
-	loadState, found := systemctlShowProperty(result.stdout, "LoadState")
-	return !found || loadState == "not-found"
-}
-
-func systemctlShowProperty(payload []byte, name string) (string, bool) {
-	var value string
-	found := false
-	for line := range strings.Lines(string(payload)) {
-		key, candidate, ok := strings.Cut(strings.TrimRight(line, "\r\n"), "=")
-		if !ok || key != name {
-			continue
-		}
-		if found {
-			return "", false
-		}
-		value = candidate
-		found = true
-	}
-	return value, found
+	return strings.TrimSpace(string(result.stdout)) == "not-found"
 }
 
 func (b *linuxSystemdBoundary) available() bool {
