@@ -246,6 +246,7 @@ func launchdRegistration(t *testing.T) personalsvc.Registration {
 		Binary:            "/opt/powercontext/bin/powercontext",
 		Endpoint:          "http://127.0.0.1:7614",
 		DataDir:           "/var/lib/powercontext",
+		EnvFile:           "/etc/powercontext/server.env",
 	})
 	if err != nil {
 		t.Fatalf("NewDefinition() error = %v", err)

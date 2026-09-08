@@ -879,6 +879,7 @@ func adapterPlanForPackage(t *testing.T, root, packageVersion string) personalsv
 		Binary:            binary,
 		Endpoint:          "http://127.0.0.1:1",
 		DataDir:           root,
+		EnvFile:           filepath.Join(root, "server.env"),
 	})
 	if err != nil {
 		t.Fatal(err)
