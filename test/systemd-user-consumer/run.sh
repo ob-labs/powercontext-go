@@ -105,6 +105,11 @@ service_properties_stage=not_run
 service_properties_exit_code=0
 service_properties_stdout_bytes=0
 service_properties_stdout_sha256="$stage_stdout_sha256"
+load_state_stage=not_run
+load_state_exit_code=0
+load_state_stdout_bytes=0
+load_state_stdout_sha256="$stage_stdout_sha256"
+load_state_value=not_run
 
 record_stage() {
   local name="$1"
@@ -152,6 +157,35 @@ record_diagnostic_stage() {
   esac
 }
 
+record_load_state() {
+  local name="$1"
+  shift
+  local exit_code
+  : > "$stage_output"
+  if "$@" > "$stage_output" 2>/dev/null; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
+  recorded_stage="$name"
+  stage_exit_code="$exit_code"
+  stage_stdout_bytes="$(wc -c < "$stage_output" | tr -d '[:space:]')"
+  stage_stdout_sha256="$(sha256sum "$stage_output" | awk '{ print substr($1, 1, 16) }')"
+  load_state_stage="$recorded_stage"
+  load_state_exit_code="$stage_exit_code"
+  load_state_stdout_bytes="$stage_stdout_bytes"
+  load_state_stdout_sha256="$stage_stdout_sha256"
+  if [ "$exit_code" -eq 0 ]; then
+    case "$(tr -d '\r\n' < "$stage_output")" in
+      not-found) load_state_value=not_found ;;
+      loaded) load_state_value=loaded ;;
+      '') load_state_value=empty ;;
+      *) load_state_value=other ;;
+    esac
+  fi
+  rm -f -- "$stage_output"
+}
+
 write_summary() {
   local result="$1"
   local manager_ready=false
@@ -169,7 +203,7 @@ write_summary() {
   local archive_sha
   archive_sha="$(sha256sum "$archive" | awk '{ print $1 }')"
   cat > "$diagnostics/summary.json" <<EOF
-{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","load_unit":{"stage":"$load_unit_stage","exit_code":$load_unit_exit_code,"stdout_bytes":$load_unit_stdout_bytes,"stdout_sha256":"$load_unit_stdout_sha256"},"unit_properties":{"stage":"$unit_properties_stage","exit_code":$unit_properties_exit_code,"stdout_bytes":$unit_properties_stdout_bytes,"stdout_sha256":"$unit_properties_stdout_sha256"},"service_properties":{"stage":"$service_properties_stage","exit_code":$service_properties_exit_code,"stdout_bytes":$service_properties_stdout_bytes,"stdout_sha256":"$service_properties_stdout_sha256"},"systemd_version":"$systemd_version","test_exit_code":$result}
+{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","load_unit":{"stage":"$load_unit_stage","exit_code":$load_unit_exit_code,"stdout_bytes":$load_unit_stdout_bytes,"stdout_sha256":"$load_unit_stdout_sha256"},"unit_properties":{"stage":"$unit_properties_stage","exit_code":$unit_properties_exit_code,"stdout_bytes":$unit_properties_stdout_bytes,"stdout_sha256":"$unit_properties_stdout_sha256"},"service_properties":{"stage":"$service_properties_stage","exit_code":$service_properties_exit_code,"stdout_bytes":$service_properties_stdout_bytes,"stdout_sha256":"$service_properties_stdout_sha256"},"load_state":{"stage":"$load_state_stage","exit_code":$load_state_exit_code,"stdout_bytes":$load_state_stdout_bytes,"stdout_sha256":"$load_state_stdout_sha256","value":"$load_state_value"},"systemd_version":"$systemd_version","test_exit_code":$result}
 EOF
 }
 
@@ -217,6 +251,8 @@ else
           busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1/unit/powercontext_2eservice org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit
         record_diagnostic_stage service_properties docker exec --user powercontext "$container" env -i "${environment[@]}" \
           busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1/unit/powercontext_2eservice org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Service
+        record_load_state load_state docker exec --user powercontext "$container" env -i "${environment[@]}" \
+          systemctl --user show --property=LoadState --value powercontext.service
       fi
     fi
   fi
