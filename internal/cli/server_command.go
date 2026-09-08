@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -51,15 +52,15 @@ func newServerCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{Use: "server", Short: "Run a configured PowerContext service."}
 	command.AddCommand(
 		newServerRunCommand(state),
-		newServerInstallCommand(),
-		newServerStatusCommand(),
-		newServerUninstallCommand(),
-		newServerServiceRunCommand(),
+		newServerInstallCommand(state),
+		newServerStatusCommand(state),
+		newServerUninstallCommand(state),
+		newServerServiceRunCommand(state),
 	)
 	return command
 }
 
-func newServerInstallCommand() *cobra.Command {
+func newServerInstallCommand(state *commandState) *cobra.Command {
 	var envFile string
 	var dataDir string
 	command := &cobra.Command{
@@ -71,7 +72,7 @@ func newServerInstallCommand() *cobra.Command {
 					return err
 				}
 			}
-			return unsupportedPersonalService()
+			return runPersonalServiceInstall(command.Context(), state, envFile, dataDir)
 		},
 	}
 	command.Flags().StringVar(&envFile, "env-file", "", "Absolute environment file used by the personal Server service.")
@@ -80,25 +81,25 @@ func newServerInstallCommand() *cobra.Command {
 	return command
 }
 
-func newServerStatusCommand() *cobra.Command {
+func newServerStatusCommand(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use: "status", Short: "Inspect the Linux personal Server service.", Args: cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return unsupportedPersonalService()
+		RunE: func(command *cobra.Command, _ []string) error {
+			return runPersonalServiceStatus(command.Context(), state)
 		},
 	}
 }
 
-func newServerUninstallCommand() *cobra.Command {
+func newServerUninstallCommand(state *commandState) *cobra.Command {
 	return &cobra.Command{
 		Use: "uninstall", Short: "Remove the Linux personal Server service.", Args: cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return unsupportedPersonalService()
+		RunE: func(command *cobra.Command, _ []string) error {
+			return runPersonalServiceUninstall(command.Context(), state)
 		},
 	}
 }
 
-func newServerServiceRunCommand() *cobra.Command {
+func newServerServiceRunCommand(state *commandState) *cobra.Command {
 	var envFile string
 	var endpoint string
 	var dataDir string
@@ -110,7 +111,7 @@ func newServerServiceRunCommand() *cobra.Command {
 			serviceFlagRequirement{name: "data-dir", value: &dataDir},
 		),
 		RunE: func(command *cobra.Command, _ []string) error {
-			return unsupportedPersonalService()
+			return runPersonalServiceLauncher(command.Context(), state, envFile, endpoint, dataDir)
 		},
 	}
 	command.Flags().StringVar(&envFile, "env-file", "", "Registered environment file.")
@@ -249,6 +250,35 @@ func withServerEnvironment(values map[string]string, run func() error) (err erro
 	for name, value := range values {
 		if setErr := os.Setenv(name, value); setErr != nil {
 			return fmt.Errorf("server: load environment: %w", setErr)
+		}
+	}
+	return run()
+}
+
+// withIsolatedServerEnvironment starts a foreground service with exactly the
+// values recorded in its private environment file plus service-owned overrides.
+// A systemd user manager may retain arbitrary inherited values, so selectively
+// replacing POWERCONTEXT_SERVER_* variables would permit stale provider
+// credentials or configuration to reach the managed process.
+func withIsolatedServerEnvironment(values map[string]string, run func() error) (err error) {
+	serverEnvironmentScopeMu.Lock()
+	defer serverEnvironmentScopeMu.Unlock()
+
+	before := slices.Clone(os.Environ())
+	os.Clearenv()
+	defer func() {
+		os.Clearenv()
+		for _, item := range before {
+			name, value, found := strings.Cut(item, "=")
+			if !found {
+				continue
+			}
+			err = errors.Join(err, os.Setenv(name, value))
+		}
+	}()
+	for name, value := range values {
+		if setErr := os.Setenv(name, value); setErr != nil {
+			return fmt.Errorf("server: load isolated environment: %w", setErr)
 		}
 	}
 	return run()

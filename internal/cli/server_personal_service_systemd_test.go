@@ -19,7 +19,9 @@ import (
 	"context"
 	json "encoding/json/v2"
 	"errors"
+	"io"
 	"io/fs"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -259,6 +261,31 @@ func TestLinuxSystemdBoundaryValidatesEnvironmentAndSerializesOperations(t *test
 	}
 }
 
+func TestLinuxSystemdBoundaryProbesOnlyExactLoopbackLiveness(t *testing.T) {
+	boundary, _, _ := newTestLinuxSystemdBoundary(t)
+	client := &testLinuxSystemdHTTPClient{}
+	boundary.probeClient = client
+
+	state, err := boundary.Probe(t.Context(), "http://127.0.0.1:8123")
+	if err != nil || state != personalsvc.ProbeLive {
+		t.Fatalf("Probe() = %s, %v; want live, nil", state, err)
+	}
+	if client.url != "http://127.0.0.1:8123/health/live" || client.method != http.MethodGet {
+		t.Fatalf("liveness request = %s %s", client.method, client.url)
+	}
+
+	state, err = boundary.Probe(t.Context(), "http://service.example:8123")
+	if err == nil || state != personalsvc.ProbeUnreachable || client.calls != 1 {
+		t.Fatalf("non-loopback Probe() = %s, %v; calls = %d", state, err, client.calls)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	state, err = boundary.Probe(canceled, "http://127.0.0.1:8123")
+	if !errors.Is(err, context.Canceled) || state != personalsvc.ProbeUnreachable || client.calls != 1 {
+		t.Fatalf("canceled Probe() = %s, %v; calls = %d", state, err, client.calls)
+	}
+}
+
 type linuxSystemdCommandResult struct {
 	exitCode int
 	stdout   []byte
@@ -268,6 +295,23 @@ type linuxSystemdCommandResult struct {
 type testLinuxSystemdRunner struct {
 	responses []linuxSystemdCommandResult
 	calls     [][]string
+}
+
+type testLinuxSystemdHTTPClient struct {
+	calls  int
+	method string
+	url    string
+}
+
+func (c *testLinuxSystemdHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	c.calls++
+	c.method = request.Method
+	c.url = request.URL.String()
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"status":"ok"}`)),
+		Request:    request,
+	}, nil
 }
 
 func (r *testLinuxSystemdRunner) Run(_ context.Context, program string, arguments ...string) (linuxSystemdProcessResult, error) {

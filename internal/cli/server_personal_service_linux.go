@@ -36,8 +36,8 @@ import (
 const maximumPersonalServiceFileSize = 1 << 20
 
 // newCurrentLinuxSystemdBoundary performs current-user discovery only when a
-// later lifecycle command asks for it. Task 2 does not wire this constructor
-// into a CLI command, so it cannot mutate a host service by itself.
+// personal-service lifecycle command asks for it. Constructing the boundary
+// itself does not inspect a user manager or mutate a host service.
 func newCurrentLinuxSystemdBoundary() (*linuxSystemdBoundary, error) {
 	if os.Geteuid() == 0 {
 		return nil, newPersonalServicePlatformError("configuration")

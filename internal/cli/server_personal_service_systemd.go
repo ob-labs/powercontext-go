@@ -20,12 +20,18 @@ import (
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"errors"
+	"io"
 	"io/fs"
+	"maps"
+	"net/http"
+	"net/url"
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ob-labs/powercontext-go/internal/personalsvc"
+	"github.com/ob-labs/powercontext-go/internal/transportpolicy"
 )
 
 const (
@@ -35,6 +41,7 @@ const (
 	personalServiceUnitObjectPath   = "/org/freedesktop/systemd1/unit/powercontext_2eservice"
 	personalServiceUnitInterface    = "org.freedesktop.systemd1.Unit"
 	personalServiceServiceInterface = "org.freedesktop.systemd1.Service"
+	personalServiceProbeTimeout     = 5 * time.Second
 )
 
 // linuxPersonalServiceRoots are derived from the current user's home rather
@@ -93,6 +100,10 @@ type linuxOperationLocker interface {
 	WithLock(context.Context, func(context.Context) error) error
 }
 
+type linuxSystemdHTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
 // linuxPrivateFileIdentity records the two observations around a no-follow
 // open. A changed identity, non-regular type, loose mode, or foreign owner is
 // always unsafe.
@@ -118,10 +129,11 @@ func validLinuxPrivateFileObservation(value linuxPrivateFileIdentity, owner uint
 // It is inert until a caller invokes one of its methods; constructing it does
 // not inspect a bus, file, process, or service lifecycle.
 type linuxSystemdBoundary struct {
-	roots  linuxPersonalServiceRoots
-	runner linuxSystemdRunner
-	files  linuxPrivateFileStore
-	locker linuxOperationLocker
+	roots       linuxPersonalServiceRoots
+	runner      linuxSystemdRunner
+	files       linuxPrivateFileStore
+	locker      linuxOperationLocker
+	probeClient linuxSystemdHTTPClient
 }
 
 var _ personalsvc.SystemdUserBoundary = (*linuxSystemdBoundary)(nil)
@@ -137,7 +149,16 @@ func newLinuxSystemdBoundary(
 		roots.stateRoot != path.Join(home, ".local", "state", "powercontext") || runner == nil || files == nil || locker == nil {
 		return nil, newPersonalServicePlatformError("configuration")
 	}
-	return &linuxSystemdBoundary{roots: roots, runner: runner, files: files, locker: locker}, nil
+	return &linuxSystemdBoundary{
+		roots: roots, runner: runner, files: files, locker: locker,
+		probeClient: &http.Client{
+			Timeout:   personalServiceProbeTimeout,
+			Transport: &http.Transport{Proxy: nil},
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+	}, nil
 }
 
 func (b *linuxSystemdBoundary) unitPath() string {
@@ -206,6 +227,29 @@ func (b *linuxSystemdBoundary) VerifyEnvironmentFile(ctx context.Context, envFil
 		return newPersonalServicePlatformError("environment file")
 	}
 	return nil
+}
+
+// LoadEnvironmentFile reads and parses a private environment file through the
+// same no-follow identity validation used by install and launcher execution.
+func (b *linuxSystemdBoundary) LoadEnvironmentFile(ctx context.Context, envFile string) (map[string]string, error) {
+	if !b.available() || !validLinuxPrivatePath(envFile) {
+		return nil, newPersonalServicePlatformError("environment file")
+	}
+	if err := contextError(ctx); err != nil {
+		return nil, err
+	}
+	content, exists, err := b.files.Read(ctx, envFile)
+	if err != nil || !exists {
+		if contextErr := contextError(ctx); contextErr != nil {
+			return nil, contextErr
+		}
+		return nil, newPersonalServicePlatformError("environment file")
+	}
+	values, err := parseConfigEnvironment(string(content))
+	if err != nil {
+		return nil, newPersonalServicePlatformError("environment file")
+	}
+	return maps.Clone(values), nil
 }
 
 func (b *linuxSystemdBoundary) ReadFile(ctx context.Context, name string) ([]byte, bool, error) {
@@ -314,11 +358,61 @@ func (b *linuxSystemdBoundary) Run(ctx context.Context, command personalsvc.Syst
 	return personalsvc.NewSystemdUserCommandResult(result.exitCode, result.stdout), nil
 }
 
-// Probe is deliberately withheld until the launcher/liveness slice owns a
-// bounded loopback client. A status command cannot infer lifecycle success
-// from a systemd state alone.
-func (*linuxSystemdBoundary) Probe(context.Context, string) (personalsvc.ProbeState, error) {
-	return personalsvc.ProbeUnreachable, newPersonalServicePlatformError("liveness probe")
+// Probe requests only the exact public liveness route through a proxy-free,
+// bounded loopback client. A valid liveness response identifies an existing
+// PowerContext process; every other response proves that the endpoint is busy
+// but cannot be used as the managed service's liveness evidence.
+func (b *linuxSystemdBoundary) Probe(ctx context.Context, endpoint string) (personalsvc.ProbeState, error) {
+	if !b.available() || b.probeClient == nil {
+		return personalsvc.ProbeUnreachable, newPersonalServicePlatformError("liveness probe")
+	}
+	if err := contextError(ctx); err != nil {
+		return personalsvc.ProbeUnreachable, err
+	}
+	target, err := personalServiceHealthURL(endpoint)
+	if err != nil {
+		return personalsvc.ProbeUnreachable, newPersonalServicePlatformError("liveness probe")
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, personalServiceProbeTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, target.String(), nil)
+	if err != nil {
+		return personalsvc.ProbeUnreachable, newPersonalServicePlatformError("liveness probe")
+	}
+	response, err := b.probeClient.Do(request)
+	if err != nil {
+		if ctx.Err() != nil {
+			return personalsvc.ProbeUnreachable, ctx.Err()
+		}
+		return personalsvc.ProbeUnreachable, nil
+	}
+	defer response.Body.Close()
+	content, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<10))
+	if response.StatusCode != http.StatusOK || readErr != nil {
+		return personalsvc.ProbeConflict, nil
+	}
+	var health struct {
+		Status string `json:"status"`
+	}
+	if json.Unmarshal(content, &health) != nil || health.Status != "ok" {
+		return personalsvc.ProbeConflict, nil
+	}
+	return personalsvc.ProbeLive, nil
+}
+
+func personalServiceHealthURL(endpoint string) (*url.URL, error) {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme != "http" || parsed.User != nil || parsed.Hostname() == "" ||
+		!transportpolicy.IsLoopbackHost(parsed.Hostname()) || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, errors.New("invalid liveness endpoint")
+	}
+	target := parsed.Clone()
+	target.Path = "/health/live"
+	target.RawPath = ""
+	target.RawQuery = ""
+	target.ForceQuery = false
+	target.Fragment = ""
+	return target, nil
 }
 
 func (b *linuxSystemdBoundary) busctl(ctx context.Context, arguments ...string) ([]byte, error) {
