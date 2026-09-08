@@ -18,7 +18,7 @@ jobs:
   windows-contract:
     name: windows-contract
     runs-on: windows-2025
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out with repository attributes
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -33,6 +33,41 @@ jobs:
 
       - name: Verify Windows Task Scheduler executor boundary
         run: go test -count=1 ./internal/personalsvchost/windows
+
+      - name: Stage locked SQLite headers for Windows archive consumption
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $moduleCache = (& go env GOMODCACHE).Trim()
+          $source = Join-Path $moduleCache 'github.com\mattn\go-sqlite3@v1.14.33\sqlite3-binding.h'
+          if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw 'locked go-sqlite3 header is unavailable'
+          }
+          $headers = Join-Path $env:RUNNER_TEMP 'powercontext-sqlite-header-v1.14.33'
+          New-Item -ItemType Directory -Force -Path $headers | Out-Null
+          Copy-Item -LiteralPath $source -Destination (Join-Path $headers 'sqlite3.h') -Force
+
+      - name: Install the pinned SBOM generator for Windows archive consumption
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (& go run ./tools/release asset -component syft -field version).Trim()
+          $tools = Join-Path $env:RUNNER_TEMP 'tools'
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+          $env:GOBIN = $tools
+          & go install "github.com/anchore/syft/cmd/syft@v$version"
+          if ($LASTEXITCODE -ne 0) {
+            throw "install pinned Syft $version failed"
+          }
+
+      - name: Verify Windows release archive personal server lifecycle
+        shell: pwsh
+        env:
+          CGO_CPPFLAGS: -I${{ runner.temp }}\powercontext-sqlite-header-v1.14.33
+          POWERCONTEXT_WINDOWS_RELEASE_CONSUMER_SYFT: ${{ runner.temp }}\tools\syft.exe
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\test\release\windows-archive-consumer.ps1 -Syft $env:POWERCONTEXT_WINDOWS_RELEASE_CONSUMER_SYFT
 
       - name: Verify LF attributes and frozen fixture hashes
         shell: pwsh
@@ -54,6 +89,7 @@ jobs:
             'test/conformance/testdata/python-v0.0.2/manifest.json',
             'test/conformance/testdata/python-v0.1.0/manifest.json',
             'artifact/memory/prompts/conversation.txt',
+            'test/release/windows-archive-consumer.ps1',
             'evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl'
           )
           foreach ($path in $textPaths) {

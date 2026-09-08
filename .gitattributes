@@ -14,6 +14,7 @@
 *.mjs text eol=lf
 *.mod text eol=lf
 *.py text eol=lf
+*.ps1 text eol=lf
 *.sh text eol=lf
 *.sum text eol=lf
 *.toml text eol=lf

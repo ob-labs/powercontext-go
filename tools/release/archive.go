@@ -76,7 +76,7 @@ func archiveTree(root, output string, timestamp time.Time) (returnErr error) {
 			header.Name += "/"
 			header.Mode = 0o755
 		} else if info.Mode().IsRegular() {
-			header.Mode = normalizedFileMode(info.Mode())
+			header.Mode = releaseArchiveFileMode(relative, info.Mode())
 		}
 		header.ModTime = timestamp
 		header.AccessTime = time.Time{}
@@ -111,4 +111,14 @@ func normalizedFileMode(mode os.FileMode) int64 {
 		return 0o755
 	}
 	return 0o644
+}
+
+func releaseArchiveFileMode(path string, mode os.FileMode) int64 {
+	if filepath.Base(filepath.Dir(path)) == "bin" {
+		switch filepath.Base(path) {
+		case "powercontext", "powercontext.exe":
+			return 0o755
+		}
+	}
+	return normalizedFileMode(mode)
 }

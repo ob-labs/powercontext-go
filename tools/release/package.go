@@ -146,11 +146,16 @@ func packageRelease(options packageOptions) (packageResult, error) {
 		return packageResult{}, err
 	}
 	target := facts.GOOS + "-" + facts.GOARCH
-	if _, ok := assets.Tokenizers.Assets[target]; !ok {
-		return packageResult{}, fmt.Errorf("unsupported release target %q", target)
-	}
-	if _, ok := assets.ONNXRuntime.Assets[target]; !ok {
-		return packageResult{}, fmt.Errorf("unsupported release target %q", target)
+	// The Windows standard edition embeds sqlite-vec and has no Full native
+	// asset dependency. All existing targets and every Full release remain
+	// constrained by the native asset manifest.
+	if options.Edition == "full" || target != "windows-amd64" {
+		if _, ok := assets.Tokenizers.Assets[target]; !ok {
+			return packageResult{}, fmt.Errorf("unsupported release target %q", target)
+		}
+		if _, ok := assets.ONNXRuntime.Assets[target]; !ok {
+			return packageResult{}, fmt.Errorf("unsupported release target %q", target)
+		}
 	}
 
 	outputDirectory, err := filepath.Abs(options.Output)
@@ -336,9 +341,17 @@ func newBuildManifest(
 		BuildDate: buildTime.Format(time.RFC3339), GoVersion: facts.Info.GoVersion,
 		Target: facts.GOOS + "-" + facts.GOARCH, CGOEnabled: facts.CGOEnabled == "1",
 		BuildTags: slices.Clone(facts.BuildTags), Oracle: oracle,
-		Binary:       fileRecord{Path: "bin/powercontext", SHA256: facts.BinaryHash, Size: facts.BinaryBytes},
+		Binary:       fileRecord{Path: releaseBinaryPath(facts.GOOS), SHA256: facts.BinaryHash, Size: facts.BinaryBytes},
 		NativeAssets: nativeRecords,
 	}
+}
+
+func releaseBinaryPath(goos string) string {
+	name := "powercontext"
+	if goos == "windows" {
+		name += ".exe"
+	}
+	return "bin/" + name
 }
 
 func validatePackageOptions(options packageOptions) (time.Time, error) {
@@ -422,7 +435,7 @@ func stageRelease(repository, root string, options packageOptions, facts binaryF
 			return err
 		}
 	}
-	if err := copyRegularFile(options.Binary, filepath.Join(root, "bin", "powercontext"), 0o755); err != nil {
+	if err := copyRegularFile(options.Binary, filepath.Join(root, filepath.FromSlash(releaseBinaryPath(facts.GOOS))), 0o755); err != nil {
 		return err
 	}
 	for _, pair := range [][2]string{
