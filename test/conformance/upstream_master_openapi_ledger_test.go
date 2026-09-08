@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	upstreamMasterCommit = "74b961fbb07165595314726715d412a3d0d90589"
+	upstreamMasterCommit = "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
 	goMainCommit         = "e9dce330e58c4acbcfb1c0c5f0a4c9df581750e9"
 )
 
@@ -317,7 +317,10 @@ func validateUpstreamMasterOpenAPILedgerError(ledger upstreamMasterOpenAPILedger
 }
 
 func validateUpstreamOnlyOperations(entries []upstreamOnlyOperation, want map[string]openAPIEndpoint, endpoints map[string]string) error {
-	clusters := map[string]int{"scope": 10, "source": 6, "artifact": 6, "managed-skill": 6, "remote-skill": 10}
+	clusters := map[string]int{
+		"scope": 10, "source": 6, "artifact": 7, "managed-skill": 6, "remote-skill": 10,
+		"access": 9, "artifact-tags": 5, "prompt": 2,
+	}
 	seen := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
 		if _, exists := seen[entry.OperationID]; exists {

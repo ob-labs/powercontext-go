@@ -27,8 +27,8 @@ import (
 const (
 	compatibilitySurfaceSchemaVersion = 2
 	legacyBaselineOperationCount      = 53
-	canonicalOperationCount           = 77
-	upstreamOnlyOperationCount        = 38
+	canonicalOperationCount           = 94
+	upstreamOnlyOperationCount        = 55
 	retainedExtensionCount            = 14
 	explicitMCPToolCount              = 23
 
@@ -189,7 +189,7 @@ func (surface compatibilitySurface) validate(legacy map[string]compatibilityEndp
 		return fmt.Errorf("compatibility surface schema_version = %d, want %d", surface.SchemaVersion, compatibilitySurfaceSchemaVersion)
 	}
 	if surface.Upstream.Repository != "oceanbase/powercontext" ||
-		surface.Upstream.Commit != "74b961fbb07165595314726715d412a3d0d90589" {
+		surface.Upstream.Commit != "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c" {
 		return fmt.Errorf("unexpected upstream snapshot %q at %q", surface.Upstream.Repository, surface.Upstream.Commit)
 	}
 	if surface.Canonical.OperationCount != canonicalOperationCount {
