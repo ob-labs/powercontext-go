@@ -55,7 +55,7 @@ func TestSystemdUserAdapterWritesDeterministicOwnedUnit(t *testing.T) {
 		"Type=simple\n" +
 		"Environment=POWERCONTEXT_SERVICE_OWNED=true\n" +
 		"Environment=POWERCONTEXT_SERVICE_METADATA=" + "PLACEHOLDER" + "\n" +
-		"ExecStart=\"/opt/powercontext/bin/personal-launcher\" \"--foreground\" \"--endpoint\" \"http://127.0.0.1:8123\" \"--data-dir\" \"/home/alice/.local/share/powercontext\"\n" +
+		"ExecStart=\"/opt/powercontext/bin/powercontext\" \"server\" \"_service-run\" \"--env-file\" \"/home/alice/.config/powercontext/server.env\" \"--endpoint\" \"http://127.0.0.1:8123\" \"--data-dir\" \"/home/alice/.local/share/powercontext\"\n" +
 		"Restart=on-failure\n" +
 		"RestartSec=5s\n" +
 		"TimeoutStopSec=30s\n" +
@@ -123,10 +123,11 @@ func TestSystemdUserAdapterRefusesForeignOrMalformedArtifactsWithoutMutation(t *
 
 func TestSystemdUserAdapterRejectsEveryManagerOwnershipMismatchWithoutEnablement(t *testing.T) {
 	registration := systemdRegistration(t)
-	const executable = "/opt/powercontext/bin/personal-launcher"
+	const executable = "/opt/powercontext/bin/powercontext"
 	canonical := systemdOwnedManagerFixture(t, registration, []personalsvc.SystemdUserExecStart{
 		personalsvc.NewSystemdUserExecStart(executable, []string{
-			executable, "--foreground", "--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local/share/powercontext",
+			executable, "server", "_service-run", "--env-file", "/home/alice/.config/powercontext/server.env",
+			"--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local/share/powercontext",
 		}, false),
 	})
 	ownedBoundary := newSystemdBoundary()
@@ -164,7 +165,7 @@ func TestSystemdUserAdapterRejectsEveryManagerOwnershipMismatchWithoutEnablement
 			name: "arguments",
 			mutate: func(value systemdManagerFixture) systemdManagerFixture {
 				arguments := value.execStart[0].Arguments()
-				arguments[3] = "http://127.0.0.1:9000"
+				arguments[6] = "http://127.0.0.1:9000"
 				value.execStart = []personalsvc.SystemdUserExecStart{personalsvc.NewSystemdUserExecStart(executable, arguments, false)}
 				return value
 			},
@@ -239,12 +240,8 @@ func TestSystemdUserAdapterRejectsEveryManagerOwnershipMismatchWithoutEnablement
 }
 
 func TestSystemdUserAdapterAcceptsManagerArgumentsContainingSpaces(t *testing.T) {
-	registration := systemdRegistration(t)
-	launcher, err := personalsvc.NewSystemdUserLauncher(
-		"/opt/PowerContext Personal/personal-launcher",
-		"--foreground",
-		"PowerContext personal",
-	)
+	registration := systemdRegistrationWithBinary(t, "/opt/PowerContext Personal/powercontext")
+	launcher, err := personalsvc.NewSystemdUserLauncher("server", "_service-run")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,9 +252,9 @@ func TestSystemdUserAdapterAcceptsManagerArgumentsContainingSpaces(t *testing.T)
 	}
 	boundary.setManagerUnit(systemdOwnedManagerFixture(t, registration, []personalsvc.SystemdUserExecStart{
 		personalsvc.NewSystemdUserExecStart(
-			"/opt/PowerContext Personal/personal-launcher",
+			"/opt/PowerContext Personal/powercontext",
 			[]string{
-				"/opt/PowerContext Personal/personal-launcher", "--foreground", "PowerContext personal",
+				"/opt/PowerContext Personal/powercontext", "server", "_service-run", "--env-file", "/home/alice/.config/powercontext/server.env",
 				"--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local/share/powercontext",
 			},
 			false,
@@ -271,12 +268,8 @@ func TestSystemdUserAdapterAcceptsManagerArgumentsContainingSpaces(t *testing.T)
 }
 
 func TestSystemdUserAdapterRejectsAmbiguousFlattenedManagerArguments(t *testing.T) {
-	registration := systemdRegistration(t)
-	launcher, err := personalsvc.NewSystemdUserLauncher(
-		"/opt/PowerContext Personal/personal-launcher",
-		"--foreground",
-		"PowerContext personal",
-	)
+	registration := systemdRegistrationWithBinary(t, "/opt/PowerContext Personal/powercontext")
+	launcher, err := personalsvc.NewSystemdUserLauncher("server", "_service-run")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,10 +280,10 @@ func TestSystemdUserAdapterRejectsAmbiguousFlattenedManagerArguments(t *testing.
 	}
 	boundary.setManagerUnit(systemdOwnedManagerFixture(t, registration, []personalsvc.SystemdUserExecStart{
 		personalsvc.NewSystemdUserExecStart(
-			"/opt/PowerContext Personal/personal-launcher",
+			"/opt/PowerContext Personal/powercontext",
 			[]string{
-				"/opt/PowerContext Personal/personal-launcher", "--foreground", "PowerContext", "personal",
-				"--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local/share/powercontext",
+				"/opt/PowerContext Personal/powercontext", "server", "_service-run", "--env-file", "/home/alice/.config/powercontext/server.env",
+				"--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local", "share/powercontext",
 			},
 			false,
 		),
@@ -304,12 +297,13 @@ func TestSystemdUserAdapterRejectsAmbiguousFlattenedManagerArguments(t *testing.
 
 func TestSystemdUserAdapterRejectsManagerWithoutDropInPaths(t *testing.T) {
 	registration := systemdRegistration(t)
-	executable := "/opt/powercontext/bin/personal-launcher"
+	executable := "/opt/powercontext/bin/powercontext"
 	boundary := newSystemdBoundary()
 	adapter := newSystemdAdapter(t, boundary)
 	managerFixture := systemdOwnedManagerFixture(t, registration, []personalsvc.SystemdUserExecStart{
 		personalsvc.NewSystemdUserExecStart(executable, []string{
-			executable, "--foreground", "--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local/share/powercontext",
+			executable, "server", "_service-run", "--env-file", "/home/alice/.config/powercontext/server.env",
+			"--endpoint", "http://127.0.0.1:8123", "--data-dir", "/home/alice/.local/share/powercontext",
 		}, false),
 	})
 	managerFixture.dropInPathsPresent = false
@@ -459,7 +453,7 @@ func TestSystemdUserAdapterZeroValueFailsClosed(t *testing.T) {
 }
 
 func TestSystemdUserAdapterRejectsNonPrivateUnitPathsWithoutHostAccess(t *testing.T) {
-	launcher, err := personalsvc.NewSystemdUserLauncher("/opt/powercontext/bin/personal-launcher", "--foreground")
+	launcher, err := personalsvc.NewSystemdUserLauncher("server", "_service-run")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,24 +479,27 @@ func TestSystemdUserAdapterRejectsNonPrivateUnitPathsWithoutHostAccess(t *testin
 	}
 }
 
-func TestSystemdUserLauncherRejectsRegistrationOverrideArguments(t *testing.T) {
+func TestSystemdUserLauncherAcceptsOnlyTheFixedServiceRunPrefix(t *testing.T) {
 	for _, arguments := range [][]string{
+		nil,
+		{"server"},
+		{"_service-run"},
 		{"--endpoint", "http://127.0.0.1:9000"},
 		{"--endpoint=http://127.0.0.1:9000"},
 		{"--data-dir", "/foreign/data"},
 		{"--data-dir=/foreign/data"},
 		{"--"},
 	} {
-		_, err := personalsvc.NewSystemdUserLauncher("/opt/powercontext/bin/personal-launcher", arguments...)
+		_, err := personalsvc.NewSystemdUserLauncher(arguments...)
 		if err == nil {
-			t.Fatalf("NewSystemdUserLauncher(%q) accepted a registration override", arguments)
+			t.Fatalf("NewSystemdUserLauncher(%q) accepted a non-fixed prefix", arguments)
 		}
 	}
 }
 
 func newSystemdAdapter(t *testing.T, boundary *systemdBoundary) *personalsvc.SystemdUserAdapter {
 	t.Helper()
-	launcher, err := personalsvc.NewSystemdUserLauncher("/opt/powercontext/bin/personal-launcher", "--foreground")
+	launcher, err := personalsvc.NewSystemdUserLauncher("server", "_service-run")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,12 +511,16 @@ func newSystemdAdapter(t *testing.T, boundary *systemdBoundary) *personalsvc.Sys
 }
 
 func systemdRegistration(t *testing.T) personalsvc.Registration {
+	return systemdRegistrationWithBinary(t, "/opt/powercontext/bin/powercontext")
+}
+
+func systemdRegistrationWithBinary(t *testing.T, binary string) personalsvc.Registration {
 	t.Helper()
 	definition, err := personalsvc.NewDefinition(personalsvc.DefinitionInput{
 		Ownership:         personalsvc.OwnershipMarker,
 		DefinitionVersion: personalsvc.DefinitionVersion,
 		PackageVersion:    "0.2.0",
-		Binary:            "/opt/powercontext/bin/powercontext",
+		Binary:            binary,
 		Endpoint:          "http://127.0.0.1:8123",
 		DataDir:           "/home/alice/.local/share/powercontext",
 		EnvFile:           "/home/alice/.config/powercontext/server.env",
