@@ -117,13 +117,28 @@ func readReleasePersonalServiceStatus(t *testing.T, binary string) releasePerson
 	t.Helper()
 	output, err := runReleasePersonalService(t, binary, "server", "status", "--json")
 	if err != nil {
-		t.Fatal("inspect release personal service")
+		t.Fatalf("inspect release personal service: %s", releasePersonalServiceFailureClass(output))
 	}
 	var status releasePersonalServiceStatus
 	if err := json.Unmarshal(output, &status); err != nil {
 		t.Fatal("decode release personal service status")
 	}
 	return status
+}
+
+func releasePersonalServiceFailureClass(output []byte) string {
+	value := string(output)
+	switch {
+	case strings.Contains(value, "systemd user service unit inspect failed"):
+		return "unit_inspect"
+	case strings.Contains(value, "systemd user service manager command failed"):
+		return "manager_command"
+	case strings.Contains(value, "personal Server service configuration failed"):
+		return "configuration"
+	case strings.Contains(value, "personal Server service lifecycle is not available"):
+		return "unsupported"
+	}
+	return "redacted"
 }
 
 func runReleasePersonalService(t *testing.T, binary string, arguments ...string) ([]byte, error) {
