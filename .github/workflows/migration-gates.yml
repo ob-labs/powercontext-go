@@ -204,11 +204,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: oceanbase/powercontext
-          ref: 74b961fbb07165595314726715d412a3d0d90589
+          ref: e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c
           path: _upstream_master
 
       - name: Verify upstream master identity
-        run: test "$(git -C _upstream_master rev-parse HEAD)" = 74b961fbb07165595314726715d412a3d0d90589
+        run: test "$(git -C _upstream_master rev-parse HEAD)" = e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c
 
       - name: Set up the Go environment
         uses: ./.github/actions/setup-go-env

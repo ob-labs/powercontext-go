@@ -88,7 +88,7 @@ func TestResolveOutputPathKeepsAbsoluteAndRootsRelative(t *testing.T) {
 }
 
 func TestLoadLatestNodeManifestRejectsInvalidDocuments(t *testing.T) {
-	const upstreamCommit = "74b961fbb07165595314726715d412a3d0d90589"
+	const upstreamCommit = "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
 	valid := fmt.Sprintf(`{"schema_version":1,"upstream_commit":%q,"node_ids":["tests/test_alpha.py::test_alpha","tests/test_beta.py::test_beta"]}`, upstreamCommit)
 	tests := []struct {
 		name     string
@@ -102,6 +102,7 @@ func TestLoadLatestNodeManifestRejectsInvalidDocuments(t *testing.T) {
 		{name: "nested node object", contents: fmt.Sprintf(`{"schema_version":1,"upstream_commit":%q,"node_ids":[{"id":"tests/test_alpha.py::test_alpha","future":true}]}`, upstreamCommit)},
 		{name: "wrong schema", contents: fmt.Sprintf(`{"schema_version":2,"upstream_commit":%q,"node_ids":["tests/test_alpha.py::test_alpha"]}`, upstreamCommit)},
 		{name: "wrong commit", contents: `{"schema_version":1,"upstream_commit":"not-the-pinned-commit","node_ids":["tests/test_alpha.py::test_alpha"]}`},
+		{name: "previous master commit", contents: strings.Replace(valid, upstreamCommit, "74b961fbb07165595314726715d412a3d0d90589", 1)},
 		{name: "empty list", contents: fmt.Sprintf(`{"schema_version":1,"upstream_commit":%q,"node_ids":[]}`, upstreamCommit)},
 		{name: "empty node ID", contents: fmt.Sprintf(`{"schema_version":1,"upstream_commit":%q,"node_ids":[""]}`, upstreamCommit)},
 		{name: "absolute node path", contents: fmt.Sprintf(`{"schema_version":1,"upstream_commit":%q,"node_ids":["/tests/test_alpha.py::test_alpha"]}`, upstreamCommit)},

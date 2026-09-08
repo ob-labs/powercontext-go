@@ -106,6 +106,12 @@
     "tests/builtin/artifacts/handoff/test_generation.py::test_llm_pipeline_rejects_uncited_statements": {
       "classification": "in_scope"
     },
+    "tests/builtin/artifacts/handoff/test_generation_metadata.py::test_absent_generation_preserves_legacy_handoff_json": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/handoff/test_generation_metadata.py::test_receipt_retains_exact_origin_across_edits_and_key_rotation": {
+      "classification": "in_scope"
+    },
     "tests/builtin/artifacts/handoff/test_models.py::test_activation_adds_the_boundary_source_once_and_rejects_duplicate_evidence": {
       "classification": "in_scope"
     },
@@ -262,6 +268,147 @@
     "tests/builtin/artifacts/memory/test_service.py::test_memory_search_applies_injected_reranker_after_coarse_fusion": {
       "classification": "in_scope"
     },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_all_registered_auto_selections_preserve_existing_guidance": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_auto_preserves_the_deployed_extraction_profile[coding]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_auto_preserves_the_deployed_extraction_profile[conversation]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_custom_selection_freezes_exact_revision_and_keeps_scope_identity": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_demonstrations_cannot_add_authority_fields_to_the_operation_contract[expected_output]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_demonstrations_cannot_add_authority_fields_to_the_operation_contract[input]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_demonstrations_validate_without_inserting_defaults": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_inconsistent_definitions_and_duplicate_keys_fail_before_composition": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_instructions_have_one_canonical_unicode_representation": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides0]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides1]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides2]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides3]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides4]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides5]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides6]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_invalid_or_oversized_content_is_rejected[overrides7]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_schema_incompatibility_is_separate_from_immutable_content_decoding": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_content.py::test_unavailable_components_reject_custom_but_allow_explicit_auto": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_rerank.py::test_search_freezes_the_rerank_prompt_before_reading_coarse_candidates": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_service.py::test_concurrent_scopes_and_retries_use_frozen_prompt_selections": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_service.py::test_configuration_read_preserves_saved_content_when_component_cannot_run[False]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_service.py::test_configuration_read_preserves_saved_content_when_component_cannot_run[True]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_service.py::test_injected_component_blocks_existing_custom_head_and_allows_explicit_auto": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_service.py::test_prompt_traces_include_identity_but_exclude_custom_content": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[experience.generate-path8-artifact:99]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[experience.generate-path9-source:1]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[experience.incubate-path7-invalid7]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[handoff.generate-path12-invalid12]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[handoff.generate-path13-invalid13]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[handoff.generate-path14-invalid14]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.extract-path0-invalid0]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.extract-path1-invalid1]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.extract-path2-entry:1]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.rerank-path3-invalid3]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.rerank-path4-invalid4]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.rerank-path5-invalid5]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[memory.rerank-path6-invalid6]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[skill.generate-path10-Invalid Package Name]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_demonstrations_reject_semantically_impossible_outputs[skill.generate-path11-]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_generated_demonstrations_retry_invalid_references_within_request_budget": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_valid_demonstrations_preserve_their_original_json[experience.generate]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_valid_demonstrations_preserve_their_original_json[experience.incubate]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_valid_demonstrations_preserve_their_original_json[handoff.generate]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_valid_demonstrations_preserve_their_original_json[memory.extract]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_valid_demonstrations_preserve_their_original_json[memory.rerank]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/prompt/test_prompt_validation.py::test_valid_demonstrations_preserve_their_original_json[skill.generate]": {
+      "classification": "in_scope"
+    },
     "tests/builtin/artifacts/skill/test_compatibility.py::test_compatibility_is_reasoned_per_agent_format_and_observed_environment": {
       "classification": "mixed",
       "supported_surfaces": ["core", "codex"],
@@ -314,6 +461,9 @@
       "classification": "in_scope"
     },
     "tests/builtin/artifacts/skill/test_external.py::test_scan_skips_invalid_or_symlinked_packages": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/artifacts/skill/test_generation.py::test_invalid_generated_package_is_retried_before_any_write": {
       "classification": "in_scope"
     },
     "tests/builtin/artifacts/skill/test_models.py::test_model_generated_skill_cannot_claim_an_existing_package_snapshot": {
@@ -450,6 +600,18 @@
     },
     "tests/builtin/persistence/test_artifacts.py::test_two_artifact_families_share_revisions_and_ordered_direct_lineage": {
       "classification": "in_scope"
+    },
+    "tests/builtin/persistence/test_connectors.py::test_connector_checkpoint_initial_creation_avoids_savepoints_on_mysql_compatible_connections": {
+      "classification": "out_of_scope",
+      "database": "mysql",
+      "out_of_scope_reason": "unsupported-database",
+      "reason": "The upstream case exercises MySQL-compatible SAVEPOINT handling for OceanBase, which is outside the SQLite-only product matrix."
+    },
+    "tests/builtin/persistence/test_cursors.py::test_source_cursor_initial_creation_avoids_savepoints_on_mysql_compatible_connections": {
+      "classification": "out_of_scope",
+      "database": "mysql",
+      "out_of_scope_reason": "unsupported-database",
+      "reason": "The upstream case exercises MySQL-compatible SAVEPOINT handling for OceanBase, which is outside the SQLite-only product matrix."
     },
     "tests/builtin/persistence/test_cursors.py::test_source_cursor_initial_creation_is_safe_across_connections": {
       "classification": "in_scope"
@@ -628,6 +790,15 @@
       "out_of_scope_reason": "unsupported-database",
       "reason": "The upstream case exercises the OceanBase persistence profile, which is outside the SQLite-only product matrix."
     },
+    "tests/builtin/persistence/test_prompt_records.py::test_definition_change_does_not_hide_history_or_partially_commit_a_failed_rollback": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/persistence/test_prompt_records.py::test_prompt_scope_isolation_and_immutable_rollback": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/persistence/test_prompt_records.py::test_revision_cursor_freezes_snapshot_and_cannot_cross_resource_boundaries": {
+      "classification": "in_scope"
+    },
     "tests/builtin/persistence/test_provider.py::test_candidate_inference_does_not_hold_the_database_transaction": {
       "classification": "in_scope"
     },
@@ -641,6 +812,9 @@
       "classification": "in_scope"
     },
     "tests/builtin/persistence/test_provider.py::test_source_window_artifact_and_cursor_are_one_transaction": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/persistence/test_records.py::test_artifact_and_entry_tags_preserve_content_and_query_independently": {
       "classification": "in_scope"
     },
     "tests/builtin/persistence/test_records.py::test_artifact_create_and_replace_validate_handoff_as_json": {
@@ -658,13 +832,22 @@
     "tests/builtin/persistence/test_records.py::test_base_access_reuses_existing_tables_without_lifecycle_columns": {
       "classification": "in_scope"
     },
+    "tests/builtin/persistence/test_records.py::test_empty_tag_set_has_one_concurrent_winner_across_connections": {
+      "classification": "in_scope"
+    },
     "tests/builtin/persistence/test_records.py::test_experience_and_skill_writers_update_owned_search_projections": {
       "classification": "in_scope"
     },
     "tests/builtin/persistence/test_records.py::test_family_projection_failure_rolls_back_source_and_artifact": {
       "classification": "in_scope"
     },
+    "tests/builtin/persistence/test_records.py::test_in_memory_sqlite_supports_concurrent_tag_reads": {
+      "classification": "in_scope"
+    },
     "tests/builtin/persistence/test_records.py::test_source_create_persists_json_without_public_internal_fields": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/persistence/test_records.py::test_tag_cursor_is_bound_to_filter_scope_and_caller": {
       "classification": "in_scope"
     },
     "tests/builtin/persistence/test_seekdb_profile.py::test_config_requires_an_explicit_non_empty_path": {
@@ -1009,7 +1192,10 @@
     "tests/builtin/test_scope_application.py::test_concurrent_default_and_binding_writes_remain_valid": {
       "classification": "in_scope"
     },
-    "tests/builtin/test_scope_application.py::test_concurrent_default_bootstrap_returns_one_scope": {
+    "tests/builtin/test_scope_application.py::test_concurrent_default_bootstrap_returns_one_scope[1]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_scope_application.py::test_concurrent_default_bootstrap_returns_one_scope[8]": {
       "classification": "in_scope"
     },
     "tests/builtin/test_scope_application.py::test_concurrent_parent_updates_cannot_form_a_cycle": {
@@ -1037,6 +1223,36 @@
       "classification": "in_scope"
     },
     "tests/builtin/test_scope_application.py::test_scope_creation_is_idempotent_but_not_ambiguous": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags0]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags1]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags2]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags3]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags4]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags5]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags6]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags7]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_invalid_or_duplicate_tags_fail_without_echoing_input[tags8]": {
+      "classification": "in_scope"
+    },
+    "tests/builtin/test_tags.py::test_unicode_normalization_preserves_display_and_canonical_order": {
       "classification": "in_scope"
     },
     "tests/claude_code_plugin/test_contract.py::test_claude_integration_does_not_embed_machine_specific_windows_paths": {
@@ -1672,6 +1888,120 @@
     "tests/codex_plugin/test_skill_projection.py::test_projection_rejects_managed_content_that_is_not_a_valid_codex_skill[safe-skill-Do <anything> for a bounded task.]": {
       "classification": "in_scope"
     },
+    "tests/e2e/test_access_control_http.py::test_base_source_and_artifact_routes_preserve_access_boundaries": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_logical_handoff_grant_and_revoke_cross_the_public_server_boundary": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_resource_discovery_includes_base_artifacts_under_scope_grants[experience-builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_resource_discovery_includes_base_artifacts_under_scope_grants[experience-casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_resource_discovery_includes_base_artifacts_under_scope_grants[skill-builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_resource_discovery_includes_base_artifacts_under_scope_grants[skill-casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_scheduled_memory_processing_uses_the_static_service_principal_as_owner": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_server_administrators_discover_managed_resources_without_content_access[builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_server_administrators_discover_managed_resources_without_content_access[casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_tag_owners_and_exact_viewers_preserve_scope_boundaries[experience]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_tag_owners_and_exact_viewers_preserve_scope_boundaries[handoff]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_tag_owners_and_exact_viewers_preserve_scope_boundaries[memory]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_http.py::test_tag_owners_and_exact_viewers_preserve_scope_boundaries[skill]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_candidate_permissions_preserve_proposer_restriction": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_concurrent_handoff_receipts_cannot_replace_the_authenticated_submitter": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_owner_failure_blocks_collections_and_context_before_content": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_configuration_does_not_fall_back_when_saved_owner_is_pending": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_management_respects_scope_and_artifact_permissions[builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_management_respects_scope_and_artifact_permissions[casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_owner_cannot_mutate_after_scope_role_revocation[scope.admin-builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_owner_cannot_mutate_after_scope_role_revocation[scope.admin-casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_owner_cannot_mutate_after_scope_role_revocation[scope.contributor-builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_prompt_owner_cannot_mutate_after_scope_role_revocation[scope.contributor-casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_readiness_probes_dependencies_and_recovers[audit]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_readiness_probes_dependencies_and_recovers[provider]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_readiness_probes_dependencies_and_recovers[relationships]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_shared_handoff_and_persisted_receipt_identity": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_shared_memory_resolves_only_the_granted_entry": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_unprivileged_requests_cannot_distinguish_missing_owner[builtin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_access_control_regressions.py::test_unprivileged_requests_cannot_distinguish_missing_owner[casbin]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_http_tags_cover_families_entries_filters_and_inactive_lifecycle": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_prompt_configuration_is_readable_but_not_a_tag_target": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_tag_routes_reject_principals_without_access[GET-/artifacts/experience/private/tags-None]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_tag_routes_reject_principals_without_access[GET-/artifacts/memory/private/entries/private/tags-None]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_tag_routes_reject_principals_without_access[POST-/artifact-tags/query-payload4]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_tag_routes_reject_principals_without_access[PUT-/artifacts/experience/private/tags-payload1]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_tag_routes_reject_principals_without_access[PUT-/artifacts/memory/private/entries/private/tags-payload3]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_artifact_tags.py::test_tag_search_filters_before_candidate_limits_and_survives_rebuild": {
+      "classification": "in_scope"
+    },
     "tests/e2e/test_base_access_api.py::test_experience_and_skill_base_writes_are_visible_through_existing_apis": {
       "classification": "in_scope"
     },
@@ -1751,6 +2081,12 @@
       "classification": "in_scope"
     },
     "tests/e2e/test_external_skill_registry.py::test_http_sdk_external_skill_registry_preserves_host_local_authority": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_handoff_prompt_provenance_api.py::test_handoff_provenance_survives_separate_requests_and_rejects_forgery": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_handoff_runtime.py::test_handoff_resolution_authorizes_each_evidence_target_before_reading_it": {
       "classification": "in_scope"
     },
     "tests/e2e/test_handoff_runtime.py::test_handoff_runtime_recovers_only_explicitly_committed_milestones": {
@@ -1870,6 +2206,28 @@
       "out_of_scope_reason": "unsupported-agent",
       "reason": "The upstream case exercises the OpenCode integration, which is outside the Codex and WorkBuddy product matrix."
     },
+    "tests/e2e/test_prompt_management_api.py::test_prompt_configuration_previews_defaults_without_inference[coding]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_prompt_management_api.py::test_prompt_configuration_previews_defaults_without_inference[conversation]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_prompt_management_api.py::test_prompt_http_history_generation_and_scoped_inference[disabled]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_prompt_management_api.py::test_prompt_http_history_generation_and_scoped_inference[enforced]": {
+      "classification": "in_scope"
+    },
+    "tests/e2e/test_prompt_management_live.py::test_prompt_management_with_real_services[configured]": {
+      "classification": "mixed",
+      "supported_surfaces": ["core", "sqlite"],
+      "unsupported_databases": ["oceanbase", "seekdb"],
+      "reason": "The configured real-provider Prompt case accepts SQLite, OceanBase, or seekDB through ServerSettings; only its core and SQLite behavior is in the product matrix."
+    },
+    "tests/e2e/test_prompt_management_live.py::test_prompt_management_with_real_services[sqlite]": {
+      "classification": "in_scope",
+      "database": "sqlite"
+    },
     "tests/e2e/test_pydantic_ai_chain.py::test_pydantic_ai_capture_checkpoint_recall_and_search_chain": {
       "classification": "out_of_scope",
       "out_of_scope_reason": "non-product",
@@ -1879,6 +2237,41 @@
       "classification": "out_of_scope",
       "out_of_scope_reason": "non-product",
       "reason": "The upstream case verifies the Pydantic AI framework adapter rather than supported product behavior."
+    },
+    "tests/e2e/test_real_artifact_tags.py::test_real_models_and_tags[disabled-oceanbase]": {
+      "classification": "out_of_scope",
+      "database": "oceanbase",
+      "out_of_scope_reason": "unsupported-database",
+      "reason": "The upstream real-model tag case creates and drops an OceanBase database, which is outside the SQLite-only product matrix."
+    },
+    "tests/e2e/test_real_artifact_tags.py::test_real_models_and_tags[disabled-sqlite]": {
+      "classification": "in_scope",
+      "database": "sqlite"
+    },
+    "tests/e2e/test_real_artifact_tags.py::test_real_models_and_tags[enforced-oceanbase]": {
+      "classification": "out_of_scope",
+      "database": "oceanbase",
+      "out_of_scope_reason": "unsupported-database",
+      "reason": "The upstream real-model tag case creates and drops an OceanBase database, which is outside the SQLite-only product matrix."
+    },
+    "tests/e2e/test_real_artifact_tags.py::test_real_models_and_tags[enforced-sqlite]": {
+      "classification": "in_scope",
+      "database": "sqlite"
+    },
+    "tests/e2e/test_real_experience_skill_harness.py::test_preflight_cleanup_accepts_a_fresh_database": {
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "non-product",
+      "reason": "The upstream case verifies cleanup implemented in the real-provider test harness, not a product operation."
+    },
+    "tests/e2e/test_real_experience_skill_harness.py::test_preflight_cleanup_discovers_registered_scope_and_removes_access_rows": {
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "non-product",
+      "reason": "The upstream case verifies cleanup implemented in the real-provider test harness, not a product operation."
+    },
+    "tests/e2e/test_real_experience_skill_harness.py::test_preflight_cleanup_uses_only_existing_scope_tables": {
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "non-product",
+      "reason": "The upstream case verifies cleanup implemented in the real-provider test harness, not a product operation."
     },
     "tests/e2e/test_remote_skill_distribution.py::test_https_remote_receiver_http_vertical_slice_is_exact_isolated_and_reversible": {
       "classification": "mixed",
@@ -2169,6 +2562,12 @@
       "reason": "The upstream case exercises the Hermes integration, which is outside the Codex and WorkBuddy product matrix."
     },
     "tests/integrations/test_hermes_provider.py::test_http_client_dispatches_operation_paths_and_get_query": {
+      "classification": "out_of_scope",
+      "external_agent": "hermes",
+      "out_of_scope_reason": "unsupported-agent",
+      "reason": "The upstream case exercises the Hermes integration, which is outside the Codex and WorkBuddy product matrix."
+    },
+    "tests/integrations/test_hermes_provider.py::test_http_client_forwards_authorization_and_preserves_access_denial": {
       "classification": "out_of_scope",
       "external_agent": "hermes",
       "out_of_scope_reason": "unsupported-agent",
@@ -2640,10 +3039,124 @@
       "out_of_scope_reason": "non-product",
       "reason": "The upstream case verifies the Pydantic AI framework adapter rather than supported product behavior."
     },
-    "tests/test_api_contract.py::test_artifact_collection_only_accepts_pagination": {
+    "tests/test_access_adapters.py::test_authzen_fails_closed_on_malformed_decisions_and_cannot_manage_relationships": {
       "classification": "in_scope"
     },
-    "tests/test_api_contract.py::test_base_access_contract_uses_only_the_seven_scoped_operations": {
+    "tests/test_access_adapters.py::test_authzen_group_context_matches_builtin_and_casbin_decisions": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_adapters.py::test_authzen_rejects_credential_urls_and_insecure_remote_http": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_adapters.py::test_authzen_uses_logical_identity_and_trusted_powercontext_context": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_adapters.py::test_builtin_and_casbin_adapters_share_terminal_semantics": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_adapters.py::test_casbin_composition_has_writable_relationships_and_owner_enforcement": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_access_role_cardinalities_are_explicit": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_administration_roles_do_not_become_content_writers": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_candidate_attestation_does_not_grant_or_overwrite_artifact_ownership": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_candidate_owner_is_locked_to_proposer_and_target": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_expired_receiver_can_be_reclaimed_once_without_losing_history[-7]": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_expired_receiver_can_be_reclaimed_once_without_losing_history[8]": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_group_binding_is_inherited_from_trusted_authentication_context": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_logical_artifact_share_is_read_only_across_all_versions": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_many_binding_can_be_replaced_without_domain_specific_behavior": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_memory_share_targets_one_logical_entry_without_entry_version": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_missing_owner_is_fail_closed_and_owner_is_immutable": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_resource_cursor_is_bound_to_policy_revision": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_resource_cursor_is_bound_to_trusted_group_membership": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_control.py::test_singleton_binding_replacement_is_atomic": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_access_api_and_handoff_pep_enforce_exact_receiver_visibility": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_access_audit_persists_the_trusted_actor_separately_from_the_subject": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_access_audit_time_range_filters_results_and_binds_the_cursor": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_access_binding_replace_is_generic_and_atomic": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_artifact_publication_requires_logical_share_and_target_scope_admin": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_authentication_provider_failures_use_a_stable_secret_safe_response": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_compound_access_check_supports_all_and_any_without_a_batch_route": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_connector_checkpoint_routes_enforce_the_nested_scope_boundary": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_dashboard_scope_discovery_uses_the_same_principal_and_filters_before_response": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_enforced_mode_cannot_silently_start_without_authentication_or_provider": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_enforced_mode_uses_injected_authentication_and_builtin_access": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_injected_authentication_takes_precedence_over_legacy_token": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_logical_memory_entry_grant_allows_every_entry_version_but_not_scope_listing": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_low_level_enforced_app_fails_closed_without_an_authorization_provider": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_http.py::test_standard_skill_lifecycle_routes_enforce_access_before_runtime": {
+      "classification": "in_scope"
+    },
+    "tests/test_access_mcp.py::test_mcp_internal_bridge_preserves_principal_and_audits_mcp_transport": {
+      "classification": "in_scope"
+    },
+    "tests/test_api_contract.py::test_access_contract_uses_compound_checks_and_generic_binding_replacement": {
+      "classification": "in_scope"
+    },
+    "tests/test_api_contract.py::test_access_contract_uses_logical_resources_and_generic_skill_read_access": {
+      "classification": "in_scope"
+    },
+    "tests/test_api_contract.py::test_artifact_collection_accepts_pagination_and_exact_tag_filters": {
+      "classification": "in_scope"
+    },
+    "tests/test_api_contract.py::test_base_access_contract_includes_revision_history_and_tags": {
       "classification": "in_scope"
     },
     "tests/test_api_contract.py::test_base_access_create_requests_leave_identity_generation_to_the_server": {
@@ -2673,6 +3186,9 @@
     "tests/test_api_contract.py::test_entry_list_hides_inactive_entries_unless_explicitly_requested": {
       "classification": "in_scope"
     },
+    "tests/test_api_contract.py::test_every_access_protected_operation_declares_the_unavailable_response": {
+      "classification": "in_scope"
+    },
     "tests/test_api_contract.py::test_experience_skill_and_review_operations_are_typed_and_family_routed": {
       "classification": "in_scope"
     },
@@ -2698,6 +3214,9 @@
       "classification": "in_scope"
     },
     "tests/test_api_contract.py::test_generated_transport_rejects_values_outside_openapi[SearchMemoryRequest-value3]": {
+      "classification": "in_scope"
+    },
+    "tests/test_api_contract.py::test_handoff_access_metadata_resolves_business_revision_to_logical_authorization": {
       "classification": "in_scope"
     },
     "tests/test_api_contract.py::test_handoff_operations_expose_the_complete_explicit_lifecycle": {
@@ -2728,6 +3247,9 @@
       "classification": "in_scope"
     },
     "tests/test_api_contract.py::test_server_publishes_the_canonical_openapi_schema": {
+      "classification": "in_scope"
+    },
+    "tests/test_api_contract.py::test_source_ingestion_operations_preserve_the_access_boundary": {
       "classification": "in_scope"
     },
     "tests/test_api_contract.py::test_source_observation_contract_uses_explicit_connector_scope_and_captured_values": {
@@ -2976,7 +3498,22 @@
     "tests/test_client.py::test_client_downloads_handoff_report_bytes_and_sets_download_flag": {
       "classification": "in_scope"
     },
+    "tests/test_client.py::test_client_exposes_typed_access_binding_replacement": {
+      "classification": "in_scope"
+    },
+    "tests/test_client.py::test_client_exposes_typed_access_check": {
+      "classification": "in_scope"
+    },
     "tests/test_client.py::test_client_keeps_a_generic_server_error_when_the_error_body_is_invalid": {
+      "classification": "in_scope"
+    },
+    "tests/test_client.py::test_client_maps_access_statuses_to_distinct_stable_exceptions[401-UnauthorizedResponseError]": {
+      "classification": "in_scope"
+    },
+    "tests/test_client.py::test_client_maps_access_statuses_to_distinct_stable_exceptions[403-ForbiddenResponseError]": {
+      "classification": "in_scope"
+    },
+    "tests/test_client.py::test_client_maps_access_statuses_to_distinct_stable_exceptions[503-UnavailableResponseError]": {
       "classification": "in_scope"
     },
     "tests/test_client.py::test_client_preserves_server_error_context": {
@@ -3157,6 +3694,9 @@
       "classification": "in_scope"
     },
     "tests/test_dashboard.py::test_dashboard_mount_failure_does_not_prevent_server_startup": {
+      "classification": "in_scope"
+    },
+    "tests/test_dashboard.py::test_dashboard_scripts_revalidate_cached_modules_after_an_update": {
       "classification": "in_scope"
     },
     "tests/test_dashboard.py::test_handoff_report_page_is_available_without_the_statistics_dashboard": {
@@ -3932,10 +4472,19 @@
     "tests/test_server.py::test_enabled_bearer_authentication_requires_a_token": {
       "classification": "in_scope"
     },
+    "tests/test_server.py::test_enforced_mode_fails_closed_if_the_authorization_provider_disappears": {
+      "classification": "in_scope"
+    },
     "tests/test_server.py::test_env_example_loads_server_settings": {
       "classification": "in_scope"
     },
     "tests/test_server.py::test_explicit_external_skill_configuration_overrides_default_targets": {
+      "classification": "in_scope"
+    },
+    "tests/test_server.py::test_legacy_auth_token_cannot_silently_enable_access": {
+      "classification": "in_scope"
+    },
+    "tests/test_server.py::test_legacy_static_bearer_environment_maps_to_server_admin": {
       "classification": "in_scope"
     },
     "tests/test_server.py::test_liveness_adds_a_server_owned_request_id": {
@@ -3962,10 +4511,16 @@
     "tests/test_server.py::test_scalar_reference_embeds_the_canonical_openapi_contract": {
       "classification": "in_scope"
     },
+    "tests/test_server.py::test_scheduled_experience_owns_only_candidates_created_by_its_incubation": {
+      "classification": "in_scope"
+    },
     "tests/test_server.py::test_server_factory_applies_generation_model_settings_to_readiness": {
       "classification": "in_scope"
     },
     "tests/test_server.py::test_server_factory_caches_and_redacts_degraded_embedding_readiness": {
+      "classification": "in_scope"
+    },
+    "tests/test_server.py::test_server_factory_maps_static_token_to_bootstrap_principal": {
       "classification": "in_scope"
     },
     "tests/test_server.py::test_server_factory_optionally_requires_bearer_authentication": {
@@ -4266,6 +4821,9 @@
       "classification": "in_scope"
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[unexpected output\\n-0-unknown]": {
+      "classification": "in_scope"
+    },
+    "tests/test_service.py::test_launchd_start_kickstarts_a_newly_bootstrapped_job": {
       "classification": "in_scope"
     },
     "tests/test_service.py::test_launchd_stop_waits_until_bootout_removes_the_loaded_job": {
