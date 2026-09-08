@@ -238,7 +238,7 @@ func (c *Controller) installLocked(ctx context.Context, desired Registration, in
 		changed = stored != desired
 	}
 	if changed {
-		if err := c.commit(ctx, desired, artifact); err != nil {
+		if err := c.commit(ctx, desired, artifact, managerRegistration); err != nil {
 			return false, err
 		}
 	} else if err := c.adapter.Enable(ctx); err != nil {
@@ -253,32 +253,41 @@ func (c *Controller) installLocked(ctx context.Context, desired Registration, in
 	return true, nil
 }
 
-func (c *Controller) commit(ctx context.Context, desired Registration, previous Artifact) error {
+func (c *Controller) commit(
+	ctx context.Context,
+	desired Registration,
+	previousArtifact Artifact,
+	previousManager ManagerRegistration,
+) error {
 	if err := c.adapter.Write(ctx, desired); err != nil {
-		c.restore(ctx, previous)
+		c.restore(ctx, previousArtifact, previousManager)
 		return newContextOperationError(ErrorOperation, StageWrite, statusForSupportedUnknown(), ctx)
 	}
 	if err := c.adapter.Reload(ctx); err != nil {
-		c.restore(ctx, previous)
+		c.restore(ctx, previousArtifact, previousManager)
 		return newContextOperationError(ErrorOperation, StageReload, statusForSupportedUnknown(), ctx)
 	}
 	if err := c.adapter.Enable(ctx); err != nil {
-		c.restore(ctx, previous)
+		c.restore(ctx, previousArtifact, previousManager)
 		return newContextOperationError(ErrorOperation, StageEnable, statusForSupportedUnknown(), ctx)
 	}
 	return nil
 }
 
-func (c *Controller) restore(ctx context.Context, previous Artifact) {
+func (c *Controller) restore(ctx context.Context, previousArtifact Artifact, previousManager ManagerRegistration) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
 	defer cancel()
+	if restorer, found := c.adapter.(snapshotRestorer); found {
+		_ = restorer.Restore(restoreCtx, previousArtifact, previousManager)
+		return
+	}
 
 	_ = c.adapter.Disable(restoreCtx)
-	if previous.State() == RegistrationInstalled {
-		registration, found := previous.Registration()
+	if previousArtifact.State() == RegistrationInstalled {
+		registration, found := previousArtifact.Registration()
 		if found {
 			_ = c.adapter.Write(restoreCtx, registration)
 			_ = c.adapter.Reload(restoreCtx)

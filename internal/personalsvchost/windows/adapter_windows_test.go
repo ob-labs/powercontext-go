@@ -584,6 +584,105 @@ func TestControllerCancellationAfterReplaceRestoresPreviousTask(t *testing.T) {
 	}
 }
 
+func TestControllerCancellationRestoresManagerWithoutArtifact(t *testing.T) {
+	root := t.TempDir()
+	desired := adapterPlanForPackage(t, root, "2.0.0")
+	previous := adapterPlanForPackage(t, root, "1.0.0")
+	files := newMemoryArtifacts()
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler := &memoryScheduler{files: files, cancelAfterCreate: cancel, rejectCanceled: true}
+	adapter, err := newAdapter(
+		desired,
+		root,
+		`\PowerContext\Tests\unit-mixed-manager`,
+		testIdentity,
+		scheduler,
+		files,
+		http.DefaultClient,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousDocument, err := adapter.renderPlan(previous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler.document, scheduler.present = previousDocument, true
+	controller, err := personalsvc.NewController(adapter, directOperationBoundary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, installErr := controller.Install(ctx, desired.Registration())
+	if !errors.Is(installErr, context.Canceled) {
+		t.Fatalf("Install() error = %v; want context cancellation", installErr)
+	}
+	artifact, err := adapter.InspectArtifact(t.Context())
+	if err != nil || artifact.State() != personalsvc.RegistrationNotInstalled {
+		t.Fatalf("mixed artifact after cancellation = %s, %v; want absent", artifact.State(), err)
+	}
+	assertOwnedManagerRegistration(t, adapter, previous.Registration())
+}
+
+func TestControllerCancellationRestoresArtifactWithoutManager(t *testing.T) {
+	root := t.TempDir()
+	desired := adapterPlanForPackage(t, root, "2.0.0")
+	previous := adapterPlanForPackage(t, root, "1.0.0")
+	files := newMemoryArtifacts()
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler := &memoryScheduler{files: files, cancelAfterCreate: cancel, rejectCanceled: true}
+	adapter, err := newAdapter(
+		desired,
+		root,
+		`\PowerContext\Tests\unit-mixed-artifact`,
+		testIdentity,
+		scheduler,
+		files,
+		http.DefaultClient,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousDocument, err := adapter.renderPlan(previous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files.content, files.exists = previousDocument, true
+	controller, err := personalsvc.NewController(adapter, directOperationBoundary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, installErr := controller.Install(ctx, desired.Registration())
+	if !errors.Is(installErr, context.Canceled) {
+		t.Fatalf("Install() error = %v; want context cancellation", installErr)
+	}
+	artifact, err := adapter.InspectArtifact(t.Context())
+	if err != nil || artifact.State() != personalsvc.RegistrationInstalled {
+		t.Fatalf("mixed artifact after cancellation = %s, %v; want installed", artifact.State(), err)
+	}
+	stored, found := artifact.Registration()
+	if !found || stored != previous.Registration() {
+		t.Fatal("mixed cancellation did not restore the prior artifact")
+	}
+	manager, err := adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipNotLoaded {
+		t.Fatalf("mixed manager after cancellation = %s, %v; want not loaded", manager.Ownership(), err)
+	}
+}
+
+func assertOwnedManagerRegistration(t *testing.T, adapter *Adapter, want personalsvc.Registration) {
+	t.Helper()
+	manager, err := adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
+		t.Fatalf("manager after cancellation = %s, %v; want owned", manager.Ownership(), err)
+	}
+	loaded, found := manager.Registration()
+	if !found || loaded != want {
+		t.Fatal("manager after cancellation has the wrong registration")
+	}
+}
+
 func TestNativeArtifactStoreReplacesExactArtifact(t *testing.T) {
 	root := t.TempDir()
 	store, err := newNativeArtifactStore(root)

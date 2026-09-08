@@ -393,6 +393,129 @@ func (a *Adapter) ManagerState(ctx context.Context) (personalsvc.ManagerState, e
 	return state, nil
 }
 
+// Restore reconstructs the independently captured artifact and manager
+// snapshots after a failed mutation. It never infers one snapshot from the
+// other, so either side may have been absent before the operation.
+func (a *Adapter) Restore(
+	ctx context.Context,
+	previousArtifact personalsvc.Artifact,
+	previousManager personalsvc.ManagerRegistration,
+) error {
+	if err := a.available(ctx); err != nil {
+		return err
+	}
+	artifactPlan, artifactExists, err := a.planForArtifact(previousArtifact)
+	if err != nil {
+		return err
+	}
+	managerPlan, managerExists, err := a.planForManager(previousManager)
+	if err != nil {
+		return err
+	}
+	currentArtifact, currentManager, err := a.mutableState(ctx)
+	if err != nil {
+		return err
+	}
+	if currentArtifact.State() != personalsvc.RegistrationInstalled &&
+		currentArtifact.State() != personalsvc.RegistrationNotInstalled {
+		return newError("restore", nil)
+	}
+	if currentManager.Ownership() != personalsvc.ManagerOwnershipOwned &&
+		currentManager.Ownership() != personalsvc.ManagerOwnershipNotLoaded {
+		return newError("restore", nil)
+	}
+	if currentManager.Ownership() == personalsvc.ManagerOwnershipOwned {
+		state, stateErr := a.scheduler.State(ctx)
+		if stateErr != nil || state == personalsvc.ManagerUnknown {
+			return newError("restore", contextCause(ctx, stateErr))
+		}
+		if state == personalsvc.ManagerActive {
+			if err := a.scheduler.End(ctx); err != nil {
+				return newError("restore", contextCause(ctx, err))
+			}
+		}
+		if err := a.scheduler.Disable(ctx); err != nil {
+			return newError("restore", contextCause(ctx, err))
+		}
+		if err := a.scheduler.Delete(ctx); err != nil {
+			return newError("restore", contextCause(ctx, err))
+		}
+	}
+	if currentArtifact.State() == personalsvc.RegistrationInstalled {
+		if err := a.artifacts.Remove(ctx, a.artifactPath); err != nil {
+			return newError("restore", contextCause(ctx, err))
+		}
+	}
+
+	if managerExists {
+		if err := a.writePlan(ctx, managerPlan); err != nil {
+			return err
+		}
+		if err := a.scheduler.Create(ctx, a.artifactPath); err != nil {
+			return newError("restore", contextCause(ctx, err))
+		}
+		if err := a.scheduler.Enable(ctx); err != nil {
+			return newError("restore", contextCause(ctx, err))
+		}
+	}
+	if artifactExists {
+		return a.writePlan(ctx, artifactPlan)
+	}
+	if managerExists {
+		if err := a.artifacts.Remove(ctx, a.artifactPath); err != nil {
+			return newError("restore", contextCause(ctx, err))
+		}
+	}
+	return nil
+}
+
+func (a *Adapter) planForArtifact(artifact personalsvc.Artifact) (personalsvc.TaskSchedulerSpec, bool, error) {
+	if artifact.State() == personalsvc.RegistrationNotInstalled {
+		return personalsvc.TaskSchedulerSpec{}, false, nil
+	}
+	if artifact.State() != personalsvc.RegistrationInstalled {
+		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
+	}
+	registration, found := artifact.Registration()
+	if !found {
+		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
+	}
+	plan, found := a.knownPlan(registration)
+	if !found {
+		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
+	}
+	return plan, true, nil
+}
+
+func (a *Adapter) planForManager(manager personalsvc.ManagerRegistration) (personalsvc.TaskSchedulerSpec, bool, error) {
+	if manager.Ownership() == personalsvc.ManagerOwnershipNotLoaded {
+		return personalsvc.TaskSchedulerSpec{}, false, nil
+	}
+	if manager.Ownership() != personalsvc.ManagerOwnershipOwned {
+		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
+	}
+	registration, found := manager.Registration()
+	if !found {
+		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
+	}
+	plan, found := a.knownPlan(registration)
+	if !found {
+		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
+	}
+	return plan, true, nil
+}
+
+func (a *Adapter) writePlan(ctx context.Context, plan personalsvc.TaskSchedulerSpec) error {
+	document, err := a.renderPlan(plan)
+	if err != nil {
+		return err
+	}
+	if err := a.artifacts.Write(ctx, a.artifactPath, document); err != nil {
+		return newError("restore", contextCause(ctx, err))
+	}
+	return nil
+}
+
 func (a *Adapter) mutableState(ctx context.Context) (personalsvc.Artifact, personalsvc.ManagerRegistration, error) {
 	artifact, err := a.InspectArtifact(ctx)
 	if err != nil {

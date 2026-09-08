@@ -138,6 +138,12 @@ type Adapter interface {
 	ManagerState(context.Context) (ManagerState, error)
 }
 
+// snapshotRestorer is an optional exact rollback boundary for adapters whose
+// native manager object and stored artifact can exist independently.
+type snapshotRestorer interface {
+	Restore(context.Context, Artifact, ManagerRegistration) error
+}
+
 // OperationBoundary serializes one complete lifecycle mutation. It is injected
 // so Controller remains pure Go and cannot select a host lock implementation.
 type OperationBoundary interface {
