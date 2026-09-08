@@ -304,7 +304,11 @@ func TestNewComposesProductionAdapterAndOperationBoundary(t *testing.T) {
 	if composition.Adapter() == nil || composition.OperationBoundary() == nil {
 		t.Fatal("New() returned an incomplete composition")
 	}
-	if got := composition.Adapter().artifactPath; got != filepath.Join(root, "PowerContext", "Services", "personal-server.xml") {
+	canonicalRoot, rootErr := resolveUserDataRoot(root)
+	if rootErr != nil {
+		t.Fatal(rootErr)
+	}
+	if got := composition.Adapter().artifactPath; got != filepath.Join(canonicalRoot, "PowerContext", "Services", "personal-server.xml") {
 		t.Fatalf("artifact path = %q", got)
 	}
 	if composition.Adapter().taskName != personalsvc.TaskSchedulerTaskName {
@@ -794,7 +798,7 @@ func TestNativeArtifactStoreReplacesExactArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, "PowerContext", "Services", "personal-server.xml")
+	path := store.artifactPath
 	if firstWriteErr := store.Write(t.Context(), path, []byte("first")); firstWriteErr != nil {
 		t.Fatal(firstWriteErr)
 	}

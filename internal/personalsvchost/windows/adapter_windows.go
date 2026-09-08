@@ -106,8 +106,9 @@ func newAdapter(
 	artifacts artifactStore,
 	httpClient *http.Client,
 ) (*Adapter, error) {
+	resolvedRoot, rootErr := resolveUserDataRoot(userDataRoot)
 	if scheduler == nil || artifacts == nil || httpClient == nil ||
-		!validUserDataRoot(userDataRoot) || !validTaskName(taskName) || !validUserIdentity(identity) {
+		rootErr != nil || !validTaskName(taskName) || !validUserIdentity(identity) {
 		return nil, newError("configuration", nil)
 	}
 	if _, err := plan.XML(); err != nil {
@@ -115,7 +116,7 @@ func newAdapter(
 	}
 	return &Adapter{
 		plan:         plan,
-		artifactPath: filepath.Join(userDataRoot, filepath.FromSlash("PowerContext/Services/personal-server.xml")),
+		artifactPath: filepath.Join(resolvedRoot, filepath.FromSlash("PowerContext/Services/personal-server.xml")),
 		taskName:     taskName,
 		userSID:      identity.sid,
 		userAccount:  identity.account,

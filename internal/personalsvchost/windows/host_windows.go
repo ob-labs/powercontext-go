@@ -129,22 +129,30 @@ type nativeArtifactStore struct {
 }
 
 func newNativeArtifactStore(root string) (*nativeArtifactStore, error) {
-	root = filepath.Clean(root)
-	if !validUserDataRoot(root) {
-		return nil, newError("configuration", nil)
-	}
-	info, err := os.Lstat(root)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil, newError("configuration", nil)
-	}
-	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil || !validUserDataRoot(resolved) {
+	resolved, err := resolveUserDataRoot(root)
+	if err != nil {
 		return nil, newError("configuration", nil)
 	}
 	return &nativeArtifactStore{
 		root:         resolved,
 		artifactPath: filepath.Join(resolved, filepath.FromSlash("PowerContext/Services/personal-server.xml")),
 	}, nil
+}
+
+func resolveUserDataRoot(root string) (string, error) {
+	root = filepath.Clean(root)
+	if !validUserDataRoot(root) {
+		return "", errors.New("invalid personal service root")
+	}
+	info, err := os.Lstat(root)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("invalid personal service root")
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil || !validUserDataRoot(resolved) {
+		return "", errors.New("invalid personal service root")
+	}
+	return resolved, nil
 }
 
 func (s *nativeArtifactStore) Read(ctx context.Context, path string) ([]byte, bool, error) {
