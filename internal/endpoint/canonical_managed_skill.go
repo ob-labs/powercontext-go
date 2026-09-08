@@ -83,7 +83,7 @@ func (h *CanonicalManagedSkillHandler) read(ctx context.Context, request *manage
 	if h == nil || h.operations == nil {
 		return skill.PackageSnapshot{}, &RuntimeNotReadyError{}
 	}
-	if request == nil || request.Artifact.Family != skill.Family || request.Artifact.Revision < 1 {
+	if request == nil || request.Artifact.Revision < 1 {
 		return skill.PackageSnapshot{}, &InvalidRequestError{}
 	}
 	ref, err := artifact.NewRef(request.Artifact.Family, request.Artifact.ArtifactID, int64(request.Artifact.Revision))
@@ -92,8 +92,7 @@ func (h *CanonicalManagedSkillHandler) read(ctx context.Context, request *manage
 	}
 	snapshot, err := h.operations.ReadSkillPackage(ctx, request.ScopeID, ref)
 	if err != nil {
-		var missing *artifact.NotFoundError
-		if errors.As(err, &missing) {
+		if _, missing := errors.AsType[*artifact.NotFoundError](err); missing {
 			return skill.PackageSnapshot{}, &managedSkillPackageNotFoundError{}
 		}
 		return skill.PackageSnapshot{}, err

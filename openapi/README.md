@@ -29,7 +29,7 @@ operation's ID, method, path, and `implemented-canonical` status against the
 e4 inventory. They do not require a stable 74 schema source to contain every
 new e4 deferred operation. The e4 Artifact revision-history, Artifact tag,
 Prompt, and Access clusters remain deferred. This rebaseline does not implement
-Artifact writes, managed Skills, remote Skills, or native personal services.
+Artifact writes, managed Skill generation, remote Skills, or native personal services.
 
 `canonical/upstream-powercontext.yaml` is the immutable raw OpenAPI blob for
 the three sidecars. `canonical/scopes-manifest.json` explicitly projects only

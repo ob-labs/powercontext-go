@@ -70,6 +70,7 @@ func TestManagedSkillPackageArchiveBoundaryHandlesInteroperabilityClaimPolarity(
 func managedSkillPackageArchiveBoundaryError(contents string) error {
 	text := strings.Join(strings.Fields(contents), " ")
 	for _, required := range []string{
+		"This rebaseline does not implement Artifact writes, managed Skill generation, remote Skills, or native personal services.",
 		"Go-persisted immutable package snapshot",
 		"`archive_base64` decodes to the exact stored archive bytes",
 		"Python Receiver/CLI archive-reference interoperability remains unimplemented",
@@ -80,6 +81,7 @@ func managedSkillPackageArchiveBoundaryError(contents string) error {
 		}
 	}
 	for _, prohibited := range []string{
+		"this rebaseline does not implement artifact writes, managed skills, remote skills, or native personal services.",
 		"cross-language zip canonicalization is implemented",
 		"cross-language zip canonicalization is supported",
 		"python receiver archive-reference interoperability is implemented",

@@ -70,12 +70,17 @@ func TestCanonicalManagedSkillHandlerProjectsVerifiedSnapshot(t *testing.T) {
 }
 
 func TestCanonicalManagedSkillHandlerClassifiesInvalidAndMissingReads(t *testing.T) {
-	handler := NewCanonicalManagedSkillHandler(managedSkillPackageOperationsFunc(func(context.Context, string, artifact.Ref) (skill.PackageSnapshot, error) {
+	var readRef artifact.Ref
+	handler := NewCanonicalManagedSkillHandler(managedSkillPackageOperationsFunc(func(_ context.Context, _ string, ref artifact.Ref) (skill.PackageSnapshot, error) {
+		readRef = ref
 		return skill.PackageSnapshot{}, &artifact.NotFoundError{}
 	}))
-	missing, err := handler.GetSkillPackageManifest(t.Context(), &managedskills.GetSkillPackageRequest{ScopeID: "scope", Artifact: managedskills.ArtifactReference{Family: skill.Family, ArtifactID: "package", Revision: 1}})
+	missing, err := handler.GetSkillPackageManifest(t.Context(), &managedskills.GetSkillPackageRequest{ScopeID: "scope", Artifact: managedskills.ArtifactReference{Family: "future.family", ArtifactID: "package", Revision: 1}})
 	if err == nil || missing != nil || MapError(err).Code != "not_found" {
 		t.Fatalf("missing result=%#v error=%v mapping=%#v", missing, err, MapError(err))
+	}
+	if readRef.Family() != "future.family" {
+		t.Fatalf("missing arbitrary family was not delegated: %#v", readRef)
 	}
 	invalid, invalidErr := handler.GetSkillPackageManifest(t.Context(), &managedskills.GetSkillPackageRequest{ScopeID: "scope", Artifact: managedskills.ArtifactReference{Family: skill.Family, ArtifactID: "package", Revision: 0}})
 	if invalidErr == nil || invalid != nil || MapError(invalidErr).Code != "invalid_request" {

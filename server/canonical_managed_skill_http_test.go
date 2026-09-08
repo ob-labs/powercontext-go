@@ -35,6 +35,7 @@ import (
 	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
 	"github.com/ob-labs/powercontext-go/artifact"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
+	serverlogging "github.com/ob-labs/powercontext-go/internal/observability/logging"
 	"github.com/ob-labs/powercontext-go/internal/sqlstore"
 )
 
@@ -195,17 +196,18 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	beforePackages := managedSkillTableCount(t, database, "pc_skill_packages")
 	requestBody := `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`
 	for _, testCase := range []struct {
-		name, path, body, token string
-		status                  int
+		name, path, body, token, operation string
+		status                             int
 	}{
-		{"auth", "/v1/skill/package/manifest", requestBody, "", http.StatusUnauthorized},
-		{"unknown scope", "/v1/skill/package/manifest", `{"scope_id":"private-missing-scope","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`, config.Auth.Token, http.StatusNotFound},
-		{"missing revision", "/v1/skill/package/download", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":99}}`, config.Auth.Token, http.StatusNotFound},
-		{"invalid revision", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":0}}`, config.Auth.Token, http.StatusUnprocessableEntity},
-		{"legacy Skill", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-legacy","revision":1}}`, config.Auth.Token, http.StatusInternalServerError},
-		{"other family", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"experience","artifact_id":"private-other-family","revision":1}}`, config.Auth.Token, http.StatusUnprocessableEntity},
-		{"MCP remains isolated", "/mcp", requestBody, config.Auth.Token, http.StatusNotFound},
-		{"legacy route remains isolated", "/v1/skill/package/materialize", requestBody, config.Auth.Token, http.StatusNotFound},
+		{"auth", "/v1/skill/package/manifest", requestBody, "", "get_skill_package_manifest", http.StatusUnauthorized},
+		{"unknown scope", "/v1/skill/package/manifest", `{"scope_id":"private-missing-scope","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusNotFound},
+		{"missing revision", "/v1/skill/package/download", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":99}}`, config.Auth.Token, "download_skill_package", http.StatusNotFound},
+		{"missing arbitrary family", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"future.family","artifact_id":"private-arbitrary-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusNotFound},
+		{"invalid revision", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":0}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusUnprocessableEntity},
+		{"legacy Skill", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-legacy","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError},
+		{"persisted experience", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"experience","artifact_id":"private-other-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError},
+		{"MCP remains isolated", "/mcp", requestBody, config.Auth.Token, "", http.StatusNotFound},
+		{"legacy route remains isolated", "/v1/skill/package/materialize", requestBody, config.Auth.Token, "", http.StatusNotFound},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, testCase.path, bytes.NewBufferString(testCase.body))
@@ -213,10 +215,14 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 			request.Header.Set("Authorization", "Bearer "+testCase.token)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
-			if response.Code != testCase.status || response.Header().Get("X-PowerContext-Request-ID") == "" {
+			requestID := response.Header().Get("X-PowerContext-Request-ID")
+			if response.Code != testCase.status || requestID == "" {
 				t.Fatalf("status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
 			}
-			for _, protected := range []string{scopeID, config.Auth.Token, "private-package", "private-instruction", "private-missing-scope"} {
+			if testCase.operation != "" {
+				assertManagedSkillPackageAccessLog(t, logs.String(), requestID, testCase.operation, testCase.status)
+			}
+			for _, protected := range []string{scopeID, config.Auth.Token, "private-package", "private-instruction", "private-missing-scope", "private-arbitrary-family", "private-other-family"} {
 				if strings.Contains(response.Body.String(), protected) || strings.Contains(logs.String(), protected) {
 					t.Fatalf("HTTP or access logs leaked %q", protected)
 				}
@@ -261,6 +267,25 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "runtime_not_ready") {
 		t.Fatalf("closed runtime response = %d %s", response.Code, response.Body.String())
 	}
+}
+
+func assertManagedSkillPackageAccessLog(t *testing.T, output, requestID, operation string, status int) {
+	t.Helper()
+	for _, record := range decodeLogRecords(t, output) {
+		if record["event"] != serverlogging.TransportCompletedEvent || record["operation"] != operation || record["request_id"] != requestID {
+			continue
+		}
+		level := "INFO"
+		if status >= http.StatusInternalServerError {
+			level = "ERROR"
+		}
+		assertLogFields(t, record, map[string]any{
+			"level": level, "logger": "powercontext.server.access", "outcome": "failure",
+			"transport": "http", "unit": "transport", "status_code": float64(status), "span_id": requestID,
+		})
+		return
+	}
+	t.Fatalf("access log operation %q request ID %q not found in %s", operation, requestID, output)
 }
 
 func persistManagedSkillPackage(t *testing.T, database *sql.DB, scopeID, artifactID, instructions string) {

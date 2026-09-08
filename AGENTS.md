@@ -181,6 +181,11 @@ source / artifact / trigger / inference
   include its exact method-and-path resolver in access-log operation lookup.
   Verify real handler requests log the generated operation ID and correlated
   request ID without exposing resource identifiers, content, or credentials.
+- When a transport accepts a generic exact Artifact reference but a
+  family-specific reader determines its available representation, validate the
+  reference without prefiltering its family. Verify a persisted non-target
+  family retains the reader's error contract and a missing syntactically valid
+  arbitrary family remains a redacted 404.
 - When adding an owned generated output root, synchronize its explicit license
   and lint exclusions, generator inventory, generated-output checks, and release
   contracts. Verify the actual license-header check and affected generator and
