@@ -93,7 +93,11 @@ func TestAdapterCompletesOwnedTaskLifecycleThroughExplicitBoundaries(t *testing.
 		t.Fatal(removeErr)
 	}
 
-	wantPath := filepath.Join(root, "PowerContext", "Services", "personal-server.xml")
+	canonicalRoot, rootErr := resolveUserDataRoot(root)
+	if rootErr != nil {
+		t.Fatal(rootErr)
+	}
+	wantPath := filepath.Join(canonicalRoot, "PowerContext", "Services", "personal-server.xml")
 	if files.writePath != wantPath || files.removePath != wantPath {
 		t.Fatalf("artifact paths = write %q, remove %q; want %q", files.writePath, files.removePath, wantPath)
 	}
