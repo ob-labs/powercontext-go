@@ -93,6 +93,14 @@ stage_exit_code=0
 stage_stdout_bytes=0
 stage_stdout_sha256="$(printf '' | sha256sum | awk '{ print substr($1, 1, 16) }')"
 stage_output="$workspace/.stage-output"
+load_unit_stage=not_run
+load_unit_exit_code=0
+load_unit_stdout_bytes=0
+load_unit_stdout_sha256="$stage_stdout_sha256"
+unit_properties_stage=not_run
+unit_properties_exit_code=0
+unit_properties_stdout_bytes=0
+unit_properties_stdout_sha256="$stage_stdout_sha256"
 
 record_stage() {
   local name="$1"
@@ -112,6 +120,28 @@ record_stage() {
   return "$exit_code"
 }
 
+record_diagnostic_stage() {
+  local name="$1"
+  shift
+  if record_stage "$name" "$@"; then
+    :
+  fi
+  case "$name" in
+    load_unit)
+      load_unit_stage="$recorded_stage"
+      load_unit_exit_code="$stage_exit_code"
+      load_unit_stdout_bytes="$stage_stdout_bytes"
+      load_unit_stdout_sha256="$stage_stdout_sha256"
+      ;;
+    unit_properties)
+      unit_properties_stage="$recorded_stage"
+      unit_properties_exit_code="$stage_exit_code"
+      unit_properties_stdout_bytes="$stage_stdout_bytes"
+      unit_properties_stdout_sha256="$stage_stdout_sha256"
+      ;;
+  esac
+}
+
 write_summary() {
   local result="$1"
   local manager_ready=false
@@ -129,7 +159,7 @@ write_summary() {
   local archive_sha
   archive_sha="$(sha256sum "$archive" | awk '{ print $1 }')"
   cat > "$diagnostics/summary.json" <<EOF
-{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","systemd_version":"$systemd_version","test_exit_code":$result}
+{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","load_unit":{"stage":"$load_unit_stage","exit_code":$load_unit_exit_code,"stdout_bytes":$load_unit_stdout_bytes,"stdout_sha256":"$load_unit_stdout_sha256"},"unit_properties":{"stage":"$unit_properties_stage","exit_code":$unit_properties_exit_code,"stdout_bytes":$unit_properties_stdout_bytes,"stdout_sha256":"$unit_properties_stdout_sha256"},"systemd_version":"$systemd_version","test_exit_code":$result}
 EOF
 }
 
@@ -171,6 +201,10 @@ else
         POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE=/work/"$(basename "$archive")" \
         timeout 90 /work/"$(basename "$test_binary")" -test.v -test.run '^TestReleaseArchiveProvidesConsumablePersonalService$'; then
         result=1
+        record_diagnostic_stage load_unit docker exec --user powercontext "$container" env -i "${environment[@]}" \
+          busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager LoadUnit s powercontext.service
+        record_diagnostic_stage unit_properties docker exec --user powercontext "$container" env -i "${environment[@]}" \
+          busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1/unit/powercontext_2eservice org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit
       fi
     fi
   fi

@@ -2214,6 +2214,9 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 		{name: "runner dbus socket verification", payload: runner, old: "test -S /run/user/1001/bus", replace: "test -e /run/user/1001/bus", which: "runner"},
 		{name: "runner user-bus ping", payload: runner, old: "busctl --user --json=short call", replace: "busctl --private", which: "runner"},
 		{name: "runner stage diagnostics", payload: runner, old: "record_stage", replace: "record_phase", which: "runner"},
+		{name: "runner load-unit diagnosis", payload: runner, old: "org.freedesktop.systemd1.Manager LoadUnit s powercontext.service", replace: "org.freedesktop.systemd1.Manager LoadUnit s foreign.service", which: "runner"},
+		{name: "runner unit-properties diagnosis", payload: runner, old: "org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit", replace: "org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Service", which: "runner"},
+		{name: "runner failure diagnosis recorder", payload: runner, old: "record_diagnostic_stage", replace: "record_external_stage", which: "runner"},
 		{name: "runner container privilege", payload: runner, old: "--privileged", replace: "--read-only", which: "runner"},
 	} {
 		t.Run(mutant.name, func(t *testing.T) {
@@ -2322,6 +2325,10 @@ func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload,
 		"systemctl --user start dbus.socket", "test -S /run/user/1001/bus",
 		"busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.DBus.Peer Ping",
 		"record_stage", "stage_exit_code", "stage_stdout_bytes", "stage_stdout_sha256",
+		"record_diagnostic_stage", "org.freedesktop.systemd1.Manager LoadUnit s powercontext.service",
+		"org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit",
+		"load_unit_exit_code", "load_unit_stdout_bytes", "load_unit_stdout_sha256",
+		"unit_properties_exit_code", "unit_properties_stdout_bytes", "unit_properties_stdout_sha256",
 		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "mktemp -d", "chmod 0700",
 		"docker run --detach --privileged", "--tmpfs /run", "--tmpfs /run/lock", "--volume \"$workspace:/work\"",
 	} {
