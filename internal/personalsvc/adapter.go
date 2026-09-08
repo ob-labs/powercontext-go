@@ -36,7 +36,10 @@ type Artifact struct {
 	definition      DefinitionState
 	registration    Registration
 	hasRegistration bool
+	restoreSnapshot *restoreSnapshot
 }
+
+type restoreSnapshot struct{ value any }
 
 // InstalledArtifact returns a verified owned artifact with its executable
 // available. Adapters may use InstalledArtifactWithDefinition when they can
@@ -80,12 +83,29 @@ func (a Artifact) DefinitionState() DefinitionState { return a.definition }
 // Registration returns the verified immutable registration when one exists.
 func (a Artifact) Registration() (Registration, bool) { return a.registration, a.hasRegistration }
 
+// WithRestoreSnapshot returns a copy carrying immutable adapter-owned rollback
+// state. The snapshot is not part of status or ownership decisions.
+func (a Artifact) WithRestoreSnapshot(snapshot any) Artifact {
+	a.restoreSnapshot = &restoreSnapshot{value: snapshot}
+	return a
+}
+
+// RestoreSnapshot returns opaque adapter-owned rollback state to the adapter
+// that produced this observation.
+func (a Artifact) RestoreSnapshot() (any, bool) {
+	if a.restoreSnapshot == nil {
+		return nil, false
+	}
+	return a.restoreSnapshot.value, true
+}
+
 // ManagerRegistration is an immutable inspection result for the object loaded
 // by the native manager. It is separate from Artifact by design.
 type ManagerRegistration struct {
 	ownership       ManagerOwnership
 	registration    Registration
 	hasRegistration bool
+	restoreSnapshot *restoreSnapshot
 }
 
 // OwnedManager returns a loaded native object verified as PowerContext-owned.
@@ -120,6 +140,22 @@ func (r ManagerRegistration) Registration() (Registration, bool) {
 	return r.registration, r.hasRegistration
 }
 
+// WithRestoreSnapshot returns a copy carrying immutable adapter-owned rollback
+// state independently from the artifact observation.
+func (r ManagerRegistration) WithRestoreSnapshot(snapshot any) ManagerRegistration {
+	r.restoreSnapshot = &restoreSnapshot{value: snapshot}
+	return r
+}
+
+// RestoreSnapshot returns opaque adapter-owned rollback state to the adapter
+// that produced this observation.
+func (r ManagerRegistration) RestoreSnapshot() (any, bool) {
+	if r.restoreSnapshot == nil {
+		return nil, false
+	}
+	return r.restoreSnapshot.value, true
+}
+
 // Adapter isolates every native, filesystem, process, and network operation.
 // Implementations must inspect the artifact and loaded manager object through
 // independent methods; Controller never infers ownership from an endpoint.
@@ -136,6 +172,12 @@ type Adapter interface {
 	Disable(context.Context) error
 	Remove(context.Context) error
 	ManagerState(context.Context) (ManagerState, error)
+}
+
+// snapshotRestorer is an optional exact rollback boundary for adapters whose
+// native manager object and stored artifact can exist independently.
+type snapshotRestorer interface {
+	Restore(context.Context, Artifact, ManagerRegistration) error
 }
 
 // OperationBoundary serializes one complete lifecycle mutation. It is injected

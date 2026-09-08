@@ -17,7 +17,10 @@ package personalsvc
 import (
 	"context"
 	"errors"
+	"time"
 )
+
+const restoreTimeout = 30 * time.Second
 
 // Controller orchestrates one immutable personal-service registration through
 // a supplied native Adapter. It does not read the environment, access storage,
@@ -235,7 +238,7 @@ func (c *Controller) installLocked(ctx context.Context, desired Registration, in
 		changed = stored != desired
 	}
 	if changed {
-		if err := c.commit(ctx, desired, artifact); err != nil {
+		if err := c.commit(ctx, desired, artifact, managerRegistration); err != nil {
 			return false, err
 		}
 	} else if err := c.adapter.Enable(ctx); err != nil {
@@ -250,35 +253,62 @@ func (c *Controller) installLocked(ctx context.Context, desired Registration, in
 	return true, nil
 }
 
-func (c *Controller) commit(ctx context.Context, desired Registration, previous Artifact) error {
+func (c *Controller) commit(
+	ctx context.Context,
+	desired Registration,
+	previousArtifact Artifact,
+	previousManager ManagerRegistration,
+) error {
 	if err := c.adapter.Write(ctx, desired); err != nil {
-		c.restore(ctx, previous)
-		return newOperationError(ErrorOperation, StageWrite, statusForSupportedUnknown())
+		c.restore(ctx, previousArtifact, previousManager)
+		return newContextOperationError(ctx, ErrorOperation, StageWrite, statusForSupportedUnknown())
 	}
 	if err := c.adapter.Reload(ctx); err != nil {
-		c.restore(ctx, previous)
-		return newOperationError(ErrorOperation, StageReload, statusForSupportedUnknown())
+		c.restore(ctx, previousArtifact, previousManager)
+		return newContextOperationError(ctx, ErrorOperation, StageReload, statusForSupportedUnknown())
 	}
 	if err := c.adapter.Enable(ctx); err != nil {
-		c.restore(ctx, previous)
-		return newOperationError(ErrorOperation, StageEnable, statusForSupportedUnknown())
+		c.restore(ctx, previousArtifact, previousManager)
+		return newContextOperationError(ctx, ErrorOperation, StageEnable, statusForSupportedUnknown())
 	}
 	return nil
 }
 
-func (c *Controller) restore(ctx context.Context, previous Artifact) {
-	_ = c.adapter.Disable(ctx)
-	if previous.State() == RegistrationInstalled {
-		registration, found := previous.Registration()
+func (c *Controller) restore(ctx context.Context, previousArtifact Artifact, previousManager ManagerRegistration) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
+	defer cancel()
+	if restorer, found := c.adapter.(snapshotRestorer); found {
+		_ = restorer.Restore(restoreCtx, previousArtifact, previousManager)
+		return
+	}
+
+	_ = c.adapter.Disable(restoreCtx)
+	if previousArtifact.State() == RegistrationInstalled {
+		registration, found := previousArtifact.Registration()
 		if found {
-			_ = c.adapter.Write(ctx, registration)
-			_ = c.adapter.Reload(ctx)
-			_ = c.adapter.Enable(ctx)
+			_ = c.adapter.Write(restoreCtx, registration)
+			_ = c.adapter.Reload(restoreCtx)
+			_ = c.adapter.Enable(restoreCtx)
 			return
 		}
 	}
-	_ = c.adapter.Remove(ctx)
-	_ = c.adapter.Reload(ctx)
+	_ = c.adapter.Remove(restoreCtx)
+	_ = c.adapter.Reload(restoreCtx)
+}
+
+func newContextOperationError(
+	ctx context.Context,
+	kind ErrorKind,
+	stage OperationStage,
+	status Status,
+) *OperationError {
+	if ctx == nil {
+		return newOperationError(kind, stage, status)
+	}
+	return newOperationErrorWithCause(kind, stage, status, ctx.Err())
 }
 
 func (c *Controller) uninstallLocked(ctx context.Context) error {

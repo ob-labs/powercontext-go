@@ -1476,7 +1476,7 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-contract.yml has no windows-contract job")
 	}
-	setupIndex, apiTestIndex := -1, -1
+	setupIndex, apiTestIndex, executorTestIndex := -1, -1, -1
 	for index, step := range job.Steps {
 		switch step.Name {
 		case "Set up the Go environment":
@@ -1487,13 +1487,18 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 			if strings.TrimSpace(step.Run) == "go test -count=1 ./tools/api-baseline -run '^TestWriteBaselineReplacesExistingOutput$'" {
 				apiTestIndex = index
 			}
+		case "Verify Windows Task Scheduler executor boundary":
+			if strings.TrimSpace(step.Run) == "go test -count=1 ./internal/personalsvchost/windows" {
+				executorTestIndex = index
+			}
 		}
 	}
-	if setupIndex < 0 || apiTestIndex <= setupIndex {
+	if setupIndex < 0 || apiTestIndex <= setupIndex || executorTestIndex <= apiTestIndex {
 		t.Fatalf(
-			"Windows targeted Go steps = setup %d, API %d, want ordered setup and regression tests",
+			"Windows targeted Go steps = setup %d, API %d, executor %d, want ordered setup and regression tests",
 			setupIndex,
 			apiTestIndex,
+			executorTestIndex,
 		)
 	}
 }
