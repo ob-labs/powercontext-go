@@ -2219,6 +2219,7 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 		{name: "runner service-properties diagnosis", payload: runner, old: "record_diagnostic_stage service_properties", replace: "record_diagnostic_stage unrelated_properties", which: "runner"},
 		{name: "runner load-state diagnosis", payload: runner, old: "record_load_state load_state", replace: "record_load_state unrelated_state", which: "runner"},
 		{name: "runner full-show diagnosis", payload: runner, old: "record_show_state show_state", replace: "record_show_state unrelated_show", which: "runner"},
+		{name: "runner consumer diagnostic", payload: runner, old: "archive_consumer_stdout_sha256", replace: "archive_consumer_output_digest", which: "runner"},
 		{name: "runner failure diagnosis recorder", payload: runner, old: "record_diagnostic_stage", replace: "record_external_stage", which: "runner"},
 		{name: "runner container privilege", payload: runner, old: "--privileged", replace: "--read-only", which: "runner"},
 	} {
@@ -2338,6 +2339,7 @@ func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload,
 		"load_state_exit_code", "load_state_stdout_bytes", "load_state_stdout_sha256", "load_state_value",
 		"record_show_state show_state", "systemctl --user show --property=LoadState --property=FragmentPath --property=DropInPaths --property=Environment --property=ExecStart powercontext.service",
 		"show_state_exit_code", "show_state_stdout_bytes", "show_state_stdout_sha256", "show_state_value",
+		"archive_consumer_exit_code", "archive_consumer_stdout_bytes", "archive_consumer_stdout_sha256",
 		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "mktemp -d", "chmod 0700",
 		"docker run --detach --privileged", "--tmpfs /run", "--tmpfs /run/lock", "--volume \"$workspace:/work\"",
 	} {
