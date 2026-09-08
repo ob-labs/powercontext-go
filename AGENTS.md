@@ -202,6 +202,9 @@ source / artifact / trigger / inference
   merge only `Rows.Close`; do not call a helper that reads `Rows.Err` again.
   Verify injected iteration and close failures remain matchable while each
   root error appears only once.
+- When a health probe consumes an HTTP response but its outcome intentionally
+  does not model close failure, explicitly discard `Body.Close` in a deferred
+  function. Verify the probe outcome and the pinned `errcheck` policy.
 - When a CI end-to-end test starts a compiled Go service under a readiness
   deadline, build the binary once before the deadline and pass its absolute
   path to every test worker. Verify the workflow with empty `GOMODCACHE` and
@@ -626,3 +629,17 @@ source / artifact / trigger / inference
   root, reject global load roots, and fail closed on missing or nonempty
   `DropInPaths`. Verify global paths, drop-ins, space-containing command
   arguments, and zero-value public operations cannot reach a native boundary.
+- When a Linux personal-service boundary accesses an owned artifact or
+  credential-bearing environment file, resolve every directory component from
+  a trusted descriptor with `O_DIRECTORY|O_NOFOLLOW` and perform leaf reads,
+  writes, renames, and deletes relative to that descriptor. Preserve D-Bus
+  environment entries as individual assignments and require each ownership
+  marker exactly once. Verify a middle-directory symlink to an owner-private
+  target, concurrent parent replacement, and a whitespace-combined marker
+  assignment cannot substitute a trusted artifact or manager registration.
+
+- When a hidden service command forwards persistent paths or endpoints into a
+  managed unit, reject a changed flag value with leading or trailing whitespace
+  as a usage error before any platform boundary. Render and parse the exact
+  supported systemd service type, and verify legacy type variants remain
+  unowned artifacts.

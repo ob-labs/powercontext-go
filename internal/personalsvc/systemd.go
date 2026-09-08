@@ -98,7 +98,7 @@ type SystemdUserManagerUnit struct {
 	fragmentPath       string
 	dropInPathsPresent bool
 	dropInPaths        []string
-	environment        string
+	environment        []string
 	execStart          []SystemdUserExecStart
 }
 
@@ -109,7 +109,7 @@ func NewSystemdUserManagerUnit(
 	fragmentPath string,
 	dropInPathsPresent bool,
 	dropInPaths []string,
-	environment string,
+	environment []string,
 	execStart []SystemdUserExecStart,
 ) SystemdUserManagerUnit {
 	return SystemdUserManagerUnit{
@@ -117,7 +117,7 @@ func NewSystemdUserManagerUnit(
 		fragmentPath:       strings.Clone(fragmentPath),
 		dropInPathsPresent: dropInPathsPresent,
 		dropInPaths:        slices.Clone(dropInPaths),
-		environment:        strings.Clone(environment),
+		environment:        slices.Clone(environment),
 		execStart:          cloneSystemdUserExecStart(execStart),
 	}
 }
@@ -135,8 +135,10 @@ func (u SystemdUserManagerUnit) HasDropInPaths() bool { return u.dropInPathsPres
 // DropInPaths returns independent copies of the manager-reported drop-ins.
 func (u SystemdUserManagerUnit) DropInPaths() []string { return slices.Clone(u.dropInPaths) }
 
-// Environment returns the manager-reported environment assignments.
-func (u SystemdUserManagerUnit) Environment() string { return u.environment }
+// Environment returns independent copies of the manager-reported environment
+// assignments. Each string remains one D-Bus assignment; callers must not
+// split a value on whitespace because values may themselves contain spaces.
+func (u SystemdUserManagerUnit) Environment() []string { return slices.Clone(u.environment) }
 
 // ExecStart returns independent copies of the manager-reported commands.
 func (u SystemdUserManagerUnit) ExecStart() []SystemdUserExecStart {
@@ -163,45 +165,34 @@ type SystemdUserBoundary interface {
 	Probe(context.Context, string) (ProbeState, error)
 }
 
-// SystemdUserLauncher is an immutable command prefix for the future
-// manager-owned personal-service launcher. Registration endpoint and data-dir
-// arguments are appended by the adapter so inspected metadata and ExecStart
-// always describe the same registration.
+// SystemdUserLauncher is the fixed command prefix for the manager-owned
+// personal-service launcher. The executable and all mutable values belong to
+// the registration, so the unit can be compared directly with its definition.
 type SystemdUserLauncher struct {
-	executable string
-	arguments  []string
+	arguments []string
 }
 
-// NewSystemdUserLauncher validates a launcher executable and its fixed
-// argument prefix without touching the host filesystem.
-func NewSystemdUserLauncher(executable string, arguments ...string) (SystemdUserLauncher, error) {
-	if !validSystemdArgument(executable, true) {
+// NewSystemdUserLauncher accepts only the release binary's hidden service
+// command. It does not inspect the executable or filesystem.
+func NewSystemdUserLauncher(arguments ...string) (SystemdUserLauncher, error) {
+	if !slices.Equal(arguments, []string{"server", "_service-run"}) {
 		return SystemdUserLauncher{}, newSystemdAdapterError("configuration")
 	}
-	for _, argument := range arguments {
-		if !validSystemdLauncherPrefixArgument(argument) {
-			return SystemdUserLauncher{}, newSystemdAdapterError("configuration")
-		}
-	}
-	return SystemdUserLauncher{executable: executable, arguments: append([]string(nil), arguments...)}, nil
+	return SystemdUserLauncher{arguments: slices.Clone(arguments)}, nil
 }
 
 func (l SystemdUserLauncher) command(registration Registration) ([]string, error) {
-	if !validSystemdArgument(l.executable, true) {
+	if !slices.Equal(l.arguments, []string{"server", "_service-run"}) {
 		return nil, newSystemdAdapterError("configuration")
-	}
-	for _, argument := range l.arguments {
-		if !validSystemdLauncherPrefixArgument(argument) {
-			return nil, newSystemdAdapterError("configuration")
-		}
 	}
 	if err := registration.Definition().Validate(); err != nil {
 		return nil, newSystemdAdapterError("configuration")
 	}
-	arguments := make([]string, 0, 1+len(l.arguments)+4)
-	arguments = append(arguments, l.executable)
+	arguments := make([]string, 0, 1+len(l.arguments)+6)
+	arguments = append(arguments, registration.Definition().Binary())
 	arguments = append(arguments, l.arguments...)
 	arguments = append(arguments,
+		"--env-file", registration.Definition().EnvFile(),
 		"--endpoint", registration.Definition().Endpoint(),
 		"--data-dir", registration.Definition().DataDir(),
 	)
@@ -232,13 +223,8 @@ func NewSystemdUserAdapter(
 	if boundary == nil || !validSystemdUserConfigRoot(userConfigRoot) {
 		return nil, newSystemdAdapterError("configuration")
 	}
-	if !validSystemdArgument(launcher.executable, true) {
+	if !slices.Equal(launcher.arguments, []string{"server", "_service-run"}) {
 		return nil, newSystemdAdapterError("configuration")
-	}
-	for _, argument := range launcher.arguments {
-		if !validSystemdLauncherPrefixArgument(argument) {
-			return nil, newSystemdAdapterError("configuration")
-		}
 	}
 	return &SystemdUserAdapter{
 		boundary: boundary,
@@ -473,7 +459,7 @@ func (a *SystemdUserAdapter) render(registration Registration) ([]byte, error) {
 		"StartLimitBurst=3\n" +
 		"\n" +
 		"[Service]\n" +
-		"Type=simple\n" +
+		"Type=exec\n" +
 		"Environment=POWERCONTEXT_SERVICE_OWNED=true\n" +
 		"Environment=POWERCONTEXT_SERVICE_METADATA=" + metadata + "\n" +
 		"ExecStart=" + strings.Join(quoted, " ") + "\n" +
@@ -557,16 +543,6 @@ func validSystemdArgument(value string, absolute bool) bool {
 	return true
 }
 
-func validSystemdLauncherPrefixArgument(value string) bool {
-	if !validSystemdArgument(value, false) {
-		return false
-	}
-	if value == "--" || value == "--endpoint" || value == "--data-dir" {
-		return false
-	}
-	return !strings.HasPrefix(value, "--endpoint=") && !strings.HasPrefix(value, "--data-dir=")
-}
-
 func validEncodedRegistration(value string) bool {
 	if value == "" {
 		return false
@@ -585,8 +561,8 @@ func quoteSystemdArgument(value string) string {
 	return "\"" + replacer.Replace(value) + "\""
 }
 
-func systemdOwnership(value string) (metadata string, owned bool, found bool) {
-	for item := range strings.FieldsSeq(value) {
+func systemdOwnership(values []string) (metadata string, owned bool, found bool) {
+	for _, item := range values {
 		name, itemValue, hasValue := strings.Cut(item, "=")
 		if !hasValue {
 			continue

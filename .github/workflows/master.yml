@@ -296,6 +296,64 @@ jobs:
             exit 1
           fi
 
+  linux-personal-service-consumer:
+    name: Linux personal service release consumer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libsqlite3-dev
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Build Standard Linux archive for personal-service consumer
+        shell: bash
+        run: |
+          version=0.0.0-ci
+          epoch="$(git show -s --format=%ct)"
+          build_date="$(date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)"
+          syft_version="$(go run ./tools/release asset -component syft -field version)"
+          mkdir -p "$RUNNER_TEMP/tools"
+          GOBIN="$RUNNER_TEMP/tools" go install "github.com/anchore/syft/cmd/syft@v$syft_version"
+          make package-standard \
+            VERSION="$version" COMMIT="$GITHUB_SHA" BUILD_DATE="$build_date" \
+            SYFT="$RUNNER_TEMP/tools/syft"
+
+      - name: Build Linux personal-service consumer
+        shell: bash
+        run: |
+          go test -c -tags systemd_user_consumer \
+            -o "$RUNNER_TEMP/powercontext-systemd-user-consumer.test" ./tools/release
+
+      - name: Exercise Standard Linux personal-service archive
+        shell: bash
+        run: |
+          version=0.0.0-ci
+          archive="$(realpath "dist/powercontext-${version}-linux-amd64.tar.gz")"
+          test/systemd-user-consumer/run.sh \
+            --archive "$archive" \
+            --test-binary "$RUNNER_TEMP/powercontext-systemd-user-consumer.test"
+
+      - name: Upload bounded personal-service consumer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: linux-personal-service-consumer-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-systemd-user-consumer.*/summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
   check-docs:
     runs-on: ubuntu-latest
     timeout-minutes: 15

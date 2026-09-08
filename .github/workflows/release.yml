@@ -158,6 +158,33 @@ jobs:
           make package-standard
           make package-full
 
+      - name: Build Linux personal-service consumer
+        if: matrix.target == 'linux-amd64'
+        shell: bash
+        run: |
+          go test -c -tags systemd_user_consumer \
+            -o "$RUNNER_TEMP/powercontext-systemd-user-consumer.test" ./tools/release
+
+      - name: Exercise Standard Linux personal-service archive
+        if: matrix.target == 'linux-amd64'
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          archive="$(realpath "dist/powercontext-${VERSION}-linux-amd64.tar.gz")"
+          test/systemd-user-consumer/run.sh \
+            --archive "$archive" \
+            --test-binary "$RUNNER_TEMP/powercontext-systemd-user-consumer.test"
+
+      - name: Upload bounded personal-service consumer diagnostics
+        if: failure() && matrix.target == 'linux-amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-linux-personal-service-consumer-${{ github.sha }}
+          path: ${{ runner.temp }}/powercontext-systemd-user-consumer.*/summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Smoke test both released process surfaces
         env:
           POWERCONTEXT_ONNXRUNTIME_LIBRARY_DIR: ${{ steps.native.outputs.onnxruntime-lib-dir }}

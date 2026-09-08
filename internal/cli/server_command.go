@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -42,10 +43,108 @@ type serverEnvironmentValue struct {
 	present bool
 }
 
+type serviceFlagRequirement struct {
+	name  string
+	value *string
+}
+
 func newServerCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{Use: "server", Short: "Run a configured PowerContext service."}
-	command.AddCommand(newServerRunCommand(state))
+	command.AddCommand(
+		newServerRunCommand(state),
+		newServerInstallCommand(state),
+		newServerStatusCommand(state),
+		newServerUninstallCommand(state),
+		newServerServiceRunCommand(state),
+	)
 	return command
+}
+
+func newServerInstallCommand(state *commandState) *cobra.Command {
+	var envFile string
+	var dataDir string
+	command := &cobra.Command{
+		Use: "install", Short: "Install the Linux personal Server service.",
+		Args: requiredServiceArgs(serviceFlagRequirement{name: "env-file", value: &envFile}),
+		RunE: func(command *cobra.Command, _ []string) error {
+			if command.Flags().Changed("data-dir") {
+				if err := requireServiceFlag(command, "data-dir", dataDir); err != nil {
+					return err
+				}
+			}
+			return runPersonalServiceInstall(command.Context(), state, envFile, dataDir)
+		},
+	}
+	command.Flags().StringVar(&envFile, "env-file", "", "Absolute environment file used by the personal Server service.")
+	command.Flags().StringVar(&dataDir, "data-dir", "", "Absolute Server data directory override.")
+	_ = command.MarkFlagRequired("env-file")
+	return command
+}
+
+func newServerStatusCommand(state *commandState) *cobra.Command {
+	return &cobra.Command{
+		Use: "status", Short: "Inspect the Linux personal Server service.", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			return runPersonalServiceStatus(command.Context(), state)
+		},
+	}
+}
+
+func newServerUninstallCommand(state *commandState) *cobra.Command {
+	return &cobra.Command{
+		Use: "uninstall", Short: "Remove the Linux personal Server service.", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			return runPersonalServiceUninstall(command.Context(), state)
+		},
+	}
+}
+
+func newServerServiceRunCommand(state *commandState) *cobra.Command {
+	var envFile string
+	var endpoint string
+	var dataDir string
+	command := &cobra.Command{
+		Use: "_service-run", Hidden: true,
+		Args: requiredServiceArgs(
+			serviceFlagRequirement{name: "env-file", value: &envFile},
+			serviceFlagRequirement{name: "endpoint", value: &endpoint},
+			serviceFlagRequirement{name: "data-dir", value: &dataDir},
+		),
+		RunE: func(command *cobra.Command, _ []string) error {
+			return runPersonalServiceLauncher(command.Context(), state, envFile, endpoint, dataDir)
+		},
+	}
+	command.Flags().StringVar(&envFile, "env-file", "", "Registered environment file.")
+	command.Flags().StringVar(&endpoint, "endpoint", "", "Registered loopback endpoint.")
+	command.Flags().StringVar(&dataDir, "data-dir", "", "Registered Server data directory.")
+	for _, name := range []string{"env-file", "endpoint", "data-dir"} {
+		_ = command.MarkFlagRequired(name)
+	}
+	return command
+}
+
+func requiredServiceArgs(requirements ...serviceFlagRequirement) cobra.PositionalArgs {
+	return func(command *cobra.Command, arguments []string) error {
+		if err := cobra.NoArgs(command, arguments); err != nil {
+			return err
+		}
+		for _, requirement := range requirements {
+			if !command.Flags().Changed(requirement.name) {
+				return usageError(fmt.Errorf("server: --%s is required", requirement.name))
+			}
+			if err := requireServiceFlag(command, requirement.name, *requirement.value); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+func requireServiceFlag(command *cobra.Command, name, value string) error {
+	if command.Flags().Changed(name) && (strings.TrimSpace(value) == "" || strings.TrimSpace(value) != value) {
+		return usageError(fmt.Errorf("server: --%s must be a non-empty trimmed value", name))
+	}
+	return nil
 }
 
 func newServerRunCommand(state *commandState) *cobra.Command {
@@ -151,6 +250,35 @@ func withServerEnvironment(values map[string]string, run func() error) (err erro
 	for name, value := range values {
 		if setErr := os.Setenv(name, value); setErr != nil {
 			return fmt.Errorf("server: load environment: %w", setErr)
+		}
+	}
+	return run()
+}
+
+// withIsolatedServerEnvironment starts a foreground service with exactly the
+// values recorded in its private environment file plus service-owned overrides.
+// A systemd user manager may retain arbitrary inherited values, so selectively
+// replacing POWERCONTEXT_SERVER_* variables would permit stale provider
+// credentials or configuration to reach the managed process.
+func withIsolatedServerEnvironment(values map[string]string, run func() error) (err error) {
+	serverEnvironmentScopeMu.Lock()
+	defer serverEnvironmentScopeMu.Unlock()
+
+	before := slices.Clone(os.Environ())
+	os.Clearenv()
+	defer func() {
+		os.Clearenv()
+		for _, item := range before {
+			name, value, found := strings.Cut(item, "=")
+			if !found {
+				continue
+			}
+			err = errors.Join(err, os.Setenv(name, value))
+		}
+	}()
+	for name, value := range values {
+		if setErr := os.Setenv(name, value); setErr != nil {
+			return fmt.Errorf("server: load isolated environment: %w", setErr)
 		}
 	}
 	return run()
