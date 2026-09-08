@@ -18,22 +18,32 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/go-faster/jx"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/source"
 )
+
+type sourceLegacyClientSecurity string
+
+func (s sourceLegacyClientSecurity) BearerAuth(context.Context, v1.OperationName) (v1.BearerAuth, error) {
+	return v1.BearerAuth{Token: string(s)}, nil
+}
 
 func TestCanonicalSourceIngestionAndCheckpointHTTP(t *testing.T) {
 	var logs bytes.Buffer
@@ -45,6 +55,8 @@ func TestCanonicalSourceIngestionAndCheckpointHTTP(t *testing.T) {
 	config.Auth.Enabled = true
 	config.Auth.Token = "source-ingestion-secret"
 	config.Logging.Access = true
+	config.MCP.Enabled = true
+	config.MCP.Path = DefaultMCPPath
 	application, err := OpenApplication(t.Context(), config, Dependencies{
 		Logger: newJSONTestLogger(t, &logs), TracerProvider: provider,
 	})
@@ -55,6 +67,23 @@ func TestCanonicalSourceIngestionAndCheckpointHTTP(t *testing.T) {
 
 	scopeID := applicationDefaultScope(t, application).ID()
 	client, handler := sourceHTTPClient(t, application, config.Auth.Token)
+	legacyClient, err := v1.NewClient(
+		"http://powercontext.test", sourceLegacyClientSecurity(config.Auth.Token),
+		v1.WithClient(&http.Client{Transport: scopeSidecarRoundTripper{handler: handler}}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := legacyClient.CaptureContentSource(t.Context(), &v1.CaptureContentSourceRequest{
+		ScopeID: scopeID, SourceID: "legacy-after-source-sidecar", Content: "legacy path remains reachable",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captured, ok := legacy.(*v1.CaptureContentSourceResponseHeaders); !ok || captured.Response.Status != v1.CaptureStatusAccepted {
+		t.Fatalf("legacy CaptureContentSource() = %#v", legacy)
+	}
+	assertCanonicalSourceMCPIsolation(t, handler, config)
 	binding := canonicalsource.ConnectorBinding{
 		ScopeID: scopeID, BindingID: "checkpoint-http", ConnectorName: "fixture", ConnectorVersion: "1",
 	}
@@ -197,12 +226,47 @@ func TestCanonicalSourceIngestionAndCheckpointHTTP(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	var sourceCount int
-	if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_sources WHERE scope_id = ?", scopeID).Scan(&sourceCount); err != nil {
+	if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_sources WHERE scope_id = ? AND source_type = ?", scopeID, manifest.Name).Scan(&sourceCount); err != nil {
 		t.Fatal(err)
 	}
 	if sourceCount != 1 {
 		t.Fatalf("accepted remote Source count = %d, want 1", sourceCount)
 	}
+	privateCheckpointBinding := canonicalsource.ConnectorBinding{
+		ScopeID: "private-unknown-checkpoint-scope", BindingID: "private-checkpoint-binding", ConnectorName: "fixture", ConnectorVersion: "1",
+	}
+	for _, test := range []struct {
+		name, path string
+		request    any
+	}{
+		{
+			name: "get", path: "/v1/connector-checkpoints/get",
+			request: &canonicalsource.GetConnectorCheckpointRequest{Binding: privateCheckpointBinding},
+		},
+		{
+			name: "commit", path: "/v1/connector-checkpoints/commit",
+			request: &canonicalsource.CommitConnectorCheckpointRequest{
+				Binding: privateCheckpointBinding, Checkpoint: canonicalSourceRawJSON("null"), Expected: canonicalSourceRawJSON("null"),
+			},
+		},
+	} {
+		t.Run("unknown Scope checkpoint "+test.name, func(t *testing.T) {
+			payload, marshalErr := json.Marshal(test.request)
+			if marshalErr != nil {
+				t.Fatal(marshalErr)
+			}
+			request := httptest.NewRequest(http.MethodPost, test.path, bytes.NewReader(payload))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Authorization", "Bearer "+config.Auth.Token)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404: %s", response.Code, response.Body.String())
+			}
+			assertCanonicalRawSourceError(t, response, "scope_not_found", privateCheckpointBinding.ScopeID, privateCheckpointBinding.BindingID, config.Auth.Token)
+		})
+	}
+	assertScopeHasNoPersistentWork(t, database, privateCheckpointBinding.ScopeID)
 
 	privateScope := "private-unknown-source-ingestion-scope"
 	privatePayload := `{"scope_id":"` + privateScope + `","observation":{"name":"private-item","definition_version":"1","materialization":"captured","source_type":"` + manifest.Name + `","definition_fingerprint":"` + manifest.Fingerprint + `","payload":{"name":"private-item","definition_version":"1","materialization":"captured","large":1},"projections":[]}}`
@@ -347,6 +411,64 @@ func assertCanonicalSourceError(t *testing.T, result any, want string, private .
 	for _, value := range private {
 		if strings.Contains(string(payload), value) {
 			t.Fatalf("error response leaks %q: %s", value, payload)
+		}
+	}
+}
+
+func assertCanonicalRawSourceError(t *testing.T, response *httptest.ResponseRecorder, want string, private ...string) {
+	t.Helper()
+	if response.Header().Get("X-PowerContext-Request-ID") == "" {
+		t.Fatal("response has no request ID")
+	}
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || envelope.Error.Code != want {
+		t.Fatalf("error response = %s, want %q (err=%v)", response.Body.String(), want, err)
+	}
+	for _, value := range private {
+		if strings.Contains(response.Body.String(), value) {
+			t.Fatalf("error response leaks %q: %s", value, response.Body.String())
+		}
+	}
+}
+
+func assertCanonicalSourceMCPIsolation(t *testing.T, handler http.Handler, config ProcessConfig) {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "source-ingestion-test", Version: "1"}, nil)
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+		Endpoint: "http://powercontext.test" + strings.TrimRight(config.MCP.Path, "/") + "/",
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			request = request.Clone(request.Context())
+			request.Header.Set("Authorization", "Bearer "+config.Auth.Token)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			return response.Result(), nil
+		})},
+		DisableStandaloneSSE: true,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	tools, err := session.ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, len(tools.Tools))
+	for index, tool := range tools.Tools {
+		names[index] = tool.Name
+	}
+	if !slices.Contains(names, "capture_content_source") {
+		t.Fatalf("MCP tools do not include legacy capture: %v", names)
+	}
+	for _, upstreamOnly := range []string{
+		"register_source_definition", "submit_source_observation", "get_connector_checkpoint", "commit_connector_checkpoint",
+	} {
+		if slices.Contains(names, upstreamOnly) {
+			t.Fatalf("canonical Source operation became an MCP tool: %s", upstreamOnly)
 		}
 	}
 }
