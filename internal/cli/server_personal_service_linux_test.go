@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -102,6 +103,115 @@ func TestLinuxPrivateFilesReplaceOnlyThePrivateUnitAtomically(t *testing.T) {
 			t.Fatalf("temporary unit %q remains", entry.Name())
 		}
 	}
+}
+
+func TestLinuxPrivateFilesRejectMiddleDirectorySymlinksToPrivateTargets(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("personal user service refuses root execution")
+	}
+	files, home := newTestLinuxPrivateFiles(t)
+	config := filepath.Join(home, ".config")
+	target := filepath.Join(home, ".private-target")
+	if err := os.Mkdir(config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(target, "server.env")
+	if err := os.WriteFile(envFile, []byte("OPENAI_API_KEY=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(config, "service")
+	if err := os.Symlink(target, linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.Validate(t.Context(), filepath.Join(linked, "server.env")); err == nil {
+		t.Fatal("Validate followed a middle-directory symbolic link")
+	}
+	if _, _, err := files.Read(t.Context(), filepath.Join(linked, "server.env")); err == nil {
+		t.Fatal("Read followed a middle-directory symbolic link")
+	}
+	if err := files.Write(t.Context(), filepath.Join(linked, "powercontext.service"), []byte("foreign")); err == nil {
+		t.Fatal("Write followed a middle-directory symbolic link")
+	}
+	if err := files.Remove(t.Context(), filepath.Join(linked, "server.env")); err == nil {
+		t.Fatal("Remove followed a middle-directory symbolic link")
+	}
+	if content, err := os.ReadFile(envFile); err != nil || !strings.Contains(string(content), "secret") {
+		t.Fatalf("private target changed: content = %q, error = %v", content, err)
+	}
+}
+
+func TestLinuxPrivateFilesRejectConcurrentParentReplacement(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("personal user service refuses root execution")
+	}
+	files, home := newTestLinuxPrivateFiles(t)
+	config := filepath.Join(home, ".config")
+	systemd := filepath.Join(config, "systemd")
+	user := filepath.Join(systemd, "user")
+	foreignSystemd := filepath.Join(home, ".foreign-systemd")
+	if err := os.Mkdir(config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(systemd, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(user, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(user, "powercontext.service"), []byte("owned"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(foreignSystemd, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(foreignSystemd, "user"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(foreignSystemd, "user", "powercontext.service"), []byte("foreign"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stop := make(chan struct{})
+	var replacements sync.WaitGroup
+	replacements.Add(1)
+	go func() {
+		defer replacements.Done()
+		hold := filepath.Join(config, "systemd.hold")
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if err := os.Rename(systemd, hold); err != nil {
+				continue
+			}
+			if err := os.Symlink(foreignSystemd, systemd); err != nil {
+				_ = os.Rename(hold, systemd)
+				continue
+			}
+			_ = os.Remove(systemd)
+			_ = os.Rename(hold, systemd)
+		}
+	}()
+
+	unit := filepath.Join(user, "powercontext.service")
+	for range 1000 {
+		content, exists, err := files.Read(t.Context(), unit)
+		if err != nil || !exists {
+			continue
+		}
+		if string(content) != "owned" {
+			close(stop)
+			replacements.Wait()
+			t.Fatalf("Read followed a concurrently replaced parent: %q", content)
+		}
+	}
+	close(stop)
+	replacements.Wait()
 }
 
 func newTestLinuxPrivateFiles(t *testing.T) (*linuxPrivateFiles, string) {

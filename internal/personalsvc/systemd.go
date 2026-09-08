@@ -98,7 +98,7 @@ type SystemdUserManagerUnit struct {
 	fragmentPath       string
 	dropInPathsPresent bool
 	dropInPaths        []string
-	environment        string
+	environment        []string
 	execStart          []SystemdUserExecStart
 }
 
@@ -109,7 +109,7 @@ func NewSystemdUserManagerUnit(
 	fragmentPath string,
 	dropInPathsPresent bool,
 	dropInPaths []string,
-	environment string,
+	environment []string,
 	execStart []SystemdUserExecStart,
 ) SystemdUserManagerUnit {
 	return SystemdUserManagerUnit{
@@ -117,7 +117,7 @@ func NewSystemdUserManagerUnit(
 		fragmentPath:       strings.Clone(fragmentPath),
 		dropInPathsPresent: dropInPathsPresent,
 		dropInPaths:        slices.Clone(dropInPaths),
-		environment:        strings.Clone(environment),
+		environment:        slices.Clone(environment),
 		execStart:          cloneSystemdUserExecStart(execStart),
 	}
 }
@@ -135,8 +135,10 @@ func (u SystemdUserManagerUnit) HasDropInPaths() bool { return u.dropInPathsPres
 // DropInPaths returns independent copies of the manager-reported drop-ins.
 func (u SystemdUserManagerUnit) DropInPaths() []string { return slices.Clone(u.dropInPaths) }
 
-// Environment returns the manager-reported environment assignments.
-func (u SystemdUserManagerUnit) Environment() string { return u.environment }
+// Environment returns independent copies of the manager-reported environment
+// assignments. Each string remains one D-Bus assignment; callers must not
+// split a value on whitespace because values may themselves contain spaces.
+func (u SystemdUserManagerUnit) Environment() []string { return slices.Clone(u.environment) }
 
 // ExecStart returns independent copies of the manager-reported commands.
 func (u SystemdUserManagerUnit) ExecStart() []SystemdUserExecStart {
@@ -559,8 +561,8 @@ func quoteSystemdArgument(value string) string {
 	return "\"" + replacer.Replace(value) + "\""
 }
 
-func systemdOwnership(value string) (metadata string, owned bool, found bool) {
-	for item := range strings.FieldsSeq(value) {
+func systemdOwnership(values []string) (metadata string, owned bool, found bool) {
+	for _, item := range values {
 		name, itemValue, hasValue := strings.Cut(item, "=")
 		if !hasValue {
 			continue

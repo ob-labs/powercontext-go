@@ -173,14 +173,23 @@ func TestSystemdUserAdapterRejectsEveryManagerOwnershipMismatchWithoutEnablement
 		{
 			name: "marker",
 			mutate: func(value systemdManagerFixture) systemdManagerFixture {
-				value.environment = strings.Replace(value.environment, "POWERCONTEXT_SERVICE_OWNED", "FOREIGN_SERVICE_OWNED", 1)
+				value.environment = slices.Clone(value.environment)
+				value.environment[0] = "FOREIGN_SERVICE_OWNED=true"
 				return value
 			},
 		},
 		{
 			name: "metadata",
 			mutate: func(value systemdManagerFixture) systemdManagerFixture {
-				value.environment = strings.Replace(value.environment, "POWERCONTEXT_SERVICE_METADATA=", "POWERCONTEXT_SERVICE_METADATA=malformed-", 1)
+				value.environment = slices.Clone(value.environment)
+				value.environment[1] = "POWERCONTEXT_SERVICE_METADATA=malformed-"
+				return value
+			},
+		},
+		{
+			name: "combined environment assignment",
+			mutate: func(value systemdManagerFixture) systemdManagerFixture {
+				value.environment = []string{value.environment[0] + " " + value.environment[1]}
 				return value
 			},
 		},
@@ -539,7 +548,7 @@ type systemdManagerFixture struct {
 	fragmentPath       string
 	dropInPathsPresent bool
 	dropInPaths        []string
-	environment        string
+	environment        []string
 	execStart          []personalsvc.SystemdUserExecStart
 }
 
@@ -556,8 +565,11 @@ func systemdOwnedManagerFixture(
 	return systemdManagerFixture{
 		fragmentPath:       systemdUnitPath,
 		dropInPathsPresent: true,
-		environment:        "POWERCONTEXT_SERVICE_OWNED=true POWERCONTEXT_SERVICE_METADATA=" + metadata,
-		execStart:          execStart,
+		environment: []string{
+			"POWERCONTEXT_SERVICE_OWNED=true",
+			"POWERCONTEXT_SERVICE_METADATA=" + metadata,
+		},
+		execStart: execStart,
 	}
 }
 
@@ -629,7 +641,7 @@ func (b *systemdBoundary) InspectUnit(_ context.Context, unit string) (personals
 		return personalsvc.SystemdUserManagerUnit{}, b.managerErr
 	}
 	if b.managerUnit.LoadState() == "" {
-		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, "", nil), nil
+		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
 	}
 	return b.managerUnit, nil
 }

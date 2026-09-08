@@ -163,6 +163,20 @@ func TestLinuxSystemdBoundaryRejectsForeignOrMalformedStructuredBusData(t *testi
 	}
 }
 
+func TestLinuxSystemdBoundaryPreservesEachEnvironmentAssignment(t *testing.T) {
+	assignments := []string{"POWERCONTEXT_SERVICE_OWNED=true POWERCONTEXT_SERVICE_METADATA=not-a-separate-assignment"}
+	boundary, runner, _ := newTestLinuxSystemdBoundary(t)
+	runner.responses = []linuxSystemdCommandResult{
+		{stdout: []byte(`{"type":"o","data":"/org/freedesktop/systemd1/unit/powercontext_2eservice"}`)},
+		{stdout: unitPropertiesJSON(t, "loaded", "/home/alice/.config/systemd/user/powercontext.service", nil)},
+		{stdout: servicePropertiesJSON(t, assignments, nil)},
+	}
+	unit, err := boundary.InspectUnit(t.Context(), "powercontext.service")
+	if err != nil || !slices.Equal(unit.Environment(), assignments) {
+		t.Fatalf("InspectUnit() Environment = %q, error = %v", unit.Environment(), err)
+	}
+}
+
 func TestLinuxSystemdBoundaryReportsAVerifiedStaleRunningDefinition(t *testing.T) {
 	desired := newTestPersonalServiceRegistration(t, "1.0.0")
 	stale := newTestPersonalServiceRegistration(t, "0.9.0")

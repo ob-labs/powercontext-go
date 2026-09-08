@@ -273,7 +273,7 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 	// that support check succeeded, LoadUnit's nonzero result is the exact
 	// unregistered-unit state needed for a first install or completed uninstall.
 	if objectResult.exitCode != 0 {
-		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, "", nil), nil
+		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
 	}
 	if err := parseBusctlObjectPath(objectResult.stdout); err != nil {
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
@@ -430,7 +430,7 @@ func parseBusctlUnit(unitPayload, servicePayload []byte) (personalsvc.SystemdUse
 		return personalsvc.SystemdUserManagerUnit{}, err
 	}
 	return personalsvc.NewSystemdUserManagerUnit(
-		loadState, fragmentPath, true, dropIns, strings.Join(environment, " "), execStart,
+		loadState, fragmentPath, true, dropIns, environment, execStart,
 	), nil
 }
 

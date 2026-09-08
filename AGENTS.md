@@ -626,3 +626,11 @@ source / artifact / trigger / inference
   root, reject global load roots, and fail closed on missing or nonempty
   `DropInPaths`. Verify global paths, drop-ins, space-containing command
   arguments, and zero-value public operations cannot reach a native boundary.
+- When a Linux personal-service boundary accesses an owned artifact or
+  credential-bearing environment file, resolve every directory component from
+  a trusted descriptor with `O_DIRECTORY|O_NOFOLLOW` and perform leaf reads,
+  writes, renames, and deletes relative to that descriptor. Preserve D-Bus
+  environment entries as individual assignments and require each ownership
+  marker exactly once. Verify a middle-directory symlink to an owner-private
+  target, concurrent parent replacement, and a whitespace-combined marker
+  assignment cannot substitute a trusted artifact or manager registration.

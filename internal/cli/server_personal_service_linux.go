@@ -19,6 +19,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -64,7 +66,13 @@ type linuxPrivateFiles struct {
 func newLinuxPrivateFiles(roots linuxPersonalServiceRoots) (*linuxPrivateFiles, error) {
 	home := filepath.FromSlash(filepath.Dir(roots.configRoot))
 	owner := uint32(os.Geteuid())
-	if owner == 0 || !safeLinuxUserHome(home, owner) {
+	descriptor, err := openAbsoluteDirectoryNoSymlink(home)
+	if err != nil {
+		return nil, newPersonalServicePlatformError("configuration")
+	}
+	defer unix.Close(descriptor)
+	var stat unix.Stat_t
+	if owner == 0 || unix.Fstat(descriptor, &stat) != nil || !safeLinuxUserHomeStat(stat, owner) {
 		return nil, newPersonalServicePlatformError("configuration")
 	}
 	return &linuxPrivateFiles{home: home, owner: owner}, nil
@@ -104,23 +112,23 @@ func (f *linuxPrivateFiles) Write(ctx context.Context, name string, content []by
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	parent := filepath.Dir(name)
-	if err := f.ensurePrivateDirectories(parent); err != nil {
-		return err
-	}
-	if existing, err := f.openPrivate(name); err == nil {
-		if closeErr := existing.Close(); closeErr != nil {
-			return closeErr
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	temporary, err := os.CreateTemp(parent, ".powercontext.service-")
+	parent, base, err := f.openPrivateParent(name, true)
 	if err != nil {
 		return err
 	}
-	temporaryName := temporary.Name()
-	defer func() { _ = os.Remove(temporaryName) }()
+	defer unix.Close(parent)
+	before, exists, err := f.privateAt(parent, base)
+	if err != nil {
+		return err
+	}
+	if exists && !validLinuxPrivateFileObservation(before, f.owner) {
+		return errors.New("unsafe private file")
+	}
+	temporary, temporaryName, err := createPrivateTemporaryFile(parent)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unix.Unlinkat(parent, temporaryName, 0) }()
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
 		return err
@@ -139,38 +147,51 @@ func (f *linuxPrivateFiles) Write(ctx context.Context, name string, content []by
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryName, name); err != nil {
+	if err := unix.Renameat(parent, temporaryName, parent, base); err != nil {
 		return err
 	}
-	return os.Chmod(name, 0o600)
+	return nil
 }
 
 func (f *linuxPrivateFiles) Remove(ctx context.Context, name string) error {
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	file, err := f.openPrivate(name)
+	parent, base, err := f.openPrivateParent(name, false)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if closeErr := file.Close(); closeErr != nil {
-		return closeErr
+	defer unix.Close(parent)
+	identity, exists, err := f.privateAt(parent, base)
+	if err != nil || !exists {
+		return err
 	}
-	return os.Remove(name)
+	if !validLinuxPrivateFileObservation(identity, f.owner) {
+		return errors.New("unsafe private file")
+	}
+	return unix.Unlinkat(parent, base, 0)
 }
 
 func (f *linuxPrivateFiles) openPrivate(name string) (*os.File, error) {
-	before, err := linuxPrivateIdentity(name)
+	parent, base, err := f.openPrivateParent(name, false)
 	if err != nil {
 		return nil, err
+	}
+	defer unix.Close(parent)
+	before, exists, err := f.privateAt(parent, base)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, os.ErrNotExist
 	}
 	if !validLinuxPrivateFileObservation(before, f.owner) {
 		return nil, errors.New("unsafe private file")
 	}
-	descriptor, err := unix.Open(name, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	descriptor, err := unix.Openat(parent, base, unix.O_RDONLY|unix.O_NONBLOCK|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -184,59 +205,175 @@ func (f *linuxPrivateFiles) openPrivate(name string) (*os.File, error) {
 		_ = unix.Close(descriptor)
 		return nil, errors.New("private file changed during open")
 	}
-	return os.NewFile(uintptr(descriptor), filepath.Base(name)), nil
+	return os.NewFile(uintptr(descriptor), base), nil
 }
 
-func (f *linuxPrivateFiles) ensurePrivateDirectories(target string) error {
+func (f *linuxPrivateFiles) openOrCreatePrivate(name string, flags int) (*os.File, error) {
+	parent, base, err := f.openPrivateParent(name, true)
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(parent)
+	before, existed, err := f.privateAt(parent, base)
+	if err != nil {
+		return nil, err
+	}
+	if existed && !validLinuxPrivateFileObservation(before, f.owner) {
+		return nil, errors.New("unsafe private file")
+	}
+	descriptor, err := unix.Openat(parent, base, flags|unix.O_CREAT|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	var stat unix.Stat_t
+	if err := unix.Fstat(descriptor, &stat); err != nil {
+		_ = unix.Close(descriptor)
+		return nil, err
+	}
+	after := linuxPrivateIdentityFromStat(stat)
+	if !validLinuxPrivateFileObservation(after, f.owner) || existed && !validLinuxPrivateFile(before, after, f.owner) {
+		_ = unix.Close(descriptor)
+		return nil, errors.New("private file changed during open")
+	}
+	return os.NewFile(uintptr(descriptor), base), nil
+}
+
+func (f *linuxPrivateFiles) openPrivateParent(name string, create bool) (int, string, error) {
+	if name != filepath.Clean(name) || !filepath.IsAbs(name) {
+		return -1, "", errors.New("invalid private file path")
+	}
+	base := filepath.Base(name)
+	if base == "." || base == string(filepath.Separator) || base == ".." {
+		return -1, "", errors.New("invalid private file path")
+	}
+	parent := filepath.Dir(name)
+	if create {
+		descriptor, err := f.ensurePrivateDirectories(parent)
+		return descriptor, base, err
+	}
+	descriptor, err := f.openOwnedPrivateDirectory(parent)
+	return descriptor, base, err
+}
+
+func (f *linuxPrivateFiles) ensurePrivateDirectories(target string) (int, error) {
 	relative, err := filepath.Rel(f.home, target)
 	if err != nil || relative == ".." || filepath.IsAbs(relative) || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return errors.New("private path escaped current user root")
+		return -1, errors.New("private path escaped current user root")
 	}
-	current := f.home
+	descriptor, err := openAbsoluteDirectoryNoSymlink(f.home)
+	if err != nil {
+		return -1, err
+	}
+	var home unix.Stat_t
+	if err := unix.Fstat(descriptor, &home); err != nil || !safeLinuxUserHomeStat(home, f.owner) {
+		_ = unix.Close(descriptor)
+		return -1, errors.New("unsafe current user root")
+	}
 	for _, element := range strings.Split(relative, string(filepath.Separator)) {
 		if element == "" || element == "." {
 			continue
 		}
-		current = filepath.Join(current, element)
-		if err := mkdirPrivateDirectory(current, f.owner); err != nil {
-			return err
+		next, openErr := unix.Openat(descriptor, element, unix.O_PATH|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if errors.Is(openErr, unix.ENOENT) {
+			if mkdirErr := unix.Mkdirat(descriptor, element, 0o700); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
+				_ = unix.Close(descriptor)
+				return -1, mkdirErr
+			}
+			next, openErr = unix.Openat(descriptor, element, unix.O_PATH|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		}
+		if openErr != nil {
+			_ = unix.Close(descriptor)
+			return -1, openErr
+		}
+		_ = unix.Close(descriptor)
+		descriptor = next
+		var stat unix.Stat_t
+		if err := unix.Fstat(descriptor, &stat); err != nil || !safeLinuxDirectoryStat(stat, f.owner) {
+			_ = unix.Close(descriptor)
+			return -1, errors.New("unsafe private directory")
 		}
 	}
-	return nil
+	if relative == "." {
+		var stat unix.Stat_t
+		if err := unix.Fstat(descriptor, &stat); err != nil || !safeLinuxDirectoryStat(stat, f.owner) {
+			_ = unix.Close(descriptor)
+			return -1, errors.New("unsafe private directory")
+		}
+	}
+	return descriptor, nil
 }
 
-func mkdirPrivateDirectory(name string, owner uint32) error {
-	if err := os.Mkdir(name, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
-		return err
+func (f *linuxPrivateFiles) openOwnedPrivateDirectory(name string) (int, error) {
+	descriptor, err := openAbsoluteDirectoryNoSymlink(name)
+	if err != nil {
+		return -1, err
 	}
-	if !safeLinuxDirectory(name, owner) {
-		return errors.New("unsafe private directory")
-	}
-	return nil
-}
-
-func safeLinuxDirectory(name string, owner uint32) bool {
 	var stat unix.Stat_t
-	if unix.Lstat(name, &stat) != nil {
-		return false
+	if err := unix.Fstat(descriptor, &stat); err != nil || !safeLinuxDirectoryStat(stat, f.owner) {
+		_ = unix.Close(descriptor)
+		return -1, errors.New("unsafe private directory")
 	}
+	return descriptor, nil
+}
+
+func (f *linuxPrivateFiles) privateAt(parent int, base string) (linuxPrivateFileIdentity, bool, error) {
+	var stat unix.Stat_t
+	if err := unix.Fstatat(parent, base, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		if errors.Is(err, unix.ENOENT) {
+			return linuxPrivateFileIdentity{}, false, nil
+		}
+		return linuxPrivateFileIdentity{}, false, err
+	}
+	return linuxPrivateIdentityFromStat(stat), true, nil
+}
+
+func createPrivateTemporaryFile(parent int) (*os.File, string, error) {
+	for range 128 {
+		var nonce [12]byte
+		if _, err := rand.Read(nonce[:]); err != nil {
+			return nil, "", err
+		}
+		name := ".powercontext.service-" + hex.EncodeToString(nonce[:])
+		descriptor, err := unix.Openat(parent, name, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+		if errors.Is(err, unix.EEXIST) {
+			continue
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		return os.NewFile(uintptr(descriptor), name), name, nil
+	}
+	return nil, "", errors.New("cannot create private temporary file")
+}
+
+func openAbsoluteDirectoryNoSymlink(name string) (int, error) {
+	if name != filepath.Clean(name) || !filepath.IsAbs(name) {
+		return -1, errors.New("invalid directory path")
+	}
+	descriptor, err := unix.Open(string(filepath.Separator), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return -1, err
+	}
+	for _, element := range strings.Split(strings.TrimPrefix(name, string(filepath.Separator)), string(filepath.Separator)) {
+		if element == "" {
+			continue
+		}
+		next, openErr := unix.Openat(descriptor, element, unix.O_PATH|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		_ = unix.Close(descriptor)
+		if openErr != nil {
+			return -1, openErr
+		}
+		descriptor = next
+	}
+	return descriptor, nil
+}
+
+func safeLinuxDirectoryStat(stat unix.Stat_t, owner uint32) bool {
 	return stat.Uid == owner && stat.Mode&unix.S_IFMT == unix.S_IFDIR && stat.Mode&0o077 == 0
 }
 
-func safeLinuxUserHome(name string, owner uint32) bool {
-	var stat unix.Stat_t
-	if unix.Lstat(name, &stat) != nil {
-		return false
-	}
+func safeLinuxUserHomeStat(stat unix.Stat_t, owner uint32) bool {
 	return stat.Uid == owner && stat.Mode&unix.S_IFMT == unix.S_IFDIR
-}
-
-func linuxPrivateIdentity(name string) (linuxPrivateFileIdentity, error) {
-	var stat unix.Stat_t
-	if err := unix.Lstat(name, &stat); err != nil {
-		return linuxPrivateFileIdentity{}, err
-	}
-	return linuxPrivateIdentityFromStat(stat), nil
 }
 
 func linuxPrivateIdentityFromStat(stat unix.Stat_t) linuxPrivateFileIdentity {
@@ -267,15 +404,12 @@ func (l *linuxOperationFileLock) WithLock(ctx context.Context, operation func(co
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	if err := l.files.ensurePrivateDirectories(filepath.Dir(l.path)); err != nil {
-		return err
-	}
-	descriptor, err := unix.Open(l.path, unix.O_RDWR|unix.O_CREAT|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	file, err := l.files.openOrCreatePrivate(l.path, unix.O_RDWR)
 	if err != nil {
 		return err
 	}
-	file := os.NewFile(uintptr(descriptor), filepath.Base(l.path))
 	defer file.Close()
+	descriptor := int(file.Fd())
 	var stat unix.Stat_t
 	if err := unix.Fstat(descriptor, &stat); err != nil || !validLinuxPrivateFileObservation(linuxPrivateIdentityFromStat(stat), l.files.owner) {
 		return errors.New("unsafe operation lock")
