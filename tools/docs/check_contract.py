@@ -28,6 +28,26 @@ DOCUMENTED_GO_VERSION = re.compile(
     r"\bGo (\d+\.\d+(?:\.\d+)?) implementation\b"
 )
 CONFLICT_BOUNDARY = re.compile(r"^(?:<<<<<<<|>>>>>>>) .+$")
+E4_OPENAPI_POLICY = (
+    "The current-master inventory is pinned to "
+    "`oceanbase/powercontext@e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c`: "
+    "94 canonical operations, 55 upstream-only operations, and 17 newly "
+    "deferred operations."
+)
+SIDECAR_PIN_POLICY = (
+    "Scope, Source, and Artifact sidecars remain independently pinned to "
+    "`oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`."
+)
+DEFERRED_E4_POLICY = (
+    "The e4 Artifact revision-history, Artifact tag, Prompt, and Access "
+    "clusters remain deferred. This rebaseline does not implement Artifact "
+    "writes, managed Skills, remote Skills, or native personal services."
+)
+
+
+def contains_policy(text: str, policy: str) -> bool:
+    pattern = re.escape(policy).replace(r"\ ", r"\s+")
+    return re.search(pattern, text) is not None
 
 
 def documentation_errors(root: Path) -> list[str]:
@@ -35,6 +55,7 @@ def documentation_errors(root: Path) -> list[str]:
     go_mod = (root / "go.mod").read_text(encoding="utf-8")
     index_path = root / "docs" / "index.md"
     index = index_path.read_text(encoding="utf-8")
+    openapi_path = root / "openapi" / "README.md"
 
     go_match = GO_DIRECTIVE.search(go_mod)
     if go_match is None:
@@ -48,6 +69,15 @@ def documentation_errors(root: Path) -> list[str]:
                 "docs/index.md: documented Go version "
                 f"{documented_match.group(1)} does not match go.mod {go_match.group(1)}"
             )
+
+    if not openapi_path.is_file():
+        errors.append("openapi/README.md: missing E4 two-pin policy")
+    else:
+        openapi = openapi_path.read_text(encoding="utf-8")
+        for policy in (E4_OPENAPI_POLICY, SIDECAR_PIN_POLICY, DEFERRED_E4_POLICY):
+            if not contains_policy(openapi, policy):
+                errors.append("openapi/README.md: missing E4 two-pin policy")
+                break
 
     for path in sorted((root / "docs").rglob("*.md")):
         for line_number, line in enumerate(

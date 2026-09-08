@@ -61,12 +61,24 @@ class DocumentationContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
 
+    def test_missing_e4_two_pin_policy_is_rejected(self) -> None:
+        result = self.run_checker(
+            go_version="1.27.0",
+            index_version="1.27.0",
+            architecture="# Architecture\n",
+            openapi_readme="# OpenAPI\n\n77 canonical operations and 38 deferred entries.\n",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("openapi/README.md: missing E4 two-pin policy", result.stderr)
+
     def run_checker(
         self,
         *,
         go_version: str,
         index_version: str,
         architecture: str,
+        openapi_readme: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -83,12 +95,27 @@ class DocumentationContractTest(unittest.TestCase):
                 architecture,
                 encoding="utf-8",
             )
+            (root / "openapi").mkdir()
+            (root / "openapi" / "README.md").write_text(
+                openapi_readme or self.valid_openapi_readme(),
+                encoding="utf-8",
+            )
             return subprocess.run(
                 [sys.executable, str(CHECKER), "--root", str(root)],
                 check=False,
                 capture_output=True,
                 text=True,
             )
+
+    @staticmethod
+    def valid_openapi_readme() -> str:
+        return "\n".join(
+            (
+                "The current-master inventory is pinned to `oceanbase/powercontext@e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c`: 94 canonical operations, 55 upstream-only operations, and 17 newly deferred operations.",
+                "Scope, Source, and Artifact sidecars remain independently pinned to `oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`.",
+                "The e4 Artifact revision-history, Artifact tag, Prompt, and Access clusters remain deferred. This rebaseline does not implement Artifact writes, managed Skills, remote Skills, or native personal services.",
+            )
+        )
 
 
 if __name__ == "__main__":
