@@ -29,6 +29,25 @@ import (
 
 const activeOpenAPISHA256 = "ab78caf229a61568675dbc9176ad0e1a48d6d48aa860fc7f3b5993ea69268ccb"
 
+func TestREADMEStatesManagedSkillPackageArchiveBoundary(t *testing.T) {
+	t.Parallel()
+	contents, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(strings.Fields(string(contents)), " ")
+	for _, required := range []string{
+		"Go-persisted immutable package snapshot",
+		"`archive_base64` decodes to the exact stored archive bytes",
+		"Python Receiver/CLI archive-reference interoperability remains unimplemented",
+		"do not define a shared cross-language ZIP canonicalization",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("README.md does not state managed Skill package archive boundary %q", required)
+		}
+	}
+}
+
 func TestFrozenOpenAPIAndGeneratedHandlerStayInSync(t *testing.T) {
 	t.Parallel()
 	contents, err := os.ReadFile("powercontext.yaml")
