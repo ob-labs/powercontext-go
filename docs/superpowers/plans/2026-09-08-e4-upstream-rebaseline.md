@@ -70,9 +70,9 @@ all frozen/retained/migration/MCP fields.
 
 Update the paired OpenAPI ledger in the same task because the generator's
 full compatibility test intentionally asserts byte-for-byte inventory
-agreement. Set its e4 identity, Go baseline to this branch base, operation
-and endpoint counts, new cluster counts, and all 17 exact records. Do not
-update master pytest node/discovery evidence yet.
+agreement. Set its e4 identity, operation and endpoint counts, new cluster
+counts, and all 17 exact records. Do not update master pytest node/discovery
+evidence yet.
 
 - [ ] **Step 5: Verify the generator boundary**
 
@@ -116,6 +116,13 @@ before editing evidence. Expected: current 74 pin/count/entry assertions fail.
 Use the Task 1 e4 OpenAPI ledger as immutable input. Do not alter operation
 counts, endpoint identities, or cluster entries in this task; discovery must
 only classify exact node IDs against that ledger.
+
+Retain `e9dce330e58c4acbcfb1c0c5f0a4c9df581750e9` as the Go OpenAPI operation
+baseline. Its `e9dce330..9b45f7f` delta changes only `Capabilities` fields;
+operation IDs, methods, and paths are identical, so it does not require an
+inventory change. If a future Go baseline delta changes any operation identity,
+update that baseline separately with endpoint-comparison evidence before
+changing the ledger.
 
 - [ ] **Step 3: Regenerate discovery evidence**
 
