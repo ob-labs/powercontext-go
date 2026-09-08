@@ -15,9 +15,13 @@
 package endpoint
 
 import (
+	"bytes"
 	"context"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"net/url"
 
+	"github.com/go-faster/jx"
 	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
 	"github.com/ob-labs/powercontext-go/source"
@@ -29,12 +33,32 @@ type SourceResourceOperations interface {
 	GetResource(context.Context, string, string, string) (runtime.SourceRecord, error)
 }
 
-type CanonicalSourceHandler struct{ operations SourceResourceOperations }
+// SourceIngestionOperations admits remote Source Definitions and observations.
+type SourceIngestionOperations interface {
+	Register(context.Context, source.DefinitionManifest) (source.DefinitionManifest, error)
+	Submit(context.Context, string, source.SourceObservation) (runtime.SourceReceipt, error)
+}
+
+// ConnectorCheckpointOperations owns Scope-admitted Connector checkpoints.
+type ConnectorCheckpointOperations interface {
+	Get(context.Context, source.ConnectorBinding) (source.ConnectorCheckpoint, error)
+	Commit(context.Context, source.ConnectorBinding, jsontext.Value, jsontext.Value) (source.ConnectorCheckpoint, error)
+}
+
+type CanonicalSourceHandler struct {
+	operations  SourceResourceOperations
+	ingestion   SourceIngestionOperations
+	checkpoints ConnectorCheckpointOperations
+}
 
 var _ canonicalsource.Handler = (*CanonicalSourceHandler)(nil)
 
-func NewCanonicalSourceHandler(operations SourceResourceOperations) *CanonicalSourceHandler {
-	return &CanonicalSourceHandler{operations: operations}
+func NewCanonicalSourceHandler(
+	operations SourceResourceOperations,
+	ingestion SourceIngestionOperations,
+	checkpoints ConnectorCheckpointOperations,
+) *CanonicalSourceHandler {
+	return &CanonicalSourceHandler{operations: operations, ingestion: ingestion, checkpoints: checkpoints}
 }
 
 func (h *CanonicalSourceHandler) CreateSource(ctx context.Context, request *canonicalsource.CreateSourceRequest, params canonicalsource.CreateSourceParams) (canonicalsource.CreateSourceRes, error) {
@@ -75,6 +99,147 @@ func (h *CanonicalSourceHandler) GetSource(ctx context.Context, params canonical
 		return nil, err
 	}
 	return &canonicalsource.GetSourceOKHeaders{Response: record, XPowerContextRequestID: canonicalSourceRequestID(ctx)}, nil
+}
+
+func (h *CanonicalSourceHandler) RegisterSourceDefinition(
+	ctx context.Context,
+	request *canonicalsource.RegisterSourceDefinitionRequest,
+) (canonicalsource.RegisterSourceDefinitionRes, error) {
+	if h == nil || h.ingestion == nil {
+		return nil, &RuntimeNotReadyError{}
+	}
+	if request == nil {
+		return nil, &InvalidRequestError{}
+	}
+	manifest, err := canonicalSourceDefinition(request.Manifest)
+	if err != nil {
+		return nil, err
+	}
+	registered, err := h.ingestion.Register(ctx, manifest)
+	if err != nil {
+		return nil, err
+	}
+	response, err := canonicalSourceDefinitionResponse(registered)
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (h *CanonicalSourceHandler) SubmitSourceObservation(
+	ctx context.Context,
+	request *canonicalsource.SubmitSourceObservationRequest,
+) (canonicalsource.SubmitSourceObservationRes, error) {
+	if h == nil || h.ingestion == nil {
+		return nil, &RuntimeNotReadyError{}
+	}
+	if request == nil {
+		return nil, &InvalidRequestError{}
+	}
+	observation, err := canonicalSourceObservation(request.Observation)
+	if err != nil {
+		return nil, err
+	}
+	receipt, err := h.ingestion.Submit(ctx, request.ScopeID, observation)
+	if err != nil {
+		return nil, err
+	}
+	position := int(receipt.Sequence)
+	if receipt.Sequence < 1 || int64(position) != receipt.Sequence {
+		return nil, &RuntimeNotReadyError{}
+	}
+	return &canonicalsource.SourceObservationReceipt{
+		Source: canonicalsource.SourceReference{Name: receipt.Ref.Type(), SourceID: receipt.Ref.ID()}, Position: position,
+	}, nil
+}
+
+func (h *CanonicalSourceHandler) GetConnectorCheckpoint(
+	ctx context.Context,
+	request *canonicalsource.GetConnectorCheckpointRequest,
+) (canonicalsource.GetConnectorCheckpointRes, error) {
+	if h == nil || h.checkpoints == nil {
+		return nil, &RuntimeNotReadyError{}
+	}
+	if request == nil {
+		return nil, &InvalidRequestError{}
+	}
+	binding, err := canonicalConnectorBinding(request.Binding)
+	if err != nil {
+		return nil, err
+	}
+	checkpoint, err := h.checkpoints.Get(ctx, binding)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalConnectorCheckpointState(request.Binding, checkpoint), nil
+}
+
+func (h *CanonicalSourceHandler) CommitConnectorCheckpoint(
+	ctx context.Context,
+	request *canonicalsource.CommitConnectorCheckpointRequest,
+) (canonicalsource.CommitConnectorCheckpointRes, error) {
+	if h == nil || h.checkpoints == nil {
+		return nil, &RuntimeNotReadyError{}
+	}
+	if request == nil {
+		return nil, &InvalidRequestError{}
+	}
+	binding, err := canonicalConnectorBinding(request.Binding)
+	if err != nil {
+		return nil, err
+	}
+	checkpoint, err := h.checkpoints.Commit(
+		ctx, binding, jsontext.Value(bytes.Clone(request.Checkpoint)), jsontext.Value(bytes.Clone(request.Expected)),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalConnectorCheckpointState(request.Binding, checkpoint), nil
+}
+
+func canonicalSourceDefinition(value canonicalsource.SourceDefinitionManifest) (source.DefinitionManifest, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return source.DefinitionManifest{}, &source.InvalidDefinitionManifestError{Field: "manifest", Detail: "must be valid JSON"}
+	}
+	return source.ParseDefinitionManifest(payload)
+}
+
+func canonicalSourceDefinitionResponse(value source.DefinitionManifest) (canonicalsource.SourceDefinitionManifest, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return canonicalsource.SourceDefinitionManifest{}, err
+	}
+	var response canonicalsource.SourceDefinitionManifest
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return canonicalsource.SourceDefinitionManifest{}, err
+	}
+	return response, nil
+}
+
+func canonicalSourceObservation(value canonicalsource.SourceObservation) (source.SourceObservation, error) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return source.SourceObservation{}, &source.InvalidSourceObservationError{Field: "observation", Detail: "must be valid JSON"}
+	}
+	return source.ParseSourceObservation(payload)
+}
+
+func canonicalConnectorBinding(value canonicalsource.ConnectorBinding) (source.ConnectorBinding, error) {
+	return source.NewConnectorBinding(value.ScopeID, value.BindingID, value.ConnectorName, value.ConnectorVersion)
+}
+
+func canonicalConnectorCheckpointState(
+	binding canonicalsource.ConnectorBinding,
+	checkpoint source.ConnectorCheckpoint,
+) *canonicalsource.ConnectorCheckpointState {
+	value, found := checkpoint.Value()
+	if !found {
+		value = jsontext.Value("null")
+	}
+	return &canonicalsource.ConnectorCheckpointState{
+		Binding: binding, Checkpoint: jx.Raw(bytes.Clone(value)),
+	}
 }
 
 func canonicalSourceRecord(result runtime.SourceRecord) (canonicalsource.SourceRecord, error) {

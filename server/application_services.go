@@ -33,18 +33,20 @@ import (
 )
 
 type applicationServices struct {
-	scopes         *pcruntime.ScopeApplication
-	sources        *pcruntime.SourceApplication
-	artifacts      *pcruntime.ArtifactResourceApplication
-	memory         *pcruntime.MemoryApplication
-	context        *pcruntime.ContextApplication
-	review         *pcruntime.ReviewApplication
-	generation     *pcruntime.GenerationApplication
-	externalSkills *pcruntime.ExternalSkillApplication
-	handoff        *pcruntime.HandoffApplication
-	work           *pcruntime.WorkApplication
-	handoffReport  *pcruntime.HandoffReportApplication
-	statistics     *pcruntime.StatisticsApplication
+	scopes               *pcruntime.ScopeApplication
+	sources              *pcruntime.SourceApplication
+	remoteIngestion      *pcruntime.RemoteIngestionApplication
+	connectorCheckpoints *pcruntime.ConnectorCheckpointApplication
+	artifacts            *pcruntime.ArtifactResourceApplication
+	memory               *pcruntime.MemoryApplication
+	context              *pcruntime.ContextApplication
+	review               *pcruntime.ReviewApplication
+	generation           *pcruntime.GenerationApplication
+	externalSkills       *pcruntime.ExternalSkillApplication
+	handoff              *pcruntime.HandoffApplication
+	work                 *pcruntime.WorkApplication
+	handoffReport        *pcruntime.HandoffReportApplication
+	statistics           *pcruntime.StatisticsApplication
 }
 
 func buildApplicationServices(
@@ -79,6 +81,24 @@ func buildApplicationServices(
 		return applicationServices{}, err
 	}
 	sourceApplication, err := pcruntime.NewSourceApplication(lifecycle, sourceBackend)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	remoteIngestionBackend, err := sqlstore.NewRuntimeRemoteIngestionBackend(
+		database, sqlstore.DefinitionManifestRepository{}, repositories.sources,
+	)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	remoteIngestion, err := pcruntime.NewRemoteIngestionApplication(lifecycle, remoteIngestionBackend)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	checkpointStore, err := sqlstore.NewRuntimeConnectorCheckpointStore(database, sqlstore.ConnectorCheckpointRepository{})
+	if err != nil {
+		return applicationServices{}, err
+	}
+	connectorCheckpoints, err := pcruntime.NewConnectorCheckpointApplication(lifecycle, checkpointStore)
 	if err != nil {
 		return applicationServices{}, err
 	}
@@ -302,7 +322,8 @@ func buildApplicationServices(
 		return applicationServices{}, err
 	}
 	return applicationServices{
-		scopes: scopeApplication, sources: sourceApplication, artifacts: artifactApplication, memory: memoryApplication, context: contextApplication,
+		scopes: scopeApplication, sources: sourceApplication, remoteIngestion: remoteIngestion, connectorCheckpoints: connectorCheckpoints,
+		artifacts: artifactApplication, memory: memoryApplication, context: contextApplication,
 		review: reviewApplication, generation: generationApplication, externalSkills: externalApplication,
 		handoff: handoffApplication, work: workApplication, handoffReport: handoffReportApplication,
 		statistics: statisticsApplication,

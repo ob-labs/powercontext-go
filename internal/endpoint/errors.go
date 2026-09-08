@@ -113,6 +113,9 @@ func MapError(err error) ErrorMapping {
 	if mapped, ok := mapHandoffError(err); ok {
 		return mapped
 	}
+	if mapped, ok := mapSourceIngestionError(err); ok {
+		return mapped
+	}
 	return mapDomainError(err)
 }
 
@@ -256,6 +259,37 @@ func mapHandoffError(err error) (ErrorMapping, bool) {
 		return mapping(http.StatusInternalServerError, "invalid_handoff_generation", "Handoff generation violated its contract.", map[string]any{
 			"reason": invalidGeneration.Code,
 		}), true
+	}
+	return ErrorMapping{}, false
+}
+
+func mapSourceIngestionError(err error) (ErrorMapping, bool) {
+	if _, ok := errors.AsType[*source.DefinitionConflictError](err); ok {
+		return mapping(http.StatusConflict, "source_conflict", "The Source identity has different content.", nil), true
+	}
+	if _, ok := errors.AsType[*source.ObservationConflictError](err); ok {
+		return mapping(http.StatusConflict, "source_conflict", "The Source identity has different content.", nil), true
+	}
+	if _, ok := errors.AsType[*source.DefinitionNotFoundError](err); ok {
+		return mapping(http.StatusNotFound, "source_definition_not_found", "The requested Source Definition was not found.", nil), true
+	}
+	if _, ok := errors.AsType[*runtime.ConnectorCheckpointConflictError](err); ok {
+		return mapping(http.StatusConflict, "connector_checkpoint_conflict", "The Connector checkpoint is stale or conflicts with its binding.", nil), true
+	}
+	if _, ok := errors.AsType[*source.InvalidDefinitionManifestError](err); ok {
+		return mapping(http.StatusUnprocessableEntity, "invalid_source_ingestion", "The Source ingestion request is invalid.", nil), true
+	}
+	if _, ok := errors.AsType[*source.InvalidSourceObservationError](err); ok {
+		return mapping(http.StatusUnprocessableEntity, "invalid_source_ingestion", "The Source ingestion request is invalid.", nil), true
+	}
+	if _, ok := errors.AsType[*source.InvalidSourceProjectionError](err); ok {
+		return mapping(http.StatusUnprocessableEntity, "invalid_source_ingestion", "The Source ingestion request is invalid.", nil), true
+	}
+	if _, ok := errors.AsType[*source.InvalidConnectorBindingError](err); ok {
+		return invalidRequest(), true
+	}
+	if _, ok := errors.AsType[*source.InvalidConnectorRunError](err); ok {
+		return invalidRequest(), true
 	}
 	return ErrorMapping{}, false
 }
