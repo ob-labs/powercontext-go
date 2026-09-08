@@ -6,6 +6,10 @@ package sources
 type OperationName = string
 
 const (
-	CreateSourceOperation OperationName = "CreateSource"
-	GetSourceOperation    OperationName = "GetSource"
+	CommitConnectorCheckpointOperation OperationName = "CommitConnectorCheckpoint"
+	CreateSourceOperation              OperationName = "CreateSource"
+	GetConnectorCheckpointOperation    OperationName = "GetConnectorCheckpoint"
+	GetSourceOperation                 OperationName = "GetSource"
+	RegisterSourceDefinitionOperation  OperationName = "RegisterSourceDefinition"
+	SubmitSourceObservationOperation   OperationName = "SubmitSourceObservation"
 )

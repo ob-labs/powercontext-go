@@ -25,6 +25,10 @@ import (
 var sourceSidecarOperations = []scopeSidecarOperation{
 	{OperationID: "create_source", Method: "post", Path: "/v1/scopes/{scope_id}/sources"},
 	{OperationID: "get_source", Method: "get", Path: "/v1/scopes/{scope_id}/sources/{source_type}/{source_id}"},
+	{OperationID: "register_source_definition", Method: "post", Path: "/v1/source-definitions/register"},
+	{OperationID: "submit_source_observation", Method: "post", Path: "/v1/source-observations"},
+	{OperationID: "get_connector_checkpoint", Method: "post", Path: "/v1/connector-checkpoints/get"},
+	{OperationID: "commit_connector_checkpoint", Method: "post", Path: "/v1/connector-checkpoints/commit"},
 }
 
 type sourceSidecarManifest struct {

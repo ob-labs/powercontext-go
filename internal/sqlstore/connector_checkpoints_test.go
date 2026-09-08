@@ -167,7 +167,7 @@ func TestConnectorCheckpointRepositoryRejectsStoredBindingMismatchWithoutDisclos
 		_, _, err := (sqlstore.ConnectorCheckpointRepository{}).Load(t.Context(), tx, binding)
 		return err
 	})
-	if _, ok := errors.AsType[*sqlstore.InvalidStoredPayloadError](err); !ok {
+	if _, ok := errors.AsType[*sqlstore.CheckpointConflictError](err); !ok {
 		t.Fatalf("binding mismatch error = %T %v", err, err)
 	}
 	for _, secret := range []string{binding.ScopeID(), binding.ID(), binding.ConnectorName(), binding.ConnectorVersion(), "stored-secret", "stored-version-secret"} {

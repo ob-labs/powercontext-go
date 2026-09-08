@@ -10,8 +10,20 @@ passing check on one surface does not prove another.
 | Scheduler state | Versioned scheduler fixture and constrained Pickle model | Frozen Oracle fixture regeneration and `internal/scheduler` compatibility tests. |
 | Prompts | Embedded prompt files and frozen SHA-256 fixture inventory | Frozen Oracle and traceability checks reject prompt or digest drift. |
 | Generated schemas and clients | Generator source and checked-in generated inventory | `make check-generated`; fresh-consumer execution is owned by the generated-consumer gate. |
+| Fixed upstream74 Source sidecar | `openapi/canonical/sources.json` and Runtime Scope admission | Real Server requests verify Definition, Observation, and checkpoint behavior. The fixed raw schema omits `404 scope_not_found` for both `get_connector_checkpoint` and `commit_connector_checkpoint`; Runtime admission still returns that redacted 404 before storage, so generated clients report an unexpected status for those two cases. Do not add a synthetic generated response to hide the contract gap. |
 | CLI output and process behavior | `cmd/powercontext` public command boundary | `tools/process-smoke` exercises the built binary, including authentication, restart persistence, and shutdown. |
 | Public Go APIs | Deliberate public package inventory in ADR 0002 | `make api-compat` binds `v0.1.0` to its exact commit and rejects incompatible exported API changes. |
+
+## Canonical Source Sidecar Evidence
+
+The Source sidecar mounts only the exact generated HTTP method/path pairs. Real
+Server composition tests prove that the legacy `capture_content_source` HTTP
+operation remains reachable through the underlying legacy handler, while MCP
+`tools/list` continues to expose that legacy tool and excludes the four
+upstream-only Source Definition, Observation, and Connector checkpoint
+operations. This transport boundary is deliberate; no MCP tool or generated
+raw74 response is added merely to make a typed client accept a Runtime Scope
+admission result.
 
 ## Quality scope
 

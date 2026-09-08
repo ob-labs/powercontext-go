@@ -491,6 +491,11 @@ source / artifact / trigger / inference
   unique key decide an initial-create race. Verify real multi-connection
   contention and that cancellation or non-constraint storage failures remain
   distinguishable from a typed checkpoint conflict.
+  When a checkpoint transport represents absence as JSON null, compare that
+  wire value only after Scope admission and an actual-state load, then pass the
+  actual row presence and value to the final CAS. Verify absent/null transitions,
+  stale competing writes, and binding conflicts without classifying corrupt
+  envelopes or cancellation as conflicts.
 - When a hierarchy mutation validates graph relationships, acquire the database
   write lock before reading its hierarchy snapshot and commit that validation
   with metadata CAS in one transaction. Verify two independent SQLite Database

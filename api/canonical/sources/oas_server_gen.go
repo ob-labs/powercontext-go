@@ -8,18 +8,42 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CommitConnectorCheckpoint implements commit_connector_checkpoint operation.
+	//
+	// Replaces the checkpoint only when its expected starting value still matches.
+	//
+	// POST /v1/connector-checkpoints/commit
+	CommitConnectorCheckpoint(ctx context.Context, req *CommitConnectorCheckpointRequest) (CommitConnectorCheckpointRes, error)
 	// CreateSource implements create_source operation.
 	//
 	// Persist one Source without synchronously deriving Artifacts. The Server generates source_id.
 	//
 	// POST /v1/scopes/{scope_id}/sources
 	CreateSource(ctx context.Context, req *CreateSourceRequest, params CreateSourceParams) (CreateSourceRes, error)
+	// GetConnectorCheckpoint implements get_connector_checkpoint operation.
+	//
+	// Read a Connector binding checkpoint.
+	//
+	// POST /v1/connector-checkpoints/get
+	GetConnectorCheckpoint(ctx context.Context, req *GetConnectorCheckpointRequest) (GetConnectorCheckpointRes, error)
 	// GetSource implements get_source operation.
 	//
 	// Get one exact Source.
 	//
 	// GET /v1/scopes/{scope_id}/sources/{source_type}/{source_id}
 	GetSource(ctx context.Context, params GetSourceParams) (GetSourceRes, error)
+	// RegisterSourceDefinition implements register_source_definition operation.
+	//
+	// Registers an immutable declarative manifest without loading worker plugin code.
+	//
+	// POST /v1/source-definitions/register
+	RegisterSourceDefinition(ctx context.Context, req *RegisterSourceDefinitionRequest) (RegisterSourceDefinitionRes, error)
+	// SubmitSourceObservation implements submit_source_observation operation.
+	//
+	// Validates the observation against its registered manifest and durably appends it before receipt.
+	//
+	// POST /v1/source-observations
+	SubmitSourceObservation(ctx context.Context, req *SubmitSourceObservationRequest) (SubmitSourceObservationRes, error)
 }
 
 // Server implements http server based on OpenAPI v3 specification and

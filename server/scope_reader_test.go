@@ -187,6 +187,7 @@ func assertScopeHasNoPersistentWork(t *testing.T, database *sql.DB, scopeID stri
 	for _, table := range []string{
 		"pc_sources",
 		"pc_source_journal_heads",
+		"pc_connector_checkpoints",
 		"pc_artifacts",
 		"pc_memory_entry_versions",
 		"pc_memory_entry_heads",

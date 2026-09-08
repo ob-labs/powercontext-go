@@ -35,20 +35,22 @@ import (
 // Application is one fully assembled Runtime and its shared endpoint adapter.
 // Close is idempotent and drains admitted work before closing persistence.
 type Application struct {
-	config            ProcessConfig
-	runtime           *pcruntime.Runtime
-	endpoint          *endpoint.Handler
-	capabilities      pcruntime.Capabilities
-	readiness         *pcruntime.ReadinessChecks
-	metrics           *servermetrics.Server
-	tracing           trace.TracerProvider
-	logger            *slog.Logger
-	review            *pcruntime.ReviewApplication
-	externalSkills    *pcruntime.ExternalSkillApplication
-	scopes            *pcruntime.ScopeApplication
-	sources           *pcruntime.SourceApplication
-	artifacts         *pcruntime.ArtifactResourceApplication
-	agentSkillTargets []skill.AgentSkillTarget
+	config               ProcessConfig
+	runtime              *pcruntime.Runtime
+	endpoint             *endpoint.Handler
+	capabilities         pcruntime.Capabilities
+	readiness            *pcruntime.ReadinessChecks
+	metrics              *servermetrics.Server
+	tracing              trace.TracerProvider
+	logger               *slog.Logger
+	review               *pcruntime.ReviewApplication
+	externalSkills       *pcruntime.ExternalSkillApplication
+	scopes               *pcruntime.ScopeApplication
+	sources              *pcruntime.SourceApplication
+	remoteIngestion      *pcruntime.RemoteIngestionApplication
+	connectorCheckpoints *pcruntime.ConnectorCheckpointApplication
+	artifacts            *pcruntime.ArtifactResourceApplication
+	agentSkillTargets    []skill.AgentSkillTarget
 
 	readinessMu   sync.Mutex
 	hasReadiness  bool
@@ -94,9 +96,8 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 		config: config, runtime: foundation.lifecycle, capabilities: capabilities,
 		readiness: readiness, metrics: foundation.metrics, tracing: foundation.tracing, logger: dependencies.Logger,
 		review: services.review, externalSkills: services.externalSkills, scopes: services.scopes,
-		sources:           services.sources,
-		artifacts:         services.artifacts,
-		agentSkillTargets: foundation.assembled.agentSkillTargets,
+		sources: services.sources, remoteIngestion: services.remoteIngestion, connectorCheckpoints: services.connectorCheckpoints,
+		artifacts: services.artifacts, agentSkillTargets: foundation.assembled.agentSkillTargets,
 	}
 	application.endpoint = endpoint.NewHandler(endpoint.HandlerOptions{
 		Capabilities: application.getCapabilities,
@@ -143,7 +144,7 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 		webUI:              webOptions,
 		scopeBindings:      a.scopes,
 		canonicalScopes:    endpoint.NewCanonicalScopeHandler(a.scopes),
-		canonicalSources:   endpoint.NewCanonicalSourceHandler(a.sources),
+		canonicalSources:   endpoint.NewCanonicalSourceHandler(a.sources, a.remoteIngestion, a.connectorCheckpoints),
 		canonicalArtifacts: endpoint.NewCanonicalArtifactHandler(a.artifacts),
 	})
 }
