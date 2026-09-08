@@ -80,6 +80,7 @@ func TestTaskSchedulerSpecRejectsShellAction(t *testing.T) {
 		Binary:            `C:\Windows\System32\cmd.exe`,
 		Endpoint:          "http://127.0.0.1:8123",
 		DataDir:           `C:\Users\person\AppData\Local\PowerContext`,
+		EnvFile:           `C:\Users\person\AppData\Local\PowerContext\server.env`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -315,6 +316,7 @@ func taskSchedulerSpec(t *testing.T, startOnLogin bool) personalsvc.TaskSchedule
 		Binary:            `C:\Program Files\PowerContext\powercontext.exe`,
 		Endpoint:          "http://127.0.0.1:8123",
 		DataDir:           `C:\Users\person\AppData\Local\PowerContext`,
+		EnvFile:           `C:\Users\person\AppData\Local\PowerContext\server.env`,
 	})
 	if err != nil {
 		t.Fatal(err)

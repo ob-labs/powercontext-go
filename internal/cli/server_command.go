@@ -44,8 +44,93 @@ type serverEnvironmentValue struct {
 
 func newServerCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{Use: "server", Short: "Run a configured PowerContext service."}
-	command.AddCommand(newServerRunCommand(state))
+	command.AddCommand(
+		newServerRunCommand(state),
+		newServerInstallCommand(),
+		newServerStatusCommand(),
+		newServerUninstallCommand(),
+		newServerServiceRunCommand(),
+	)
 	return command
+}
+
+func newServerInstallCommand() *cobra.Command {
+	var envFile string
+	var dataDir string
+	command := &cobra.Command{
+		Use: "install", Short: "Install the Linux personal Server service.", Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			if err := requireServiceFlag(command, "env-file", envFile); err != nil {
+				return err
+			}
+			if command.Flags().Changed("data-dir") {
+				if err := requireServiceFlag(command, "data-dir", dataDir); err != nil {
+					return err
+				}
+			}
+			return unsupportedPersonalService()
+		},
+	}
+	command.Flags().StringVar(&envFile, "env-file", "", "Absolute environment file used by the personal Server service.")
+	command.Flags().StringVar(&dataDir, "data-dir", "", "Absolute Server data directory override.")
+	_ = command.MarkFlagRequired("env-file")
+	return command
+}
+
+func newServerStatusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use: "status", Short: "Inspect the Linux personal Server service.", Args: cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			return unsupportedPersonalService()
+		},
+	}
+}
+
+func newServerUninstallCommand() *cobra.Command {
+	return &cobra.Command{
+		Use: "uninstall", Short: "Remove the Linux personal Server service.", Args: cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			return unsupportedPersonalService()
+		},
+	}
+}
+
+func newServerServiceRunCommand() *cobra.Command {
+	var envFile string
+	var endpoint string
+	var dataDir string
+	command := &cobra.Command{
+		Use: "_service-run", Hidden: true, Args: cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			for _, flag := range []struct {
+				name  string
+				value string
+			}{
+				{name: "env-file", value: envFile},
+				{name: "endpoint", value: endpoint},
+				{name: "data-dir", value: dataDir},
+			} {
+				if err := requireServiceFlag(command, flag.name, flag.value); err != nil {
+					return err
+				}
+			}
+			return unsupportedPersonalService()
+		},
+	}
+	command.Flags().StringVar(&envFile, "env-file", "", "Registered environment file.")
+	command.Flags().StringVar(&endpoint, "endpoint", "", "Registered loopback endpoint.")
+	command.Flags().StringVar(&dataDir, "data-dir", "", "Registered Server data directory.")
+	for _, name := range []string{"env-file", "endpoint", "data-dir"} {
+		_ = command.MarkFlagRequired(name)
+	}
+	return command
+}
+
+func requireServiceFlag(command *cobra.Command, name, value string) error {
+	if command.Flags().Changed(name) && strings.TrimSpace(value) == "" {
+		return usageError(fmt.Errorf("server: --%s must be a non-empty trimmed value", name))
+	}
+	return nil
 }
 
 func newServerRunCommand(state *commandState) *cobra.Command {
