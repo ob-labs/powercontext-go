@@ -61,20 +61,28 @@ func TestServerPersonalServiceCommandsExposeThePortableContract(t *testing.T) {
 	}
 }
 
-func TestServerPersonalServiceCommandsRejectExplicitBlankValues(t *testing.T) {
+func TestServerPersonalServiceCommandsRejectMissingOrBlankValuesBeforeNativeEffects(t *testing.T) {
 	for _, arguments := range [][]string{
+		{"server", "install"},
 		{"server", "install", "--env-file="},
 		{"server", "install", "--env-file", "/etc/powercontext/server.env", "--data-dir="},
+		{"server", "_service-run", "--endpoint", "http://127.0.0.1:7614", "--data-dir", "/var/lib/powercontext"},
+		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--data-dir", "/var/lib/powercontext"},
+		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint", "http://127.0.0.1:7614"},
 		{"server", "_service-run", "--env-file=", "--endpoint", "http://127.0.0.1:7614", "--data-dir", "/var/lib/powercontext"},
 		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint=", "--data-dir", "/var/lib/powercontext"},
 		{"server", "_service-run", "--env-file", "/etc/powercontext/server.env", "--endpoint", "http://127.0.0.1:7614", "--data-dir="},
 	} {
 		t.Run(strings.Join(arguments[1:], " "), func(t *testing.T) {
-			command := newCommand(VersionInfo{}, nil, nil)
+			system := &scriptedSystemCommands{t: t}
+			command := newCommandWithAllDependencies(VersionInfo{}, nil, nil, nil, nil, system)
 			command.SetArgs(arguments)
 			err := command.ExecuteContext(t.Context())
 			if _, found := errors.AsType[*UsageError](err); !found || ExitCode(err) != 2 {
 				t.Fatalf("ExecuteContext() error = %T %v, want typed usage error", err, err)
+			}
+			if len(system.calls) != 0 || len(system.lookups) != 0 {
+				t.Fatalf("invalid command reached native boundary: calls=%v lookups=%v", system.calls, system.lookups)
 			}
 		})
 	}

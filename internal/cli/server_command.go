@@ -42,6 +42,11 @@ type serverEnvironmentValue struct {
 	present bool
 }
 
+type serviceFlagRequirement struct {
+	name  string
+	value *string
+}
+
 func newServerCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{Use: "server", Short: "Run a configured PowerContext service."}
 	command.AddCommand(
@@ -58,11 +63,9 @@ func newServerInstallCommand() *cobra.Command {
 	var envFile string
 	var dataDir string
 	command := &cobra.Command{
-		Use: "install", Short: "Install the Linux personal Server service.", Args: cobra.NoArgs,
+		Use: "install", Short: "Install the Linux personal Server service.",
+		Args: requiredServiceArgs(serviceFlagRequirement{name: "env-file", value: &envFile}),
 		RunE: func(command *cobra.Command, _ []string) error {
-			if err := requireServiceFlag(command, "env-file", envFile); err != nil {
-				return err
-			}
 			if command.Flags().Changed("data-dir") {
 				if err := requireServiceFlag(command, "data-dir", dataDir); err != nil {
 					return err
@@ -100,20 +103,13 @@ func newServerServiceRunCommand() *cobra.Command {
 	var endpoint string
 	var dataDir string
 	command := &cobra.Command{
-		Use: "_service-run", Hidden: true, Args: cobra.NoArgs,
+		Use: "_service-run", Hidden: true,
+		Args: requiredServiceArgs(
+			serviceFlagRequirement{name: "env-file", value: &envFile},
+			serviceFlagRequirement{name: "endpoint", value: &endpoint},
+			serviceFlagRequirement{name: "data-dir", value: &dataDir},
+		),
 		RunE: func(command *cobra.Command, _ []string) error {
-			for _, flag := range []struct {
-				name  string
-				value string
-			}{
-				{name: "env-file", value: envFile},
-				{name: "endpoint", value: endpoint},
-				{name: "data-dir", value: dataDir},
-			} {
-				if err := requireServiceFlag(command, flag.name, flag.value); err != nil {
-					return err
-				}
-			}
 			return unsupportedPersonalService()
 		},
 	}
@@ -124,6 +120,23 @@ func newServerServiceRunCommand() *cobra.Command {
 		_ = command.MarkFlagRequired(name)
 	}
 	return command
+}
+
+func requiredServiceArgs(requirements ...serviceFlagRequirement) cobra.PositionalArgs {
+	return func(command *cobra.Command, arguments []string) error {
+		if err := cobra.NoArgs(command, arguments); err != nil {
+			return err
+		}
+		for _, requirement := range requirements {
+			if !command.Flags().Changed(requirement.name) {
+				return usageError(fmt.Errorf("server: --%s is required", requirement.name))
+			}
+			if err := requireServiceFlag(command, requirement.name, *requirement.value); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 }
 
 func requireServiceFlag(command *cobra.Command, name, value string) error {
