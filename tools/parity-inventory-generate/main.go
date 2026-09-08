@@ -175,7 +175,7 @@ var (
 
 const (
 	latestNodeManifestSchemaVersion = 1
-	latestNodeManifestCommit        = "74b961fbb07165595314726715d412a3d0d90589"
+	latestNodeManifestCommit        = "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
 	modeGoPort                      = "go-port"
 	modeRetainedHost                = "retained-host"
 	modeCrossLayer                  = "cross-layer"

@@ -23,9 +23,90 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestScopeSidecarStableSourceAcceptsMovingInventory(t *testing.T) {
+	t.Parallel()
+	source, manifest, legacy, compatibility := readScopeSidecarInputs(t, repositoryRootForScopeSidecarTest(t))
+	surface, err := decodeCompatibilitySurface(compatibility)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if surface.Upstream.Commit != "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c" || surface.Canonical.OperationCount != 94 {
+		t.Fatal("fixture must use the e4 inventory")
+	}
+	if manifest.Upstream.Commit != "74b961fbb07165595314726715d412a3d0d90589" {
+		t.Fatal("fixture must retain the stable sidecar source")
+	}
+	if _, projectionErr := projectScopeSidecar(source, manifest, legacy, compatibility); projectionErr != nil {
+		t.Fatalf("stable sidecar source rejected against moving inventory: %v", projectionErr)
+	}
+}
+
+func TestScopeSidecarSelectedOperationsRequireInventoryAgreement(t *testing.T) {
+	t.Parallel()
+	source, _, legacy, compatibility := readScopeSidecarInputs(t, repositoryRootForScopeSidecarTest(t))
+	for _, selected := range [][]scopeSidecarOperation{scopeSidecarOperations, sourceSidecarOperations, artifactSidecarOperations} {
+		for _, operation := range selected {
+			for _, mutation := range []string{"missing", "method", "path", "deferred"} {
+				t.Run(operation.OperationID+"/"+mutation, func(t *testing.T) {
+					surface, decodeErr := decodeCompatibilitySurface(compatibility)
+					if decodeErr != nil {
+						t.Fatal(decodeErr)
+					}
+					index := stagedOperationIndex(t, surface, operation.OperationID)
+					switch mutation {
+					case "missing":
+						// Keep the inventory size valid so selected-operation membership must reject it.
+						surface.Canonical.UpstreamOnlyOperations[index].OperationID += "_unselected"
+					case "method":
+						surface.Canonical.UpstreamOnlyOperations[index].Method = "delete"
+					case "path":
+						surface.Canonical.UpstreamOnlyOperations[index].Path += "/changed"
+					case "deferred":
+						surface.Canonical.UpstreamOnlyOperations[index].Status = compatibilityStatusDeferred
+					}
+					mutant, marshalErr := json.Marshal(surface)
+					if marshalErr != nil {
+						t.Fatal(marshalErr)
+					}
+					if validationErr := validateCompatibilitySurface(legacy, mutant); validationErr != nil {
+						t.Fatalf("mutant must remain a valid inventory: %v", validationErr)
+					}
+					if validationErr := validatePinnedScopeSidecarSource(source, selected, legacy, mutant); validationErr == nil ||
+						!strings.Contains(validationErr.Error(), operation.OperationID) {
+						t.Fatalf("selected operation mutant was not rejected specifically: %v", validationErr)
+					}
+				})
+			}
+		}
+	}
+	for _, selected := range [][]scopeSidecarOperation{scopeSidecarOperations, sourceSidecarOperations, artifactSidecarOperations} {
+		for _, operation := range selected {
+			t.Run(operation.OperationID+"/source mismatch", func(t *testing.T) {
+				mutant := slices.Clone(selected)
+				index := slices.Index(mutant, operation)
+				mutant[index].Path += "/changed"
+				surface, decodeErr := decodeCompatibilitySurface(compatibility)
+				if decodeErr != nil {
+					t.Fatal(decodeErr)
+				}
+				surface.Canonical.UpstreamOnlyOperations[stagedOperationIndex(t, surface, operation.OperationID)].Path = mutant[index].Path
+				contents, marshalErr := json.Marshal(surface)
+				if marshalErr != nil {
+					t.Fatal(marshalErr)
+				}
+				if validationErr := validatePinnedScopeSidecarSource(source, mutant, legacy, contents); validationErr == nil ||
+					!strings.Contains(validationErr.Error(), operation.OperationID) {
+					t.Fatalf("source mismatch was not rejected specifically: %v", validationErr)
+				}
+			})
+		}
+	}
+}
 
 func TestScopeSidecarProjectsOnlyPinnedScopeMetadataOperations(t *testing.T) {
 	t.Parallel()

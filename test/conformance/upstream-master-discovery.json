@@ -3,7 +3,7 @@
   "upstream": {
     "repository": "oceanbase/powercontext",
     "branch": "master",
-    "commit": "74b961fbb07165595314726715d412a3d0d90589"
+    "commit": "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
   },
   "collection": {
     "command": [
@@ -21,20 +21,22 @@
       "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
     },
     "exit_code": 0,
-    "test_case_count": 1345
+    "test_case_count": 1522
   },
   "locked_environment": {
     "python_version": "3.11.15",
     "pytest_version": "9.1.1",
-    "uv_lock_sha256": "268a9cdb9e570cd933e999fe947b45ebf8e49b09c6c6c76c71a0c4edeac6b467"
+    "uv_version": "0.11.2",
+    "uv_lock_sha256": "21088b6c8e579d5e4e6e42ee9a38e102a001049c3ca0029fe6f14fefdc5ce347",
+    "uv_lock_source": "git-blob"
   },
   "evidence": {
-    "raw_stdout_sha256": "284a43727a937bc91f34e9315f673bb386e28affab6368e01a5b8a27ef480a6c",
-    "node_manifest_sha256": "9fde01ae816827b3da781888023dd105e9afb45c147dd140483d02441e4ab7f8"
+    "raw_stdout_sha256": "ed2f4e3c932e6c23387b5f1479b11030bc197ffc9808561de2cf358d967ed3ee",
+    "node_manifest_sha256": "32b34753dd8f9e9f6577c685b4bb9ac9706a7875e3300123394301a539ffbf80"
   },
   "normalized_node_ids": {
     "state": "required",
-    "count": 1345,
+    "count": 1522,
     "required_input": "test/conformance/upstream-master-node-ids.json",
     "scope": "test/conformance/parity-scope.json"
   }

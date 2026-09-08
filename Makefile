@@ -231,8 +231,8 @@ check-generated: ## Verify generated contracts and traceability outputs are clea
 
 parity-inventory-check: ## Fail closed until the exact upstream master node list is fully classified.
 	@test -n "$(UPSTREAM_MASTER_CHECKOUT)" || { echo 'UPSTREAM_MASTER_CHECKOUT must name the exact upstream master checkout' >&2; exit 2; }
-	@test "$$(git -C "$(UPSTREAM_MASTER_CHECKOUT)" rev-parse HEAD)" = 74b961fbb07165595314726715d412a3d0d90589 || { echo 'UPSTREAM_MASTER_CHECKOUT is not 74b961fbb07165595314726715d412a3d0d90589' >&2; exit 2; }
-	POWERCONTEXT_REQUIRE_UPSTREAM_MASTER_SCOPE=1 $(GO) test -count=1 ./test/conformance -run '^TestUpstreamMasterDiscovery'
+	@test "$$(git -C "$(UPSTREAM_MASTER_CHECKOUT)" rev-parse HEAD)" = e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c || { echo 'UPSTREAM_MASTER_CHECKOUT is not e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c' >&2; exit 2; }
+	POWERCONTEXT_REQUIRE_UPSTREAM_MASTER_SCOPE=1 POWERCONTEXT_UPSTREAM_CHECKOUT="$(UPSTREAM_MASTER_CHECKOUT)" $(GO) test -count=1 ./test/conformance -run '^TestUpstreamMasterDiscovery'
 	$(GO) run ./tools/parity-inventory-generate -check-latest-scope -scope test/conformance/parity-scope.json -latest-case-list test/conformance/upstream-master-node-ids.json
 
 release-contract-check: ## Verify the recorded upstream tag, release assets, and PyPI provenance.

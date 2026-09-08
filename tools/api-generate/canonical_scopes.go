@@ -203,25 +203,15 @@ func validatePinnedScopeSidecarSource(
 			return fmt.Errorf("Scope sidecar operation %q status = %q, want %q", operation.OperationID, entry.Status, compatibilityStatusImplementedCanonical)
 		}
 	}
-	want, err := surface.projectCanonical(legacy)
-	if err != nil {
-		return fmt.Errorf("project canonical operation ledger: %w", err)
-	}
 	got, err := parseOpenAPIOperations(source)
 	if err != nil {
 		return fmt.Errorf("parse pinned upstream OpenAPI: %w", err)
 	}
-	if len(got) != len(want) {
-		return fmt.Errorf("pinned upstream operation count = %d, want %d", len(got), len(want))
-	}
-	for operationID, endpoint := range want {
-		if got[operationID] != endpoint {
-			return fmt.Errorf("pinned upstream operation %q = %#v, want %#v", operationID, got[operationID], endpoint)
-		}
-	}
-	for operationID := range got {
-		if _, found := want[operationID]; !found {
-			return fmt.Errorf("pinned upstream OpenAPI contains untracked operation %q", operationID)
+	// The manifest pins schema bytes independently of the moving operation inventory.
+	for _, operation := range operations {
+		endpoint := compatibilityEndpoint{Method: operation.Method, Path: operation.Path}
+		if got[operation.OperationID] != endpoint {
+			return fmt.Errorf("pinned upstream operation %q = %#v, want %#v", operation.OperationID, got[operation.OperationID], endpoint)
 		}
 	}
 	return nil

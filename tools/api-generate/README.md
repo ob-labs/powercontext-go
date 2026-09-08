@@ -3,26 +3,29 @@
 Generation tooling for `api/v1` belongs here. Generated output derives only
 from the legacy `openapi/powercontext.yaml` contract.
 
-`openapi/compatibility-surface.json` is a pinned inventory for the later
-upstream snapshot. The generator verifies it before regenerating the legacy
-surface: the 14 retained Go Handoff Report operations stay available, while
-the 38 upstream-only operations remain unimplemented. In particular, legacy
-`GET /v1/stats` keeps `GetStats`; the future canonical `POST /v1/stats` is
-reserved as `GetStatsCanonical`. The inventory is a migration gate, not an
-alternate OpenAPI input, so it cannot expand `v1.Handler` or `v1.Invoker`.
-Its `mcp_generated_openapi_operations` field covers only schema-generated
-OpenAPI-dispatch tools. Native conditional MCP tools have their own registration
-and tests.
+`openapi/compatibility-surface.json` is the e4 current-master inventory:
+94 canonical operations and 55 upstream-only operations. The generator
+verifies it before regenerating the legacy surface: the 14 retained Go Handoff
+Report operations stay available, and all 17 e4 additions are deferred. In
+particular, legacy `GET /v1/stats` keeps `GetStats`; the future canonical
+`POST /v1/stats` is reserved as `GetStatsCanonical`. The inventory is a
+migration gate, not an alternate OpenAPI input, so it cannot expand
+`v1.Handler` or `v1.Invoker`. Its `mcp_generated_openapi_operations` field
+covers only schema-generated OpenAPI-dispatch tools. Native conditional MCP
+tools have their own registration and tests.
 
-The Scope sidecar is the first deliberately narrow canonical package. Its
-`-scope-sidecar-manifest` mode reads the raw pinned upstream OpenAPI,
-compatibility inventory, and frozen legacy document; it validates the complete
-77-operation ledger before projecting only the five Scope read/resolve
-operations into `api/canonical/scopes`. The manifest carries the sole product
-overlay, which limits `ScopeBindingKey.integration` to `codex` and `workbuddy`.
-The mode requires package `scopes` below a `canonical/scopes` target and rejects
-every Client Invoker output. It generates no route registration, MCP schema, or
-legacy `v1` artifact.
+Scope, Source, and Artifact sidecar manifests independently pin the 74 raw
+upstream schema and its digest. A sidecar validates each selected operation's
+ID, method, path, and `implemented-canonical` status against the e4 inventory;
+it does not require the 74 source to contain all e4 deferred operations. The
+Scope sidecar is the first deliberately narrow canonical package. Its
+`-scope-sidecar-manifest` mode reads the stable raw source, compatibility
+inventory, and frozen legacy document before projecting only the five Scope
+read/resolve operations into `api/canonical/scopes`. The manifest carries the
+sole product overlay, which limits `ScopeBindingKey.integration` to `codex` and
+`workbuddy`. The mode requires package `scopes` below a `canonical/scopes`
+target and rejects every Client Invoker output. It generates no route
+registration, MCP schema, or legacy `v1` artifact.
 
 The independent `-artifact-sidecar-manifest` mode projects exactly
 `list_artifacts`, `get_artifact`, and `get_artifact_revision` into `api/canonical/artifacts`.

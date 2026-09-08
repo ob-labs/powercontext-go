@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	upstreamMasterDiscoveryCommit = "74b961fbb07165595314726715d412a3d0d90589"
-	upstreamMasterNodeIDCount     = 1345
+	upstreamMasterDiscoveryCommit = "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
+	upstreamMasterNodeIDCount     = 1522
 )
 
 type upstreamMasterNodeIDs struct {
@@ -54,6 +54,8 @@ type upstreamMasterDiscovery struct {
 	LockedEnvironment struct {
 		PythonVersion string `json:"python_version"`
 		PytestVersion string `json:"pytest_version"`
+		UVVersion     string `json:"uv_version"`
+		UVLockSource  string `json:"uv_lock_source"`
 		UVLockSHA256  string `json:"uv_lock_sha256"`
 	} `json:"locked_environment"`
 	Evidence struct {
@@ -87,11 +89,19 @@ func TestUpstreamMasterDiscoveryRejectsAmbiguousOrWrongEvidence(t *testing.T) {
 	}{
 		{
 			name:   "wrong upstream commit",
-			mutant: strings.Replace(string(contents), upstreamMasterDiscoveryCommit, "0000000000000000000000000000000000000000", 1),
+			mutant: strings.Replace(string(contents), upstreamMasterDiscoveryCommit, "74b961fbb07165595314726715d412a3d0d90589", 1),
 		},
 		{
 			name:   "wrong collection count",
-			mutant: strings.Replace(string(contents), `"test_case_count": 1345`, `"test_case_count": 1344`, 1),
+			mutant: strings.Replace(string(contents), `"test_case_count": 1522`, `"test_case_count": 1521`, 1),
+		},
+		{
+			name:   "working-tree lock source",
+			mutant: strings.Replace(string(contents), `"uv_lock_source": "git-blob"`, `"uv_lock_source": "working-tree"`, 1),
+		},
+		{
+			name:   "CRLF working-tree lock digest",
+			mutant: strings.Replace(string(contents), "21088b6c8e579d5e4e6e42ee9a38e102a001049c3ca0029fe6f14fefdc5ce347", "96de6b39127cef8e90fee496052f5a9245597893b65cfdc6aa2cbcd6521cfe61", 1),
 		},
 		{
 			name:   "unknown member",
@@ -140,6 +150,55 @@ func TestUpstreamMasterDiscoveryIdentityAndCollection(t *testing.T) {
 		t.Fatalf("latest-master scope must plan exactly SQLite, Codex, and WorkBuddy: %#v", scope)
 	}
 	assertUpstreamMasterScopeMatchesNodeIDs(t, scope, nodeIDs)
+}
+
+func TestUpstreamMasterDiscoveryMatchesPinnedLock(t *testing.T) {
+	if os.Getenv("POWERCONTEXT_REQUIRE_UPSTREAM_MASTER_SCOPE") == "1" && os.Getenv("POWERCONTEXT_UPSTREAM_CHECKOUT") == "" {
+		t.Fatal("required upstream discovery gate has no POWERCONTEXT_UPSTREAM_CHECKOUT")
+	}
+	checkout := upstreamOpenAPICheckout(t)
+	contents, err := os.ReadFile("upstream-master-discovery.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovery, err := decodeUpstreamMasterDiscovery(contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := upstreamLockSHA256(t, checkout, discovery.Upstream.Commit); got != discovery.LockedEnvironment.UVLockSHA256 {
+		t.Fatalf("pinned upstream uv.lock blob SHA-256 = %s, want %s", got, discovery.LockedEnvironment.UVLockSHA256)
+	}
+}
+
+func TestUpstreamMasterDiscoveryLockIgnoresWorkingTreeAndHEAD(t *testing.T) {
+	checkout := t.TempDir()
+	runGit(t, checkout, "init")
+	runGit(t, checkout, "config", "core.autocrlf", "false")
+	runGit(t, checkout, "config", "user.name", "PowerContext")
+	runGit(t, checkout, "config", "user.email", "powercontext@example.invalid")
+	lockPath := filepath.Join(checkout, "uv.lock")
+	const original = "version = 1\nrevision = 3\n"
+	if err := os.WriteFile(lockPath, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, checkout, "add", "uv.lock")
+	runGit(t, checkout, "commit", "-m", "original lock")
+	commit := strings.TrimSpace(string(runGit(t, checkout, "rev-parse", "HEAD")))
+	if err := os.WriteFile(lockPath, []byte("version = 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, checkout, "commit", "-am", "different HEAD lock")
+	if err := os.WriteFile(lockPath, []byte(strings.ReplaceAll(original, "\n", "\r\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := upstreamLockSHA256(t, checkout, commit), fmt.Sprintf("%x", sha256.Sum256([]byte(original))); got != want {
+		t.Fatalf("pinned lock digest = %s, want original LF blob %s", got, want)
+	}
+}
+
+func upstreamLockSHA256(t *testing.T, checkout, commit string) string {
+	t.Helper()
+	return fmt.Sprintf("%x", sha256.Sum256(runGit(t, checkout, "show", commit+":uv.lock")))
 }
 
 func assertUpstreamMasterScopeMatchesNodeIDs(t *testing.T, scope upstreamMasterScope, nodeIDs []string) {
@@ -298,10 +357,11 @@ func decodeUpstreamMasterDiscovery(contents []byte) (upstreamMasterDiscovery, er
 		return upstreamMasterDiscovery{}, fmt.Errorf("upstream-master collection exit/count = %d/%d, want 0/%d", discovery.Collection.ExitCode, discovery.Collection.TestCaseCount, upstreamMasterNodeIDCount)
 	}
 	if discovery.LockedEnvironment.PythonVersion != "3.11.15" || discovery.LockedEnvironment.PytestVersion != "9.1.1" ||
-		discovery.LockedEnvironment.UVLockSHA256 != "268a9cdb9e570cd933e999fe947b45ebf8e49b09c6c6c76c71a0c4edeac6b467" {
+		discovery.LockedEnvironment.UVVersion != "0.11.2" || discovery.LockedEnvironment.UVLockSource != "git-blob" ||
+		discovery.LockedEnvironment.UVLockSHA256 != "21088b6c8e579d5e4e6e42ee9a38e102a001049c3ca0029fe6f14fefdc5ce347" {
 		return upstreamMasterDiscovery{}, fmt.Errorf("upstream-master locked collection environment is not the recorded Python, pytest, and uv.lock identity")
 	}
-	if discovery.Evidence.RawStdoutSHA256 != "284a43727a937bc91f34e9315f673bb386e28affab6368e01a5b8a27ef480a6c" ||
+	if discovery.Evidence.RawStdoutSHA256 != "ed2f4e3c932e6c23387b5f1479b11030bc197ffc9808561de2cf358d967ed3ee" ||
 		len(discovery.Evidence.NodeManifestSHA256) != sha256.Size*2 {
 		return upstreamMasterDiscovery{}, fmt.Errorf("upstream-master collection evidence hashes are incomplete")
 	}

@@ -3,28 +3,37 @@
 `powercontext.yaml` is copied from the current Python reference baseline and is
 the sole source of truth for the generated legacy HTTP wire surface.
 
-`compatibility-surface.json` pins the later upstream operation inventory while
+`compatibility-surface.json` pins the current-master operation inventory while
 the corresponding use cases are implemented incrementally. Its 53-operation
 legacy baseline includes the 14 retained Go Handoff Report extensions and
-legacy `GET /v1/stats`. Every one of the 38 pinned upstream-only operations is
-explicitly `deferred` or `implemented-canonical`. Both states are excluded
-from the frozen legacy input, so a status change alone cannot expose a legacy
-route, generated package, or MCP tool. An `implemented-canonical` status
-requires its separately generated canonical transport plus Server and SQLite
-service-chain proof before it is recorded.
+legacy `GET /v1/stats`. The current-master inventory is pinned to
+`oceanbase/powercontext@e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c`: 94 canonical
+operations, 55 upstream-only operations, and 17 newly deferred operations.
+Every upstream-only operation is explicitly `deferred` or
+`implemented-canonical`. Both states are excluded from the frozen legacy
+input, so a status change alone cannot expose a legacy route, generated
+package, or MCP tool. An `implemented-canonical` status requires its separately
+generated canonical transport plus Server and SQLite service-chain proof before
+it is recorded.
 
-The canonical ledger contains 77 operations. It removes the
-retained Handoff extensions, normalizes `get_stats` to its reserved canonical
-`POST /v1/stats` `GetStatsCanonical` name, and adds all 38 upstream-only
-operations regardless of their staged status. The inventory remains a
-migration gate, not a second OpenAPI input, so it cannot expand `v1.Handler`
-or `v1.Invoker` on its own.
+The current-master canonical ledger removes the retained Handoff extensions,
+normalizes `get_stats` to its reserved canonical `POST /v1/stats`
+`GetStatsCanonical` name, and includes all upstream-only operations regardless
+of their staged status. It is a migration gate, not a second OpenAPI input, so
+it cannot expand `v1.Handler` or `v1.Invoker` on its own.
 
-`canonical/upstream-powercontext.yaml` is the immutable raw OpenAPI blob from
+Scope, Source, and Artifact sidecars remain independently pinned to
 `oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`.
-`canonical/scopes-manifest.json` pins its SHA-256, verifies every one of the
-77 ledger endpoints, and explicitly projects only `list_scopes`, `get_scope`,
-`get_default_scope`, `resolve_scope_selection`, and `resolve_scope_binding`.
+Their manifests pin the raw-source SHA-256 and validate only each selected
+operation's ID, method, path, and `implemented-canonical` status against the
+e4 inventory. They do not require a stable 74 schema source to contain every
+new e4 deferred operation. The e4 Artifact revision-history, Artifact tag,
+Prompt, and Access clusters remain deferred. This rebaseline does not implement
+Artifact writes, managed Skills, remote Skills, or native personal services.
+
+`canonical/upstream-powercontext.yaml` is the immutable raw OpenAPI blob for
+the three sidecars. `canonical/scopes-manifest.json` explicitly projects only
+`list_scopes`, `get_scope`, `get_default_scope`, `resolve_scope_selection`, and `resolve_scope_binding`.
 The projection writes `canonical/scopes.json` and generates the separate
 `api/canonical/scopes` package. Its only product overlay narrows
 `ScopeBindingKey.integration` to `codex` and `workbuddy`.
@@ -33,6 +42,11 @@ The sidecar generator cannot target `api/v1`, cannot write the legacy Client
 Invoker, and does not register HTTP routes or MCP tools. Its generated package
 is a compile-time contract for a later Server and SQLite Scope-read slice, not
 evidence that those endpoints are mounted.
+
+The frozen legacy `openapi/powercontext.yaml`, generated `api/v1`, legacy
+Client Invoker, and generated MCP tool inventory remain unchanged by the e4
+inventory update. The two pins deliberately separate current-master deferred
+accountability from the stable public sidecar wire contract.
 
 `canonical/sources-manifest.json` independently projects `create_source` and
 `get_source` from that same pinned upstream blob into `canonical/sources.json`
