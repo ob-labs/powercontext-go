@@ -133,6 +133,9 @@ else
     )
     if ! docker exec --user powercontext "$container" env -i "${environment[@]}" systemctl --user show-environment >/dev/null 2>&1; then
       result=1
+    elif ! docker exec --user powercontext "$container" env -i "${environment[@]}" \
+      busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.DBus.Peer Ping >/dev/null 2>&1; then
+      result=1
     elif ! docker exec "$container" test ! -e /home/powercontext/.config/systemd/user/powercontext.service; then
       result=1
     else

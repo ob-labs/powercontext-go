@@ -328,13 +328,24 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 	if err != nil {
 		return personalsvc.SystemdUserManagerUnit{}, err
 	}
+	unitValues, err := parseBusctlProperties(unitProperties)
+	if err != nil {
+		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
+	}
+	loadState, err := busctlRequiredString(unitValues, "LoadState", "s")
+	if err != nil {
+		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
+	}
+	if loadState == "not-found" {
+		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
+	}
 	serviceProperties, err := b.busctl(ctx,
 		"call", personalServiceManagerName, personalServiceUnitObjectPath, "org.freedesktop.DBus.Properties", "GetAll", "s", personalServiceServiceInterface,
 	)
 	if err != nil {
 		return personalsvc.SystemdUserManagerUnit{}, err
 	}
-	unit, err := parseBusctlUnit(unitProperties, serviceProperties)
+	unit, err := parseBusctlUnit(unitValues, serviceProperties)
 	if err != nil {
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
@@ -494,11 +505,7 @@ func parseBusctlObjectPath(payload []byte) error {
 	return nil
 }
 
-func parseBusctlUnit(unitPayload, servicePayload []byte) (personalsvc.SystemdUserManagerUnit, error) {
-	unitValues, err := parseBusctlProperties(unitPayload)
-	if err != nil {
-		return personalsvc.SystemdUserManagerUnit{}, err
-	}
+func parseBusctlUnit(unitValues map[string]busctlValue, servicePayload []byte) (personalsvc.SystemdUserManagerUnit, error) {
 	serviceValues, err := parseBusctlProperties(servicePayload)
 	if err != nil {
 		return personalsvc.SystemdUserManagerUnit{}, err

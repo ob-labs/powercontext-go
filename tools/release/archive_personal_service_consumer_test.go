@@ -49,6 +49,10 @@ func TestReleaseArchiveProvidesConsumablePersonalService(t *testing.T) {
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
 		t.Fatalf("release archive has no executable bin/powercontext")
 	}
+	before := readReleasePersonalServiceStatus(t, binary)
+	if before.Support != "supported" || before.Registration != "not_installed" {
+		t.Fatalf("initial release personal service status = %#v", before)
+	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -129,6 +133,8 @@ func releasePersonalServiceFailureClass(output []byte, commandErr error) string 
 	case strings.Contains(value, "systemd user service unit inspect failed"):
 		return "unit_inspect"
 	case strings.Contains(value, "systemd user service inspect manager failed"):
+		return "manager_inspect"
+	case strings.Contains(value, "personal service operation failed during inspect_manager"):
 		return "manager_inspect"
 	case strings.Contains(value, "systemd user service manager command failed"):
 		return "manager_command"

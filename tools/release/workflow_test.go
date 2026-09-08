@@ -2210,6 +2210,7 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 		{name: "verify provenance order", payload: verification, old: "Verify signed GitHub Release provenance", replace: "Verify signed GitHub Release provenance removed", which: "verification"},
 		{name: "runner isolation", payload: runner, old: "env -i", replace: "env", which: "runner"},
 		{name: "runner manager", payload: runner, old: "systemctl start user@1001.service", replace: "systemctl start user@9999.service", which: "runner"},
+		{name: "runner user-bus ping", payload: runner, old: "busctl --user --json=short call", replace: "busctl --private", which: "runner"},
 		{name: "runner container privilege", payload: runner, old: "--privileged", replace: "--read-only", which: "runner"},
 	} {
 		t.Run(mutant.name, func(t *testing.T) {
@@ -2315,6 +2316,7 @@ func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload,
 	runner := string(runnerPayload)
 	for _, required := range []string{
 		"env -i", "systemctl start user@1001.service", "systemctl --user show-environment", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus",
+		"busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.DBus.Peer Ping",
 		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "mktemp -d", "chmod 0700",
 		"docker run --detach --privileged", "--tmpfs /run", "--tmpfs /run/lock", "--volume \"$workspace:/work\"",
 	} {
