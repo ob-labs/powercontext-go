@@ -15,13 +15,69 @@
 package modelprovider
 
 import (
+	json "encoding/json/v2"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ob-labs/powercontext-go/inference"
 )
+
+func TestFactoryAnthropicWorkloadBaseURLUsesEnvironmentAPIKey(t *testing.T) {
+	type requestDetails struct {
+		method        string
+		path          string
+		apiKey        string
+		authorization string
+	}
+	requests := make(chan requestDetails, 4)
+	provider := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests <- requestDetails{
+			method:        request.Method,
+			path:          request.URL.Path,
+			apiKey:        request.Header.Get("X-Api-Key"),
+			authorization: request.Header.Get("Authorization"),
+		}
+		response.Header().Set("Content-Type", "application/json")
+		encoded, err := json.Marshal(anthropicResponse("msg_1", "ok", 1, 1))
+		if err != nil {
+			t.Errorf("encode Anthropic response: %v", err)
+			return
+		}
+		if _, err := response.Write(encoded); err != nil {
+			t.Errorf("write Anthropic response: %v", err)
+		}
+	}))
+	t.Cleanup(provider.Close)
+
+	factory, err := NewFactory(MilestoneB, testEnvironment{
+		"ANTHROPIC_API_KEY":  "environment-key",
+		"ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
+	}.lookup, provider.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	workload := WorkloadConfig{BaseURL: provider.URL + "/custom-anthropic/"}
+	model, err := factory.TextModelWithWorkload("anthropic:claude-test", workload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workload.BaseURL = "http://127.0.0.1:2/mutated/"
+	if _, err := model.Complete(t.Context(), textRequestForProviderTest(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	request := <-requests
+	if request.method != http.MethodPost || request.path != "/custom-anthropic/v1/messages" ||
+		request.apiKey != "environment-key" || request.authorization != "" {
+		t.Fatalf("Anthropic request = %#v", request)
+	}
+	if len(requests) != 0 {
+		t.Fatalf("unexpected additional Anthropic requests = %d", len(requests))
+	}
+}
 
 func TestFactoryAppliesWorkloadOverridesWithoutRetainingCallerState(t *testing.T) {
 	fake := &openAIFake{responses: []any{chatResponse("chat_1", `{"value":"stable"}`, 1, 1)}}
@@ -69,35 +125,54 @@ func TestFactoryAppliesWorkloadOverridesWithoutRetainingCallerState(t *testing.T
 	}
 }
 
-func TestFactoryRejectsWorkloadOverrideForNonOpenAIProviderBeforeRequest(t *testing.T) {
-	factory, err := NewFactory(MilestoneB, testEnvironment{"ANTHROPIC_API_KEY": "test-key"}.lookup, nil)
+func TestFactoryRejectsUnsupportedNonOpenAIWorkloadOverrides(t *testing.T) {
+	factory, err := NewFactory(MilestoneB, testEnvironment{
+		"ANTHROPIC_API_KEY":            "test-key",
+		"PYDANTIC_AI_GATEWAY_API_KEY":  "private-bearer",
+		"PYDANTIC_AI_GATEWAY_BASE_URL": "https://gateway-provider.test/proxy",
+	}.lookup, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	workload := WorkloadConfig{
-		BaseURL: "https://private-provider.test/v1",
-		Headers: http.Header{"Authorization": []string{"private-secret"}},
-	}
 	for _, factoryCall := range []struct {
-		name string
-		call func() error
+		name    string
+		call    func() error
+		secrets []string
 	}{
-		{name: "text", call: func() error {
-			_, callErr := factory.TextModelWithWorkload("anthropic:claude-test", workload)
+		{name: "Anthropic headers", call: func() error {
+			_, callErr := factory.TextModelWithWorkload("anthropic:claude-test", WorkloadConfig{
+				Headers: http.Header{"Authorization": []string{"private-secret"}},
+			})
 			return callErr
-		}},
-		{name: "embedding", call: func() error {
-			_, callErr := factory.EmbeddingTransportWithWorkload("google:gemini-embedding-001", workload)
+		}, secrets: []string{"private-secret", "test-key"}},
+		{name: "Anthropic model settings", call: func() error {
+			_, callErr := factory.TextModelWithWorkload("anthropic:claude-test", WorkloadConfig{
+				ModelSettings: map[string]any{"top_p": "private-setting"},
+			})
 			return callErr
-		}},
+		}, secrets: []string{"private-setting", "test-key"}},
+		{name: "Anthropic gateway base URL", call: func() error {
+			_, callErr := factory.TextModelWithWorkload(
+				"gateway/anthropic:claude-test",
+				WorkloadConfig{BaseURL: "https://private-provider.test/v1"},
+			)
+			return callErr
+		}, secrets: []string{"private-provider", "private-bearer", "gateway-provider"}},
+		{name: "Google embedding base URL", call: func() error {
+			_, callErr := factory.EmbeddingTransportWithWorkload(
+				"google:gemini-embedding-001",
+				WorkloadConfig{BaseURL: "https://private-provider.test/v1"},
+			)
+			return callErr
+		}, secrets: []string{"private-provider", "test-key"}},
 	} {
 		t.Run(factoryCall.name, func(t *testing.T) {
 			err := factoryCall.call()
-			var configuration *inference.ConfigurationError
-			if !errors.As(err, &configuration) || configuration.Code() != "workload-provider" {
+			configuration, ok := errors.AsType[*inference.ConfigurationError](err)
+			if !ok || configuration.Code() != "workload-provider" {
 				t.Fatalf("error = %v", err)
 			}
-			for _, secret := range []string{"private-provider", "private-secret"} {
+			for _, secret := range factoryCall.secrets {
 				if strings.Contains(err.Error(), secret) {
 					t.Fatalf("error leaked %q: %v", secret, err)
 				}

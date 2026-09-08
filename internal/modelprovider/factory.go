@@ -151,8 +151,8 @@ func (f *Factory) TextModel(modelID string) (inference.TextModel, error) {
 	return f.textModel(modelID, WorkloadConfig{})
 }
 
-// TextModelWithWorkload builds an OpenAI-compatible text client with a
-// workload-local endpoint, headers, and request settings.
+// TextModelWithWorkload builds a text client with supported workload-local
+// endpoint, header, and request-setting overrides.
 func (f *Factory) TextModelWithWorkload(modelID string, workload WorkloadConfig) (inference.TextModel, error) {
 	return f.textModel(modelID, workload)
 }
@@ -172,8 +172,11 @@ func (f *Factory) textModel(modelID string, workload WorkloadConfig) (inference.
 	if err := validateProviderModel(route); err != nil {
 		return nil, err
 	}
-	if clonedWorkload.hasOverrides() && route.protocol != ProtocolOpenAIChat && route.protocol != ProtocolOpenAIResponses {
-		return nil, inference.NewConfigurationError("workload-provider", "workload overrides require OpenAI-compatible model routes")
+	openAIWorkload := route.protocol == ProtocolOpenAIChat || route.protocol == ProtocolOpenAIResponses
+	anthropicBaseURLOnly := route.protocol == ProtocolAnthropic && !route.gateway && clonedWorkload.BaseURL != "" &&
+		len(clonedWorkload.Headers) == 0 && len(clonedWorkload.ModelSettings) == 0
+	if clonedWorkload.hasOverrides() && !openAIWorkload && !anthropicBaseURLOnly {
+		return nil, inference.NewConfigurationError("workload-provider", "workload override is not supported for model route")
 	}
 	switch route.protocol {
 	case ProtocolOpenAIChat, ProtocolOpenAIResponses:
@@ -187,6 +190,9 @@ func (f *Factory) textModel(modelID string, workload WorkloadConfig) (inference.
 		config, configErr := f.anthropicConfig(route)
 		if configErr != nil {
 			return nil, configErr
+		}
+		if clonedWorkload.BaseURL != "" {
+			config.BaseURL = clonedWorkload.BaseURL
 		}
 		return NewAnthropicTextModel(route, config)
 	case ProtocolGroq, ProtocolXAI, ProtocolMistral, ProtocolHuggingFace:
