@@ -2209,11 +2209,11 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 		{name: "release consumer platform", payload: release, old: "matrix.target == 'linux-amd64'", replace: "matrix.target == 'linux-arm64'", which: "release"},
 		{name: "verify provenance order", payload: verification, old: "Verify signed GitHub Release provenance", replace: "Verify signed GitHub Release provenance removed", which: "verification"},
 		{name: "runner isolation", payload: runner, old: "env -i", replace: "env", which: "runner"},
-		{name: "runner manager", payload: runner, old: "systemd --user", replace: "systemd --system", which: "runner"},
+		{name: "runner manager", payload: runner, old: "systemctl start user@1001.service", replace: "systemctl start user@9999.service", which: "runner"},
 		{name: "runner container privilege", payload: runner, old: "--privileged", replace: "--read-only", which: "runner"},
 	} {
 		t.Run(mutant.name, func(t *testing.T) {
-			changed := strings.Replace(string(mutant.payload), mutant.old, mutant.replace, 1)
+			changed := strings.ReplaceAll(string(mutant.payload), mutant.old, mutant.replace)
 			if changed == string(mutant.payload) {
 				t.Fatal("mutant did not change the contract")
 			}
@@ -2314,8 +2314,8 @@ func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload,
 
 	runner := string(runnerPayload)
 	for _, required := range []string{
-		"env -i", "dbus-run-session", "systemd --user", "systemctl --user exit", "busctl --user", "timeout 90",
-		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "POWERCONTEXT_SYSTEMD_TEST_BINARY", "mktemp -d", "chmod 0700",
+		"env -i", "systemctl start user@1001.service", "systemctl --user show-environment", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus",
+		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "mktemp -d", "chmod 0700",
 		"docker run --detach --privileged", "--tmpfs /run", "--tmpfs /run/lock", "--volume \"$workspace:/work\"",
 	} {
 		if !strings.Contains(runner, required) {

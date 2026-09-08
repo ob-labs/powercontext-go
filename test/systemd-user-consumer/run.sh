@@ -110,37 +110,6 @@ write_summary() {
 EOF
 }
 
-session="$workspace/session.sh"
-cat > "$session" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-manager_pid=""
-cleanup() {
-  local result=$?
-  if [ -n "$manager_pid" ]; then
-    systemctl --user exit >/dev/null 2>&1 || true
-    wait "$manager_pid" >/dev/null 2>&1 || true
-  fi
-  exit "$result"
-}
-trap cleanup EXIT INT TERM
-
-systemd --user >/dev/null 2>&1 &
-manager_pid=$!
-deadline=$((SECONDS + 30))
-until systemctl --user show-environment >/dev/null 2>&1 && \
-  busctl --user call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.DBus.Peer Ping >/dev/null 2>&1; do
-  if [ "$SECONDS" -ge "$deadline" ]; then
-    exit 1
-  fi
-  sleep 1
-done
-touch "$POWERCONTEXT_SYSTEMD_MANAGER_READY"
-timeout 90 "$POWERCONTEXT_SYSTEMD_TEST_BINARY" -test.v -test.run '^TestReleaseArchiveProvidesConsumablePersonalService$'
-EOF
-chmod 0700 "$session"
-
 result=0
 if ! docker build --quiet --file "$script_dir/Dockerfile" --tag "$image" "$script_dir" >/dev/null; then
   result=1
@@ -150,25 +119,27 @@ elif ! docker run --detach --privileged --tmpfs /run --tmpfs /run/lock \
 else
   if ! docker exec "$container" install -d --owner=powercontext --group=powercontext --mode=0700 /run/user/1001; then
     result=1
-  elif ! docker exec "$container" systemctl show-environment >/dev/null; then
+  elif ! docker exec "$container" systemctl start user@1001.service >/dev/null 2>&1; then
     result=1
   else
     systemd_version="$(docker exec "$container" systemd --version 2>/dev/null | awk 'NR == 1 { print $2 }')"
-    if ! docker exec --user powercontext \
-      --env HOME=/home/powercontext \
-      --env TMPDIR=/work/tmp \
-      --env XDG_RUNTIME_DIR=/run/user/1001 \
-      "$container" env -i \
-      HOME=/home/powercontext \
-      TMPDIR=/work/tmp \
-      XDG_RUNTIME_DIR=/run/user/1001 \
-      PATH=/usr/sbin:/usr/bin:/sbin:/bin \
-      LC_ALL=C \
-      POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE=/work/"$(basename "$archive")" \
-      POWERCONTEXT_SYSTEMD_MANAGER_READY=/work/manager-ready \
-      POWERCONTEXT_SYSTEMD_TEST_BINARY=/work/"$(basename "$test_binary")" \
-      dbus-run-session -- /work/session.sh; then
+    environment=(
+      HOME=/home/powercontext
+      TMPDIR=/work/tmp
+      XDG_RUNTIME_DIR=/run/user/1001
+      DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus
+      PATH=/usr/sbin:/usr/bin:/sbin:/bin
+      LC_ALL=C
+    )
+    if ! docker exec --user powercontext "$container" env -i "${environment[@]}" systemctl --user show-environment >/dev/null 2>&1; then
       result=1
+    else
+      touch "$workspace/manager-ready"
+      if ! docker exec --user powercontext "$container" env -i "${environment[@]}" \
+        POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE=/work/"$(basename "$archive")" \
+        timeout 90 /work/"$(basename "$test_binary")" -test.v -test.run '^TestReleaseArchiveProvidesConsumablePersonalService$'; then
+        result=1
+      fi
     fi
   fi
 fi
