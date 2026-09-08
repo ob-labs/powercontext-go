@@ -8,4 +8,5 @@ type OperationName = string
 const (
 	DownloadSkillPackageOperation    OperationName = "DownloadSkillPackage"
 	GetSkillPackageManifestOperation OperationName = "GetSkillPackageManifest"
+	RecordSkillUsageOperation        OperationName = "RecordSkillUsage"
 )

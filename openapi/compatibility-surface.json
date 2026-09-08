@@ -103,7 +103,7 @@
       {"operation_id": "query_artifact_tags", "method": "post", "path": "/v1/scopes/{scope_id}/artifact-tags/query", "status": "deferred"},
       {"operation_id": "reconcile_remote_skills", "method": "post", "path": "/v1/skill/remote/reconcile", "status": "deferred"},
       {"operation_id": "record_remote_skill_receipt", "method": "post", "path": "/v1/skill/remote/receipt", "status": "deferred"},
-      {"operation_id": "record_skill_usage", "method": "post", "path": "/v1/skill/usage", "status": "deferred"},
+      {"operation_id": "record_skill_usage", "method": "post", "path": "/v1/skill/usage", "status": "implemented-canonical"},
       {"operation_id": "register_source_definition", "method": "post", "path": "/v1/source-definitions/register", "status": "implemented-canonical"},
       {"operation_id": "rename_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/rename", "status": "deferred"},
       {"operation_id": "replace_access_binding", "method": "post", "path": "/v1/access/bindings/replace", "status": "deferred"},

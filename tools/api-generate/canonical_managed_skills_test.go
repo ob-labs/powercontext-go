@@ -46,6 +46,7 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 	want := map[string]compatibilityEndpoint{
 		"get_skill_package_manifest": {Method: "post", Path: "/v1/skill/package/manifest"},
 		"download_skill_package":     {Method: "post", Path: "/v1/skill/package/download"},
+		"record_skill_usage":         {Method: "post", Path: "/v1/skill/usage"},
 	}
 	if len(operations) != len(want) {
 		t.Fatalf("unexpected operations: %v", operations)
@@ -60,7 +61,10 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 		t.Fatal(err)
 	}
 	schemas := document["components"].(map[string]any)["schemas"].(map[string]any)
-	expectedSchemas := []string{"GetSkillPackageRequest", "ArtifactReference", "SkillPackageManifest", "SkillPackageDownload", "SkillPackageReference", "SkillPackageFile", "ErrorResponse", "ErrorDetail"}
+	expectedSchemas := []string{
+		"GetSkillPackageRequest", "ArtifactReference", "SkillPackageManifest", "SkillPackageDownload", "SkillPackageReference", "SkillPackageFile",
+		"RecordSkillUsageRequest", "CaptureContentSourceResponse", "CaptureStatus", "SourceReference", "ErrorResponse", "ErrorDetail",
+	}
 	if len(schemas) != len(expectedSchemas) {
 		t.Fatalf("unexpected schemas: %v", schemas)
 	}
@@ -96,7 +100,7 @@ func TestManagedSkillSidecarProjectionAndIntegrity(t *testing.T) {
 	if _, projectErr := projectManagedSkillSidecar(append(slices.Clone(upstream), '\n'), manifest, legacy, compatibility); projectErr == nil {
 		t.Fatal("modified source bytes accepted")
 	}
-	for _, id := range []string{"get_skill_package_manifest", "download_skill_package"} {
+	for _, id := range []string{"get_skill_package_manifest", "download_skill_package", "record_skill_usage"} {
 		for _, field := range []string{"status", "method", "path", "operation_id"} {
 			t.Run(id+"/"+field, func(t *testing.T) {
 				ledger, decodeErr := decodeCompatibilitySurface(compatibility)
@@ -274,6 +278,7 @@ var _ managedskills.Handler = managedskills.UnimplementedHandler{}
 var _ managedskills.Invoker = (*managedskills.Client)(nil)
 var _ func(context.Context, *managedskills.GetSkillPackageRequest) (managedskills.GetSkillPackageManifestRes, error) = managedskills.UnimplementedHandler{}.GetSkillPackageManifest
 var _ func(context.Context, *managedskills.GetSkillPackageRequest) (managedskills.DownloadSkillPackageRes, error) = managedskills.UnimplementedHandler{}.DownloadSkillPackage
+var _ func(context.Context, *managedskills.RecordSkillUsageRequest) (managedskills.RecordSkillUsageRes, error) = managedskills.UnimplementedHandler{}.RecordSkillUsage
 func TestConsumer(t *testing.T) {
  request:=managedskills.GetSkillPackageRequest{ScopeID:"scope", Artifact:managedskills.ArtifactReference{ArtifactID:"skill", Family:"skill", Revision:1}}
  if err:=request.Validate();err!=nil{t.Fatal(err)}

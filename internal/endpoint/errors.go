@@ -334,6 +334,12 @@ func mapDomainError(err error) ErrorMapping {
 	if _, ok := errors.AsType[*source.InvalidContentResourceError](err); ok {
 		return invalidRequest()
 	}
+	if _, ok := errors.AsType[*source.InvalidSkillUsageError](err); ok {
+		return invalidRequest()
+	}
+	if _, ok := errors.AsType[*source.SkillUsageTaskSourceNotFoundError](err); ok {
+		return mapping(http.StatusNotFound, "source_not_found", "The requested Source was not found.", nil)
+	}
 	if errors.As(err, &sourceConflict) {
 		return mapping(http.StatusConflict, "source_conflict", "The Source identity has different content.", nil)
 	}

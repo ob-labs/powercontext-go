@@ -172,6 +172,61 @@ func TestCanonicalManagedSkillPackageManifestDownloadAndRestart(t *testing.T) {
 	}
 }
 
+func TestCanonicalManagedSkillUsageHTTPRecordsExactPackageEvidence(t *testing.T) {
+	config := applicationTestConfig(t)
+	config.Auth.Enabled = true
+	config.Auth.Token = "managed-skill-usage-token"
+	application, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { closeScopeReaderApplication(t, application) })
+	scopeID := applicationDefaultScope(t, application).ID()
+	snapshot := persistManagedSkillPackage(t, artifactTestDatabase(t, config), scopeID, "usage-package", "usage-instruction")
+	task, err := application.sources.CaptureContent(t.Context(), scopeID, "usage-task", "completed task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := managedSkillHTTPClient(t, application, config.Auth.Token)
+	request := &managedskills.RecordSkillUsageRequest{
+		ScopeID: scopeID, ObservationID: "usage-observation",
+		SkillRef:      managedskills.ArtifactReference{Family: skill.Family, ArtifactID: "usage-package", Revision: 1},
+		PackageDigest: "sha256:" + snapshot.Reference().TreeDigest(),
+		TargetID:      "codex-target", Selected: true,
+		Invoked:    managedskills.RecordSkillUsageRequestInvokedTrue,
+		Validation: managedskills.RecordSkillUsageRequestValidationPassed,
+		Outcome:    managedskills.RecordSkillUsageRequestOutcomeSuccess,
+		TaskSource: managedskills.NewOptSourceReference(managedskills.SourceReference{Name: task.Ref.Type(), SourceID: task.Ref.ID()}),
+	}
+	result, requestErr := client.RecordSkillUsage(t.Context(), request)
+	if requestErr != nil {
+		t.Fatal(requestErr)
+	}
+	response, ok := result.(*managedskills.CaptureContentSourceResponse)
+	if !ok || response.Status != managedskills.CaptureStatusAccepted || response.Position != 2 ||
+		response.Source.Name != "skill-usage" || response.Source.SourceID != "usage-observation" {
+		t.Fatalf("usage response = %#v", result)
+	}
+	replayed, requestErr := client.RecordSkillUsage(t.Context(), request)
+	if requestErr != nil {
+		t.Fatal(requestErr)
+	}
+	replayedResponse, ok := replayed.(*managedskills.CaptureContentSourceResponse)
+	if !ok || *replayedResponse != *response {
+		t.Fatalf("usage idempotency response = %#v", replayed)
+	}
+	invalid := *request
+	invalid.ObservationID = "rejected-usage"
+	invalid.PackageDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	rejected, requestErr := client.RecordSkillUsage(t.Context(), &invalid)
+	if requestErr != nil {
+		t.Fatal(requestErr)
+	}
+	if _, ok := rejected.(*managedskills.InvalidRequestHeaders); !ok {
+		t.Fatalf("mismatched digest response = %T", rejected)
+	}
+}
+
 func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testing.T) {
 	var logs bytes.Buffer
 	recorder := tracetest.NewSpanRecorder()
@@ -188,7 +243,7 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	t.Cleanup(func() { closeScopeReaderApplication(t, application) })
 	scopeID := applicationDefaultScope(t, application).ID()
 	database := artifactTestDatabase(t, config)
-	persistManagedSkillPackage(t, database, scopeID, "private-package", "private-instruction")
+	snapshot := persistManagedSkillPackage(t, database, scopeID, "private-package", "private-instruction")
 	if _, err := database.ExecContext(t.Context(), `INSERT INTO pc_artifacts(scope_id, family, artifact_id, revision, content) VALUES (?, 'skill', 'private-legacy', 1, ?), (?, 'experience', 'private-other-family', 1, ?)`,
 		scopeID, []byte(`{"name":"legacy","description":"legacy","instructions":"private-legacy-content"}`), scopeID, []byte(`{"situation":"private-other-content","action":"a","outcome":"o","lesson":"l"}`)); err != nil {
 		t.Fatal(err)
@@ -202,7 +257,10 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	}
 	beforeArtifacts := managedSkillTableCount(t, database, "pc_artifacts")
 	beforePackages := managedSkillTableCount(t, database, "pc_skill_packages")
+	beforeSources := managedSkillTableCount(t, database, "pc_sources")
 	requestBody := `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`
+	usageDigest := "sha256:" + snapshot.Reference().TreeDigest()
+	usageBody := `{"scope_id":"` + scopeID + `","observation_id":"private-usage-observation","skill_ref":{"family":"skill","artifact_id":"private-package","revision":1},"package_digest":"` + usageDigest + `","target_id":"private-usage-target","selected":true,"invoked":"true","validation":"passed","outcome":"success","task_source":{"name":"content","source_id":"private-missing-task"}}`
 	for _, testCase := range []struct {
 		name, path, body, token, operation string
 		status                             int
@@ -217,6 +275,7 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 		{"invalid revision", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":0}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusUnprocessableEntity, managedSkillAccessSpanIgnored},
 		{"legacy Skill", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-legacy","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError, managedSkillAccessSpanIgnored},
 		{"persisted experience", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"experience","artifact_id":"private-other-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError, managedSkillAccessSpanIgnored},
+		{"missing usage task Source", "/v1/skill/usage", usageBody, config.Auth.Token, "record_skill_usage", http.StatusNotFound, managedSkillAccessSpanMatchesRequest},
 		{"MCP remains isolated", "/mcp", requestBody, config.Auth.Token, "", http.StatusNotFound, managedSkillAccessSpanIgnored},
 		{"legacy route remains isolated", "/v1/skill/package/materialize", requestBody, config.Auth.Token, "", http.StatusNotFound, managedSkillAccessSpanIgnored},
 	} {
@@ -233,7 +292,7 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 			if testCase.operation != "" {
 				assertManagedSkillPackageAccessLog(t, logs.String(), requestID, testCase.operation, testCase.status, testCase.spanExpectation)
 			}
-			for _, protected := range []string{scopeID, config.Auth.Token, "private-package", "private-instruction", "private-missing-scope", "private-arbitrary-family", "private-other-family"} {
+			for _, protected := range []string{scopeID, config.Auth.Token, "private-package", "private-instruction", "private-missing-scope", "private-arbitrary-family", "private-other-family", "private-usage-observation", "private-usage-target", "private-missing-task", usageDigest} {
 				if strings.Contains(response.Body.String(), protected) || strings.Contains(logs.String(), protected) {
 					t.Fatalf("HTTP or access logs leaked %q", protected)
 				}
@@ -250,6 +309,9 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	}
 	if got := managedSkillTableCount(t, database, "pc_skill_packages"); got != beforePackages {
 		t.Fatalf("reads changed packages: got %d want %d", got, beforePackages)
+	}
+	if got := managedSkillTableCount(t, database, "pc_sources"); got != beforeSources {
+		t.Fatalf("failed usage write changed Sources: got %d want %d", got, beforeSources)
 	}
 	if _, err := database.ExecContext(t.Context(), `UPDATE pc_skill_packages SET archive = x'707269766174652d636f7272757074' WHERE scope_id = ?`, scopeID); err != nil {
 		t.Fatal(err)
@@ -318,7 +380,7 @@ func assertManagedSkillPackageAccessLog(
 	t.Fatalf("access log operation %q request ID %q not found in %s", operation, requestID, output)
 }
 
-func persistManagedSkillPackage(t *testing.T, database *sql.DB, scopeID, artifactID, instructions string) {
+func persistManagedSkillPackage(t *testing.T, database *sql.DB, scopeID, artifactID, instructions string) skill.PackageSnapshot {
 	t.Helper()
 	attached, err := sqlstore.Attach(database)
 	if err != nil {
@@ -346,6 +408,7 @@ func persistManagedSkillPackage(t *testing.T, database *sql.DB, scopeID, artifac
 	}); err != nil {
 		t.Fatal(err)
 	}
+	return snapshot
 }
 
 func managedSkillTableCount(t *testing.T, database *sql.DB, table string) int {
@@ -356,6 +419,8 @@ func managedSkillTableCount(t *testing.T, database *sql.DB, table string) int {
 		query = "SELECT COUNT(*) FROM pc_artifacts"
 	case "pc_skill_packages":
 		query = "SELECT COUNT(*) FROM pc_skill_packages"
+	case "pc_sources":
+		query = "SELECT COUNT(*) FROM pc_sources"
 	default:
 		t.Fatalf("unexpected table %q", table)
 	}

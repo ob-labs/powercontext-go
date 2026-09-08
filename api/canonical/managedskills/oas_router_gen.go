@@ -17,6 +17,9 @@ var (
 	rn3AllowedHeaders = map[string]string{
 		"POST": "Authorization,Content-Type",
 	}
+	rn5AllowedHeaders = map[string]string{
+		"POST": "Authorization,Content-Type",
+	}
 )
 
 func (s *Server) cutPrefix(path string) (string, bool) {
@@ -57,9 +60,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		switch elem[0] {
-		case '/': // Prefix: "/v1/skill/package/"
+		case '/': // Prefix: "/v1/skill/"
 
-			if l := len("/v1/skill/package/"); len(elem) >= l && elem[0:l] == "/v1/skill/package/" {
+			if l := len("/v1/skill/"); len(elem) >= l && elem[0:l] == "/v1/skill/" {
 				elem = elem[l:]
 			} else {
 				break
@@ -69,34 +72,73 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			switch elem[0] {
-			case 'd': // Prefix: "download"
+			case 'p': // Prefix: "package/"
 
-				if l := len("download"); len(elem) >= l && elem[0:l] == "download" {
+				if l := len("package/"); len(elem) >= l && elem[0:l] == "package/" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					// Leaf node.
-					switch r.Method {
-					case "POST":
-						s.handleDownloadSkillPackageRequest([0]string{}, elemIsEscaped, w, r)
-					default:
-						s.notAllowed(w, r, notAllowedParams{
-							allowedMethods: "POST",
-							allowedHeaders: rn1AllowedHeaders,
-							acceptPost:     "application/json",
-							acceptPatch:    "",
-						})
+					break
+				}
+				switch elem[0] {
+				case 'd': // Prefix: "download"
+
+					if l := len("download"); len(elem) >= l && elem[0:l] == "download" {
+						elem = elem[l:]
+					} else {
+						break
 					}
 
-					return
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleDownloadSkillPackageRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn1AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
+				case 'm': // Prefix: "manifest"
+
+					if l := len("manifest"); len(elem) >= l && elem[0:l] == "manifest" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch r.Method {
+						case "POST":
+							s.handleGetSkillPackageManifestRequest([0]string{}, elemIsEscaped, w, r)
+						default:
+							s.notAllowed(w, r, notAllowedParams{
+								allowedMethods: "POST",
+								allowedHeaders: rn3AllowedHeaders,
+								acceptPost:     "application/json",
+								acceptPatch:    "",
+							})
+						}
+
+						return
+					}
+
 				}
 
-			case 'm': // Prefix: "manifest"
+			case 'u': // Prefix: "usage"
 
-				if l := len("manifest"); len(elem) >= l && elem[0:l] == "manifest" {
+				if l := len("usage"); len(elem) >= l && elem[0:l] == "usage" {
 					elem = elem[l:]
 				} else {
 					break
@@ -106,11 +148,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					// Leaf node.
 					switch r.Method {
 					case "POST":
-						s.handleGetSkillPackageManifestRequest([0]string{}, elemIsEscaped, w, r)
+						s.handleRecordSkillUsageRequest([0]string{}, elemIsEscaped, w, r)
 					default:
 						s.notAllowed(w, r, notAllowedParams{
 							allowedMethods: "POST",
-							allowedHeaders: rn3AllowedHeaders,
+							allowedHeaders: rn5AllowedHeaders,
 							acceptPost:     "application/json",
 							acceptPatch:    "",
 						})
@@ -207,9 +249,9 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 			break
 		}
 		switch elem[0] {
-		case '/': // Prefix: "/v1/skill/package/"
+		case '/': // Prefix: "/v1/skill/"
 
-			if l := len("/v1/skill/package/"); len(elem) >= l && elem[0:l] == "/v1/skill/package/" {
+			if l := len("/v1/skill/"); len(elem) >= l && elem[0:l] == "/v1/skill/" {
 				elem = elem[l:]
 			} else {
 				break
@@ -219,34 +261,73 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 				break
 			}
 			switch elem[0] {
-			case 'd': // Prefix: "download"
+			case 'p': // Prefix: "package/"
 
-				if l := len("download"); len(elem) >= l && elem[0:l] == "download" {
+				if l := len("package/"); len(elem) >= l && elem[0:l] == "package/" {
 					elem = elem[l:]
 				} else {
 					break
 				}
 
 				if len(elem) == 0 {
-					// Leaf node.
-					switch method {
-					case "POST":
-						r.name = DownloadSkillPackageOperation
-						r.summary = "Download an exact managed Skill package"
-						r.operationID = "download_skill_package"
-						r.operationGroup = ""
-						r.pathPattern = "/v1/skill/package/download"
-						r.args = args
-						r.count = 0
-						return r, true
-					default:
-						return
+					break
+				}
+				switch elem[0] {
+				case 'd': // Prefix: "download"
+
+					if l := len("download"); len(elem) >= l && elem[0:l] == "download" {
+						elem = elem[l:]
+					} else {
+						break
 					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = DownloadSkillPackageOperation
+							r.summary = "Download an exact managed Skill package"
+							r.operationID = "download_skill_package"
+							r.operationGroup = ""
+							r.pathPattern = "/v1/skill/package/download"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
+				case 'm': // Prefix: "manifest"
+
+					if l := len("manifest"); len(elem) >= l && elem[0:l] == "manifest" {
+						elem = elem[l:]
+					} else {
+						break
+					}
+
+					if len(elem) == 0 {
+						// Leaf node.
+						switch method {
+						case "POST":
+							r.name = GetSkillPackageManifestOperation
+							r.summary = "Get an exact managed Skill package manifest"
+							r.operationID = "get_skill_package_manifest"
+							r.operationGroup = ""
+							r.pathPattern = "/v1/skill/package/manifest"
+							r.args = args
+							r.count = 0
+							return r, true
+						default:
+							return
+						}
+					}
+
 				}
 
-			case 'm': // Prefix: "manifest"
+			case 'u': // Prefix: "usage"
 
-				if l := len("manifest"); len(elem) >= l && elem[0:l] == "manifest" {
+				if l := len("usage"); len(elem) >= l && elem[0:l] == "usage" {
 					elem = elem[l:]
 				} else {
 					break
@@ -256,11 +337,11 @@ func (s *Server) FindPath(method string, u *url.URL) (r Route, _ bool) {
 					// Leaf node.
 					switch method {
 					case "POST":
-						r.name = GetSkillPackageManifestOperation
-						r.summary = "Get an exact managed Skill package manifest"
-						r.operationID = "get_skill_package_manifest"
+						r.name = RecordSkillUsageOperation
+						r.summary = "Record a bounded Skill usage observation"
+						r.operationID = "record_skill_usage"
 						r.operationGroup = ""
-						r.pathPattern = "/v1/skill/package/manifest"
+						r.pathPattern = "/v1/skill/usage"
 						r.args = args
 						r.count = 0
 						return r, true

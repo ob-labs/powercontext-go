@@ -39,6 +39,7 @@ type applicationServices struct {
 	connectorCheckpoints *pcruntime.ConnectorCheckpointApplication
 	artifacts            *pcruntime.ArtifactResourceApplication
 	skillPackages        *pcruntime.SkillPackageResourceApplication
+	skillUsage           *pcruntime.SkillUsageApplication
 	memory               *pcruntime.MemoryApplication
 	context              *pcruntime.ContextApplication
 	review               *pcruntime.ReviewApplication
@@ -118,6 +119,14 @@ func buildApplicationServices(
 		return applicationServices{}, err
 	}
 	skillPackageApplication, err := pcruntime.NewSkillPackageResourceApplication(lifecycle, skillPackageReader)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	skillUsageRecorder, err := sqlstore.NewRuntimeSkillUsageRecorder(database, repositories.sources)
+	if err != nil {
+		return applicationServices{}, err
+	}
+	skillUsageApplication, err := pcruntime.NewSkillUsageApplication(lifecycle, skillUsageRecorder)
 	if err != nil {
 		return applicationServices{}, err
 	}
@@ -333,7 +342,7 @@ func buildApplicationServices(
 	}
 	return applicationServices{
 		scopes: scopeApplication, sources: sourceApplication, remoteIngestion: remoteIngestion, connectorCheckpoints: connectorCheckpoints,
-		artifacts: artifactApplication, skillPackages: skillPackageApplication, memory: memoryApplication, context: contextApplication,
+		artifacts: artifactApplication, skillPackages: skillPackageApplication, skillUsage: skillUsageApplication, memory: memoryApplication, context: contextApplication,
 		review: reviewApplication, generation: generationApplication, externalSkills: externalApplication,
 		handoff: handoffApplication, work: workApplication, handoffReport: handoffReportApplication,
 		statistics: statisticsApplication,

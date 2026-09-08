@@ -8,3 +8,7 @@ type DownloadSkillPackageRes interface {
 type GetSkillPackageManifestRes interface {
 	getSkillPackageManifestRes()
 }
+
+type RecordSkillUsageRes interface {
+	recordSkillUsageRes()
+}

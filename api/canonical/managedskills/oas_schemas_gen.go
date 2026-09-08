@@ -3,6 +3,7 @@
 package managedskills
 
 import (
+	"github.com/go-faster/errors"
 	"github.com/go-faster/jx"
 )
 
@@ -67,6 +68,108 @@ func (s *BearerAuth) SetToken(val string) {
 func (s *BearerAuth) SetRoles(val []string) {
 	s.Roles = val
 }
+
+// Ref: #/components/schemas/CaptureContentSourceResponse
+type CaptureContentSourceResponse struct {
+	Position int             `json:"position"`
+	Source   SourceReference `json:"source"`
+	Status   CaptureStatus   `json:"status"`
+}
+
+// GetPosition returns the value of Position.
+func (s *CaptureContentSourceResponse) GetPosition() int {
+	return s.Position
+}
+
+// GetSource returns the value of Source.
+func (s *CaptureContentSourceResponse) GetSource() SourceReference {
+	return s.Source
+}
+
+// GetStatus returns the value of Status.
+func (s *CaptureContentSourceResponse) GetStatus() CaptureStatus {
+	return s.Status
+}
+
+// SetPosition sets the value of Position.
+func (s *CaptureContentSourceResponse) SetPosition(val int) {
+	s.Position = val
+}
+
+// SetSource sets the value of Source.
+func (s *CaptureContentSourceResponse) SetSource(val SourceReference) {
+	s.Source = val
+}
+
+// SetStatus sets the value of Status.
+func (s *CaptureContentSourceResponse) SetStatus(val CaptureStatus) {
+	s.Status = val
+}
+
+func (*CaptureContentSourceResponse) recordSkillUsageRes() {}
+
+// Ref: #/components/schemas/CaptureStatus
+type CaptureStatus string
+
+const (
+	CaptureStatusAccepted CaptureStatus = "accepted"
+)
+
+// AllValues returns all CaptureStatus values.
+func (CaptureStatus) AllValues() []CaptureStatus {
+	return []CaptureStatus{
+		CaptureStatusAccepted,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s CaptureStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case CaptureStatusAccepted:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *CaptureStatus) UnmarshalText(data []byte) error {
+	switch CaptureStatus(data) {
+	case CaptureStatusAccepted:
+		*s = CaptureStatusAccepted
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// ConflictHeaders wraps ErrorResponse with response headers.
+type ConflictHeaders struct {
+	XPowerContextRequestID OptString
+	Response               ErrorResponse
+}
+
+// GetXPowerContextRequestID returns the value of XPowerContextRequestID.
+func (s *ConflictHeaders) GetXPowerContextRequestID() OptString {
+	return s.XPowerContextRequestID
+}
+
+// GetResponse returns the value of Response.
+func (s *ConflictHeaders) GetResponse() ErrorResponse {
+	return s.Response
+}
+
+// SetXPowerContextRequestID sets the value of XPowerContextRequestID.
+func (s *ConflictHeaders) SetXPowerContextRequestID(val OptString) {
+	s.XPowerContextRequestID = val
+}
+
+// SetResponse sets the value of Response.
+func (s *ConflictHeaders) SetResponse(val ErrorResponse) {
+	s.Response = val
+}
+
+func (*ConflictHeaders) recordSkillUsageRes() {}
 
 // Ref: #/components/schemas/ErrorDetail
 type ErrorDetail struct {
@@ -185,6 +288,7 @@ func (s *InternalErrorHeaders) SetResponse(val ErrorResponse) {
 
 func (*InternalErrorHeaders) downloadSkillPackageRes()    {}
 func (*InternalErrorHeaders) getSkillPackageManifestRes() {}
+func (*InternalErrorHeaders) recordSkillUsageRes()        {}
 
 // InvalidRequestHeaders wraps ErrorResponse with response headers.
 type InvalidRequestHeaders struct {
@@ -214,6 +318,7 @@ func (s *InvalidRequestHeaders) SetResponse(val ErrorResponse) {
 
 func (*InvalidRequestHeaders) downloadSkillPackageRes()    {}
 func (*InvalidRequestHeaders) getSkillPackageManifestRes() {}
+func (*InvalidRequestHeaders) recordSkillUsageRes()        {}
 
 // NewNilErrorDetailDetails returns new NilErrorDetailDetails with value set to v.
 func NewNilErrorDetailDetails(v ErrorDetailDetails) NilErrorDetailDetails {
@@ -288,6 +393,7 @@ func (s *NotFoundHeaders) SetResponse(val ErrorResponse) {
 
 func (*NotFoundHeaders) downloadSkillPackageRes()    {}
 func (*NotFoundHeaders) getSkillPackageManifestRes() {}
+func (*NotFoundHeaders) recordSkillUsageRes()        {}
 
 // NewOptNilString returns new OptNilString with value set to v.
 func NewOptNilString(v string) OptNilString {
@@ -357,6 +463,52 @@ func (o OptNilString) Or(d string) string {
 	return d
 }
 
+// NewOptSourceReference returns new OptSourceReference with value set to v.
+func NewOptSourceReference(v SourceReference) OptSourceReference {
+	return OptSourceReference{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptSourceReference is optional SourceReference.
+type OptSourceReference struct {
+	Value SourceReference
+	Set   bool
+}
+
+// IsSet returns true if OptSourceReference was set.
+func (o OptSourceReference) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptSourceReference) Reset() {
+	var v SourceReference
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptSourceReference) SetTo(v SourceReference) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptSourceReference) Get() (v SourceReference, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptSourceReference) Or(d SourceReference) SourceReference {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
 	return OptString{
@@ -401,6 +553,275 @@ func (o OptString) Or(d string) string {
 		return v
 	}
 	return d
+}
+
+// Ref: #/components/schemas/RecordSkillUsageRequest
+type RecordSkillUsageRequest struct {
+	EnvironmentFingerprint OptNilString                      `json:"environment_fingerprint"`
+	Invoked                RecordSkillUsageRequestInvoked    `json:"invoked"`
+	ObservationID          string                            `json:"observation_id"`
+	Outcome                RecordSkillUsageRequestOutcome    `json:"outcome"`
+	PackageDigest          string                            `json:"package_digest"`
+	ScopeID                string                            `json:"scope_id"`
+	Selected               bool                              `json:"selected"`
+	SkillRef               ArtifactReference                 `json:"skill_ref"`
+	TargetID               string                            `json:"target_id"`
+	TaskSource             OptSourceReference                `json:"task_source"`
+	Validation             RecordSkillUsageRequestValidation `json:"validation"`
+}
+
+// GetEnvironmentFingerprint returns the value of EnvironmentFingerprint.
+func (s *RecordSkillUsageRequest) GetEnvironmentFingerprint() OptNilString {
+	return s.EnvironmentFingerprint
+}
+
+// GetInvoked returns the value of Invoked.
+func (s *RecordSkillUsageRequest) GetInvoked() RecordSkillUsageRequestInvoked {
+	return s.Invoked
+}
+
+// GetObservationID returns the value of ObservationID.
+func (s *RecordSkillUsageRequest) GetObservationID() string {
+	return s.ObservationID
+}
+
+// GetOutcome returns the value of Outcome.
+func (s *RecordSkillUsageRequest) GetOutcome() RecordSkillUsageRequestOutcome {
+	return s.Outcome
+}
+
+// GetPackageDigest returns the value of PackageDigest.
+func (s *RecordSkillUsageRequest) GetPackageDigest() string {
+	return s.PackageDigest
+}
+
+// GetScopeID returns the value of ScopeID.
+func (s *RecordSkillUsageRequest) GetScopeID() string {
+	return s.ScopeID
+}
+
+// GetSelected returns the value of Selected.
+func (s *RecordSkillUsageRequest) GetSelected() bool {
+	return s.Selected
+}
+
+// GetSkillRef returns the value of SkillRef.
+func (s *RecordSkillUsageRequest) GetSkillRef() ArtifactReference {
+	return s.SkillRef
+}
+
+// GetTargetID returns the value of TargetID.
+func (s *RecordSkillUsageRequest) GetTargetID() string {
+	return s.TargetID
+}
+
+// GetTaskSource returns the value of TaskSource.
+func (s *RecordSkillUsageRequest) GetTaskSource() OptSourceReference {
+	return s.TaskSource
+}
+
+// GetValidation returns the value of Validation.
+func (s *RecordSkillUsageRequest) GetValidation() RecordSkillUsageRequestValidation {
+	return s.Validation
+}
+
+// SetEnvironmentFingerprint sets the value of EnvironmentFingerprint.
+func (s *RecordSkillUsageRequest) SetEnvironmentFingerprint(val OptNilString) {
+	s.EnvironmentFingerprint = val
+}
+
+// SetInvoked sets the value of Invoked.
+func (s *RecordSkillUsageRequest) SetInvoked(val RecordSkillUsageRequestInvoked) {
+	s.Invoked = val
+}
+
+// SetObservationID sets the value of ObservationID.
+func (s *RecordSkillUsageRequest) SetObservationID(val string) {
+	s.ObservationID = val
+}
+
+// SetOutcome sets the value of Outcome.
+func (s *RecordSkillUsageRequest) SetOutcome(val RecordSkillUsageRequestOutcome) {
+	s.Outcome = val
+}
+
+// SetPackageDigest sets the value of PackageDigest.
+func (s *RecordSkillUsageRequest) SetPackageDigest(val string) {
+	s.PackageDigest = val
+}
+
+// SetScopeID sets the value of ScopeID.
+func (s *RecordSkillUsageRequest) SetScopeID(val string) {
+	s.ScopeID = val
+}
+
+// SetSelected sets the value of Selected.
+func (s *RecordSkillUsageRequest) SetSelected(val bool) {
+	s.Selected = val
+}
+
+// SetSkillRef sets the value of SkillRef.
+func (s *RecordSkillUsageRequest) SetSkillRef(val ArtifactReference) {
+	s.SkillRef = val
+}
+
+// SetTargetID sets the value of TargetID.
+func (s *RecordSkillUsageRequest) SetTargetID(val string) {
+	s.TargetID = val
+}
+
+// SetTaskSource sets the value of TaskSource.
+func (s *RecordSkillUsageRequest) SetTaskSource(val OptSourceReference) {
+	s.TaskSource = val
+}
+
+// SetValidation sets the value of Validation.
+func (s *RecordSkillUsageRequest) SetValidation(val RecordSkillUsageRequestValidation) {
+	s.Validation = val
+}
+
+type RecordSkillUsageRequestInvoked string
+
+const (
+	RecordSkillUsageRequestInvokedTrue    RecordSkillUsageRequestInvoked = "true"
+	RecordSkillUsageRequestInvokedFalse   RecordSkillUsageRequestInvoked = "false"
+	RecordSkillUsageRequestInvokedUnknown RecordSkillUsageRequestInvoked = "unknown"
+)
+
+// AllValues returns all RecordSkillUsageRequestInvoked values.
+func (RecordSkillUsageRequestInvoked) AllValues() []RecordSkillUsageRequestInvoked {
+	return []RecordSkillUsageRequestInvoked{
+		RecordSkillUsageRequestInvokedTrue,
+		RecordSkillUsageRequestInvokedFalse,
+		RecordSkillUsageRequestInvokedUnknown,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RecordSkillUsageRequestInvoked) MarshalText() ([]byte, error) {
+	switch s {
+	case RecordSkillUsageRequestInvokedTrue:
+		return []byte(s), nil
+	case RecordSkillUsageRequestInvokedFalse:
+		return []byte(s), nil
+	case RecordSkillUsageRequestInvokedUnknown:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RecordSkillUsageRequestInvoked) UnmarshalText(data []byte) error {
+	switch RecordSkillUsageRequestInvoked(data) {
+	case RecordSkillUsageRequestInvokedTrue:
+		*s = RecordSkillUsageRequestInvokedTrue
+		return nil
+	case RecordSkillUsageRequestInvokedFalse:
+		*s = RecordSkillUsageRequestInvokedFalse
+		return nil
+	case RecordSkillUsageRequestInvokedUnknown:
+		*s = RecordSkillUsageRequestInvokedUnknown
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type RecordSkillUsageRequestOutcome string
+
+const (
+	RecordSkillUsageRequestOutcomeSuccess RecordSkillUsageRequestOutcome = "success"
+	RecordSkillUsageRequestOutcomeFailure RecordSkillUsageRequestOutcome = "failure"
+	RecordSkillUsageRequestOutcomeUnknown RecordSkillUsageRequestOutcome = "unknown"
+)
+
+// AllValues returns all RecordSkillUsageRequestOutcome values.
+func (RecordSkillUsageRequestOutcome) AllValues() []RecordSkillUsageRequestOutcome {
+	return []RecordSkillUsageRequestOutcome{
+		RecordSkillUsageRequestOutcomeSuccess,
+		RecordSkillUsageRequestOutcomeFailure,
+		RecordSkillUsageRequestOutcomeUnknown,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RecordSkillUsageRequestOutcome) MarshalText() ([]byte, error) {
+	switch s {
+	case RecordSkillUsageRequestOutcomeSuccess:
+		return []byte(s), nil
+	case RecordSkillUsageRequestOutcomeFailure:
+		return []byte(s), nil
+	case RecordSkillUsageRequestOutcomeUnknown:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RecordSkillUsageRequestOutcome) UnmarshalText(data []byte) error {
+	switch RecordSkillUsageRequestOutcome(data) {
+	case RecordSkillUsageRequestOutcomeSuccess:
+		*s = RecordSkillUsageRequestOutcomeSuccess
+		return nil
+	case RecordSkillUsageRequestOutcomeFailure:
+		*s = RecordSkillUsageRequestOutcomeFailure
+		return nil
+	case RecordSkillUsageRequestOutcomeUnknown:
+		*s = RecordSkillUsageRequestOutcomeUnknown
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+type RecordSkillUsageRequestValidation string
+
+const (
+	RecordSkillUsageRequestValidationPassed  RecordSkillUsageRequestValidation = "passed"
+	RecordSkillUsageRequestValidationFailed  RecordSkillUsageRequestValidation = "failed"
+	RecordSkillUsageRequestValidationUnknown RecordSkillUsageRequestValidation = "unknown"
+)
+
+// AllValues returns all RecordSkillUsageRequestValidation values.
+func (RecordSkillUsageRequestValidation) AllValues() []RecordSkillUsageRequestValidation {
+	return []RecordSkillUsageRequestValidation{
+		RecordSkillUsageRequestValidationPassed,
+		RecordSkillUsageRequestValidationFailed,
+		RecordSkillUsageRequestValidationUnknown,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s RecordSkillUsageRequestValidation) MarshalText() ([]byte, error) {
+	switch s {
+	case RecordSkillUsageRequestValidationPassed:
+		return []byte(s), nil
+	case RecordSkillUsageRequestValidationFailed:
+		return []byte(s), nil
+	case RecordSkillUsageRequestValidationUnknown:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *RecordSkillUsageRequestValidation) UnmarshalText(data []byte) error {
+	switch RecordSkillUsageRequestValidation(data) {
+	case RecordSkillUsageRequestValidationPassed:
+		*s = RecordSkillUsageRequestValidationPassed
+		return nil
+	case RecordSkillUsageRequestValidationFailed:
+		*s = RecordSkillUsageRequestValidationFailed
+		return nil
+	case RecordSkillUsageRequestValidationUnknown:
+		*s = RecordSkillUsageRequestValidationUnknown
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
 }
 
 // Ref: #/components/schemas/SkillPackageDownload
@@ -654,6 +1075,33 @@ func (s *SkillPackageReference) SetUncompressedSize(val int) {
 	s.UncompressedSize = val
 }
 
+// Ref: #/components/schemas/SourceReference
+type SourceReference struct {
+	// Stable Source type.
+	Name     string `json:"name"`
+	SourceID string `json:"source_id"`
+}
+
+// GetName returns the value of Name.
+func (s *SourceReference) GetName() string {
+	return s.Name
+}
+
+// GetSourceID returns the value of SourceID.
+func (s *SourceReference) GetSourceID() string {
+	return s.SourceID
+}
+
+// SetName sets the value of Name.
+func (s *SourceReference) SetName(val string) {
+	s.Name = val
+}
+
+// SetSourceID sets the value of SourceID.
+func (s *SourceReference) SetSourceID(val string) {
+	s.SourceID = val
+}
+
 // UnauthorizedHeaders wraps ErrorResponse with response headers.
 type UnauthorizedHeaders struct {
 	WWWAuthenticate        OptString
@@ -693,6 +1141,7 @@ func (s *UnauthorizedHeaders) SetResponse(val ErrorResponse) {
 
 func (*UnauthorizedHeaders) downloadSkillPackageRes()    {}
 func (*UnauthorizedHeaders) getSkillPackageManifestRes() {}
+func (*UnauthorizedHeaders) recordSkillUsageRes()        {}
 
 // UnavailableHeaders wraps ErrorResponse with response headers.
 type UnavailableHeaders struct {
@@ -722,3 +1171,4 @@ func (s *UnavailableHeaders) SetResponse(val ErrorResponse) {
 
 func (*UnavailableHeaders) downloadSkillPackageRes()    {}
 func (*UnavailableHeaders) getSkillPackageManifestRes() {}
+func (*UnavailableHeaders) recordSkillUsageRes()        {}
