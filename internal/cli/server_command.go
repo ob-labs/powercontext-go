@@ -44,7 +44,13 @@ type serverEnvironmentValue struct {
 
 func newServerCommand(state *commandState) *cobra.Command {
 	command := &cobra.Command{Use: "server", Short: "Run a configured PowerContext service."}
-	command.AddCommand(newServerRunCommand(state))
+	command.AddCommand(
+		newServerRunCommand(state),
+		newPersonalServiceInstallCommand(state),
+		newPersonalServiceStatusCommand(state),
+		newPersonalServiceUninstallCommand(state),
+		newPersonalServiceRunCommand(state),
+	)
 	return command
 }
 
