@@ -169,6 +169,14 @@ source / artifact / trigger / inference
 - Merge with an existing rule when the lesson is already covered. Keep the
   stronger wording and remove duplication so this file remains a practical
   engineering contract rather than an append-only incident log.
+- When Server composition adds durable SQLite sidecar state, preserve database
+  directory initialization before opening the sidecar and close the owned
+  database if sidecar validation fails. Verify first startup in a missing
+  directory, restart reuse, concurrent initialization, and invalid existing
+  material without replacement or path disclosure. Before opening persisted
+  secrets, reject non-regular paths without opening them; on Unix, also use a
+  nonblocking, no-follow open and recheck descriptor identity and type. Verify a
+  FIFO with no writer returns a bounded, redacted refusal and remains unchanged.
 - When Server composition mounts an independently generated HTTP sidecar,
   include its exact method-and-path resolver in access-log operation lookup.
   Verify real handler requests log the generated operation ID and correlated

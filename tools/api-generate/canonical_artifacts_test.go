@@ -45,7 +45,29 @@ func TestArtifactSidecarProjectionAndPolicy(t *testing.T) {
 	}
 	components := document["components"].(map[string]any)
 	schemas := components["schemas"].(map[string]any)
-	wantSchemas := []string{"ArtifactReference", "ArtifactRevision", "BaseArtifactFamily", "ErrorDetail", "ErrorResponse", "SourceTypeReference"}
+	wantOperations := []scopeSidecarOperation{
+		{OperationID: "list_artifacts", Method: "get", Path: "/v1/scopes/{scope_id}/artifacts/{family}"},
+		{OperationID: "get_artifact", Method: "get", Path: "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}"},
+		{OperationID: "get_artifact_revision", Method: "get", Path: "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}/revisions/{revision}"},
+	}
+	if !slices.Equal(manifest.Operations, wantOperations) {
+		t.Fatalf("operations = %v", manifest.Operations)
+	}
+	paths := document["paths"].(map[string]any)
+	if len(paths) != len(wantOperations) {
+		t.Fatalf("paths = %v", paths)
+	}
+	for _, operation := range wantOperations {
+		path, ok := paths[operation.Path].(map[string]any)
+		if !ok {
+			t.Fatalf("missing path %s", operation.Path)
+		}
+		projectedOperation, ok := path[operation.Method].(map[string]any)
+		if !ok || projectedOperation["operationId"] != operation.OperationID {
+			t.Fatalf("operation %s %s = %v", operation.Method, operation.Path, projectedOperation)
+		}
+	}
+	wantSchemas := []string{"ArtifactCollectionItem", "ArtifactPage", "ArtifactReference", "ArtifactRevision", "BaseArtifactFamily", "ErrorDetail", "ErrorResponse", "SourceTypeReference"}
 	if len(schemas) != len(wantSchemas) {
 		t.Fatalf("schemas = %v", schemas)
 	}
@@ -54,6 +76,14 @@ func TestArtifactSidecarProjectionAndPolicy(t *testing.T) {
 			t.Fatalf("missing %s", name)
 		}
 	}
+	page := schemas["ArtifactPage"].(map[string]any)
+	if !slices.Equal(page["required"].([]any), []any{"items", "next_cursor"}) {
+		t.Fatalf("ArtifactPage required = %v", page["required"])
+	}
+	nextCursor := page["properties"].(map[string]any)["next_cursor"].(map[string]any)
+	if nextCursor["nullable"] != true {
+		t.Fatalf("ArtifactPage next_cursor = %v", nextCursor)
+	}
 	types := schemas["SourceTypeReference"].(map[string]any)["properties"].(map[string]any)["source_type"].(map[string]any)["enum"]
 	encodedTypes, err := json.Marshal(types)
 	if err != nil {
@@ -61,6 +91,12 @@ func TestArtifactSidecarProjectionAndPolicy(t *testing.T) {
 	}
 	if string(encodedTypes) != `["content","external-skill-snapshot","accepted-observation"]` {
 		t.Fatalf("lineage enum = %s", encodedTypes)
+	}
+	for _, schemaName := range []string{"ArtifactRevision", "ArtifactCollectionItem"} {
+		sourceType := schemas[schemaName].(map[string]any)["properties"].(map[string]any)["sources"].(map[string]any)["items"].(map[string]any)["$ref"]
+		if sourceType != "#/components/schemas/SourceTypeReference" {
+			t.Fatalf("%s source lineage = %v", schemaName, sourceType)
+		}
 	}
 	committed, err := os.ReadFile(filepath.Join(root, "openapi", "canonical", "artifacts.json"))
 	if err != nil {
@@ -98,7 +134,7 @@ func TestArtifactSidecarProjectionAndPolicy(t *testing.T) {
 	if _, projectionErr := projectArtifactSidecar(append(slices.Clone(upstream), '\n'), manifest, legacy, compatibility); projectionErr == nil {
 		t.Fatal("changed upstream accepted")
 	}
-	ledger := bytes.Replace(compatibility, []byte(`"operation_id": "get_artifact", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}", "status": "implemented-canonical"`), []byte(`"operation_id": "get_artifact", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}", "status": "deferred"`), 1)
+	ledger := bytes.Replace(compatibility, []byte(`"operation_id": "list_artifacts", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}", "status": "implemented-canonical"`), []byte(`"operation_id": "list_artifacts", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}", "status": "deferred"`), 1)
 	if bytes.Equal(ledger, compatibility) {
 		t.Fatal("ledger mutant did not change")
 	}
@@ -234,11 +270,13 @@ func TestArtifactSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T)
 	}
 	consumerTest := `package artifactconsumer
 import (
+ "context"
  "testing"
  artifacts "example.com/artifact-consumer/api/canonical/artifacts"
 )
 var _ artifacts.Handler = artifacts.UnimplementedHandler{}
 var _ artifacts.Invoker = (*artifacts.Client)(nil)
+var _ func(context.Context, artifacts.ListArtifactsParams) (artifacts.ListArtifactsRes, error) = artifacts.UnimplementedHandler{}.ListArtifacts
 func TestConsumer(t *testing.T) {
  for _, sourceType := range []artifacts.SourceTypeReferenceSourceType{artifacts.SourceTypeReferenceSourceTypeContent, artifacts.SourceTypeReferenceSourceTypeExternalSkillSnapshot, artifacts.SourceTypeReferenceSourceTypeAcceptedObservation} {
   reference := artifacts.SourceTypeReference{SourceType:sourceType, SourceID:"source"}

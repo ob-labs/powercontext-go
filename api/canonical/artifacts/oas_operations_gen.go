@@ -8,4 +8,5 @@ type OperationName = string
 const (
 	GetArtifactOperation         OperationName = "GetArtifact"
 	GetArtifactRevisionOperation OperationName = "GetArtifactRevision"
+	ListArtifactsOperation       OperationName = "ListArtifacts"
 )

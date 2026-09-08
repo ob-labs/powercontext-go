@@ -72,6 +72,12 @@ func MapError(err error) ErrorMapping {
 	if errors.As(err, &notReady) || (errors.As(err, &state) && state.Code == "closed") {
 		return mapping(http.StatusServiceUnavailable, "runtime_not_ready", "The Runtime is not ready.", nil)
 	}
+	if _, ok := errors.AsType[*runtime.InvalidArtifactCursorError](err); ok {
+		return mapping(http.StatusBadRequest, "invalid_cursor", "The pagination cursor is invalid.", nil)
+	}
+	if _, ok := errors.AsType[*runtime.ExpiredArtifactCursorError](err); ok {
+		return mapping(http.StatusGone, "cursor_expired", "The pagination cursor has expired.", nil)
+	}
 
 	var registryUnavailable *skill.ExternalRegistryUnavailableError
 	if errors.As(err, &registryUnavailable) {

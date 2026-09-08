@@ -25,7 +25,7 @@ every Client Invoker output. It generates no route registration, MCP schema, or
 legacy `v1` artifact.
 
 The independent `-artifact-sidecar-manifest` mode projects exactly
-`get_artifact` and `get_artifact_revision` into `api/canonical/artifacts`.
+`list_artifacts`, `get_artifact`, and `get_artifact_revision` into `api/canonical/artifacts`.
 It pins the complete upstream digest and operation ledger, closes only the
 required components, and applies the Artifact-only lineage enum policy tracked
 in Issue #202. Its generated artifacts are listed in `test/generator-inventory.json`.

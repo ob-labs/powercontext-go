@@ -7,6 +7,7 @@
     "sha256": "aca2a9dedfc4733176df3f7e27861deedcc751e0042515e3014ee9c36a017ec3"
   },
   "operations": [
+    {"operation_id": "list_artifacts", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}"},
     {"operation_id": "get_artifact", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}"},
     {"operation_id": "get_artifact_revision", "method": "get", "path": "/v1/scopes/{scope_id}/artifacts/{family}/{artifact_id}/revisions/{revision}"}
   ],
