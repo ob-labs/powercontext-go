@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -669,6 +670,110 @@ func TestControllerCancellationRestoresArtifactWithoutManager(t *testing.T) {
 	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipNotLoaded {
 		t.Fatalf("mixed manager after cancellation = %s, %v; want not loaded", manager.Ownership(), err)
 	}
+}
+
+func TestRestoreKeepsRoleSpecificSpecsAfterLaterStatusInspection(t *testing.T) {
+	root := t.TempDir()
+	base := adapterPlan(t, root)
+	registration := base.Registration()
+	desired := taskPlanVariant(t, registration, []string{"desired", "value"}, filepath.Join(root, "desired"), false)
+	artifactPlan := taskPlanVariant(t, registration, []string{"artifact", "value"}, filepath.Join(root, "artifact"), false)
+	managerPlan := taskPlanVariant(t, registration, []string{"manager", "value"}, filepath.Join(root, "manager"), true)
+	statusPlan := taskPlanVariant(t, registration, []string{"status", "value"}, filepath.Join(root, "status"), false)
+	files := newMemoryArtifacts()
+	scheduler := &memoryScheduler{files: files, state: personalsvc.ManagerInactive}
+	adapter, err := newAdapter(
+		desired,
+		root,
+		`\PowerContext\Tests\unit-role-snapshots`,
+		testIdentity,
+		scheduler,
+		files,
+		&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("test endpoint is unreachable")
+		})},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files.content, files.exists = mustRenderPlan(t, adapter, artifactPlan), true
+	scheduler.document, scheduler.present = mustRenderPlan(t, adapter, managerPlan), true
+	artifactSnapshot, err := adapter.InspectArtifact(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	managerSnapshot, err := adapter.InspectManager(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statusDocument := mustRenderPlan(t, adapter, statusPlan)
+	files.content = statusDocument
+	scheduler.document = statusDocument
+	controller, err := personalsvc.NewController(adapter, directOperationBoundary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const statusChecks = 32
+	statusErrors := make(chan error, statusChecks)
+	var wait sync.WaitGroup
+	for range statusChecks {
+		wait.Go(func() {
+			_, statusErr := controller.Status(t.Context(), registration)
+			statusErrors <- statusErr
+		})
+	}
+	wait.Wait()
+	close(statusErrors)
+	for statusErr := range statusErrors {
+		if statusErr != nil {
+			t.Fatal(statusErr)
+		}
+	}
+	if err := adapter.Restore(t.Context(), artifactSnapshot, managerSnapshot); err != nil {
+		t.Fatal(err)
+	}
+
+	artifactDocument, exists, err := files.Read(t.Context(), adapter.artifactPath)
+	if err != nil || !exists {
+		t.Fatalf("restored artifact exists = %t, error = %v", exists, err)
+	}
+	restoredArtifact, ok := adapter.parse(artifactDocument)
+	if !ok || !restoredArtifact.Matches(artifactPlan) {
+		t.Fatal("later Status inspection overwrote the artifact restore snapshot")
+	}
+	state, managerDocument, err := scheduler.Query(t.Context())
+	if err != nil || state != personalsvc.TaskSchedulerPresent {
+		t.Fatalf("restored manager = %s, %v", state, err)
+	}
+	restoredManager, ok := adapter.parse(managerDocument)
+	if !ok || !restoredManager.Matches(managerPlan) {
+		t.Fatal("later Status inspection overwrote the manager restore snapshot")
+	}
+}
+
+func taskPlanVariant(
+	t *testing.T,
+	registration personalsvc.Registration,
+	arguments []string,
+	workingDirectory string,
+	startOnLogin bool,
+) personalsvc.TaskSchedulerSpec {
+	t.Helper()
+	plan, err := personalsvc.NewTaskSchedulerSpec(registration, arguments, workingDirectory, startOnLogin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
+func mustRenderPlan(t *testing.T, adapter *Adapter, plan personalsvc.TaskSchedulerSpec) []byte {
+	t.Helper()
+	document, err := adapter.renderPlan(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return document
 }
 
 func assertOwnedManagerRegistration(t *testing.T, adapter *Adapter, want personalsvc.Registration) {

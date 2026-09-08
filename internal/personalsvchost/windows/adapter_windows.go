@@ -30,7 +30,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -94,8 +93,6 @@ type Adapter struct {
 	scheduler    taskScheduler
 	artifacts    artifactStore
 	httpClient   *http.Client
-	plansMu      sync.Mutex
-	knownPlans   map[personalsvc.Registration]personalsvc.TaskSchedulerSpec
 }
 
 var _ personalsvc.Adapter = (*Adapter)(nil)
@@ -127,7 +124,6 @@ func newAdapter(
 		scheduler:    scheduler,
 		artifacts:    artifacts,
 		httpClient:   httpClient,
-		knownPlans:   map[personalsvc.Registration]personalsvc.TaskSchedulerSpec{plan.Registration(): plan},
 	}, nil
 }
 
@@ -163,16 +159,18 @@ func (a *Adapter) InspectArtifact(ctx context.Context) (personalsvc.Artifact, er
 	if !ok {
 		return personalsvc.InvalidArtifact(), nil
 	}
-	a.remember(plan)
 	registration := plan.Registration()
 	regular, err := a.artifacts.RegularFile(ctx, registration.Definition().Binary())
 	if err != nil {
 		return personalsvc.UnknownArtifact(), newError("inspect artifact", contextCause(ctx, err))
 	}
 	if !regular {
-		return personalsvc.InstalledArtifactWithDefinition(registration, personalsvc.DefinitionMissingExecutable), nil
+		return personalsvc.InstalledArtifactWithDefinition(
+			registration,
+			personalsvc.DefinitionMissingExecutable,
+		).WithRestoreSnapshot(plan), nil
 	}
-	return personalsvc.InstalledArtifact(registration), nil
+	return personalsvc.InstalledArtifact(registration).WithRestoreSnapshot(plan), nil
 }
 
 // InspectManager verifies independently queried Task Scheduler XML before
@@ -195,8 +193,7 @@ func (a *Adapter) InspectManager(ctx context.Context) (personalsvc.ManagerRegist
 	if !ok {
 		return personalsvc.ForeignManager(), nil
 	}
-	a.remember(plan)
-	return personalsvc.OwnedManager(plan.Registration()), nil
+	return personalsvc.OwnedManager(plan.Registration()).WithRestoreSnapshot(plan), nil
 }
 
 // Probe accepts only the exact unauthenticated loopback liveness contract.
@@ -247,8 +244,7 @@ func (a *Adapter) Probe(ctx context.Context, endpoint string) (personalsvc.Probe
 // Write atomically delegates the exact resolved XML artifact after fresh
 // artifact and manager ownership checks.
 func (a *Adapter) Write(ctx context.Context, registration personalsvc.Registration) error {
-	plan, found := a.knownPlan(registration)
-	if !found {
+	if registration != a.plan.Registration() {
 		return newError("write", nil)
 	}
 	artifact, manager, err := a.mutableState(ctx)
@@ -261,7 +257,7 @@ func (a *Adapter) Write(ctx context.Context, registration personalsvc.Registrati
 	if manager.Ownership() != personalsvc.ManagerOwnershipOwned && manager.Ownership() != personalsvc.ManagerOwnershipNotLoaded {
 		return newError("write", nil)
 	}
-	document, err := a.renderPlan(plan)
+	document, err := a.renderPlan(a.plan)
 	if err != nil {
 		return err
 	}
@@ -480,8 +476,9 @@ func (a *Adapter) planForArtifact(artifact personalsvc.Artifact) (personalsvc.Ta
 	if !found {
 		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
 	}
-	plan, found := a.knownPlan(registration)
-	if !found {
+	snapshot, found := artifact.RestoreSnapshot()
+	plan, valid := snapshot.(personalsvc.TaskSchedulerSpec)
+	if !found || !valid || plan.Registration() != registration {
 		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
 	}
 	return plan, true, nil
@@ -498,8 +495,9 @@ func (a *Adapter) planForManager(manager personalsvc.ManagerRegistration) (perso
 	if !found {
 		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
 	}
-	plan, found := a.knownPlan(registration)
-	if !found {
+	snapshot, found := manager.RestoreSnapshot()
+	plan, valid := snapshot.(personalsvc.TaskSchedulerSpec)
+	if !found || !valid || plan.Registration() != registration {
 		return personalsvc.TaskSchedulerSpec{}, false, newError("restore", nil)
 	}
 	return plan, true, nil
@@ -584,19 +582,6 @@ func (a *Adapter) parse(document []byte) (personalsvc.TaskSchedulerSpec, bool) {
 		return personalsvc.TaskSchedulerSpec{}, false
 	}
 	return plan, true
-}
-
-func (a *Adapter) remember(plan personalsvc.TaskSchedulerSpec) {
-	a.plansMu.Lock()
-	defer a.plansMu.Unlock()
-	a.knownPlans[plan.Registration()] = plan
-}
-
-func (a *Adapter) knownPlan(registration personalsvc.Registration) (personalsvc.TaskSchedulerSpec, bool) {
-	a.plansMu.Lock()
-	defer a.plansMu.Unlock()
-	plan, found := a.knownPlans[registration]
-	return plan, found
 }
 
 func (a *Adapter) available(ctx context.Context) error {
