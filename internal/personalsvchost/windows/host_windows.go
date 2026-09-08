@@ -66,7 +66,7 @@ func New(config Config) (*Composition, error) {
 	}
 	adapter, err := newAdapter(
 		config.Plan,
-		config.UserDataRoot,
+		artifacts.root,
 		personalsvc.TaskSchedulerTaskName,
 		identity,
 		portableScheduler{scheduler: portable},
@@ -76,7 +76,7 @@ func New(config Config) (*Composition, error) {
 	if err != nil {
 		return nil, err
 	}
-	boundary, err := newOperationBoundary(config.UserDataRoot)
+	boundary, err := newOperationBoundary(artifacts.root)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +129,7 @@ type nativeArtifactStore struct {
 }
 
 func newNativeArtifactStore(root string) (*nativeArtifactStore, error) {
+	root = filepath.Clean(root)
 	if !validUserDataRoot(root) {
 		return nil, newError("configuration", nil)
 	}
@@ -137,12 +138,12 @@ func newNativeArtifactStore(root string) (*nativeArtifactStore, error) {
 		return nil, newError("configuration", nil)
 	}
 	resolved, err := filepath.EvalSymlinks(root)
-	if err != nil || !strings.EqualFold(filepath.Clean(resolved), root) {
+	if err != nil || !validUserDataRoot(resolved) {
 		return nil, newError("configuration", nil)
 	}
 	return &nativeArtifactStore{
-		root:         root,
-		artifactPath: filepath.Join(root, filepath.FromSlash("PowerContext/Services/personal-server.xml")),
+		root:         resolved,
+		artifactPath: filepath.Join(resolved, filepath.FromSlash("PowerContext/Services/personal-server.xml")),
 	}, nil
 }
 

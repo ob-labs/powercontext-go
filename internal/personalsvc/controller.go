@@ -261,15 +261,15 @@ func (c *Controller) commit(
 ) error {
 	if err := c.adapter.Write(ctx, desired); err != nil {
 		c.restore(ctx, previousArtifact, previousManager)
-		return newContextOperationError(ErrorOperation, StageWrite, statusForSupportedUnknown(), ctx)
+		return newContextOperationError(ctx, ErrorOperation, StageWrite, statusForSupportedUnknown())
 	}
 	if err := c.adapter.Reload(ctx); err != nil {
 		c.restore(ctx, previousArtifact, previousManager)
-		return newContextOperationError(ErrorOperation, StageReload, statusForSupportedUnknown(), ctx)
+		return newContextOperationError(ctx, ErrorOperation, StageReload, statusForSupportedUnknown())
 	}
 	if err := c.adapter.Enable(ctx); err != nil {
 		c.restore(ctx, previousArtifact, previousManager)
-		return newContextOperationError(ErrorOperation, StageEnable, statusForSupportedUnknown(), ctx)
+		return newContextOperationError(ctx, ErrorOperation, StageEnable, statusForSupportedUnknown())
 	}
 	return nil
 }
@@ -300,10 +300,10 @@ func (c *Controller) restore(ctx context.Context, previousArtifact Artifact, pre
 }
 
 func newContextOperationError(
+	ctx context.Context,
 	kind ErrorKind,
 	stage OperationStage,
 	status Status,
-	ctx context.Context,
 ) *OperationError {
 	if ctx == nil {
 		return newOperationError(kind, stage, status)
