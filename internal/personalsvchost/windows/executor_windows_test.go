@@ -72,6 +72,41 @@ func TestExecutorPassesArgumentsWithoutShell(t *testing.T) {
 	}
 }
 
+func TestExecutorReturnsOnlyBoundedStructuredQueryOutput(t *testing.T) {
+	t.Setenv(helperProcessEnvironment, "structured-output")
+	executor := executorForTest(t)
+
+	for _, test := range []struct {
+		name      string
+		arguments []string
+		want      string
+	}{
+		{
+			name:      "XML",
+			arguments: []string{"/Query", "/TN", `\PowerContext Personal Server`, "/XML", "/HRESULT"},
+			want:      "<Task />",
+		},
+		{
+			name:      "CSV status",
+			arguments: []string{"/Query", "/TN", `\PowerContext Personal Server`, "/FO", "CSV", "/NH", "/V", "/HRESULT"},
+			want:      "structured,status",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := executor.Execute(t.Context(), "schtasks.exe", test.arguments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := string(result.Output); got != test.want {
+				t.Fatalf("Execute() output = %q, want %q", got, test.want)
+			}
+			if strings.Contains(string(result.Output), "secret stderr") {
+				t.Fatal("Execute() returned native stderr")
+			}
+		})
+	}
+}
+
 func TestExecutorPreservesExitCodeBitPattern(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -322,6 +357,13 @@ func runExecutorHelperProcess() {
 	case "split-at-limit":
 		_, _ = os.Stdout.Write(bytesOf('x', maxCommandOutputBytes/2))
 		_, _ = os.Stderr.Write(bytesOf('y', maxCommandOutputBytes/2))
+	case "structured-output":
+		if slices.Contains(os.Args, "/XML") {
+			_, _ = os.Stdout.WriteString("<Task />")
+		} else {
+			_, _ = os.Stdout.WriteString("structured,status")
+		}
+		_, _ = os.Stderr.WriteString("secret stderr")
 	default:
 		os.Exit(123)
 	}

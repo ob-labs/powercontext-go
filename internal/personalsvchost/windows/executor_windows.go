@@ -15,6 +15,7 @@
 package windows
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -83,27 +84,35 @@ func (e Executor) Execute(
 
 	commandContext, cancel := context.WithCancel(ctx)
 	defer cancel()
-	output := &boundedOutput{limit: maxCommandOutputBytes, cancel: cancel}
+	budget := &outputBudget{limit: maxCommandOutputBytes, cancel: cancel}
+	stdout := &boundedOutput{budget: budget, capture: structuredQuery(arguments)}
+	stderr := &boundedOutput{budget: budget}
 	command := exec.CommandContext(commandContext, e.executable, arguments...)
-	command.Stdout = output
-	command.Stderr = output
+	command.Stdout = stdout
+	command.Stderr = stderr
 	runErr := command.Run()
 	if contextErr := ctx.Err(); contextErr != nil {
 		return personalsvc.TaskSchedulerResult{}, contextErr
 	}
-	if output.Exceeded() {
+	if budget.Exceeded() {
 		return personalsvc.TaskSchedulerResult{}, errExecutorOutputLimit
 	}
 	if runErr == nil {
-		return personalsvc.TaskSchedulerResult{}, nil
+		return personalsvc.TaskSchedulerResult{Output: stdout.Bytes()}, nil
 	}
 	if exitError, matched := errors.AsType[*exec.ExitError](runErr); matched {
-		return personalsvc.TaskSchedulerResult{ExitCode: uint32(exitError.ExitCode())}, nil
+		return personalsvc.TaskSchedulerResult{ExitCode: uint32(exitError.ExitCode()), Output: stdout.Bytes()}, nil
 	}
 	return personalsvc.TaskSchedulerResult{}, errExecutorUnavailable
 }
 
 type boundedOutput struct {
+	budget  *outputBudget
+	capture bool
+	buffer  bytes.Buffer
+}
+
+type outputBudget struct {
 	mu       sync.Mutex
 	limit    int
 	written  int
@@ -112,23 +121,42 @@ type boundedOutput struct {
 }
 
 func (w *boundedOutput) Write(data []byte) (int, error) {
-	w.mu.Lock()
-	remaining := max(0, w.limit-w.written)
+	w.budget.mu.Lock()
+	remaining := max(0, w.budget.limit-w.budget.written)
 	accepted := min(remaining, len(data))
-	w.written += accepted
+	w.budget.written += accepted
 	exceeded := accepted != len(data)
 	if exceeded {
-		w.exceeded = true
+		w.budget.exceeded = true
 	}
-	w.mu.Unlock()
-	if exceeded && w.cancel != nil {
-		w.cancel()
+	if w.capture && accepted != 0 {
+		_, _ = w.buffer.Write(data[:accepted])
+	}
+	w.budget.mu.Unlock()
+	if exceeded && w.budget.cancel != nil {
+		w.budget.cancel()
 	}
 	return len(data), nil
 }
 
-func (w *boundedOutput) Exceeded() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.exceeded
+func (w *boundedOutput) Bytes() []byte {
+	w.budget.mu.Lock()
+	defer w.budget.mu.Unlock()
+	return bytes.Clone(w.buffer.Bytes())
+}
+
+func (b *outputBudget) Exceeded() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.exceeded
+}
+
+func structuredQuery(arguments []string) bool {
+	if len(arguments) == 5 {
+		return arguments[0] == "/Query" && arguments[1] == "/TN" && arguments[2] != "" &&
+			arguments[3] == "/XML" && arguments[4] == "/HRESULT"
+	}
+	return len(arguments) == 8 && arguments[0] == "/Query" && arguments[1] == "/TN" && arguments[2] != "" &&
+		arguments[3] == "/FO" && arguments[4] == "CSV" && arguments[5] == "/NH" &&
+		arguments[6] == "/V" && arguments[7] == "/HRESULT"
 }

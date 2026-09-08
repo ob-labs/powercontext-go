@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package windows provides the Windows-native process boundary for the
-// portable personal-service Task Scheduler contract.
+// Package windows composes the portable personal-service Task Scheduler
+// contract with current-user Windows process, filesystem, identity, liveness,
+// and operation-lock boundaries.
 package windows

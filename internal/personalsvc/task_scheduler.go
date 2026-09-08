@@ -524,20 +524,25 @@ func decodeTaskSchedulerXMLNode(decoder *xml.Decoder, start xml.StartElement) (t
 }
 
 func parseTaskSchedulerRoot(root taskSchedulerXMLNode) (TaskSchedulerSpec, error) {
-	children, valid := taskSchedulerContainer(root, "Task", map[string]string{"xmlns": taskSchedulerNamespace, "version": taskSchedulerVersion},
-		"RegistrationInfo", "Triggers", "Principals", "Settings", "Actions")
+	children, valid := taskSchedulerChildMap(
+		root,
+		"Task",
+		map[string]string{"xmlns": taskSchedulerNamespace, "version": taskSchedulerVersion},
+		[]string{"RegistrationInfo", "Triggers", "Principals", "Settings", "Actions"},
+		[]string{"RegistrationInfo", "Triggers", "Principals", "Settings", "Actions"},
+	)
 	if !valid {
 		return TaskSchedulerSpec{}, taskSchedulerError(TaskSchedulerInvalid)
 	}
-	registration, err := parseTaskSchedulerRegistration(children[0])
+	registration, err := parseTaskSchedulerRegistration(children["RegistrationInfo"])
 	if err != nil {
 		return TaskSchedulerSpec{}, err
 	}
-	startOnLogin, valid := parseTaskSchedulerTriggers(children[1])
-	if !valid || !parseTaskSchedulerPrincipals(children[2]) || !parseTaskSchedulerSettings(children[3]) {
+	startOnLogin, valid := parseTaskSchedulerTriggers(children["Triggers"])
+	if !valid || !parseTaskSchedulerPrincipals(children["Principals"]) || !parseTaskSchedulerSettings(children["Settings"]) {
 		return TaskSchedulerSpec{}, taskSchedulerError(TaskSchedulerInvalid)
 	}
-	arguments, workingDirectory, valid := parseTaskSchedulerActions(children[4], registration)
+	arguments, workingDirectory, valid := parseTaskSchedulerActions(children["Actions"], registration)
 	if !valid {
 		return TaskSchedulerSpec{}, taskSchedulerError(TaskSchedulerInvalid)
 	}
@@ -549,11 +554,17 @@ func parseTaskSchedulerRoot(root taskSchedulerXMLNode) (TaskSchedulerSpec, error
 }
 
 func parseTaskSchedulerRegistration(node taskSchedulerXMLNode) (Registration, error) {
-	children, valid := taskSchedulerContainer(node, "RegistrationInfo", nil, "URI", "Description")
-	if !valid || !taskSchedulerLeaf(children[0], "URI", TaskSchedulerTaskName) {
+	children, valid := taskSchedulerChildMap(
+		node,
+		"RegistrationInfo",
+		nil,
+		[]string{"URI", "Description"},
+		[]string{"URI", "Description"},
+	)
+	if !valid || !taskSchedulerLeaf(children["URI"], "URI", TaskSchedulerTaskName) {
 		return Registration{}, taskSchedulerError(TaskSchedulerInvalid)
 	}
-	description, valid := taskSchedulerLeafText(children[1], "Description")
+	description, valid := taskSchedulerLeafText(children["Description"], "Description")
 	if !valid {
 		return Registration{}, taskSchedulerError(TaskSchedulerInvalid)
 	}
@@ -589,27 +600,78 @@ func parseTaskSchedulerPrincipals(node taskSchedulerXMLNode) bool {
 	if !valid {
 		return false
 	}
-	principal, valid := taskSchedulerContainer(children[0], "Principal", map[string]string{"id": taskSchedulerPrincipalID},
-		"UserId", "LogonType", "RunLevel")
-	return valid &&
-		taskSchedulerLeaf(principal[0], "UserId", TaskSchedulerInteractiveUser) &&
-		taskSchedulerLeaf(principal[1], "LogonType", "InteractiveToken") &&
-		taskSchedulerLeaf(principal[2], "RunLevel", "LeastPrivilege")
+	principal, valid := taskSchedulerChildMap(
+		children[0],
+		"Principal",
+		map[string]string{"id": taskSchedulerPrincipalID},
+		[]string{"UserId", "LogonType", "RunLevel"},
+		[]string{"UserId", "LogonType"},
+	)
+	if !valid ||
+		!taskSchedulerLeaf(principal["UserId"], "UserId", TaskSchedulerInteractiveUser) ||
+		!taskSchedulerLeaf(principal["LogonType"], "LogonType", "InteractiveToken") {
+		return false
+	}
+	runLevel, found := principal["RunLevel"]
+	return !found || taskSchedulerLeaf(runLevel, "RunLevel", "LeastPrivilege")
 }
 
 func parseTaskSchedulerSettings(node taskSchedulerXMLNode) bool {
-	children, valid := taskSchedulerContainer(node, "Settings", nil,
-		"MultipleInstancesPolicy", "DisallowStartIfOnBatteries", "StopIfGoingOnBatteries", "StartWhenAvailable", "RestartOnFailure", "ExecutionTimeLimit")
+	children, valid := taskSchedulerChildMap(
+		node,
+		"Settings",
+		nil,
+		[]string{
+			"MultipleInstancesPolicy", "DisallowStartIfOnBatteries", "StopIfGoingOnBatteries",
+			"StartWhenAvailable", "RestartOnFailure", "ExecutionTimeLimit", "IdleSettings",
+			"UseUnifiedSchedulingEngine", "Enabled",
+		},
+		[]string{
+			"MultipleInstancesPolicy", "DisallowStartIfOnBatteries", "StopIfGoingOnBatteries",
+			"StartWhenAvailable", "RestartOnFailure", "ExecutionTimeLimit",
+		},
+	)
 	if !valid ||
-		!taskSchedulerLeaf(children[0], "MultipleInstancesPolicy", "IgnoreNew") ||
-		!taskSchedulerLeaf(children[1], "DisallowStartIfOnBatteries", "false") ||
-		!taskSchedulerLeaf(children[2], "StopIfGoingOnBatteries", "false") ||
-		!taskSchedulerLeaf(children[3], "StartWhenAvailable", "true") ||
-		!taskSchedulerLeaf(children[5], "ExecutionTimeLimit", "PT0S") {
+		!taskSchedulerLeaf(children["MultipleInstancesPolicy"], "MultipleInstancesPolicy", "IgnoreNew") ||
+		!taskSchedulerLeaf(children["DisallowStartIfOnBatteries"], "DisallowStartIfOnBatteries", "false") ||
+		!taskSchedulerLeaf(children["StopIfGoingOnBatteries"], "StopIfGoingOnBatteries", "false") ||
+		!taskSchedulerLeaf(children["StartWhenAvailable"], "StartWhenAvailable", "true") ||
+		!taskSchedulerLeaf(children["ExecutionTimeLimit"], "ExecutionTimeLimit", "PT0S") {
 		return false
 	}
-	restart, valid := taskSchedulerContainer(children[4], "RestartOnFailure", nil, "Interval", "Count")
-	return valid && taskSchedulerLeaf(restart[0], "Interval", "PT1M") && taskSchedulerLeaf(restart[1], "Count", "3")
+	restart, valid := taskSchedulerChildMap(
+		children["RestartOnFailure"],
+		"RestartOnFailure",
+		nil,
+		[]string{"Interval", "Count"},
+		[]string{"Interval", "Count"},
+	)
+	if !valid || !taskSchedulerLeaf(restart["Interval"], "Interval", "PT1M") ||
+		!taskSchedulerLeaf(restart["Count"], "Count", "3") {
+		return false
+	}
+	if idle, found := children["IdleSettings"]; found {
+		settings, valid := taskSchedulerChildMap(
+			idle,
+			"IdleSettings",
+			nil,
+			[]string{"StopOnIdleEnd", "RestartOnIdle"},
+			[]string{"StopOnIdleEnd", "RestartOnIdle"},
+		)
+		if !valid || !taskSchedulerLeaf(settings["StopOnIdleEnd"], "StopOnIdleEnd", "true") ||
+			!taskSchedulerLeaf(settings["RestartOnIdle"], "RestartOnIdle", "false") {
+			return false
+		}
+	}
+	if unified, found := children["UseUnifiedSchedulingEngine"]; found &&
+		!taskSchedulerLeaf(unified, "UseUnifiedSchedulingEngine", "true") {
+		return false
+	}
+	if enabled, found := children["Enabled"]; found &&
+		!taskSchedulerLeaf(enabled, "Enabled", "true") && !taskSchedulerLeaf(enabled, "Enabled", "false") {
+		return false
+	}
+	return true
 }
 
 func parseTaskSchedulerActions(node taskSchedulerXMLNode, registration Registration) ([]string, string, bool) {
@@ -654,6 +716,42 @@ func taskSchedulerContainer(
 	return node.children, true
 }
 
+func taskSchedulerChildMap(
+	node taskSchedulerXMLNode,
+	name string,
+	attributes map[string]string,
+	allowed []string,
+	required []string,
+) (map[string]taskSchedulerXMLNode, bool) {
+	if node.name.Space != taskSchedulerNamespace || node.name.Local != name ||
+		!taskSchedulerAttributes(node.attrs, attributes) || strings.TrimSpace(node.text) != "" {
+		return nil, false
+	}
+	allowedNames := make(map[string]struct{}, len(allowed))
+	for _, child := range allowed {
+		allowedNames[child] = struct{}{}
+	}
+	children := make(map[string]taskSchedulerXMLNode, len(node.children))
+	for _, child := range node.children {
+		if child.name.Space != taskSchedulerNamespace {
+			return nil, false
+		}
+		if _, found := allowedNames[child.name.Local]; !found {
+			return nil, false
+		}
+		if _, duplicate := children[child.name.Local]; duplicate {
+			return nil, false
+		}
+		children[child.name.Local] = child
+	}
+	for _, child := range required {
+		if _, found := children[child]; !found {
+			return nil, false
+		}
+	}
+	return children, true
+}
+
 func taskSchedulerAttributes(attributes []xml.Attr, expected map[string]string) bool {
 	if len(attributes) != len(expected) {
 		return false
@@ -680,8 +778,9 @@ func taskSchedulerLeafText(node taskSchedulerXMLNode, name string) (string, bool
 }
 
 // TaskSchedulerResult is the process result used by the portable task
-// contract. Output is deliberately never parsed because schtasks.exe emits
-// localized text that is not a stable status API.
+// contract. Output is retained only for command forms whose structured XML or
+// CSV payload is consumed by the Windows host adapter; native diagnostics must
+// not be returned in this field.
 type TaskSchedulerResult struct {
 	ExitCode uint32
 	Output   []byte
@@ -734,17 +833,24 @@ func (s TaskScheduler) Create(ctx context.Context, xmlPath string) error {
 // Query maps only schtasks.exe exit codes. It deliberately ignores output so
 // locale changes cannot alter ownership or lifecycle decisions.
 func (s TaskScheduler) Query(ctx context.Context) (TaskSchedulerState, error) {
+	state, _, err := s.QueryXML(ctx)
+	return state, err
+}
+
+// QueryXML maps the fixed query exit code and returns an independent copy of
+// the task XML for host-owned identity normalization and ownership parsing.
+func (s TaskScheduler) QueryXML(ctx context.Context) (TaskSchedulerState, []byte, error) {
 	result, err := s.executeRaw(ctx, []string{"/Query", "/TN", TaskSchedulerTaskName, "/XML", "/HRESULT"})
 	if err != nil {
-		return TaskSchedulerUnknown, taskSchedulerError(TaskSchedulerExecution)
+		return TaskSchedulerUnknown, nil, taskSchedulerError(TaskSchedulerExecution)
 	}
 	switch result.ExitCode {
 	case 0:
-		return TaskSchedulerPresent, nil
+		return TaskSchedulerPresent, slices.Clone(result.Output), nil
 	case taskSchedulerNotFound:
-		return TaskSchedulerAbsent, nil
+		return TaskSchedulerAbsent, nil, nil
 	default:
-		return TaskSchedulerUnknown, taskSchedulerError(TaskSchedulerExecution)
+		return TaskSchedulerUnknown, nil, taskSchedulerError(TaskSchedulerExecution)
 	}
 }
 
@@ -760,6 +866,36 @@ func (s TaskScheduler) Delete(ctx context.Context) error {
 func (s TaskScheduler) Run(ctx context.Context) error {
 	_, err := s.execute(ctx, []string{"/Run", "/TN", TaskSchedulerTaskName, "/HRESULT"})
 	return err
+}
+
+// End asks the executor to stop only the fixed owned Task Scheduler identity.
+func (s TaskScheduler) End(ctx context.Context) error {
+	_, err := s.execute(ctx, []string{"/End", "/TN", TaskSchedulerTaskName, "/HRESULT"})
+	return err
+}
+
+// Enable asks the executor to enable only the fixed owned Task Scheduler identity.
+func (s TaskScheduler) Enable(ctx context.Context) error {
+	_, err := s.execute(ctx, []string{"/Change", "/TN", TaskSchedulerTaskName, "/ENABLE", "/HRESULT"})
+	return err
+}
+
+// Disable asks the executor to disable only the fixed owned Task Scheduler identity.
+func (s TaskScheduler) Disable(ctx context.Context) error {
+	_, err := s.execute(ctx, []string{"/Change", "/TN", TaskSchedulerTaskName, "/DISABLE", "/HRESULT"})
+	return err
+}
+
+// QueryStatus returns the fixed verbose CSV query for locale-independent
+// numeric Task Scheduler result classification in the Windows host adapter.
+func (s TaskScheduler) QueryStatus(ctx context.Context) ([]byte, error) {
+	result, err := s.execute(ctx, []string{
+		"/Query", "/TN", TaskSchedulerTaskName, "/FO", "CSV", "/NH", "/V", "/HRESULT",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return slices.Clone(result.Output), nil
 }
 
 func (s TaskScheduler) execute(ctx context.Context, arguments []string) (TaskSchedulerResult, error) {

@@ -117,6 +117,45 @@ func TestTaskSchedulerSpecControlsLoginTrigger(t *testing.T) {
 	}
 }
 
+func TestTaskSchedulerParserAcceptsOnlyKnownSchedulerNormalization(t *testing.T) {
+	spec := taskSchedulerSpec(t, false)
+	document, err := spec.XML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized := decodeUTF16LE(t, document)
+	normalized = strings.Replace(normalized, "      <RunLevel>LeastPrivilege</RunLevel>\n", "", 1)
+	normalized = strings.Replace(
+		normalized,
+		"    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n",
+		"    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n"+
+			"    <IdleSettings><StopOnIdleEnd>true</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>\n"+
+			"    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>\n"+
+			"    <Enabled>false</Enabled>\n",
+		1,
+	)
+	parsed, err := personalsvc.ParseTaskSchedulerXML(encodeUTF16LE(normalized))
+	if err != nil || !parsed.Matches(spec) {
+		t.Fatalf("scheduler-normalized task = %#v, %v; want original plan", parsed, err)
+	}
+
+	for _, test := range []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "idle policy", old: "<StopOnIdleEnd>true</StopOnIdleEnd>", new: "<StopOnIdleEnd>false</StopOnIdleEnd>"},
+		{name: "unified engine", old: "<UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>", new: "<UseUnifiedSchedulingEngine>false</UseUnifiedSchedulingEngine>"},
+		{name: "enabled value", old: "<Enabled>false</Enabled>", new: "<Enabled>maybe</Enabled>"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			mutant := strings.Replace(normalized, test.old, test.new, 1)
+			_, parseErr := personalsvc.ParseTaskSchedulerXML(encodeUTF16LE(mutant))
+			assertTaskSchedulerError(t, parseErr, personalsvc.TaskSchedulerInvalid)
+		})
+	}
+}
+
 func TestTaskSchedulerParserFailsClosedForForeignOrMutatedTask(t *testing.T) {
 	spec := taskSchedulerSpec(t, true)
 	document, err := spec.XML()
@@ -219,6 +258,52 @@ func TestTaskSchedulerUsesFixedSchtasksCommands(t *testing.T) {
 	}
 }
 
+func TestTaskSchedulerBuildsCompleteAdapterCommandSet(t *testing.T) {
+	document := []byte{0xff, 0xfe, '<', 0}
+	executor := &recordingTaskSchedulerExecutor{results: []personalsvc.TaskSchedulerResult{
+		{Output: document},
+		{},
+		{},
+		{},
+		{Output: []byte("status")},
+	}}
+	scheduler, err := personalsvc.NewTaskScheduler(executor)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	state, queried, err := scheduler.QueryXML(t.Context())
+	if err != nil || state != personalsvc.TaskSchedulerPresent || !bytes.Equal(queried, document) {
+		t.Fatalf("QueryXML() = %s, %x, %v", state, queried, err)
+	}
+	if err := scheduler.End(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := scheduler.Enable(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := scheduler.Disable(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	status, err := scheduler.QueryStatus(t.Context())
+	if err != nil || !bytes.Equal(status, []byte("status")) {
+		t.Fatalf("QueryStatus() = %q, %v", status, err)
+	}
+
+	want := []taskSchedulerCall{
+		{program: "schtasks.exe", arguments: []string{"/Query", "/TN", `\PowerContext Personal Server`, "/XML", "/HRESULT"}},
+		{program: "schtasks.exe", arguments: []string{"/End", "/TN", `\PowerContext Personal Server`, "/HRESULT"}},
+		{program: "schtasks.exe", arguments: []string{"/Change", "/TN", `\PowerContext Personal Server`, "/ENABLE", "/HRESULT"}},
+		{program: "schtasks.exe", arguments: []string{"/Change", "/TN", `\PowerContext Personal Server`, "/DISABLE", "/HRESULT"}},
+		{program: "schtasks.exe", arguments: []string{"/Query", "/TN", `\PowerContext Personal Server`, "/FO", "CSV", "/NH", "/V", "/HRESULT"}},
+	}
+	if !slices.EqualFunc(executor.calls, want, func(got, want taskSchedulerCall) bool {
+		return got.program == want.program && slices.Equal(got.arguments, want.arguments)
+	}) {
+		t.Fatalf("schtasks calls = %#v, want %#v", executor.calls, want)
+	}
+}
+
 func TestTaskSchedulerQueryUsesExitCodesNotLocalizedOutput(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -295,6 +380,38 @@ func TestTaskSchedulerZeroValueFailsClosed(t *testing.T) {
 			name: "run",
 			invoke: func(scheduler personalsvc.TaskScheduler) error {
 				return scheduler.Run(t.Context())
+			},
+		},
+		{
+			name: "query XML",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				_, _, err := scheduler.QueryXML(t.Context())
+				return err
+			},
+		},
+		{
+			name: "query status",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				_, err := scheduler.QueryStatus(t.Context())
+				return err
+			},
+		},
+		{
+			name: "end",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				return scheduler.End(t.Context())
+			},
+		},
+		{
+			name: "enable",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				return scheduler.Enable(t.Context())
+			},
+		},
+		{
+			name: "disable",
+			invoke: func(scheduler personalsvc.TaskScheduler) error {
+				return scheduler.Disable(t.Context())
 			},
 		},
 	} {
