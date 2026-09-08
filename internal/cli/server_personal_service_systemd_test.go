@@ -111,6 +111,26 @@ func TestLinuxSystemdBoundaryClassifiesLoadedAbsentUnitAsNotLoaded(t *testing.T)
 	}
 }
 
+func TestLinuxSystemdBoundaryClassifiesSystemctlShowNotFoundAsNotLoaded(t *testing.T) {
+	boundary, runner, _ := newTestLinuxSystemdBoundary(t)
+	runner.responses = []linuxSystemdCommandResult{
+		{stdout: []byte("unrecognized user-bus envelope")},
+		{stdout: []byte("LoadState=not-found\nFragmentPath=\nDropInPaths=\nEnvironment=\nExecStart=\n")},
+	}
+
+	unit, err := boundary.InspectUnit(t.Context(), "powercontext.service")
+	if err != nil || unit.LoadState() != "not-found" {
+		t.Fatalf("InspectUnit() = %#v, %v; want not-found, nil", unit, err)
+	}
+	want := [][]string{
+		{"busctl", "--user", "--json=short", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", "LoadUnit", "s", "powercontext.service"},
+		{"systemctl", "--user", "show", "--property=LoadState", "--property=FragmentPath", "--property=DropInPaths", "--property=Environment", "--property=ExecStart", personalServiceUnitName},
+	}
+	if got := runner.arguments(); !slices.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("fallback command = %q, want %q", got, want)
+	}
+}
+
 func TestLinuxSystemdBoundaryRejectsGlobalRootsAndForeignDropIns(t *testing.T) {
 	for _, home := range []string{"/", "/etc", "/root", "/usr/local", "/run/user/1000", "/home/alice/../bob", "relative"} {
 		if _, err := newLinuxPersonalServiceRoots(home); err == nil {

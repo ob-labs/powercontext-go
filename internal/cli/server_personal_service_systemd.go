@@ -320,6 +320,9 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 		return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
 	}
 	if parseErr := parseBusctlObjectPath(objectResult.stdout); parseErr != nil {
+		if b.systemctlShowNotFound(ctx) {
+			return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
+		}
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
 	unitProperties, err := b.busctl(ctx,
@@ -330,10 +333,16 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 	}
 	unitValues, err := parseBusctlProperties(unitProperties)
 	if err != nil {
+		if b.systemctlShowNotFound(ctx) {
+			return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
+		}
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
 	loadState, err := busctlRequiredString(unitValues, "LoadState", "s")
 	if err != nil {
+		if b.systemctlShowNotFound(ctx) {
+			return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
+		}
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
 	if loadState == "not-found" {
@@ -347,6 +356,9 @@ func (b *linuxSystemdBoundary) InspectUnit(ctx context.Context, name string) (pe
 	}
 	unit, err := parseBusctlUnit(unitValues, serviceProperties)
 	if err != nil {
+		if b.systemctlShowNotFound(ctx) {
+			return personalsvc.NewSystemdUserManagerUnit("not-found", "", false, nil, nil, nil), nil
+		}
 		return personalsvc.SystemdUserManagerUnit{}, newPersonalServicePlatformError("unit inspect")
 	}
 	return unit, nil
@@ -450,6 +462,48 @@ func (b *linuxSystemdBoundary) busctlResult(ctx context.Context, arguments ...st
 		return linuxSystemdProcessResult{}, newPersonalServicePlatformError("user bus")
 	}
 	return linuxSystemdProcessResult{exitCode: result.exitCode, stdout: bytes.Clone(result.stdout)}, nil
+}
+
+// systemctlShowNotFound preserves a strict user-bus inspection for loaded
+// units while using the upstream adapter's stable absent-unit classification
+// when a systemd version emits an unrecognized D-Bus property envelope.
+func (b *linuxSystemdBoundary) systemctlShowNotFound(ctx context.Context) bool {
+	if err := contextError(ctx); err != nil {
+		return false
+	}
+	result, err := b.runner.Run(ctx,
+		"systemctl",
+		"--user",
+		"show",
+		"--property=LoadState",
+		"--property=FragmentPath",
+		"--property=DropInPaths",
+		"--property=Environment",
+		"--property=ExecStart",
+		personalServiceUnitName,
+	)
+	if err != nil || result.exitCode != 0 || contextError(ctx) != nil {
+		return false
+	}
+	loadState, found := systemctlShowProperty(result.stdout, "LoadState")
+	return !found || loadState == "not-found"
+}
+
+func systemctlShowProperty(payload []byte, name string) (string, bool) {
+	var value string
+	found := false
+	for line := range strings.Lines(string(payload)) {
+		key, candidate, ok := strings.Cut(strings.TrimRight(line, "\r\n"), "=")
+		if !ok || key != name {
+			continue
+		}
+		if found {
+			return "", false
+		}
+		value = candidate
+		found = true
+	}
+	return value, found
 }
 
 func (b *linuxSystemdBoundary) available() bool {
