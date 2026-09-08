@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/csv"
 	json "encoding/json/v2"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,7 @@ import (
 const (
 	testTaskNamePrefix = `\PowerContext\Tests\`
 	maxProbeBytes      = 4 << 10
+	taskXMLNamespace   = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 )
 
 var requestIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
@@ -86,6 +88,9 @@ type Adapter struct {
 	artifactPath string
 	taskName     string
 	userSID      string
+	userAccount  string
+	userName     string
+	userLookup   func(string) bool
 	scheduler    taskScheduler
 	artifacts    artifactStore
 	httpClient   *http.Client
@@ -99,13 +104,13 @@ func newAdapter(
 	plan personalsvc.TaskSchedulerSpec,
 	userDataRoot string,
 	taskName string,
-	userSID string,
+	identity userIdentity,
 	scheduler taskScheduler,
 	artifacts artifactStore,
 	httpClient *http.Client,
 ) (*Adapter, error) {
 	if scheduler == nil || artifacts == nil || httpClient == nil ||
-		!validUserDataRoot(userDataRoot) || !validTaskName(taskName) || !validInteractiveSID(userSID) {
+		!validUserDataRoot(userDataRoot) || !validTaskName(taskName) || !validUserIdentity(identity) {
 		return nil, newError("configuration", nil)
 	}
 	if _, err := plan.XML(); err != nil {
@@ -115,7 +120,10 @@ func newAdapter(
 		plan:         plan,
 		artifactPath: filepath.Join(userDataRoot, filepath.FromSlash("PowerContext/Services/personal-server.xml")),
 		taskName:     taskName,
-		userSID:      userSID,
+		userSID:      identity.sid,
+		userAccount:  identity.account,
+		userName:     identity.name,
+		userLookup:   identity.lookup,
 		scheduler:    scheduler,
 		artifacts:    artifacts,
 		httpClient:   httpClient,
@@ -406,25 +414,43 @@ func (a *Adapter) renderPlan(plan personalsvc.TaskSchedulerSpec) ([]byte, error)
 	if err != nil {
 		return nil, newError("render", nil)
 	}
-	resolved, ok := rewriteTaskDocument(
-		document,
-		personalsvc.TaskSchedulerTaskName,
-		a.taskName,
-		personalsvc.TaskSchedulerInteractiveUser,
-		a.userSID,
-	)
+	resolved, ok := resolveTaskDocument(document, a.taskName, userIdentity{
+		sid: a.userSID, account: a.userAccount, name: a.userName, lookup: a.userLookup,
+	}, plan.StartOnLogin())
 	if !ok {
 		return nil, newError("render", nil)
 	}
 	return resolved, nil
 }
 
+func resolveTaskDocument(document []byte, taskName string, identity userIdentity, startOnLogin bool) ([]byte, bool) {
+	text, ok := decodeTaskDocument(document)
+	if !ok {
+		return nil, false
+	}
+	oldURI := taskXMLLeaf("URI", personalsvc.TaskSchedulerTaskName)
+	oldUser := taskXMLLeaf("UserId", personalsvc.TaskSchedulerInteractiveUser)
+	wantUsers := 1
+	if startOnLogin {
+		wantUsers = 2
+	}
+	if strings.Count(text, oldURI) != 1 || strings.Count(text, oldUser) != wantUsers {
+		return nil, false
+	}
+	text = strings.Replace(text, oldURI, taskXMLLeaf("URI", taskName), 1)
+	if startOnLogin {
+		text = strings.Replace(text, oldUser, taskXMLLeaf("UserId", identity.account), 1)
+	}
+	text = strings.Replace(text, oldUser, taskXMLLeaf("UserId", identity.sid), 1)
+	return encodeTaskDocument(text), true
+}
+
 func (a *Adapter) parse(document []byte) (personalsvc.TaskSchedulerSpec, bool) {
-	normalized, ok := rewriteTaskDocument(
+	normalized, ok := rewriteTaskDocumentIdentity(
 		document,
 		a.taskName,
 		personalsvc.TaskSchedulerTaskName,
-		a.userSID,
+		userIdentity{sid: a.userSID, account: a.userAccount, name: a.userName, lookup: a.userLookup},
 		personalsvc.TaskSchedulerInteractiveUser,
 	)
 	if !ok {
@@ -461,18 +487,119 @@ func (a *Adapter) available(ctx context.Context) error {
 }
 
 func rewriteTaskDocument(document []byte, oldTask, newTask, oldUser, newUser string) ([]byte, bool) {
+	return rewriteTaskDocumentUsers(document, oldTask, newTask, []string{oldUser}, newUser)
+}
+
+func rewriteTaskDocumentUsers(
+	document []byte,
+	oldTask string,
+	newTask string,
+	oldUsers []string,
+	newUser string,
+) ([]byte, bool) {
 	text, ok := decodeTaskDocument(document)
 	if !ok {
 		return nil, false
 	}
-	oldURI := "<URI>" + oldTask + "</URI>"
-	oldUserID := "<UserId>" + oldUser + "</UserId>"
-	if strings.Count(text, oldURI) != 1 || strings.Count(text, oldUserID) != 1 {
+	oldURI := taskXMLLeaf("URI", oldTask)
+	if strings.Count(text, oldURI) != 1 {
 		return nil, false
 	}
-	text = strings.Replace(text, oldURI, "<URI>"+newTask+"</URI>", 1)
-	text = strings.Replace(text, oldUserID, "<UserId>"+newUser+"</UserId>", 1)
+	totalUsers := strings.Count(text, "<UserId>")
+	if totalUsers < 1 || totalUsers > 2 {
+		return nil, false
+	}
+	matchedUsers := 0
+	seen := make(map[string]struct{}, len(oldUsers))
+	for _, oldUser := range oldUsers {
+		if _, duplicate := seen[oldUser]; duplicate {
+			continue
+		}
+		seen[oldUser] = struct{}{}
+		oldUserID := taskXMLLeaf("UserId", oldUser)
+		matches := strings.Count(text, oldUserID)
+		matchedUsers += matches
+		text = strings.ReplaceAll(text, oldUserID, taskXMLLeaf("UserId", newUser))
+	}
+	if matchedUsers != totalUsers {
+		return nil, false
+	}
+	text = strings.Replace(text, oldURI, taskXMLLeaf("URI", newTask), 1)
 	return encodeTaskDocument(text), true
+}
+
+func rewriteTaskDocumentIdentity(
+	document []byte,
+	oldTask string,
+	newTask string,
+	identity userIdentity,
+	newUser string,
+) ([]byte, bool) {
+	text, ok := decodeTaskDocument(document)
+	if !ok {
+		return nil, false
+	}
+	oldURI := taskXMLLeaf("URI", oldTask)
+	if strings.Count(text, oldURI) != 1 {
+		return nil, false
+	}
+	userIDs, ok := taskDocumentUserIDs(text)
+	if !ok || len(userIDs) < 1 || len(userIDs) > 2 {
+		return nil, false
+	}
+	seen := make(map[string]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		if !identity.matches(userID) {
+			return nil, false
+		}
+		if _, duplicate := seen[userID]; duplicate {
+			continue
+		}
+		seen[userID] = struct{}{}
+		leaf := taskXMLLeaf("UserId", userID)
+		if strings.Count(text, leaf) == 0 {
+			return nil, false
+		}
+		text = strings.ReplaceAll(text, leaf, taskXMLLeaf("UserId", newUser))
+	}
+	text = strings.Replace(text, oldURI, taskXMLLeaf("URI", newTask), 1)
+	return encodeTaskDocument(text), true
+}
+
+func taskDocumentUserIDs(document string) ([]string, bool) {
+	decoder := xml.NewDecoder(strings.NewReader(document))
+	decoder.Strict = true
+	decoder.CharsetReader = func(label string, input io.Reader) (io.Reader, error) {
+		if strings.EqualFold(label, "UTF-16") {
+			return input, nil
+		}
+		return nil, errors.New("unsupported task document encoding")
+	}
+	userIDs := make([]string, 0, 2)
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return userIDs, true
+		}
+		if err != nil {
+			return nil, false
+		}
+		start, found := token.(xml.StartElement)
+		if !found || start.Name.Space != taskXMLNamespace || start.Name.Local != "UserId" {
+			continue
+		}
+		var userID string
+		if err := decoder.DecodeElement(&userID, &start); err != nil || userID == "" || len(userIDs) == 2 {
+			return nil, false
+		}
+		userIDs = append(userIDs, userID)
+	}
+}
+
+func taskXMLLeaf(name, value string) string {
+	var escaped bytes.Buffer
+	_ = xml.EscapeText(&escaped, []byte(value))
+	return "<" + name + ">" + escaped.String() + "</" + name + ">"
 }
 
 func decodeTaskDocument(document []byte) (string, bool) {
@@ -586,6 +713,35 @@ func validInteractiveSID(sid string) bool {
 	}
 	switch strings.ToUpper(sid) {
 	case "S-1-5-18", "S-1-5-19", "S-1-5-20":
+		return false
+	default:
+		return true
+	}
+}
+
+type userIdentity struct {
+	sid     string
+	account string
+	name    string
+	lookup  func(string) bool
+}
+
+func (i userIdentity) matches(value string) bool {
+	if value == i.sid || strings.EqualFold(value, i.account) || strings.EqualFold(value, i.name) {
+		return true
+	}
+	return i.lookup != nil && i.lookup(value)
+}
+
+func validUserIdentity(identity userIdentity) bool {
+	if !validInteractiveSID(identity.sid) || identity.account == "" || identity.name == "" ||
+		strings.TrimSpace(identity.account) != identity.account || strings.TrimSpace(identity.name) != identity.name ||
+		strings.ContainsAny(identity.account, "\r\n\x00") || strings.ContainsAny(identity.name, "\r\n\x00") {
+		return false
+	}
+	switch strings.ToLower(identity.account) {
+	case "system", `nt authority\system`, "local service", `nt authority\local service`,
+		"network service", `nt authority\network service`:
 		return false
 	default:
 		return true

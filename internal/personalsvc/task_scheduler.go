@@ -183,8 +183,10 @@ func (s TaskSchedulerSpec) XML() ([]byte, error) {
 		},
 	}
 	if s.startOnLogin {
-		document.Triggers.LogonTrigger = new(taskSchedulerLogonTrigger)
-		document.Triggers.LogonTrigger.Enabled = "true"
+		document.Triggers.LogonTrigger = &taskSchedulerLogonTrigger{
+			UserID:  TaskSchedulerInteractiveUser,
+			Enabled: "true",
+		}
 	}
 
 	payload, err := xml.MarshalIndent(document, "", "  ")
@@ -393,6 +395,7 @@ type taskSchedulerTriggers struct {
 
 type taskSchedulerLogonTrigger struct {
 	Enabled string `xml:"Enabled"`
+	UserID  string `xml:"UserId"`
 }
 
 type taskSchedulerPrincipals struct {
@@ -590,8 +593,18 @@ func parseTaskSchedulerTriggers(node taskSchedulerXMLNode) (bool, bool) {
 	if len(node.children) != 1 {
 		return false, false
 	}
-	trigger, valid := taskSchedulerContainer(node.children[0], "LogonTrigger", nil, "Enabled")
-	enabled := valid && taskSchedulerLeaf(trigger[0], "Enabled", "true")
+	trigger, valid := taskSchedulerChildMap(
+		node.children[0],
+		"LogonTrigger",
+		nil,
+		[]string{"UserId", "Enabled"},
+		[]string{"UserId"},
+	)
+	if !valid || !taskSchedulerLeaf(trigger["UserId"], "UserId", TaskSchedulerInteractiveUser) {
+		return false, false
+	}
+	enabledNode, found := trigger["Enabled"]
+	enabled := !found || taskSchedulerLeaf(enabledNode, "Enabled", "true")
 	return enabled, enabled
 }
 

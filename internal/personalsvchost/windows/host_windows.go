@@ -59,15 +59,15 @@ func New(config Config) (*Composition, error) {
 	if err != nil {
 		return nil, newError("configuration", nil)
 	}
-	userSID, err := currentUserSID()
-	if err != nil || !validInteractiveSID(userSID) {
+	identity, err := currentUserIdentity()
+	if err != nil || !validUserIdentity(identity) {
 		return nil, newError("configuration", nil)
 	}
 	adapter, err := newAdapter(
 		config.Plan,
 		config.UserDataRoot,
 		personalsvc.TaskSchedulerTaskName,
-		userSID,
+		identity,
 		portableScheduler{scheduler: portable},
 		artifacts,
 		loopbackHTTPClient(),
@@ -264,16 +264,31 @@ func (s *nativeArtifactStore) check(ctx context.Context, path string) error {
 	return ctx.Err()
 }
 
-func currentUserSID() (string, error) {
+func currentUserIdentity() (userIdentity, error) {
 	var sessionID uint32
 	if err := golangwindows.ProcessIdToSessionId(uint32(os.Getpid()), &sessionID); err != nil || !validInteractiveSession(sessionID) {
-		return "", errors.New("current Windows session is not interactive")
+		return userIdentity{}, errors.New("current Windows session is not interactive")
 	}
 	user, err := golangwindows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil || user == nil || user.User.Sid == nil {
-		return "", errors.New("current Windows user is unavailable")
+		return userIdentity{}, errors.New("current Windows user is unavailable")
 	}
-	return user.User.Sid.String(), nil
+	name, domain, _, err := user.User.Sid.LookupAccount("")
+	if err != nil || name == "" {
+		return userIdentity{}, errors.New("current Windows account is unavailable")
+	}
+	account := name
+	if domain != "" {
+		account = domain + `\` + name
+	}
+	expectedSID := user.User.Sid.String()
+	return userIdentity{
+		sid: expectedSID, account: account, name: name,
+		lookup: func(value string) bool {
+			resolved, _, _, lookupErr := golangwindows.LookupSID("", value)
+			return lookupErr == nil && resolved != nil && resolved.String() == expectedSID
+		},
+	}, nil
 }
 
 func validInteractiveSession(sessionID uint32) bool { return sessionID != 0 }

@@ -237,10 +237,15 @@ type OperationError struct {
 	kind   ErrorKind
 	stage  OperationStage
 	status Status
+	cause  error
 }
 
 func newOperationError(kind ErrorKind, stage OperationStage, status Status) *OperationError {
 	return &OperationError{kind: kind, stage: stage, status: status}
+}
+
+func newOperationErrorWithCause(kind ErrorKind, stage OperationStage, status Status, cause error) *OperationError {
+	return &OperationError{kind: kind, stage: stage, status: status, cause: cause}
 }
 
 // Error returns a stable, redacted failure description.
@@ -263,6 +268,15 @@ func (e *OperationError) Error() string {
 	default:
 		return "personal service operation failed during " + string(e.stage)
 	}
+}
+
+// Unwrap retains only a caller-context cancellation classification. Adapter
+// and native errors are never attached to an OperationError.
+func (e *OperationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
 }
 
 // Kind returns the typed failure class.

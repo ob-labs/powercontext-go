@@ -102,9 +102,17 @@ func TestTaskSchedulerSpecControlsLoginTrigger(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotTrigger := strings.Contains(decodeUTF16LE(t, document), "<LogonTrigger>")
+			decoded := decodeUTF16LE(t, document)
+			gotTrigger := strings.Contains(decoded, "<LogonTrigger>")
 			if gotTrigger != startOnLogin {
 				t.Fatalf("LogonTrigger present = %t, want %t", gotTrigger, startOnLogin)
+			}
+			wantUserIDs := 1
+			if startOnLogin {
+				wantUserIDs = 2
+			}
+			if got := strings.Count(decoded, "<UserId>"+personalsvc.TaskSchedulerInteractiveUser+"</UserId>"); got != wantUserIDs {
+				t.Fatalf("interactive UserId count = %d, want %d", got, wantUserIDs)
 			}
 			parsed, err := personalsvc.ParseTaskSchedulerXML(document)
 			if err != nil {
@@ -115,6 +123,67 @@ func TestTaskSchedulerSpecControlsLoginTrigger(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTaskSchedulerParserRejectsUnboundLoginTrigger(t *testing.T) {
+	document, err := taskSchedulerSpec(t, true).XML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical := decodeUTF16LE(t, document)
+	for _, test := range []struct {
+		name   string
+		mutate func(string) string
+	}{
+		{
+			name: "missing user",
+			mutate: func(document string) string {
+				start := strings.Index(document, "<LogonTrigger>")
+				end := strings.Index(document, "</LogonTrigger>")
+				if start < 0 || end < start {
+					return document
+				}
+				trigger := document[start:end]
+				trigger = strings.Replace(trigger, "<UserId>"+personalsvc.TaskSchedulerInteractiveUser+"</UserId>", "", 1)
+				return document[:start] + trigger + document[end:]
+			},
+		},
+		{
+			name: "different user",
+			mutate: func(document string) string {
+				start := strings.Index(document, "<LogonTrigger>")
+				end := strings.Index(document, "</LogonTrigger>")
+				if start < 0 || end < start {
+					return document
+				}
+				trigger := document[start:end]
+				trigger = strings.Replace(trigger, personalsvc.TaskSchedulerInteractiveUser, "S-1-5-21-foreign", 1)
+				return document[:start] + trigger + document[end:]
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, parseErr := personalsvc.ParseTaskSchedulerXML(encodeUTF16LE(test.mutate(canonical)))
+			assertTaskSchedulerError(t, parseErr, personalsvc.TaskSchedulerInvalid)
+		})
+	}
+}
+
+func TestTaskSchedulerParserAcceptsOnlyEnabledLoginDefaultOmission(t *testing.T) {
+	spec := taskSchedulerSpec(t, true)
+	document, err := spec.XML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical := decodeUTF16LE(t, document)
+	withoutDefault := strings.Replace(canonical, "      <Enabled>true</Enabled>\n", "", 1)
+	parsed, err := personalsvc.ParseTaskSchedulerXML(encodeUTF16LE(withoutDefault))
+	if err != nil || !parsed.Matches(spec) {
+		t.Fatalf("default-normalized trigger = %#v, %v; want original plan", parsed, err)
+	}
+	withFalse := strings.Replace(canonical, "<Enabled>true</Enabled>", "<Enabled>false</Enabled>", 1)
+	_, err = personalsvc.ParseTaskSchedulerXML(encodeUTF16LE(withFalse))
+	assertTaskSchedulerError(t, err, personalsvc.TaskSchedulerInvalid)
 }
 
 func TestTaskSchedulerParserAcceptsOnlyKnownSchedulerNormalization(t *testing.T) {

@@ -17,7 +17,10 @@ package personalsvc
 import (
 	"context"
 	"errors"
+	"time"
 )
+
+const restoreTimeout = 30 * time.Second
 
 // Controller orchestrates one immutable personal-service registration through
 // a supplied native Adapter. It does not read the environment, access storage,
@@ -253,32 +256,50 @@ func (c *Controller) installLocked(ctx context.Context, desired Registration, in
 func (c *Controller) commit(ctx context.Context, desired Registration, previous Artifact) error {
 	if err := c.adapter.Write(ctx, desired); err != nil {
 		c.restore(ctx, previous)
-		return newOperationError(ErrorOperation, StageWrite, statusForSupportedUnknown())
+		return newContextOperationError(ErrorOperation, StageWrite, statusForSupportedUnknown(), ctx)
 	}
 	if err := c.adapter.Reload(ctx); err != nil {
 		c.restore(ctx, previous)
-		return newOperationError(ErrorOperation, StageReload, statusForSupportedUnknown())
+		return newContextOperationError(ErrorOperation, StageReload, statusForSupportedUnknown(), ctx)
 	}
 	if err := c.adapter.Enable(ctx); err != nil {
 		c.restore(ctx, previous)
-		return newOperationError(ErrorOperation, StageEnable, statusForSupportedUnknown())
+		return newContextOperationError(ErrorOperation, StageEnable, statusForSupportedUnknown(), ctx)
 	}
 	return nil
 }
 
 func (c *Controller) restore(ctx context.Context, previous Artifact) {
-	_ = c.adapter.Disable(ctx)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
+	defer cancel()
+
+	_ = c.adapter.Disable(restoreCtx)
 	if previous.State() == RegistrationInstalled {
 		registration, found := previous.Registration()
 		if found {
-			_ = c.adapter.Write(ctx, registration)
-			_ = c.adapter.Reload(ctx)
-			_ = c.adapter.Enable(ctx)
+			_ = c.adapter.Write(restoreCtx, registration)
+			_ = c.adapter.Reload(restoreCtx)
+			_ = c.adapter.Enable(restoreCtx)
 			return
 		}
 	}
-	_ = c.adapter.Remove(ctx)
-	_ = c.adapter.Reload(ctx)
+	_ = c.adapter.Remove(restoreCtx)
+	_ = c.adapter.Reload(restoreCtx)
+}
+
+func newContextOperationError(
+	kind ErrorKind,
+	stage OperationStage,
+	status Status,
+	ctx context.Context,
+) *OperationError {
+	if ctx == nil {
+		return newOperationError(kind, stage, status)
+	}
+	return newOperationErrorWithCause(kind, stage, status, ctx.Err())
 }
 
 func (c *Controller) uninstallLocked(ctx context.Context) error {

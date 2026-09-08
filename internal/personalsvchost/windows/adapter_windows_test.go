@@ -31,7 +31,11 @@ import (
 	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 )
 
-const testTaskSID = "S-1-5-21-100-200-300-1001"
+var testIdentity = userIdentity{
+	sid:     "S-1-5-21-100-200-300-1001",
+	account: `CONTOSO\alice`,
+	name:    "alice",
+}
 
 func TestAdapterCompletesOwnedTaskLifecycleThroughExplicitBoundaries(t *testing.T) {
 	root := t.TempDir()
@@ -42,7 +46,7 @@ func TestAdapterCompletesOwnedTaskLifecycleThroughExplicitBoundaries(t *testing.
 		plan,
 		root,
 		`\PowerContext\Tests\unit-lifecycle`,
-		testTaskSID,
+		testIdentity,
 		scheduler,
 		files,
 		http.DefaultClient,
@@ -117,7 +121,7 @@ func TestAdapterRejectsForeignLoadedTaskBeforeMutation(t *testing.T) {
 		plan,
 		root,
 		`\PowerContext\Tests\unit-foreign`,
-		testTaskSID,
+		testIdentity,
 		scheduler,
 		files,
 		http.DefaultClient,
@@ -167,6 +171,58 @@ func TestAdapterRejectsForeignLoadedTaskBeforeMutation(t *testing.T) {
 	}
 }
 
+func TestAdapterLoginTriggerAcceptsOnlyCurrentUserIdentity(t *testing.T) {
+	root := t.TempDir()
+	base := adapterPlan(t, root)
+	plan, err := personalsvc.NewTaskSchedulerSpec(
+		base.Registration(), base.Arguments(), base.WorkingDirectory(), true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := newMemoryArtifacts()
+	scheduler := &memoryScheduler{files: files}
+	adapter, err := newAdapter(
+		plan,
+		root,
+		`\PowerContext\Tests\unit-login-user`,
+		testIdentity,
+		scheduler,
+		files,
+		http.DefaultClient,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := adapter.render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler.present, scheduler.document = true, document
+	manager, err := adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
+		t.Fatalf("current-user trigger = %s, %v; want owned", manager.Ownership(), err)
+	}
+	text, ok := decodeTaskDocument(document)
+	if !ok {
+		t.Fatal("cannot decode login trigger fixture")
+	}
+	foreign := encodeTaskDocument(strings.Replace(
+		text,
+		taskXMLLeaf("UserId", testIdentity.account),
+		taskXMLLeaf("UserId", `CONTOSO\foreign`),
+		1,
+	))
+	if bytes.Equal(foreign, document) {
+		t.Fatal("foreign trigger fixture did not change")
+	}
+	scheduler.document = foreign
+	manager, err = adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipForeign {
+		t.Fatalf("foreign-user trigger = %s, %v; want foreign", manager.Ownership(), err)
+	}
+}
+
 func TestTaskSchedulerStateUsesNumericResultInsteadOfLocalizedText(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -210,7 +266,7 @@ func TestAdapterRejectsGlobalRoot(t *testing.T) {
 		plan,
 		root,
 		personalsvc.TaskSchedulerTaskName,
-		testTaskSID,
+		testIdentity,
 		&memoryScheduler{files: newMemoryArtifacts()},
 		newMemoryArtifacts(),
 		http.DefaultClient,
@@ -236,7 +292,7 @@ func TestNewComposesProductionAdapterAndOperationBoundary(t *testing.T) {
 	if (&Composition{}).Adapter() != nil || (&Composition{}).OperationBoundary() != nil {
 		t.Fatal("zero-value composition exposed a typed-nil boundary")
 	}
-	if _, err := currentUserSID(); err != nil {
+	if _, err := currentUserIdentity(); err != nil {
 		t.Skip("current process does not have an interactive user identity")
 	}
 	root := t.TempDir()
@@ -314,7 +370,7 @@ func TestProbeRequiresExactLoopbackLivenessContract(t *testing.T) {
 		plan,
 		root,
 		`\PowerContext\Tests\unit-probe`,
-		testTaskSID,
+		testIdentity,
 		&memoryScheduler{files: newMemoryArtifacts()},
 		newMemoryArtifacts(),
 		client,
@@ -345,7 +401,7 @@ func TestStopDoesNotEndOwnedInactiveTask(t *testing.T) {
 		plan,
 		root,
 		`\PowerContext\Tests\unit-inactive`,
-		testTaskSID,
+		testIdentity,
 		scheduler,
 		files,
 		http.DefaultClient,
@@ -379,7 +435,7 @@ func TestControllerRestoresPreviouslyInspectedTaskAfterEnableFailure(t *testing.
 		desired,
 		root,
 		`\PowerContext\Tests\unit-rollback`,
-		testTaskSID,
+		testIdentity,
 		scheduler,
 		files,
 		http.DefaultClient,
@@ -396,7 +452,7 @@ func TestControllerRestoresPreviouslyInspectedTaskAfterEnableFailure(t *testing.
 		personalsvc.TaskSchedulerTaskName,
 		adapter.taskName,
 		personalsvc.TaskSchedulerInteractiveUser,
-		testTaskSID,
+		testIdentity.sid,
 	)
 	if !ok {
 		t.Fatal("cannot resolve previous task fixture")
@@ -418,6 +474,61 @@ func TestControllerRestoresPreviouslyInspectedTaskAfterEnableFailure(t *testing.
 	registration, found := artifact.Registration()
 	if !found || registration != previous.Registration() {
 		t.Fatal("enable failure did not restore the previously inspected registration")
+	}
+}
+
+func TestControllerCancellationAfterCreateRemovesNewTask(t *testing.T) {
+	root := t.TempDir()
+	plan := adapterPlan(t, root)
+	files := newMemoryArtifacts()
+	type cleanupContextKey struct{}
+	parent := context.WithValue(t.Context(), cleanupContextKey{}, "preserved")
+	ctx, cancel := context.WithCancel(parent)
+	cleanupObserved := false
+	scheduler := &memoryScheduler{
+		files: files, cancelAfterCreate: cancel, rejectCanceled: true,
+		observeCleanup: func(cleanupCtx context.Context) error {
+			if cleanupCtx.Err() != nil || cleanupCtx.Value(cleanupContextKey{}) != "preserved" {
+				return errors.New("cleanup context did not preserve values independently")
+			}
+			if _, bounded := cleanupCtx.Deadline(); !bounded {
+				return errors.New("cleanup context is not bounded")
+			}
+			cleanupObserved = true
+			return nil
+		},
+	}
+	adapter, err := newAdapter(
+		plan,
+		root,
+		`\PowerContext\Tests\unit-cancel-create`,
+		testIdentity,
+		scheduler,
+		files,
+		http.DefaultClient,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := personalsvc.NewController(adapter, directOperationBoundary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, installErr := controller.Install(ctx, plan.Registration())
+	if !errors.Is(installErr, context.Canceled) {
+		t.Fatalf("Install() error = %v; want context cancellation", installErr)
+	}
+	artifact, err := adapter.InspectArtifact(t.Context())
+	if err != nil || artifact.State() != personalsvc.RegistrationNotInstalled {
+		t.Fatalf("artifact after cancellation = %s, %v; want removed", artifact.State(), err)
+	}
+	manager, err := adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipNotLoaded {
+		t.Fatalf("manager after cancellation = %s, %v; want not loaded", manager.Ownership(), err)
+	}
+	if !cleanupObserved {
+		t.Fatal("cancellation recovery did not use the bounded cleanup context")
 	}
 }
 
@@ -551,15 +662,21 @@ func (f *memoryArtifacts) Remove(_ context.Context, path string) error {
 func (*memoryArtifacts) RegularFile(context.Context, string) (bool, error) { return true, nil }
 
 type memoryScheduler struct {
-	files     *memoryArtifacts
-	document  []byte
-	present   bool
-	state     personalsvc.ManagerState
-	mutations []string
-	enableErr error
+	files             *memoryArtifacts
+	document          []byte
+	present           bool
+	state             personalsvc.ManagerState
+	mutations         []string
+	enableErr         error
+	cancelAfterCreate context.CancelFunc
+	rejectCanceled    bool
+	observeCleanup    func(context.Context) error
 }
 
-func (s *memoryScheduler) Query(context.Context) (personalsvc.TaskSchedulerState, []byte, error) {
+func (s *memoryScheduler) Query(ctx context.Context) (personalsvc.TaskSchedulerState, []byte, error) {
+	if err := s.contextError(ctx); err != nil {
+		return personalsvc.TaskSchedulerUnknown, nil, err
+	}
 	if !s.present {
 		return personalsvc.TaskSchedulerAbsent, nil, nil
 	}
@@ -567,6 +684,9 @@ func (s *memoryScheduler) Query(context.Context) (personalsvc.TaskSchedulerState
 }
 
 func (s *memoryScheduler) Create(ctx context.Context, path string) error {
+	if err := s.contextError(ctx); err != nil {
+		return err
+	}
 	content, exists, err := s.files.Read(ctx, path)
 	if err != nil || !exists {
 		return os.ErrNotExist
@@ -575,6 +695,11 @@ func (s *memoryScheduler) Create(ctx context.Context, path string) error {
 	s.present = true
 	s.state = personalsvc.ManagerInactive
 	s.mutations = append(s.mutations, "create")
+	if s.cancelAfterCreate != nil {
+		cancel := s.cancelAfterCreate
+		s.cancelAfterCreate = nil
+		cancel()
+	}
 	return nil
 }
 
@@ -590,8 +715,11 @@ func (s *memoryScheduler) End(context.Context) error {
 	return nil
 }
 
-func (s *memoryScheduler) Enable(context.Context) error {
+func (s *memoryScheduler) Enable(ctx context.Context) error {
 	s.mutations = append(s.mutations, "enable")
+	if err := s.contextError(ctx); err != nil {
+		return err
+	}
 	if s.enableErr != nil {
 		err := s.enableErr
 		s.enableErr = nil
@@ -600,13 +728,26 @@ func (s *memoryScheduler) Enable(context.Context) error {
 	return nil
 }
 
-func (s *memoryScheduler) Disable(context.Context) error {
+func (s *memoryScheduler) Disable(ctx context.Context) error {
+	if err := s.contextError(ctx); err != nil {
+		return err
+	}
+	if s.observeCleanup != nil {
+		observe := s.observeCleanup
+		s.observeCleanup = nil
+		if err := observe(ctx); err != nil {
+			return err
+		}
+	}
 	s.state = personalsvc.ManagerInactive
 	s.mutations = append(s.mutations, "disable")
 	return nil
 }
 
-func (s *memoryScheduler) Delete(context.Context) error {
+func (s *memoryScheduler) Delete(ctx context.Context) error {
+	if err := s.contextError(ctx); err != nil {
+		return err
+	}
 	s.document = nil
 	s.present = false
 	s.state = personalsvc.ManagerInactive
@@ -616,6 +757,13 @@ func (s *memoryScheduler) Delete(context.Context) error {
 
 func (s *memoryScheduler) State(context.Context) (personalsvc.ManagerState, error) {
 	return s.state, nil
+}
+
+func (s *memoryScheduler) contextError(ctx context.Context) error {
+	if s.rejectCanceled {
+		return ctx.Err()
+	}
+	return nil
 }
 
 type directOperationBoundary struct{}

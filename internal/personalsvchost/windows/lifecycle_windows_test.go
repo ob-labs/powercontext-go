@@ -31,65 +31,16 @@ import (
 )
 
 func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
-	executor, err := NewExecutor()
-	if errors.Is(err, errExecutorUnavailable) {
-		t.Skip("Windows Task Scheduler executable is unavailable")
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	userSID, err := currentUserSID()
-	if err != nil || !validInteractiveSID(userSID) {
-		t.Skip("current process does not have an interactive user identity")
-	}
-
-	root := t.TempDir()
-	taskName := testTaskNamePrefix + "WP5-" + uuid.New().String()
-	scheduler := &namedTaskScheduler{executor: executor, taskName: taskName}
-	createdByTest := false
-	t.Cleanup(func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		state, _, queryErr := scheduler.Query(cleanupCtx)
-		if queryErr != nil {
-			t.Errorf("cleanup query failed: %v", queryErr)
-			return
-		}
-		if state == personalsvc.TaskSchedulerPresent {
-			if !createdByTest {
-				t.Errorf("random task identity unexpectedly existed; it was not changed")
-				return
-			}
-			_ = scheduler.End(cleanupCtx)
-			if deleteErr := scheduler.Delete(cleanupCtx); deleteErr != nil {
-				t.Errorf("cleanup delete failed: %v", deleteErr)
-				return
-			}
-		}
-		state, _, queryErr = scheduler.Query(cleanupCtx)
-		if queryErr != nil || state != personalsvc.TaskSchedulerAbsent {
-			t.Errorf("cleanup final state = %s, %v; want absent", state, queryErr)
-		}
-	})
-
-	state, _, err := scheduler.Query(t.Context())
-	if errors.Is(err, errExecutorUnavailable) {
-		t.Skip("Windows Task Scheduler service is unavailable")
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	if state != personalsvc.TaskSchedulerAbsent {
-		t.Fatal("random Task Scheduler test identity already exists; refusing to alter it")
-	}
+	fixture := newNativeTaskFixture(t)
+	root, identity, scheduler := fixture.root, fixture.identity, fixture.scheduler
 
 	sentinel := filepath.Join(root, "scheduled-child.started")
-	plan := nativeLifecyclePlan(t, root, sentinel)
+	plan := nativeLifecyclePlan(t, root, sentinel, false)
 	artifacts, err := newNativeArtifactStore(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter, err := newAdapter(plan, root, taskName, userSID, scheduler, artifacts, loopbackHTTPClient())
+	adapter, err := newAdapter(plan, root, scheduler.taskName, identity, scheduler, artifacts, loopbackHTTPClient())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +50,7 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 	if err := adapter.Enable(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	createdByTest = true
+	fixture.created = true
 	manager, err := adapter.InspectManager(t.Context())
 	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
 		t.Fatalf("registered manager = %s, %v; want owned", manager.Ownership(), err)
@@ -122,7 +73,7 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 	if err := adapter.Remove(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	state, _, err = scheduler.Query(t.Context())
+	state, _, err := scheduler.Query(t.Context())
 	if err != nil || state != personalsvc.TaskSchedulerAbsent {
 		t.Fatalf("removed task state = %s, %v; want absent", state, err)
 	}
@@ -145,7 +96,7 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 	if err := scheduler.Create(t.Context(), foreignPath); err != nil {
 		t.Fatal(err)
 	}
-	createdByTest = true
+	fixture.created = true
 	state, before, err := scheduler.Query(t.Context())
 	if err != nil || state != personalsvc.TaskSchedulerPresent {
 		t.Fatalf("foreign fixture state = %s, %v", state, err)
@@ -171,6 +122,109 @@ func TestNativeTaskSchedulerLifecycleUsesOnlyUniqueTestTask(t *testing.T) {
 	t.Logf("foreign ownership refusal: %s; manager=foreign; adapter-mutation=refused; xml=unchanged; fixture-cleanup=absent", scheduler.summary())
 }
 
+func TestNativeTaskSchedulerLoginTriggerUsesCurrentUser(t *testing.T) {
+	fixture := newNativeTaskFixture(t)
+	sentinel := filepath.Join(fixture.root, "login-trigger-unused")
+	plan := nativeLifecyclePlan(t, fixture.root, sentinel, true)
+	artifacts, err := newNativeArtifactStore(fixture.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := newAdapter(
+		plan,
+		fixture.root,
+		fixture.scheduler.taskName,
+		fixture.identity,
+		fixture.scheduler,
+		artifacts,
+		loopbackHTTPClient(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Write(t.Context(), plan.Registration()); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Enable(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fixture.created = true
+	manager, err := adapter.InspectManager(t.Context())
+	if err != nil || manager.Ownership() != personalsvc.ManagerOwnershipOwned {
+		t.Fatalf("login-trigger manager = %s, %v; want owned", manager.Ownership(), err)
+	}
+	state, document, err := fixture.scheduler.Query(t.Context())
+	if err != nil || state != personalsvc.TaskSchedulerPresent {
+		t.Fatalf("login-trigger query = %s, %v", state, err)
+	}
+	text, ok := decodeTaskDocument(document)
+	currentUserIDs := strings.Count(text, taskXMLLeaf("UserId", fixture.identity.sid)) +
+		strings.Count(text, taskXMLLeaf("UserId", fixture.identity.account)) +
+		strings.Count(text, taskXMLLeaf("UserId", fixture.identity.name))
+	if !ok || currentUserIDs != 2 {
+		t.Fatal("registered login trigger is not bound to the current user")
+	}
+	if err := adapter.Disable(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Remove(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("login trigger: %s; principal=current-user; trigger=current-user; final=absent", fixture.scheduler.summary())
+}
+
+func TestNativeTaskSchedulerCancellationAfterCreateRemovesTask(t *testing.T) {
+	fixture := newNativeTaskFixture(t)
+	sentinel := filepath.Join(fixture.root, "cancel-create-unused")
+	plan := nativeLifecyclePlan(t, fixture.root, sentinel, false)
+	artifacts, err := newNativeArtifactStore(fixture.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	canceling := &cancelAfterCreateScheduler{
+		taskScheduler: fixture.scheduler,
+		afterCreate: func() {
+			fixture.created = true
+			cancel()
+		},
+	}
+	adapter, err := newAdapter(
+		plan,
+		fixture.root,
+		fixture.scheduler.taskName,
+		fixture.identity,
+		canceling,
+		artifacts,
+		loopbackHTTPClient(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundary, err := newOperationBoundary(fixture.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := personalsvc.NewController(adapter, boundary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, installErr := controller.Install(ctx, plan.Registration())
+	if !errors.Is(installErr, context.Canceled) {
+		t.Fatalf("Install() error = %v; want context cancellation", installErr)
+	}
+	state, _, err := fixture.scheduler.Query(t.Context())
+	if err != nil || state != personalsvc.TaskSchedulerAbsent {
+		t.Fatalf("task after canceled create = %s, %v; want absent", state, err)
+	}
+	artifact, err := adapter.InspectArtifact(t.Context())
+	if err != nil || artifact.State() != personalsvc.RegistrationNotInstalled {
+		t.Fatalf("artifact after canceled create = %s, %v; want absent", artifact.State(), err)
+	}
+	t.Logf("canceled create cleanup: %s; caller=canceled; task=absent; artifact=absent", fixture.scheduler.summary())
+}
+
 func TestTaskSchedulerSentinelChild(t *testing.T) {
 	separator := -1
 	for index, argument := range os.Args {
@@ -188,7 +242,7 @@ func TestTaskSchedulerSentinelChild(t *testing.T) {
 	time.Sleep(30 * time.Second)
 }
 
-func nativeLifecyclePlan(t *testing.T, root, sentinel string) personalsvc.TaskSchedulerSpec {
+func nativeLifecyclePlan(t *testing.T, root, sentinel string, startOnLogin bool) personalsvc.TaskSchedulerSpec {
 	t.Helper()
 	binary, err := os.Executable()
 	if err != nil {
@@ -213,12 +267,94 @@ func nativeLifecyclePlan(t *testing.T, root, sentinel string) personalsvc.TaskSc
 		registration,
 		[]string{"-test.run=^TestTaskSchedulerSentinelChild$", "-test.count=1", "--", sentinel},
 		root,
-		false,
+		startOnLogin,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return plan
+}
+
+type nativeTaskFixture struct {
+	root      string
+	identity  userIdentity
+	scheduler *namedTaskScheduler
+	created   bool
+}
+
+func newNativeTaskFixture(t *testing.T) *nativeTaskFixture {
+	t.Helper()
+	executor, err := NewExecutor()
+	if errors.Is(err, errExecutorUnavailable) {
+		t.Skip("Windows Task Scheduler executable is unavailable")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := currentUserIdentity()
+	if err != nil || !validUserIdentity(identity) {
+		t.Skip("current process does not have an interactive user identity")
+	}
+	fixture := &nativeTaskFixture{
+		root:     t.TempDir(),
+		identity: identity,
+		scheduler: &namedTaskScheduler{
+			executor: executor,
+			taskName: testTaskNamePrefix + "WP5-" + uuid.New().String(),
+		},
+	}
+	state, _, err := fixture.scheduler.Query(t.Context())
+	if errors.Is(err, errExecutorUnavailable) {
+		t.Skip("Windows Task Scheduler service is unavailable")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state != personalsvc.TaskSchedulerAbsent {
+		t.Fatal("random Task Scheduler test identity already exists; refusing to alter it")
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		state, _, queryErr := fixture.scheduler.Query(cleanupCtx)
+		if queryErr != nil {
+			t.Errorf("cleanup query failed: %v", queryErr)
+			return
+		}
+		if state == personalsvc.TaskSchedulerPresent {
+			if !fixture.created {
+				t.Errorf("random task identity unexpectedly existed; it was not changed")
+				return
+			}
+			_ = fixture.scheduler.End(cleanupCtx)
+			if deleteErr := fixture.scheduler.Delete(cleanupCtx); deleteErr != nil {
+				t.Errorf("cleanup delete failed: %v", deleteErr)
+				return
+			}
+		}
+		state, _, queryErr = fixture.scheduler.Query(cleanupCtx)
+		if queryErr != nil || state != personalsvc.TaskSchedulerAbsent {
+			t.Errorf("cleanup final state = %s, %v; want absent", state, queryErr)
+		}
+	})
+	return fixture
+}
+
+type cancelAfterCreateScheduler struct {
+	taskScheduler
+	afterCreate func()
+}
+
+func (s *cancelAfterCreateScheduler) Create(ctx context.Context, path string) error {
+	if err := s.taskScheduler.Create(ctx, path); err != nil {
+		return err
+	}
+	if s.afterCreate != nil {
+		afterCreate := s.afterCreate
+		s.afterCreate = nil
+		afterCreate()
+	}
+	return nil
 }
 
 type namedTaskScheduler struct {
@@ -229,7 +365,7 @@ type namedTaskScheduler struct {
 
 type schedulerEvent struct {
 	operation string
-	exitCode  uint32
+	outcome   string
 }
 
 func (s *namedTaskScheduler) Query(ctx context.Context) (personalsvc.TaskSchedulerState, []byte, error) {
@@ -296,7 +432,15 @@ func (s *namedTaskScheduler) required(ctx context.Context, arguments ...string) 
 func (s *namedTaskScheduler) execute(ctx context.Context, arguments ...string) (personalsvc.TaskSchedulerResult, error) {
 	result, err := s.executor.Execute(ctx, taskSchedulerProgram, arguments)
 	if len(s.events) < 64 {
-		s.events = append(s.events, schedulerEvent{operation: schedulerOperation(arguments), exitCode: result.ExitCode})
+		outcome := fmt.Sprintf("%#x", result.ExitCode)
+		if errors.Is(err, context.Canceled) {
+			outcome = "canceled"
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			outcome = "deadline"
+		} else if err != nil {
+			outcome = "error"
+		}
+		s.events = append(s.events, schedulerEvent{operation: schedulerOperation(arguments), outcome: outcome})
 	}
 	return result, err
 }
@@ -304,7 +448,7 @@ func (s *namedTaskScheduler) execute(ctx context.Context, arguments ...string) (
 func (s *namedTaskScheduler) summary() string {
 	parts := make([]string, 0, len(s.events))
 	for _, event := range s.events {
-		parts = append(parts, fmt.Sprintf("%s=%#x", event.operation, event.exitCode))
+		parts = append(parts, event.operation+"="+event.outcome)
 	}
 	return strings.Join(parts, ",")
 }
