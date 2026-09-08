@@ -2216,6 +2216,7 @@ func TestLinuxPersonalServiceConsumerWorkflowRejectsMutants(t *testing.T) {
 		{name: "runner stage diagnostics", payload: runner, old: "record_stage", replace: "record_phase", which: "runner"},
 		{name: "runner load-unit diagnosis", payload: runner, old: "org.freedesktop.systemd1.Manager LoadUnit s powercontext.service", replace: "org.freedesktop.systemd1.Manager LoadUnit s foreign.service", which: "runner"},
 		{name: "runner unit-properties diagnosis", payload: runner, old: "org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit", replace: "org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Service", which: "runner"},
+		{name: "runner service-properties diagnosis", payload: runner, old: "record_diagnostic_stage service_properties", replace: "record_diagnostic_stage unrelated_properties", which: "runner"},
 		{name: "runner failure diagnosis recorder", payload: runner, old: "record_diagnostic_stage", replace: "record_external_stage", which: "runner"},
 		{name: "runner container privilege", payload: runner, old: "--privileged", replace: "--read-only", which: "runner"},
 	} {
@@ -2329,6 +2330,8 @@ func validateLinuxPersonalServiceConsumerWorkflow(masterPayload, releasePayload,
 		"org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit",
 		"load_unit_exit_code", "load_unit_stdout_bytes", "load_unit_stdout_sha256",
 		"unit_properties_exit_code", "unit_properties_stdout_bytes", "unit_properties_stdout_sha256",
+		"record_diagnostic_stage service_properties", "org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Service",
+		"service_properties_exit_code", "service_properties_stdout_bytes", "service_properties_stdout_sha256",
 		"POWERCONTEXT_PERSONAL_SERVICE_ARCHIVE", "mktemp -d", "chmod 0700",
 		"docker run --detach --privileged", "--tmpfs /run", "--tmpfs /run/lock", "--volume \"$workspace:/work\"",
 	} {

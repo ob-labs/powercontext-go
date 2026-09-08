@@ -101,6 +101,10 @@ unit_properties_stage=not_run
 unit_properties_exit_code=0
 unit_properties_stdout_bytes=0
 unit_properties_stdout_sha256="$stage_stdout_sha256"
+service_properties_stage=not_run
+service_properties_exit_code=0
+service_properties_stdout_bytes=0
+service_properties_stdout_sha256="$stage_stdout_sha256"
 
 record_stage() {
   local name="$1"
@@ -139,6 +143,12 @@ record_diagnostic_stage() {
       unit_properties_stdout_bytes="$stage_stdout_bytes"
       unit_properties_stdout_sha256="$stage_stdout_sha256"
       ;;
+    service_properties)
+      service_properties_stage="$recorded_stage"
+      service_properties_exit_code="$stage_exit_code"
+      service_properties_stdout_bytes="$stage_stdout_bytes"
+      service_properties_stdout_sha256="$stage_stdout_sha256"
+      ;;
   esac
 }
 
@@ -159,7 +169,7 @@ write_summary() {
   local archive_sha
   archive_sha="$(sha256sum "$archive" | awk '{ print $1 }')"
   cat > "$diagnostics/summary.json" <<EOF
-{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","load_unit":{"stage":"$load_unit_stage","exit_code":$load_unit_exit_code,"stdout_bytes":$load_unit_stdout_bytes,"stdout_sha256":"$load_unit_stdout_sha256"},"unit_properties":{"stage":"$unit_properties_stage","exit_code":$unit_properties_exit_code,"stdout_bytes":$unit_properties_stdout_bytes,"stdout_sha256":"$unit_properties_stdout_sha256"},"systemd_version":"$systemd_version","test_exit_code":$result}
+{"archive_name":"$archive_name","archive_sha256":"$archive_sha","manager_ready":$manager_ready,"stage":"$recorded_stage","stage_exit_code":$stage_exit_code,"stage_stdout_bytes":$stage_stdout_bytes,"stage_stdout_sha256":"$stage_stdout_sha256","load_unit":{"stage":"$load_unit_stage","exit_code":$load_unit_exit_code,"stdout_bytes":$load_unit_stdout_bytes,"stdout_sha256":"$load_unit_stdout_sha256"},"unit_properties":{"stage":"$unit_properties_stage","exit_code":$unit_properties_exit_code,"stdout_bytes":$unit_properties_stdout_bytes,"stdout_sha256":"$unit_properties_stdout_sha256"},"service_properties":{"stage":"$service_properties_stage","exit_code":$service_properties_exit_code,"stdout_bytes":$service_properties_stdout_bytes,"stdout_sha256":"$service_properties_stdout_sha256"},"systemd_version":"$systemd_version","test_exit_code":$result}
 EOF
 }
 
@@ -205,6 +215,8 @@ else
           busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager LoadUnit s powercontext.service
         record_diagnostic_stage unit_properties docker exec --user powercontext "$container" env -i "${environment[@]}" \
           busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1/unit/powercontext_2eservice org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Unit
+        record_diagnostic_stage service_properties docker exec --user powercontext "$container" env -i "${environment[@]}" \
+          busctl --user --json=short call org.freedesktop.systemd1 /org/freedesktop/systemd1/unit/powercontext_2eservice org.freedesktop.DBus.Properties GetAll s org.freedesktop.systemd1.Service
       fi
     fi
   fi
