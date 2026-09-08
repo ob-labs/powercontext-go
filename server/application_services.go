@@ -326,6 +326,7 @@ func buildApplicationServices(
 			)
 		},
 		foundation.statisticsClock,
+		scopeApplication,
 	)
 	if err != nil {
 		return applicationServices{}, err

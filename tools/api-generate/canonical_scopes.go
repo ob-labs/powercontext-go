@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ghodss/yaml"
@@ -196,11 +197,20 @@ func validatePinnedScopeSidecarSource(
 	}
 	for _, operation := range operations {
 		entry, found := staged[operation.OperationID]
-		if !found || entry.Method != operation.Method || entry.Path != operation.Path {
-			return fmt.Errorf("Scope sidecar operation %q does not match the compatibility surface", operation.OperationID)
+		if found {
+			if entry.Method != operation.Method || entry.Path != operation.Path {
+				return fmt.Errorf("Scope sidecar operation %q does not match the compatibility surface", operation.OperationID)
+			}
+			if entry.Status != compatibilityStatusImplementedCanonical {
+				return fmt.Errorf("Scope sidecar operation %q status = %q, want %q", operation.OperationID, entry.Status, compatibilityStatusImplementedCanonical)
+			}
+			continue
 		}
-		if entry.Status != compatibilityStatusImplementedCanonical {
-			return fmt.Errorf("Scope sidecar operation %q status = %q, want %q", operation.OperationID, entry.Status, compatibilityStatusImplementedCanonical)
+		migration := slices.IndexFunc(surface.MethodMigrations, func(value compatibilityMigration) bool {
+			return value.OperationID == operation.OperationID && value.Canonical == (compatibilityEndpoint{Method: operation.Method, Path: operation.Path})
+		})
+		if migration < 0 {
+			return fmt.Errorf("Scope sidecar operation %q does not match the compatibility surface", operation.OperationID)
 		}
 	}
 	got, err := parseOpenAPIOperations(source)

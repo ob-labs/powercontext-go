@@ -37,6 +37,7 @@ func main() {
 	var sourceSidecarManifest string
 	var artifactSidecarManifest string
 	var managedSkillSidecarManifest string
+	var statsSidecarManifest string
 	var legacySpecification string
 	flag.StringVar(&specification, "spec", "powercontext.yaml", "canonical OpenAPI document")
 	flag.StringVar(&target, "target", "../api/v1", "generated package directory")
@@ -47,19 +48,22 @@ func main() {
 	flag.StringVar(&sourceSidecarManifest, "source-sidecar-manifest", "", "optional Source sidecar projection manifest")
 	flag.StringVar(&artifactSidecarManifest, "artifact-sidecar-manifest", "", "optional Artifact sidecar projection manifest")
 	flag.StringVar(&managedSkillSidecarManifest, "managed-skill-sidecar-manifest", "", "optional managed Skill package read projection manifest")
+	flag.StringVar(&statsSidecarManifest, "stats-sidecar-manifest", "", "optional Stats sidecar projection manifest")
 	flag.StringVar(&legacySpecification, "legacy-spec", "", "legacy OpenAPI document required for Scope sidecar generation")
 	flag.Parse()
 	var err error
-	selectedManifests := 0
-	for _, manifest := range []string{scopeSidecarManifest, sourceSidecarManifest, artifactSidecarManifest, managedSkillSidecarManifest} {
+	selectedSidecars := 0
+	for _, manifest := range []string{scopeSidecarManifest, sourceSidecarManifest, artifactSidecarManifest, managedSkillSidecarManifest, statsSidecarManifest} {
 		if manifest != "" {
-			selectedManifests++
+			selectedSidecars++
 		}
 	}
-	if selectedManifests > 1 {
+	if selectedSidecars > 1 {
 		err = errors.New("select exactly one sidecar manifest")
 	} else if managedSkillSidecarManifest != "" {
 		err = runManagedSkillSidecar(specification, managedSkillSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
+	} else if statsSidecarManifest != "" {
+		err = runStatsSidecar(specification, statsSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
 	} else if artifactSidecarManifest != "" {
 		err = runArtifactSidecar(specification, artifactSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
 	} else if sourceSidecarManifest != "" {
