@@ -11,6 +11,7 @@ passing check on one surface does not prove another.
 | Prompts | Embedded prompt files and frozen SHA-256 fixture inventory | Frozen Oracle and traceability checks reject prompt or digest drift. |
 | Generated schemas and clients | Generator source and checked-in generated inventory | `make check-generated`; fresh-consumer execution is owned by the generated-consumer gate. |
 | Fixed upstream74 Source sidecar | `openapi/canonical/sources.json` and Runtime Scope admission | Real Server requests verify Definition, Observation, and checkpoint behavior. The fixed raw schema omits `404 scope_not_found` for both `get_connector_checkpoint` and `commit_connector_checkpoint`; Runtime admission still returns that redacted 404 before storage, so generated clients report an unexpected status for those two cases. Do not add a synthetic generated response to hide the contract gap. |
+| Fixed upstream74 Stats sidecar | `openapi/canonical/stats.json` and Runtime Scope selection | Real Server requests prove canonical `POST /v1/stats` resolves the complete selection before any SQLite Scope reader runs, returns additive aggregate and per-Scope snapshots, and leaves legacy `GET /v1/stats` unchanged. The pinned Stats schema omits `404 scope_not_found`; Runtime selection still returns that redacted 404 before any selected reader runs, so generated clients report an unexpected status. Do not turn that admission failure into `422` or add a synthetic response. |
 | CLI output and process behavior | `cmd/powercontext` public command boundary | `tools/process-smoke` exercises the built binary, including authentication, restart persistence, and shutdown. |
 | Public Go APIs | Deliberate public package inventory in ADR 0002 | `make api-compat` binds `v0.1.0` to its exact commit and rejects incompatible exported API changes. |
 
@@ -27,7 +28,9 @@ admission result.
 
 ## Quality scope
 
-The Go lint gate excludes generated code only at `api/v1/`,
+The Go lint gate excludes generated code only at the explicit owned roots
+`api/v1/`, `api/canonical/scopes/`, `api/canonical/sources/`,
+`api/canonical/artifacts/`, `api/canonical/stats/`,
 `client/invoker_gen.go`, and `internal/mcpapi/schemas_gen.go`. The generated
 files still build through contract and module-integrity gates. Coverage does
 not exclude generated packages or low-coverage command surfaces: it runs

@@ -31,6 +31,7 @@ import (
 	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
 	canonicalscopec "github.com/ob-labs/powercontext-go/api/canonical/scopes"
 	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
+	canonicalstats "github.com/ob-labs/powercontext-go/api/canonical/stats"
 	v1 "github.com/ob-labs/powercontext-go/api/v1"
 	"github.com/ob-labs/powercontext-go/internal/endpoint"
 	"github.com/ob-labs/powercontext-go/internal/httpapi"
@@ -56,6 +57,7 @@ type HTTPOptions struct {
 	canonicalSources    canonicalsource.Handler
 	canonicalArtifacts  canonicalartifact.Handler
 	canonicalSkills     managedskills.Handler
+	canonicalStats      canonicalstats.Handler
 }
 
 // MCPOptions controls the optional MCP Streamable HTTP route. Path defaults to
@@ -148,6 +150,21 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 			return nil, err
 		}
 	}
+	var statsGenerated *canonicalstats.Server
+	if options.canonicalStats != nil {
+		statsOptions := []canonicalstats.ServerOption{
+			canonicalstats.WithTracerProvider(httpapi.TracerProvider(options.TracerProvider)),
+			canonicalstats.WithMiddleware(middlewares...),
+			canonicalstats.WithErrorHandler(httpapi.ErrorHandler(mapApplicationError)),
+		}
+		if options.MeterProvider != nil {
+			statsOptions = append(statsOptions, canonicalstats.WithMeterProvider(options.MeterProvider))
+		}
+		statsGenerated, err = canonicalstats.NewServer(options.canonicalStats, canonicalStatsSecurity{}, statsOptions...)
+		if err != nil {
+			return nil, err
+		}
+	}
 	mcpPath := ""
 	var artifactGenerated *canonicalartifact.Server
 	if options.canonicalArtifacts != nil {
@@ -197,6 +214,9 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 	}
 	if managedSkillGenerated != nil {
 		openAPI = canonicalManagedSkillSidecar{next: openAPI, skills: managedSkillGenerated}
+	}
+	if statsGenerated != nil {
+		openAPI = canonicalStatsSidecar{next: openAPI, stats: statsGenerated}
 	}
 	validatedOpenAPI := httpapi.ValidateJSONUnicode(openAPI)
 	var application http.Handler = validatedOpenAPI
@@ -253,6 +273,7 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		sourceGenerated,
 		artifactGenerated,
 		managedSkillGenerated,
+		statsGenerated,
 	)
 	return httpapi.Wrap(application, httpapi.Options{
 		BearerToken: options.BearerToken, HandoffReportRoutes: options.HandoffReportRoutes,
@@ -269,6 +290,7 @@ func newAccessLogOptions(
 	sourceGenerated *canonicalsource.Server,
 	artifactGenerated *canonicalartifact.Server,
 	managedSkillGenerated *managedskills.Server,
+	statsGenerated *canonicalstats.Server,
 ) *httpapi.AccessLogOptions {
 	if !options.AccessLog || accessLogger == nil {
 		return nil
@@ -276,6 +298,11 @@ func newAccessLogOptions(
 	return &httpapi.AccessLogOptions{
 		Logger: accessLogger,
 		ResolveOperation: func(request *http.Request) string {
+			if statsGenerated != nil {
+				if route, found := statsGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
 			if managedSkillGenerated != nil {
 				if route, found := managedSkillGenerated.FindPath(request.Method, request.URL); found {
 					return route.OperationID()

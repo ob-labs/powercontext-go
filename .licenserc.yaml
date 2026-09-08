@@ -63,6 +63,7 @@ header:
     - 'api/canonical/sources/**'
     - 'api/canonical/artifacts/**'
     - 'api/canonical/managedskills/**'
+    - 'api/canonical/stats/**'
     - 'client/invoker_gen.go'
     - 'internal/mcpapi/schemas_gen.go'
 

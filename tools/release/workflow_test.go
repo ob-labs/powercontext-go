@@ -1427,6 +1427,7 @@ func TestLintExclusionsAreLimitedToOwnedGeneratedGoPaths(t *testing.T) {
 		"^api/canonical/sources/":            true,
 		"^api/canonical/artifacts/":          true,
 		"^api/canonical/managedskills/":      true,
+		"^api/canonical/stats/":              true,
 		"^client/invoker_gen\\.go$":          true,
 		"^internal/mcpapi/schemas_gen\\.go$": true,
 	}
@@ -2283,6 +2284,7 @@ func TestLicenseHeadersHaveOneLocalRepairAndCIContract(t *testing.T) {
 			"- 'api/canonical/scopes/**'",
 			"- 'api/canonical/artifacts/**'",
 			"- 'api/canonical/managedskills/**'",
+			"- 'api/canonical/stats/**'",
 			"- 'client/invoker_gen.go'",
 			"- 'internal/mcpapi/schemas_gen.go'",
 			"internal/sqlstore/sqlitevec/sqlite-vec.c",

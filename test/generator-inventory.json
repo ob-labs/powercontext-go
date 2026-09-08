@@ -184,6 +184,40 @@
       ]
     },
     {
+      "name": "canonical-stats-sidecar",
+      "command": "go run ./tools/api-generate -stats-sidecar-manifest openapi/canonical/stats-manifest.json",
+      "inputs": [
+        "openapi/canonical/upstream-powercontext.yaml",
+        "openapi/canonical/stats-manifest.json",
+        "openapi/compatibility-surface.json",
+        "openapi/powercontext.yaml"
+      ],
+      "outputs": [
+        "openapi/canonical/stats.json",
+        "api/canonical/stats/oas_cfg_gen.go",
+        "api/canonical/stats/oas_client_gen.go",
+        "api/canonical/stats/oas_defaults_gen.go",
+        "api/canonical/stats/oas_handlers_gen.go",
+        "api/canonical/stats/oas_interfaces_gen.go",
+        "api/canonical/stats/oas_json_gen.go",
+        "api/canonical/stats/oas_labeler_gen.go",
+        "api/canonical/stats/oas_middleware_gen.go",
+        "api/canonical/stats/oas_operations_gen.go",
+        "api/canonical/stats/oas_request_decoders_gen.go",
+        "api/canonical/stats/oas_request_encoders_gen.go",
+        "api/canonical/stats/oas_response_decoders_gen.go",
+        "api/canonical/stats/oas_response_encoders_gen.go",
+        "api/canonical/stats/oas_router_gen.go",
+        "api/canonical/stats/oas_schemas_gen.go",
+        "api/canonical/stats/oas_security_gen.go",
+        "api/canonical/stats/oas_server_gen.go",
+        "api/canonical/stats/oas_unimplemented_gen.go",
+        "api/canonical/stats/oas_validators_gen.go",
+        "api/canonical/stats/time.go"
+      ],
+      "evidence": ["tools/api-generate/canonical_stats_test.go#func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds("]
+    },
+    {
       "name": "traceability",
       "command": "go run ./tools/traceability-generate",
       "inputs": ["test/conformance/testdata/python-v0.0.2/manifest.json", "test/conformance/traceability-rules.json"],

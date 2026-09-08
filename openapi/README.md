@@ -22,17 +22,19 @@ normalizes `get_stats` to its reserved canonical `POST /v1/stats`
 of their staged status. It is a migration gate, not a second OpenAPI input, so
 it cannot expand `v1.Handler` or `v1.Invoker` on its own.
 
-Scope, Source, and Artifact sidecars remain independently pinned to
+Scope, Source, Artifact, and Stats sidecars remain independently pinned to
 `oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`.
-Their manifests pin the raw-source SHA-256 and validate only each selected
-operation's ID, method, path, and `implemented-canonical` status against the
-e4 inventory. They do not require a stable 74 schema source to contain every
-new e4 deferred operation. The e4 Artifact revision-history, Artifact tag,
-Prompt, and Access clusters remain deferred. This rebaseline does not implement
-Artifact writes, managed Skill generation or lifecycle, remote Skills, or native personal services.
+The Scope, Source, Artifact, and managed-Skill manifests pin the raw-source
+SHA-256 and validate only each selected operation's ID, method, path, and
+`implemented-canonical` status against the e4 inventory. The Stats manifest
+instead validates the reserved `get_stats` method migration from legacy GET to
+canonical POST. None require the stable 74 schema source to contain every new
+e4 deferred operation. The e4 Artifact revision-history, Artifact tag, Prompt,
+and Access clusters remain deferred. This rebaseline does not implement Artifact
+writes, managed Skill generation or lifecycle, remote Skills, or native personal services.
 
 `canonical/upstream-powercontext.yaml` is the immutable raw OpenAPI blob for
-the three sidecars. `canonical/scopes-manifest.json` explicitly projects only
+the four sidecars. `canonical/scopes-manifest.json` explicitly projects only
 `list_scopes`, `get_scope`, `get_default_scope`, `resolve_scope_selection`, and `resolve_scope_binding`.
 The projection writes `canonical/scopes.json` and generates the separate
 `api/canonical/scopes` package. Its only product overlay narrows
@@ -101,6 +103,17 @@ upstream strong validator `"revision:N"`; exact `If-None-Match` equality returns
 304 with ETag and request ID and no body. Exact revision GET does not substitute
 the head or use its cache validator. Artifact create and replace remain
 deferred, and these three GETs add no MCP tools.
+
+`canonical/stats-manifest.json` projects only canonical `POST /v1/stats` into
+`canonical/stats.json` and `api/canonical/stats`. It is the method-migrated
+counterpart to frozen legacy `GET /v1/stats`, so it validates the exact
+compatibility migration rather than appearing as an ordinary upstream-only
+operation. The Server resolves the complete Scope selection before any SQLite
+statistics reader runs, aggregates the frozen set, preserves `by_scope`, and
+does not register an MCP tool. The raw fixed74 schema omits the Runtime's
+redacted `404 scope_not_found` admission outcome. Generated clients therefore
+report that result as unexpected; it must not be rewritten as `422` or hidden
+by a synthetic generated response.
 
 OpenAPI 3.0 cannot encode the combined `source_refs` + `artifact_refs` maximum
 described by the Candidate schemas. The generator derives the affected model
