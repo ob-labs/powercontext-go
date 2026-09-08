@@ -43,6 +43,21 @@ DEFERRED_E4_POLICY = (
     "clusters remain deferred. This rebaseline does not implement Artifact "
     "writes, managed Skills, remote Skills, or native personal services."
 )
+LEGACY_SINGLE_PIN_PATTERNS = (
+    re.compile(r"\b77\s+canonical\s+operations\b", re.IGNORECASE),
+    re.compile(r"\b38\s+(?:pinned\s+)?upstream-only\s+operations\b", re.IGNORECASE),
+)
+PROHIBITED_E4_CLAIMS = {
+    "Access": re.compile(r"\be4\s+Access(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "Prompt": re.compile(r"\be4\s+Prompt(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "Artifact tags": re.compile(r"\be4\s+Artifact\s+tags?(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "Artifact revision-history": re.compile(r"\be4\s+Artifact\s+revision-history(?:\s+cluster)?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "Source receipt identity": re.compile(r"\be4\s+Source\s+receipt\s+identity\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "Artifact writes": re.compile(r"\bArtifact\s+writes?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "managed Skills": re.compile(r"\bmanaged\s+Skills?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "remote Skills": re.compile(r"\bremote\s+Skills?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+    "native personal services": re.compile(r"\bnative\s+personal\s+services?\s+(?:is|are)\s+implemented\b", re.IGNORECASE),
+}
 
 
 def contains_policy(text: str, policy: str) -> bool:
@@ -78,6 +93,13 @@ def documentation_errors(root: Path) -> list[str]:
             if not contains_policy(openapi, policy):
                 errors.append("openapi/README.md: missing E4 two-pin policy")
                 break
+        for pattern in LEGACY_SINGLE_PIN_PATTERNS:
+            if pattern.search(openapi):
+                errors.append("openapi/README.md: contains obsolete 77/38 single-pin inventory")
+                break
+        for capability, pattern in PROHIBITED_E4_CLAIMS.items():
+            if pattern.search(openapi):
+                errors.append(f"openapi/README.md: falsely claims implemented {capability}")
 
     for path in sorted((root / "docs").rglob("*.md")):
         for line_number, line in enumerate(

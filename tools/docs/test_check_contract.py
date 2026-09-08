@@ -72,6 +72,51 @@ class DocumentationContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("openapi/README.md: missing E4 two-pin policy", result.stderr)
 
+    def test_correct_policy_with_obsolete_single_pin_inventory_is_rejected(self) -> None:
+        result = self.run_checker(
+            go_version="1.27.0",
+            index_version="1.27.0",
+            architecture="# Architecture\n",
+            openapi_readme=(
+                self.valid_openapi_readme()
+                + "\nThe canonical ledger contains 77 canonical operations and 38 upstream-only operations.\n"
+            ),
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "openapi/README.md: contains obsolete 77/38 single-pin inventory",
+            result.stderr,
+        )
+
+    def test_correct_policy_with_false_e4_capability_claims_is_rejected(self) -> None:
+        claims = {
+            "Access": "The e4 Access cluster is implemented.",
+            "Prompt": "The e4 Prompt cluster is implemented.",
+            "Artifact tags": "The e4 Artifact tags cluster is implemented.",
+            "Artifact revision-history": "The e4 Artifact revision-history cluster is implemented.",
+            "Source receipt identity": "The e4 Source receipt identity is implemented.",
+            "Artifact writes": "Artifact writes are implemented.",
+            "managed Skills": "Managed Skills are implemented.",
+            "remote Skills": "Remote Skills are implemented.",
+            "native personal services": "Native personal services are implemented.",
+        }
+
+        for capability, claim in claims.items():
+            with self.subTest(capability=capability):
+                result = self.run_checker(
+                    go_version="1.27.0",
+                    index_version="1.27.0",
+                    architecture="# Architecture\n",
+                    openapi_readme=self.valid_openapi_readme() + "\n" + claim,
+                )
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    f"openapi/README.md: falsely claims implemented {capability}",
+                    result.stderr,
+                )
+
     def run_checker(
         self,
         *,
