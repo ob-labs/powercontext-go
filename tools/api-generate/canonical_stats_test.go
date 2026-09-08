@@ -69,11 +69,11 @@ func TestStatsSidecarProjectsOnlyCanonicalPost(t *testing.T) {
 		t.Fatal(err)
 	}
 	var deferred statsSidecarManifest
-	if err := json.Unmarshal(encoded, &deferred); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(encoded, &deferred); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	deferred.Operations[0].Path = "/v1/stats/changed"
-	if _, err := projectStatsSidecar(upstream, deferred, legacy, compatibility); err == nil {
+	if _, projectionErr := projectStatsSidecar(upstream, deferred, legacy, compatibility); projectionErr == nil {
 		t.Fatal("changed Stats sidecar route was accepted")
 	}
 	surface, err := decodeCompatibilitySurface(compatibility)
@@ -99,8 +99,8 @@ func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest := filepath.Join(workspace, "stats-manifest.json")
-	if err := os.WriteFile(manifest, manifestContents, 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(manifest, manifestContents, 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	target := filepath.Join(workspace, "api", "canonical", "stats")
 	frozen := []string{legacy, filepath.Join(root, "client", "invoker_gen.go"), filepath.Join(root, "internal", "mcpapi", "schemas_gen.go")}
@@ -114,8 +114,8 @@ func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		}
 	}
 	before := readArtifacts(t, frozen)
-	if err := runStatsSidecar(upstream, manifest, target, "stats", "", compatibility, legacy); err != nil {
-		t.Fatal(err)
+	if generateErr := runStatsSidecar(upstream, manifest, target, "stats", "", compatibility, legacy); generateErr != nil {
+		t.Fatal(generateErr)
 	}
 	entries, err := os.ReadDir(target)
 	if err != nil {
@@ -135,8 +135,8 @@ func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 			Outputs []string
 		}
 	}
-	if err := json.Unmarshal(inventoryContents, &inventory, json.MatchCaseInsensitiveNames(true)); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(inventoryContents, &inventory, json.MatchCaseInsensitiveNames(true)); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	var declaredOutputs []string
 	for _, entry := range inventory.Generators {
@@ -148,13 +148,13 @@ func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		t.Fatalf("Stats generator inventory = %v, actual output = %v", declaredOutputs, actualOutputs)
 	}
 	for _, entry := range entries {
-		generated, err := os.ReadFile(filepath.Join(target, entry.Name()))
-		if err != nil {
-			t.Fatal(err)
+		generated, readErr := os.ReadFile(filepath.Join(target, entry.Name()))
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
-		golden, err := os.ReadFile(filepath.Join(root, "api", "canonical", "stats", entry.Name()))
-		if err != nil {
-			t.Fatal(err)
+		golden, goldenErr := os.ReadFile(filepath.Join(root, "api", "canonical", "stats", entry.Name()))
+		if goldenErr != nil {
+			t.Fatal(goldenErr)
 		}
 		if !bytes.Equal(generated, golden) {
 			t.Fatalf("generated Stats artifact is stale: %s", entry.Name())
@@ -164,14 +164,14 @@ func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		{filepath.Join(workspace, "api", "v1"), "v1", ""},
 		{target, "stats", filepath.Join(workspace, "invoker.go")},
 	} {
-		if err := runStatsSidecar(upstream, manifest, invalid.target, invalid.pkg, invalid.invoker, compatibility, legacy); err == nil {
+		if generateErr := runStatsSidecar(upstream, manifest, invalid.target, invalid.pkg, invalid.invoker, compatibility, legacy); generateErr == nil {
 			t.Fatal("Stats sidecar accepted a legacy output target")
 		}
 	}
 	for path, expected := range before {
-		actual, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
+		actual, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
 		if !bytes.Equal(actual, expected) {
 			t.Fatalf("Stats generation modified frozen artifact %s", path)
@@ -190,8 +190,8 @@ func TestStatsSidecarGenerationIsIsolatedAndFreshConsumerBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, requirement := range locked.Require {
-		if err := consumer.AddRequire(requirement.Mod.Path, requirement.Mod.Version); err != nil {
-			t.Fatal(err)
+		if addErr := consumer.AddRequire(requirement.Mod.Path, requirement.Mod.Version); addErr != nil {
+			t.Fatal(addErr)
 		}
 	}
 	encoded, err := consumer.Format()

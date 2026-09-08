@@ -204,7 +204,7 @@ class DocumentationContractTest(unittest.TestCase):
         return "\n".join(
             (
                 "The current-master inventory is pinned to `oceanbase/powercontext@e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c`: 94 canonical operations, 55 upstream-only operations, and 17 newly deferred operations.",
-                "Scope, Source, and Artifact sidecars remain independently pinned to `oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`.",
+                "Scope, Source, Artifact, and Stats sidecars remain independently pinned to `oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`.",
                 "The e4 Artifact revision-history, Artifact tag, Prompt, and Access clusters remain deferred. This rebaseline does not implement Artifact writes, managed Skill generation or lifecycle, remote Skills, or native personal services.",
             )
         )

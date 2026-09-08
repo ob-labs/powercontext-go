@@ -30,7 +30,8 @@ admission result.
 
 The Go lint gate excludes generated code only at the explicit owned roots
 `api/v1/`, `api/canonical/scopes/`, `api/canonical/sources/`,
-`api/canonical/artifacts/`, `api/canonical/stats/`,
+`api/canonical/artifacts/`, `api/canonical/managedskills/`,
+`api/canonical/stats/`,
 `client/invoker_gen.go`, and `internal/mcpapi/schemas_gen.go`. The generated
 files still build through contract and module-integrity gates. Coverage does
 not exclude generated packages or low-coverage command surfaces: it runs

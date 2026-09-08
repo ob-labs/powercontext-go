@@ -124,8 +124,8 @@ func runStatsSidecar(sourcePath, manifestPath, target, packageName, clientInvoke
 	if err != nil {
 		return err
 	}
-	if err := writeScopeSidecarDocument(filepath.Join(filepath.Dir(manifestPath), "stats.json"), projected); err != nil {
-		return err
+	if writeErr := writeScopeSidecarDocument(filepath.Join(filepath.Dir(manifestPath), "stats.json"), projected); writeErr != nil {
+		return writeErr
 	}
 	absolute, err := filepath.Abs(target)
 	if err != nil {

@@ -35,7 +35,7 @@ E4_OPENAPI_POLICY = (
     "deferred operations."
 )
 SIDECAR_PIN_POLICY = (
-    "Scope, Source, and Artifact sidecars remain independently pinned to "
+    "Scope, Source, Artifact, and Stats sidecars remain independently pinned to "
     "`oceanbase/powercontext@74b961fbb07165595314726715d412a3d0d90589`."
 )
 DEFERRED_E4_POLICY = (
