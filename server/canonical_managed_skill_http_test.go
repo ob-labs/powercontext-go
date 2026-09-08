@@ -45,6 +45,14 @@ func (security managedSkillClientSecurity) BearerAuth(context.Context, managedsk
 	return managedskills.BearerAuth{Token: string(security)}, nil
 }
 
+type managedSkillAccessSpanExpectation uint8
+
+const (
+	managedSkillAccessSpanIgnored managedSkillAccessSpanExpectation = iota
+	managedSkillAccessSpanAbsent
+	managedSkillAccessSpanMatchesRequest
+)
+
 func managedSkillHTTPClient(t *testing.T, application *Application, token string) *managedskills.Client {
 	t.Helper()
 	handler, err := application.HTTPHandler()
@@ -198,16 +206,19 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	for _, testCase := range []struct {
 		name, path, body, token, operation string
 		status                             int
+		spanExpectation                    managedSkillAccessSpanExpectation
 	}{
-		{"auth", "/v1/skill/package/manifest", requestBody, "", "get_skill_package_manifest", http.StatusUnauthorized},
-		{"unknown scope", "/v1/skill/package/manifest", `{"scope_id":"private-missing-scope","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusNotFound},
-		{"missing revision", "/v1/skill/package/download", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":99}}`, config.Auth.Token, "download_skill_package", http.StatusNotFound},
-		{"missing arbitrary family", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"future.family","artifact_id":"private-arbitrary-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusNotFound},
-		{"invalid revision", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":0}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusUnprocessableEntity},
-		{"legacy Skill", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-legacy","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError},
-		{"persisted experience", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"experience","artifact_id":"private-other-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError},
-		{"MCP remains isolated", "/mcp", requestBody, config.Auth.Token, "", http.StatusNotFound},
-		{"legacy route remains isolated", "/v1/skill/package/materialize", requestBody, config.Auth.Token, "", http.StatusNotFound},
+		{"manifest", "/v1/skill/package/manifest", requestBody, config.Auth.Token, "get_skill_package_manifest", http.StatusOK, managedSkillAccessSpanMatchesRequest},
+		{"download", "/v1/skill/package/download", requestBody, config.Auth.Token, "download_skill_package", http.StatusOK, managedSkillAccessSpanMatchesRequest},
+		{"auth", "/v1/skill/package/manifest", requestBody, "", "get_skill_package_manifest", http.StatusUnauthorized, managedSkillAccessSpanAbsent},
+		{"unknown scope", "/v1/skill/package/manifest", `{"scope_id":"private-missing-scope","artifact":{"family":"skill","artifact_id":"private-package","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusNotFound, managedSkillAccessSpanIgnored},
+		{"missing revision", "/v1/skill/package/download", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":99}}`, config.Auth.Token, "download_skill_package", http.StatusNotFound, managedSkillAccessSpanIgnored},
+		{"missing arbitrary family", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"future.family","artifact_id":"private-arbitrary-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusNotFound, managedSkillAccessSpanIgnored},
+		{"invalid revision", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-package","revision":0}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusUnprocessableEntity, managedSkillAccessSpanIgnored},
+		{"legacy Skill", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"skill","artifact_id":"private-legacy","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError, managedSkillAccessSpanIgnored},
+		{"persisted experience", "/v1/skill/package/manifest", `{"scope_id":"` + scopeID + `","artifact":{"family":"experience","artifact_id":"private-other-family","revision":1}}`, config.Auth.Token, "get_skill_package_manifest", http.StatusInternalServerError, managedSkillAccessSpanIgnored},
+		{"MCP remains isolated", "/mcp", requestBody, config.Auth.Token, "", http.StatusNotFound, managedSkillAccessSpanIgnored},
+		{"legacy route remains isolated", "/v1/skill/package/materialize", requestBody, config.Auth.Token, "", http.StatusNotFound, managedSkillAccessSpanIgnored},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, testCase.path, bytes.NewBufferString(testCase.body))
@@ -220,7 +231,7 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 				t.Fatalf("status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
 			}
 			if testCase.operation != "" {
-				assertManagedSkillPackageAccessLog(t, logs.String(), requestID, testCase.operation, testCase.status)
+				assertManagedSkillPackageAccessLog(t, logs.String(), requestID, testCase.operation, testCase.status, testCase.spanExpectation)
 			}
 			for _, protected := range []string{scopeID, config.Auth.Token, "private-package", "private-instruction", "private-missing-scope", "private-arbitrary-family", "private-other-family"} {
 				if strings.Contains(response.Body.String(), protected) || strings.Contains(logs.String(), protected) {
@@ -269,7 +280,12 @@ func TestCanonicalManagedSkillPackageHTTPFailuresAreRedactedAndReadOnly(t *testi
 	}
 }
 
-func assertManagedSkillPackageAccessLog(t *testing.T, output, requestID, operation string, status int) {
+func assertManagedSkillPackageAccessLog(
+	t *testing.T,
+	output, requestID, operation string,
+	status int,
+	spanExpectation managedSkillAccessSpanExpectation,
+) {
 	t.Helper()
 	for _, record := range decodeLogRecords(t, output) {
 		if record["event"] != serverlogging.TransportCompletedEvent || record["operation"] != operation || record["request_id"] != requestID {
@@ -279,10 +295,24 @@ func assertManagedSkillPackageAccessLog(t *testing.T, output, requestID, operati
 		if status >= http.StatusInternalServerError {
 			level = "ERROR"
 		}
+		outcome := "success"
+		if status >= http.StatusBadRequest {
+			outcome = "failure"
+		}
 		assertLogFields(t, record, map[string]any{
-			"level": level, "logger": "powercontext.server.access", "outcome": "failure",
-			"transport": "http", "unit": "transport", "status_code": float64(status), "span_id": requestID,
+			"level": level, "logger": "powercontext.server.access", "outcome": outcome,
+			"transport": "http", "unit": "transport", "status_code": float64(status),
 		})
+		switch spanExpectation {
+		case managedSkillAccessSpanAbsent:
+			if _, found := record["span_id"]; found {
+				t.Fatalf("access log operation %q request ID %q unexpectedly has span ID %#v", operation, requestID, record["span_id"])
+			}
+		case managedSkillAccessSpanMatchesRequest:
+			if record["span_id"] != requestID {
+				t.Fatalf("access log operation %q span ID %#v, want request ID %q", operation, record["span_id"], requestID)
+			}
+		}
 		return
 	}
 	t.Fatalf("access log operation %q request ID %q not found in %s", operation, requestID, output)
