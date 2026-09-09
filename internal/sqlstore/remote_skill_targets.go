@@ -41,6 +41,11 @@ func (repository RemoteSkillTargetRepository) Create(
 	db DBTX,
 	target skill.RemoteTarget,
 ) (skill.RemoteTarget, error) {
+	if target.Generation() != 0 {
+		return skill.RemoteTarget{}, &InvalidRepositoryArgumentError{
+			Field: "target.generation", Detail: "must be zero for a new remote target",
+		}
+	}
 	_, err := db.ExecContext(ctx, `INSERT INTO pc_agent_skill_targets (
         scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state,
         installation_id, enrollment_code_digest, enrollment_expires_at, credential_subject,
@@ -78,7 +83,7 @@ func (repository RemoteSkillTargetRepository) List(
 	db DBTX,
 	scopeID string,
 ) (result []skill.RemoteTarget, returnErr error) {
-	rows, err := db.QueryContext(ctx, remoteSkillTargetSelect+` WHERE scope_id = ? ORDER BY target_id`, scopeID)
+	rows, err := db.QueryContext(ctx, remoteSkillTargetSelect+` WHERE scope_id = ? ORDER BY created_at, target_id`, scopeID)
 	if err != nil {
 		return nil, &RemoteSkillTargetStorageError{}
 	}

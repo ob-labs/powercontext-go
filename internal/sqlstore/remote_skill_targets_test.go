@@ -76,22 +76,48 @@ func TestRemoteSkillTargetRepositoryPersistsAcrossRestartWithoutRawSecrets(t *te
 	}
 }
 
-func TestRemoteSkillTargetRepositoryListsByTargetID(t *testing.T) {
+func TestRemoteSkillTargetRepositoryListsByCreationThenTargetID(t *testing.T) {
 	database := openRemoteSkillTargetDatabase(t, filepath.Join(t.TempDir(), "list.db"))
 	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, database) })
 	repository := sqlstore.RemoteSkillTargetRepository{}
-	for _, id := range []string{"workbuddy-z", "codex-a"} {
-		target := remoteSkillTarget(t, "scope-target-list", id, skill.RemoteTargetPending)
-		createRemoteSkillTarget(t, database, repository, target)
-	}
+	later := remoteSkillTarget(t, "scope-target-list", "codex-later", skill.RemoteTargetPending)
+	later = remoteSkillTargetWith(t, later, func(input *skill.RemoteTargetInput) {
+		input.CreatedAt = input.CreatedAt.Add(time.Hour)
+		input.EnrollmentExpiresAt = input.CreatedAt.Add(time.Hour)
+		input.UpdatedAt = input.CreatedAt
+	})
+	earlier := remoteSkillTarget(t, "scope-target-list", "workbuddy-earlier", skill.RemoteTargetPending)
+	createRemoteSkillTarget(t, database, repository, later)
+	createRemoteSkillTarget(t, database, repository, earlier)
 	targets, err := inRemoteSkillTargetTransaction(t, database, func(tx sqlstore.DBTX) ([]skill.RemoteTarget, error) {
 		return repository.List(t.Context(), tx, "scope-target-list")
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(targets) != 2 || targets[0].ID() != "codex-a" || targets[1].ID() != "workbuddy-z" {
-		t.Fatalf("List() = %#v, want target-ID order", targets)
+	if len(targets) != 2 || targets[0].ID() != earlier.ID() || targets[1].ID() != later.ID() {
+		t.Fatalf("List() = %#v, want creation then target-ID order", targets)
+	}
+}
+
+func TestRemoteSkillTargetRepositoryRejectsNonZeroInitialGeneration(t *testing.T) {
+	database := openRemoteSkillTargetDatabase(t, filepath.Join(t.TempDir(), "initial-generation.db"))
+	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, database) })
+	repository := sqlstore.RemoteSkillTargetRepository{}
+	target := remoteSkillTarget(t, "scope-target-initial-generation", "codex-initial-generation", skill.RemoteTargetPending)
+	target = remoteSkillTargetWith(t, target, func(input *skill.RemoteTargetInput) {
+		input.Generation = 1
+		input.UpdatedAt = input.UpdatedAt.Add(time.Second)
+	})
+
+	err := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		_, createErr := repository.Create(t.Context(), tx, target)
+		return createErr
+	})
+	var invalid *sqlstore.InvalidRepositoryArgumentError
+	if !errors.As(err, &invalid) || invalid.Field != "target.generation" ||
+		strings.Contains(err.Error(), target.ScopeID()) || strings.Contains(err.Error(), target.ID()) {
+		t.Fatalf("nonzero Create() error = %T %v, want redacted invalid generation", err, err)
 	}
 }
 
