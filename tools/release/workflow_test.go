@@ -243,9 +243,13 @@ func TestContinuousIntegrationPreservesPythonTopologyAndGoAssurance(t *testing.T
 			"go test -json -race -shuffle=on -count=25",
 		},
 		"windows-contract.yml": {
-			"name: Windows contract checkout", "runs-on: windows-2025", "timeout-minutes: 10",
+			"name: Windows contract checkout", "runs-on: windows-2025", "timeout-minutes: 20",
 			"Verify LF attributes and frozen fixture hashes", "Get-FileHash -Algorithm SHA256",
 			"git check-attr eol", "git diff --exit-code",
+			"Stage locked SQLite headers for Windows archive consumption",
+			"go-sqlite3@v1.14.33\\sqlite3-binding.h", "CGO_CPPFLAGS",
+			"Install the pinned SBOM generator for Windows archive consumption",
+			"Verify Windows release archive personal server lifecycle",
 		},
 		"e2e-harness.yml": {
 			"name: E2E harness", "validate:", "acceptance:", "database: [sqlite]",
@@ -1476,7 +1480,7 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-contract.yml has no windows-contract job")
 	}
-	setupIndex, apiTestIndex, executorTestIndex := -1, -1, -1
+	setupIndex, apiTestIndex, executorTestIndex, headerIndex, syftIndex, archiveConsumerIndex := -1, -1, -1, -1, -1, -1
 	for index, step := range job.Steps {
 		switch step.Name {
 		case "Set up the Go environment":
@@ -1491,14 +1495,31 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 			if strings.TrimSpace(step.Run) == "go test -count=1 ./internal/personalsvchost/windows" {
 				executorTestIndex = index
 			}
+		case "Stage locked SQLite headers for Windows archive consumption":
+			if strings.Contains(step.Run, "go-sqlite3@v1.14.33\\sqlite3-binding.h") {
+				headerIndex = index
+			}
+		case "Install the pinned SBOM generator for Windows archive consumption":
+			if strings.Contains(step.Run, "github.com/anchore/syft/cmd/syft") {
+				syftIndex = index
+			}
+		case "Verify Windows release archive personal server lifecycle":
+			if strings.Contains(step.Run, "windows-archive-consumer.ps1") &&
+				strings.Contains(step.Run, "POWERCONTEXT_WINDOWS_RELEASE_CONSUMER_SYFT") {
+				archiveConsumerIndex = index
+			}
 		}
 	}
-	if setupIndex < 0 || apiTestIndex <= setupIndex || executorTestIndex <= apiTestIndex {
+	if setupIndex < 0 || apiTestIndex <= setupIndex || executorTestIndex <= apiTestIndex ||
+		headerIndex <= executorTestIndex || syftIndex <= headerIndex || archiveConsumerIndex <= syftIndex {
 		t.Fatalf(
-			"Windows targeted Go steps = setup %d, API %d, executor %d, want ordered setup and regression tests",
+			"Windows targeted steps = setup %d, API %d, executor %d, header %d, Syft %d, archive consumer %d, want ordered setup and regression tests",
 			setupIndex,
 			apiTestIndex,
 			executorTestIndex,
+			headerIndex,
+			syftIndex,
+			archiveConsumerIndex,
 		)
 	}
 }
@@ -1512,6 +1533,7 @@ func TestFrozenTextAssetsDeclareLFCheckout(t *testing.T) {
 		"openapi/powercontext.yaml",
 		"artifact/memory/prompts/conversation.txt",
 		"artifact/memory/prompts/extraction.schema.json",
+		"test/release/windows-archive-consumer.ps1",
 		"evaluation/tests/contract/fixtures/swebench_pro_public_v2.jsonl",
 		"api/v1/oas_client_gen.go",
 		"test/conformance/target-delta.json",

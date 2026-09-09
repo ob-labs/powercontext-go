@@ -843,12 +843,14 @@ func TestArchiveTreeIsDeterministic(t *testing.T) {
 func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "powercontext-1.2.3-linux-amd64")
-	binary := filepath.Join(root, "bin", "powercontext")
-	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(binary, []byte("binary"), 0o755); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"powercontext", "powercontext.exe"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("binary"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	archive := filepath.Join(parent, "release.tar.gz")
 	if err := archiveTree(root, archive, time.Unix(0, 0).UTC()); err != nil {
@@ -873,7 +875,7 @@ func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 		}
 	}()
 	reader := tar.NewReader(compressed)
-	found := false
+	found := map[string]bool{"powercontext": false, "powercontext.exe": false}
 	for {
 		header, err := reader.Next()
 		if errors.Is(err, io.EOF) {
@@ -882,15 +884,39 @@ func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.HasSuffix(header.Name, "/bin/powercontext") {
-			found = true
+		name := filepath.Base(header.Name)
+		_, expected := found[name]
+		if strings.HasSuffix(header.Name, "/bin/"+name) && expected {
+			found[name] = true
 			if header.Mode&0o111 == 0 {
-				t.Fatalf("packaged binary mode = %#o", header.Mode)
+				t.Fatalf("packaged binary %q mode = %#o", name, header.Mode)
 			}
 		}
 	}
-	if !found {
-		t.Fatal("release archive does not contain bin/powercontext")
+	for name, present := range found {
+		if !present {
+			t.Fatalf("release archive does not contain bin/%s", name)
+		}
+	}
+}
+
+func TestStageReleaseUsesWindowsExecutablePath(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	root := filepath.Join(t.TempDir(), "powercontext-1.2.3-windows-amd64")
+	binary := filepath.Join(t.TempDir(), "powercontext.exe")
+	if err := os.WriteFile(binary, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := stageRelease(repository, root, packageOptions{Binary: binary}, binaryFacts{GOOS: "windows"}); err != nil {
+		t.Fatal(err)
+	}
+	packaged := filepath.Join(root, filepath.FromSlash(releaseBinaryPath("windows")))
+	info, err := os.Stat(packaged)
+	if err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("Windows release binary %q is unavailable: %v", packaged, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "bin", "powercontext")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Windows release retained extensionless binary: %v", err)
 	}
 }
 

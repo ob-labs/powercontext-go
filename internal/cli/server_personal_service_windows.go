@@ -26,10 +26,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ob-labs/powercontext-go/internal/personalsvc"
 	personalsvcwindows "github.com/ob-labs/powercontext-go/internal/personalsvchost/windows"
 	"github.com/ob-labs/powercontext-go/server"
+)
+
+const (
+	windowsPersonalServiceStartupTimeout  = 15 * time.Second
+	windowsPersonalServiceStartupInterval = 100 * time.Millisecond
 )
 
 func runPersonalServiceInstall(ctx context.Context, state *commandState, envFile, dataDir string, startOnLogin bool) error {
@@ -42,10 +48,55 @@ func runPersonalServiceInstall(ctx context.Context, state *commandState, envFile
 		return err
 	}
 	status, err := runtime.controller.Install(ctx, registration)
+	if err != nil && windowsPersonalServiceStartupPending(status, err) {
+		ready, waitErr := waitForWindowsPersonalServiceStartup(ctx, runtime.controller, registration)
+		if waitErr != nil {
+			return waitErr
+		}
+		if ready {
+			status, err = runtime.controller.Status(ctx, registration)
+		}
+	}
 	if err != nil {
 		return err
 	}
 	return writeWindowsPersonalServiceStatus(state, status)
+}
+
+func windowsPersonalServiceStartupPending(status personalsvc.Status, err error) bool {
+	var operation *personalsvc.OperationError
+	return errors.As(err, &operation) &&
+		operation.Kind() == personalsvc.ErrorPostCommit &&
+		operation.Stage() == personalsvc.StageProbe &&
+		status.Registration() == personalsvc.RegistrationInstalled &&
+		status.Definition() == personalsvc.DefinitionCurrent &&
+		status.ManagerOwnership() == personalsvc.ManagerOwnershipOwned &&
+		status.Manager() == personalsvc.ManagerActive &&
+		status.Liveness() == personalsvc.LivenessUnreachable
+}
+
+func waitForWindowsPersonalServiceStartup(
+	ctx context.Context,
+	controller *personalsvc.Controller,
+	registration personalsvc.Registration,
+) (bool, error) {
+	startupCtx, cancel := context.WithTimeout(ctx, windowsPersonalServiceStartupTimeout)
+	defer cancel()
+	ticker := time.NewTicker(windowsPersonalServiceStartupInterval)
+	defer ticker.Stop()
+	for {
+		status, err := controller.Status(startupCtx, registration)
+		if err == nil && status.Healthy() {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, context.Cause(ctx)
+		case <-startupCtx.Done():
+			return false, nil
+		case <-ticker.C:
+		}
+	}
 }
 
 func runPersonalServiceStatus(ctx context.Context, state *commandState, dataDir string) error {

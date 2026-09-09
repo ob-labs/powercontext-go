@@ -30,6 +30,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -41,6 +42,8 @@ const (
 	testTaskNamePrefix = `\PowerContext\Tests\`
 	maxProbeBytes      = 4 << 10
 	taskXMLNamespace   = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+	stopTimeout        = 15 * time.Second
+	stopPollInterval   = 50 * time.Millisecond
 )
 
 var requestIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
@@ -327,7 +330,32 @@ func (a *Adapter) Stop(ctx context.Context) error {
 	if err := a.scheduler.End(ctx); err != nil {
 		return newError("stop", contextCause(ctx, err))
 	}
-	return nil
+	return a.waitForStopped(ctx)
+}
+
+func (a *Adapter) waitForStopped(ctx context.Context) error {
+	stopCtx, cancel := context.WithTimeout(ctx, stopTimeout)
+	defer cancel()
+	ticker := time.NewTicker(stopPollInterval)
+	defer ticker.Stop()
+	for {
+		state, err := a.scheduler.State(stopCtx)
+		if err != nil {
+			return newError("stop", contextCause(stopCtx, err))
+		}
+		switch state {
+		case personalsvc.ManagerInactive, personalsvc.ManagerFailed:
+			return nil
+		case personalsvc.ManagerActive:
+		default:
+			return newError("stop", nil)
+		}
+		select {
+		case <-stopCtx.Done():
+			return newError("stop", context.Cause(stopCtx))
+		case <-ticker.C:
+		}
+	}
 }
 
 // Disable disables only a freshly verified owned task. An absent task is

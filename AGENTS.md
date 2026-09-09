@@ -216,6 +216,14 @@ source / artifact / trigger / inference
   Keep every runtime stage beneath that root, make cancellation dominate
   failure/success/noop, and verify both trace-parent isolation and that scope
   IDs or protected inputs never become exported attributes.
+- When a native personal service starts asynchronously, do not treat an
+  accepted scheduler start as service readiness. The public install command
+  must observe its owned loopback liveness contract within a bounded,
+  cancellable window before reporting success. Likewise, uninstall must wait
+  for the owned native manager to become inactive before removing its
+  artifacts; verify the release archive lifecycle through the real native
+  manager and preserve the original redacted recovery result when the service
+  never becomes live or never stops.
 - When a test invokes a freshly built external binary, disable result caching
   or key it to the binary content. Verify the gate reruns after the binary
   changes without changing the test package.
