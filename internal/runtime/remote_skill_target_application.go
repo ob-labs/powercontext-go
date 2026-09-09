@@ -49,8 +49,9 @@ type RemoteSkillTargetCreateInput struct {
 }
 
 type RemoteSkillTargetCreateResult struct {
-	Target         skill.RemoteTargetView
-	EnrollmentCode string
+	Target              skill.RemoteTargetView
+	EnrollmentCode      string
+	EnrollmentExpiresAt time.Time
 }
 
 type RemoteSkillTargetEnrollInput struct {
@@ -131,7 +132,9 @@ func (a *RemoteSkillTargetApplication) Create(
 		if err != nil {
 			return err
 		}
-		result = RemoteSkillTargetCreateResult{Target: stored.View(), EnrollmentCode: enrollmentCode}
+		result = RemoteSkillTargetCreateResult{
+			Target: stored.View(), EnrollmentCode: enrollmentCode, EnrollmentExpiresAt: stored.EnrollmentExpiresAt(),
+		}
 		return nil
 	})
 }

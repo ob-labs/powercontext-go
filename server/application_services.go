@@ -77,10 +77,10 @@ func buildApplicationServices(
 		pcruntime.RemoteSkillTargetApplicationOptions{
 			Clock: time.Now,
 			NewID: func() string {
-				return uuid.NewString()
+				return uuid.New().String()
 			},
 			NewSecret: func() string {
-				return uuid.NewString()
+				return uuid.New().String()
 			},
 		},
 	)

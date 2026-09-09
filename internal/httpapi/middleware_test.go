@@ -516,6 +516,75 @@ func TestWrapRejectsUnsafeConfiguration(t *testing.T) {
 	}
 }
 
+func TestRemoteSkillEnrollmentExemptionIsExactAndRequiresSafeTransport(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler, err := Wrap(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}), Options{
+		BearerToken: "admin",
+		AuthExempt: func(request *http.Request) bool {
+			return request.Method == http.MethodPost && request.URL.Path == "/v1/skill/remote/target/enroll"
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, method, path string
+		wantStatus         int
+	}{
+		{name: "enroll exact post", method: http.MethodPost, path: "/v1/skill/remote/target/enroll", wantStatus: http.StatusOK},
+		{name: "enroll wrong method", method: http.MethodGet, path: "/v1/skill/remote/target/enroll", wantStatus: http.StatusUnauthorized},
+		{name: "enroll prefix", method: http.MethodPost, path: "/v1/skill/remote/target/enroll/other", wantStatus: http.StatusUnauthorized},
+		{name: "create remains guarded", method: http.MethodPost, path: "/v1/skill/remote/target/create", wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			called = false
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(test.method, test.path, nil)
+			if test.wantStatus == http.StatusOK {
+				request.RemoteAddr = "127.0.0.1:4321"
+			}
+			handler.ServeHTTP(response, request)
+			if response.Code != test.wantStatus {
+				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
+			}
+			if called != (test.wantStatus == http.StatusOK) {
+				t.Fatalf("called = %t", called)
+			}
+		})
+	}
+}
+
+func TestRemoteSkillEnrollmentRejectsForwardedLoopbackFromRemotePeer(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	handler, err := Wrap(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}), Options{
+		BearerToken: "admin",
+		AuthExempt: func(request *http.Request) bool {
+			return request.Method == http.MethodPost && request.URL.Path == "/v1/skill/remote/target/enroll"
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/skill/remote/target/enroll", nil)
+	request.RemoteAddr = "203.0.113.7:4321"
+	request.Host = "127.0.0.1"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("X-Forwarded-For", "127.0.0.1")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || called {
+		t.Fatalf("response = %d called = %t, want remote plaintext refusal", response.Code, called)
+	}
+}
+
 func assertUnauthorized(t *testing.T, response *httptest.ResponseRecorder) {
 	t.Helper()
 	if response.Header().Get("WWW-Authenticate") != "Bearer" {

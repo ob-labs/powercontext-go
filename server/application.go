@@ -153,7 +153,8 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 		canonicalSkills: endpoint.NewCanonicalManagedSkillHandler(managedSkillOperations{
 			packages: a.skillPackages, usage: a.skillUsage, review: a.review,
 		}),
-		canonicalStats: endpoint.NewCanonicalStatsHandler(a.statistics),
+		canonicalRemoteSkills: endpoint.NewCanonicalRemoteSkillHandler(a.remoteSkillTargets),
+		canonicalStats:        endpoint.NewCanonicalStatsHandler(a.statistics),
 	})
 }
 

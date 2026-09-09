@@ -27,6 +27,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -222,6 +223,10 @@ type Options struct {
 	BearerToken         string
 	HandoffReportRoutes bool
 	Access              *AccessLogOptions
+	// AuthExempt identifies a generated operation that may omit the process-wide
+	// bearer token. Such requests must use TLS or originate directly from a
+	// loopback peer; forwarded headers and Host are not a transport boundary.
+	AuthExempt func(*http.Request) bool
 }
 
 type AccessLogOptions struct {
@@ -269,7 +274,15 @@ func Wrap(next http.Handler, options Options) (http.Handler, error) {
 			http.NotFound(writer, ctx)
 			return
 		}
-		if options.BearerToken != "" && !isPublicPath(r.Method, r.URL.Path) && !validBearer(r.Header.Get("Authorization"), options.BearerToken) {
+		authExempt := options.AuthExempt != nil && options.AuthExempt(ctx)
+		if authExempt && !safeUnauthenticatedTransport(ctx) {
+			writeError(writer, http.StatusForbidden, Error{
+				Code:    "unsafe_transport",
+				Message: "The request requires TLS or a direct loopback connection.",
+			})
+			return
+		}
+		if options.BearerToken != "" && !authExempt && !isPublicPath(r.Method, r.URL.Path) && !validBearer(r.Header.Get("Authorization"), options.BearerToken) {
 			writer.Header().Set("WWW-Authenticate", "Bearer")
 			writeError(writer, http.StatusUnauthorized, Error{
 				Code:    "unauthorized",
@@ -280,6 +293,14 @@ func Wrap(next http.Handler, options Options) (http.Handler, error) {
 
 		next.ServeHTTP(writer, ctx)
 	}), nil
+}
+
+func safeUnauthenticatedTransport(request *http.Request) bool {
+	if request.TLS != nil {
+		return true
+	}
+	peer, err := netip.ParseAddrPort(request.RemoteAddr)
+	return err == nil && peer.Addr().IsLoopback()
 }
 
 // isPublicPath reports whether a request may skip bearer authentication. All

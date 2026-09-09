@@ -107,6 +107,33 @@ func TestRemoteSkillTargetEnrollReturnsLookupStorageError(t *testing.T) {
 	}
 }
 
+func TestRemoteSkillTargetCreateReturnsEnrollmentExpiryFromStoredTarget(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+	application, err := NewRemoteSkillTargetApplication(New(), &remoteSkillTargetStoreFake{
+		create: func(_ context.Context, target skill.RemoteTarget) (skill.RemoteTarget, error) {
+			return target, nil
+		},
+	}, RemoteSkillTargetApplicationOptions{
+		Clock: func() time.Time { return now }, NewID: func() string { return "target-a" },
+		NewSecret: func() string { return "enrollment-code" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := application.Create(t.Context(), RemoteSkillTargetCreateInput{
+		ScopeID: "scope-a", DisplayName: "workstation", AgentKind: skill.CodexAgent,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantExpiry := now.Add(remoteSkillTargetEnrollmentTTL)
+	if !result.EnrollmentExpiresAt.Equal(wantExpiry) {
+		t.Fatalf("enrollment expiry = %s, want %s", result.EnrollmentExpiresAt, wantExpiry)
+	}
+}
+
 func TestRemoteSkillTargetScopedReadAndMutationsRejectUnknownScopeBeforeStore(t *testing.T) {
 	for _, test := range []struct {
 		name string

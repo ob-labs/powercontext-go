@@ -29,6 +29,7 @@ import (
 
 	canonicalartifact "github.com/ob-labs/powercontext-go/api/canonical/artifacts"
 	managedskills "github.com/ob-labs/powercontext-go/api/canonical/managedskills"
+	remoteskills "github.com/ob-labs/powercontext-go/api/canonical/remoteskills"
 	canonicalscopec "github.com/ob-labs/powercontext-go/api/canonical/scopes"
 	canonicalsource "github.com/ob-labs/powercontext-go/api/canonical/sources"
 	canonicalstats "github.com/ob-labs/powercontext-go/api/canonical/stats"
@@ -43,21 +44,22 @@ import (
 )
 
 type HTTPOptions struct {
-	BearerToken         string
-	HandoffReportRoutes bool
-	TracerProvider      trace.TracerProvider
-	MeterProvider       metric.MeterProvider
-	Logger              *slog.Logger
-	AccessLog           bool
-	MCP                 MCPOptions
-	metrics             *servermetrics.Server
-	webUI               *webui.Options
-	scopeBindings       mcpapi.ScopeBindingOperations
-	canonicalScopes     canonicalscopec.Handler
-	canonicalSources    canonicalsource.Handler
-	canonicalArtifacts  canonicalartifact.Handler
-	canonicalSkills     managedskills.Handler
-	canonicalStats      canonicalstats.Handler
+	BearerToken           string
+	HandoffReportRoutes   bool
+	TracerProvider        trace.TracerProvider
+	MeterProvider         metric.MeterProvider
+	Logger                *slog.Logger
+	AccessLog             bool
+	MCP                   MCPOptions
+	metrics               *servermetrics.Server
+	webUI                 *webui.Options
+	scopeBindings         mcpapi.ScopeBindingOperations
+	canonicalScopes       canonicalscopec.Handler
+	canonicalSources      canonicalsource.Handler
+	canonicalArtifacts    canonicalartifact.Handler
+	canonicalSkills       managedskills.Handler
+	canonicalRemoteSkills remoteskills.Handler
+	canonicalStats        canonicalstats.Handler
 }
 
 // MCPOptions controls the optional MCP Streamable HTTP route. Path defaults to
@@ -196,6 +198,25 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 			return nil, err
 		}
 	}
+	var remoteSkillGenerated *remoteskills.Server
+	if options.canonicalRemoteSkills != nil {
+		remoteSkillOptions := []remoteskills.ServerOption{
+			remoteskills.WithTracerProvider(httpapi.TracerProvider(options.TracerProvider)),
+			remoteskills.WithMiddleware(middlewares...),
+			remoteskills.WithErrorHandler(httpapi.ErrorHandler(mapApplicationError)),
+		}
+		if options.MeterProvider != nil {
+			remoteSkillOptions = append(remoteSkillOptions, remoteskills.WithMeterProvider(options.MeterProvider))
+		}
+		remoteSkillGenerated, err = remoteskills.NewServer(
+			options.canonicalRemoteSkills,
+			canonicalRemoteSkillSecurity{},
+			remoteSkillOptions...,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if options.MCP.Enabled {
 		mcpPath, err = normalizeMCPPath(options.MCP.Path)
 		if err != nil {
@@ -214,6 +235,9 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 	}
 	if managedSkillGenerated != nil {
 		openAPI = canonicalManagedSkillSidecar{next: openAPI, skills: managedSkillGenerated}
+	}
+	if remoteSkillGenerated != nil {
+		openAPI = canonicalRemoteSkillSidecar{next: openAPI, skills: remoteSkillGenerated}
 	}
 	if statsGenerated != nil {
 		openAPI = canonicalStatsSidecar{next: openAPI, stats: statsGenerated}
@@ -273,11 +297,15 @@ func NewHTTPHandler(handler v1.Handler, options HTTPOptions) (http.Handler, erro
 		sourceGenerated,
 		artifactGenerated,
 		managedSkillGenerated,
+		remoteSkillGenerated,
 		statsGenerated,
 	)
 	return httpapi.Wrap(application, httpapi.Options{
 		BearerToken: options.BearerToken, HandoffReportRoutes: options.HandoffReportRoutes,
 		Access: access,
+		AuthExempt: func(request *http.Request) bool {
+			return isCanonicalRemoteSkillEnrollment(remoteSkillGenerated, request)
+		},
 	})
 }
 
@@ -290,6 +318,7 @@ func newAccessLogOptions(
 	sourceGenerated *canonicalsource.Server,
 	artifactGenerated *canonicalartifact.Server,
 	managedSkillGenerated *managedskills.Server,
+	remoteSkillGenerated *remoteskills.Server,
 	statsGenerated *canonicalstats.Server,
 ) *httpapi.AccessLogOptions {
 	if !options.AccessLog || accessLogger == nil {
@@ -298,6 +327,11 @@ func newAccessLogOptions(
 	return &httpapi.AccessLogOptions{
 		Logger: accessLogger,
 		ResolveOperation: func(request *http.Request) string {
+			if remoteSkillGenerated != nil {
+				if route, found := remoteSkillGenerated.FindPath(request.Method, request.URL); found {
+					return route.OperationID()
+				}
+			}
 			if statsGenerated != nil {
 				if route, found := statsGenerated.FindPath(request.Method, request.URL); found {
 					return route.OperationID()
