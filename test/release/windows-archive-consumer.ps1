@@ -86,6 +86,29 @@ function Wait-Unreachable {
   throw "PowerContext remained live at $Endpoint after uninstall"
 }
 
+function Wait-ArchiveProcessExit {
+  param([Parameter(Mandatory)][string]$Binary)
+
+  $expected = [IO.Path]::GetFullPath($Binary)
+  $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  do {
+    $running = @(
+      Get-Process -Name powercontext -ErrorAction SilentlyContinue | Where-Object {
+        try {
+          [string]::Equals([IO.Path]::GetFullPath($_.Path), $expected, [StringComparison]::OrdinalIgnoreCase)
+        } catch {
+          $false
+        }
+      }
+    )
+    if ($running.Count -eq 0) {
+      return
+    }
+    Start-Sleep -Milliseconds 250
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw 'archived PowerContext process remained after uninstall'
+}
+
 function Get-FreeLoopbackPort {
   $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
   try {
@@ -218,6 +241,7 @@ try {
 
   $uninstall = Invoke-Server -Binary $archiveBinary -Arguments @('server', 'uninstall', '--data-dir', $dataDirectory)
   Assert-Equal -Name 'uninstall registration' -Actual $uninstall.registration -Expected 'not_installed'
+  Wait-ArchiveProcessExit -Binary $archiveBinary
   Wait-Unreachable -Endpoint $endpoint
   $postUninstall = Invoke-Server -Binary $archiveBinary -Arguments @('server', 'status', '--data-dir', $dataDirectory)
   Assert-Equal -Name 'post-uninstall registration' -Actual $postUninstall.registration -Expected 'not_installed'
@@ -229,6 +253,7 @@ try {
 } finally {
   if ($archiveBinary -and (Test-Path -LiteralPath $archiveBinary -PathType Leaf) -and $dataDirectory) {
     & $archiveBinary server uninstall --data-dir $dataDirectory 2>&1 | Out-Null
+    Wait-ArchiveProcessExit -Binary $archiveBinary
   }
   if (Test-Path -LiteralPath $workRoot) {
     Remove-Item -LiteralPath $workRoot -Recurse -Force

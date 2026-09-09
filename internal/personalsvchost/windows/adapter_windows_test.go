@@ -434,6 +434,46 @@ func TestStopDoesNotEndOwnedInactiveTask(t *testing.T) {
 	}
 }
 
+func TestStopWaitsForOwnedTaskToBecomeInactive(t *testing.T) {
+	root := t.TempDir()
+	plan := adapterPlan(t, root)
+	files := newMemoryArtifacts()
+	scheduler := &memoryScheduler{files: files}
+	adapter, err := newAdapter(
+		plan,
+		root,
+		`\PowerContext\Tests\unit-stop-wait`,
+		testIdentity,
+		scheduler,
+		files,
+		http.DefaultClient,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := adapter.render()
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler.present = true
+	scheduler.document = document
+	scheduler.state = personalsvc.ManagerActive
+	scheduler.statesAfterEnd = []personalsvc.ManagerState{
+		personalsvc.ManagerActive,
+		personalsvc.ManagerInactive,
+	}
+
+	if err := adapter.Stop(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(scheduler.mutations, []string{"end"}) {
+		t.Fatalf("Stop() mutations = %#v, want end before release", scheduler.mutations)
+	}
+	if len(scheduler.statesAfterEnd) != 0 || scheduler.state != personalsvc.ManagerInactive {
+		t.Fatalf("Stop() did not observe an inactive task: states = %#v, state = %s", scheduler.statesAfterEnd, scheduler.state)
+	}
+}
+
 func TestControllerRestoresPreviouslyInspectedTaskAfterEnableFailure(t *testing.T) {
 	root := t.TempDir()
 	desired := adapterPlanForPackage(t, root, "2.0.0")
@@ -931,6 +971,8 @@ type memoryScheduler struct {
 	document          []byte
 	present           bool
 	state             personalsvc.ManagerState
+	statesAfterEnd    []personalsvc.ManagerState
+	endRequested      bool
 	mutations         []string
 	enableErr         error
 	cancelAfterCreate context.CancelFunc
@@ -975,7 +1017,10 @@ func (s *memoryScheduler) Run(context.Context) error {
 }
 
 func (s *memoryScheduler) End(context.Context) error {
-	s.state = personalsvc.ManagerInactive
+	s.endRequested = true
+	if len(s.statesAfterEnd) == 0 {
+		s.state = personalsvc.ManagerInactive
+	}
 	s.mutations = append(s.mutations, "end")
 	return nil
 }
@@ -1021,6 +1066,10 @@ func (s *memoryScheduler) Delete(ctx context.Context) error {
 }
 
 func (s *memoryScheduler) State(context.Context) (personalsvc.ManagerState, error) {
+	if s.endRequested && len(s.statesAfterEnd) != 0 {
+		s.state = s.statesAfterEnd[0]
+		s.statesAfterEnd = s.statesAfterEnd[1:]
+	}
 	return s.state, nil
 }
 
