@@ -36,40 +36,131 @@ import (
 
 const remoteSkillTargetDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+const preRequiredFieldsRemoteSkillTargetSchema = `CREATE TABLE pc_agent_skill_targets (
+    scope_id VARCHAR(256) NOT NULL,
+    target_id VARCHAR(64) NOT NULL,
+    display_name VARCHAR(128) NOT NULL,
+    agent_kind VARCHAR(16) NOT NULL,
+    installation_scope VARCHAR(16) NOT NULL,
+    delivery_mode VARCHAR(16) NOT NULL,
+    state VARCHAR(16) NOT NULL,
+    installation_id VARCHAR(128),
+    enrollment_code_digest VARCHAR(64),
+    enrollment_expires_at TEXT,
+    credential_subject VARCHAR(128),
+    credential_verifier VARCHAR(64),
+    receiver_version VARCHAR(64),
+    environment_fingerprint VARCHAR(64),
+    machine_hostname VARCHAR(255),
+    workspace_name VARCHAR(128),
+    last_seen_at TEXT,
+    generation INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (scope_id, target_id),
+    CONSTRAINT fk_pc_agent_skill_targets_scope FOREIGN KEY (scope_id)
+        REFERENCES pc_scopes (scope_id) ON DELETE RESTRICT,
+    CONSTRAINT uq_pc_agent_skill_targets_enrollment_digest UNIQUE (enrollment_code_digest),
+    CONSTRAINT uq_pc_agent_skill_targets_credential_subject UNIQUE (credential_subject),
+    CONSTRAINT uq_pc_agent_skill_targets_credential_verifier UNIQUE (credential_verifier),
+    CONSTRAINT uq_pc_agent_skill_targets_installation UNIQUE (
+        scope_id, agent_kind, installation_scope, installation_id
+    ),
+    CONSTRAINT ck_pc_agent_skill_targets_agent_kind CHECK (agent_kind IN ('codex', 'workbuddy')),
+    CONSTRAINT ck_pc_agent_skill_targets_installation_scope CHECK (installation_scope = 'project'),
+    CONSTRAINT ck_pc_agent_skill_targets_delivery_mode CHECK (delivery_mode = 'agent_pull'),
+    CONSTRAINT ck_pc_agent_skill_targets_generation_nonnegative CHECK (generation >= 0),
+    CONSTRAINT ck_pc_agent_skill_targets_state_payload CHECK (
+        (
+            state = 'pending'
+            AND length(enrollment_code_digest) = 64
+            AND enrollment_code_digest NOT GLOB '*[^0-9a-f]*'
+            AND length(enrollment_expires_at) > 0
+            AND installation_id IS NULL
+            AND credential_subject IS NULL
+            AND credential_verifier IS NULL
+            AND receiver_version IS NULL
+            AND environment_fingerprint IS NULL
+            AND machine_hostname IS NULL
+            AND workspace_name IS NULL
+            AND last_seen_at IS NULL
+        ) OR (
+            state = 'active'
+            AND enrollment_code_digest IS NULL
+            AND enrollment_expires_at IS NULL
+            AND length(installation_id) > 0
+            AND length(credential_subject) > 0
+            AND length(credential_verifier) = 64
+            AND credential_verifier NOT GLOB '*[^0-9a-f]*'
+            AND length(receiver_version) > 0
+            AND length(last_seen_at) > 0
+        ) OR (
+            state = 'revoked'
+            AND enrollment_code_digest IS NULL
+            AND enrollment_expires_at IS NULL
+            AND credential_verifier IS NULL
+            AND (
+                (installation_id IS NULL AND credential_subject IS NULL) OR
+                (length(installation_id) > 0 AND length(credential_subject) > 0)
+            )
+        )
+    )
+)`
+
 func TestRemoteSkillTargetRepositoryPersistsAcrossRestartWithoutRawSecrets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "remote-targets.db")
 	first := openRemoteSkillTargetDatabase(t, path)
 	repository := sqlstore.RemoteSkillTargetRepository{}
-	target := remoteSkillTarget(t, "scope-target-restart", "codex-restart", skill.RemoteTargetPending)
+	const rawEnrollmentCode = "enrollment-code-secret"
+	const rawTargetCredential = "target-credential-secret"
+	enrollmentDigest := sha256.Sum256([]byte(rawEnrollmentCode))
+	credentialDigest := sha256.Sum256([]byte(rawTargetCredential))
+	pending := remoteSkillTargetWith(t, remoteSkillTarget(t, "scope-target-restart", "codex-restart", skill.RemoteTargetPending), func(input *skill.RemoteTargetInput) {
+		input.EnrollmentCodeDigest = hex.EncodeToString(enrollmentDigest[:])
+	})
+	active := remoteSkillTargetWith(t, remoteSkillTarget(t, "scope-target-restart", "workbuddy-restart", skill.RemoteTargetActive), func(input *skill.RemoteTargetInput) {
+		input.CredentialVerifier = hex.EncodeToString(credentialDigest[:])
+	})
 
-	stored := createRemoteSkillTarget(t, first, repository, target)
-	if stored.ID() != target.ID() || stored.EnrollmentCodeDigest() != target.EnrollmentCodeDigest() {
-		t.Fatalf("Create() = %#v, want durable target", stored)
+	stored := createRemoteSkillTarget(t, first, repository, pending)
+	if stored.ID() != pending.ID() || stored.EnrollmentCodeDigest() != pending.EnrollmentCodeDigest() {
+		t.Fatalf("Create() = %#v, want durable pending target", stored)
 	}
+	createRemoteSkillTarget(t, first, repository, active)
 	closeRemoteSkillTargetDatabase(t, first)
 
 	second := openRemoteSkillTargetDatabase(t, path)
 	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, second) })
-	got := getRemoteSkillTarget(t, second, repository, target.ScopeID(), target.ID())
-	if got.ID() != target.ID() || got.State() != skill.RemoteTargetPending || got.Generation() != target.Generation() {
+	got := getRemoteSkillTarget(t, second, repository, pending.ScopeID(), pending.ID())
+	if got.ID() != pending.ID() || got.State() != skill.RemoteTargetPending || got.Generation() != pending.Generation() {
 		t.Fatalf("Get() after restart = %#v, want persisted target", got)
 	}
 	var matched skill.RemoteTarget
 	var found bool
 	err := second.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
 		var findErr error
-		matched, found, findErr = repository.FindByEnrollmentDigest(t.Context(), tx, target.EnrollmentCodeDigest())
+		matched, found, findErr = repository.FindByEnrollmentDigest(t.Context(), tx, pending.EnrollmentCodeDigest())
 		return findErr
 	})
-	if err != nil || !found || matched.ID() != target.ID() {
+	if err != nil || !found || matched.ID() != pending.ID() {
 		t.Fatalf("FindByEnrollmentDigest() = (%#v, %t, %v), want stored target", matched, found, err)
+	}
+	var persistedEnrollmentDigest, persistedCredentialVerifier string
+	if err := second.SQLDB().QueryRowContext(t.Context(), `SELECT enrollment_code_digest FROM pc_agent_skill_targets WHERE target_id = ?`, pending.ID()).Scan(&persistedEnrollmentDigest); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.SQLDB().QueryRowContext(t.Context(), `SELECT credential_verifier FROM pc_agent_skill_targets WHERE target_id = ?`, active.ID()).Scan(&persistedCredentialVerifier); err != nil {
+		t.Fatal(err)
+	}
+	if persistedEnrollmentDigest != pending.EnrollmentCodeDigest() || persistedCredentialVerifier != active.CredentialVerifier() {
+		t.Fatalf("persisted secret digests = (%q, %q), want supplied SHA-256 digests", persistedEnrollmentDigest, persistedCredentialVerifier)
 	}
 
 	file, readErr := os.ReadFile(path)
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	for _, rawSecret := range []string{"enrollment-code-secret", "target-credential-secret"} {
+	for _, rawSecret := range []string{rawEnrollmentCode, rawTargetCredential} {
 		if bytes.Contains(file, []byte(rawSecret)) {
 			t.Fatalf("SQLite database persisted raw secret %q", rawSecret)
 		}
@@ -299,6 +390,253 @@ func TestSQLiteSkillDistributionSchemaRejectsEmptyActiveIdentity(t *testing.T) {
 	var sqliteErr sqlite3.Error
 	if !errors.As(err, &sqliteErr) || sqliteErr.Code != sqlite3.ErrConstraint {
 		t.Fatalf("empty active identity insert = %T %v, want SQLite CHECK refusal", err, err)
+	}
+}
+
+func TestSQLiteSkillDistributionSchemaRejectsOmittedRequiredStateFields(t *testing.T) {
+	database := openRemoteSkillTargetDatabase(t, filepath.Join(t.TempDir(), "required-state-fields.db"))
+	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, database) })
+	seedRemoteSkillTargetScope(t, database, "scope-target-required-state")
+	assertRemoteSkillTargetRequiredStateFieldsRejected(t, database, "scope-target-required-state")
+}
+
+func TestOpenSQLiteUpgradesPreRequiredFieldsTargetSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pre-required-fields-targets.db")
+	seedLegacyRemoteSkillTargetSchema(t, path)
+
+	database := openRemoteSkillTargetDatabase(t, path)
+	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, database) })
+	seedRemoteSkillTargetScope(t, database, "scope-target-upgrade-required-state")
+	assertRemoteSkillTargetRequiredStateFieldsRejected(t, database, "scope-target-upgrade-required-state")
+}
+
+func TestOpenSQLiteRejectsInvalidLegacyRemoteTargetWithoutPartialSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "invalid-pre-required-fields-targets.db")
+	database := openRemoteSkillTargetDatabase(t, path)
+	const scopeID = "legacy-scope"
+	seedRemoteSkillTargetScope(t, database, scopeID)
+	if _, err := database.SQLDB().ExecContext(t.Context(), "DROP TABLE pc_agent_skill_targets"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.SQLDB().ExecContext(t.Context(), preRequiredFieldsRemoteSkillTargetSchema); err != nil {
+		t.Fatal(err)
+	}
+	_, err := database.SQLDB().ExecContext(t.Context(), `INSERT INTO pc_agent_skill_targets (
+        scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state,
+        credential_subject, credential_verifier, receiver_version, last_seen_at, generation, created_at, updated_at
+    ) VALUES (?, 'legacy-invalid-active', 'Legacy invalid active', 'codex', 'project', 'agent_pull', 'active',
+        'legacy-subject', ?, '0.1.0', ?, 0, ?, ?)`, scopeID, remoteSkillTargetDigest,
+		time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeRemoteSkillTargetDatabase(t, database)
+
+	if database, openErr := sqlstore.OpenSQLite(t.Context(), sqlstore.DefaultSQLiteConfig(path)); openErr == nil {
+		_ = database.Close(context.Background())
+		t.Fatal("OpenSQLite succeeded with an invalid legacy remote target")
+	}
+
+	verify, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = verify.Close() })
+	var tableSQL string
+	if err := verify.QueryRowContext(t.Context(), `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pc_agent_skill_targets'`).Scan(&tableSQL); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(tableSQL, "installation_id IS NOT NULL") {
+		t.Fatal("failed legacy upgrade replaced the original target table")
+	}
+	var legacyRows int
+	if err := verify.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM pc_agent_skill_targets WHERE target_id = 'legacy-invalid-active'`).Scan(&legacyRows); err != nil || legacyRows != 1 {
+		t.Fatalf("legacy target rows = %d, err=%v; want original invalid row", legacyRows, err)
+	}
+	var scopes int
+	if err := verify.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_scopes WHERE scope_id = ?", scopeID).Scan(&scopes); err != nil || scopes != 1 {
+		t.Fatalf("legacy Scope rows = %d, err=%v; want original Scope", scopes, err)
+	}
+	var temporaryTables int
+	if err := verify.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM sqlite_master WHERE name = ?", "pc_agent_skill_targets_legacy_state_payload").Scan(&temporaryTables); err != nil || temporaryTables != 0 {
+		t.Fatalf("failed upgrade temporary tables = %d, err=%v; want none", temporaryTables, err)
+	}
+}
+
+func TestOpenSQLiteUpgradesLegacyRemoteTargetPreservingEveryColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-target-columns.db")
+	database := openRemoteSkillTargetDatabase(t, path)
+	const scopeID = "legacy-column-scope"
+	seedRemoteSkillTargetScope(t, database, scopeID)
+	if _, err := database.SQLDB().ExecContext(t.Context(), "DROP TABLE pc_agent_skill_targets"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.SQLDB().ExecContext(t.Context(), preRequiredFieldsRemoteSkillTargetSchema); err != nil {
+		t.Fatal(err)
+	}
+	const (
+		targetID        = "legacy-active-columns"
+		installationID  = "legacy-installation"
+		credentialSub   = "legacy-subject"
+		receiverVersion = "1.2.3"
+		environment     = "legacy-environment"
+		hostname        = "legacy-host"
+		workspace       = "legacy-workspace"
+		lastSeen        = "2026-09-09T14:01:00Z"
+		createdAt       = "2026-09-09T14:00:00Z"
+		updatedAt       = "2026-09-09T14:02:00Z"
+	)
+	if _, err := database.SQLDB().ExecContext(t.Context(), `INSERT INTO pc_agent_skill_targets (
+        scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state,
+        installation_id, enrollment_code_digest, enrollment_expires_at, credential_subject,
+        credential_verifier, receiver_version, environment_fingerprint, machine_hostname,
+        workspace_name, last_seen_at, generation, created_at, updated_at
+    ) VALUES (?, ?, 'Legacy active', 'codex', 'project', 'agent_pull', 'active', ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, 7, ?, ?)`,
+		scopeID, targetID, installationID, credentialSub, remoteSkillTargetDigest, receiverVersion,
+		environment, hostname, workspace, lastSeen, createdAt, updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	closeRemoteSkillTargetDatabase(t, database)
+
+	upgraded := openRemoteSkillTargetDatabase(t, path)
+	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, upgraded) })
+	var copied int
+	if err := upgraded.SQLDB().QueryRowContext(t.Context(), `SELECT COUNT(*) FROM pc_agent_skill_targets
+        WHERE scope_id = ? AND target_id = ? AND display_name = 'Legacy active'
+          AND agent_kind = 'codex' AND installation_scope = 'project' AND delivery_mode = 'agent_pull'
+          AND state = 'active' AND installation_id = ?
+          AND enrollment_code_digest IS NULL AND enrollment_expires_at IS NULL
+          AND credential_subject = ? AND credential_verifier = ? AND receiver_version = ?
+          AND environment_fingerprint = ? AND machine_hostname = ? AND workspace_name = ?
+          AND last_seen_at = ? AND generation = 7 AND created_at = ? AND updated_at = ?`,
+		scopeID, targetID, installationID, credentialSub, remoteSkillTargetDigest, receiverVersion,
+		environment, hostname, workspace, lastSeen, createdAt, updatedAt).Scan(&copied); err != nil || copied != 1 {
+		t.Fatalf("upgraded legacy target rows = %d, err=%v; want every persisted column", copied, err)
+	}
+}
+
+func TestOpenSQLiteKeepsLegacyTargetWhenMigrationTemporaryTableExists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-target-temporary-table.db")
+	database := openRemoteSkillTargetDatabase(t, path)
+	const scopeID = "legacy-temporary-table-scope"
+	seedRemoteSkillTargetScope(t, database, scopeID)
+	for _, statement := range []string{
+		"DROP TABLE pc_agent_skill_targets",
+		preRequiredFieldsRemoteSkillTargetSchema,
+		"CREATE TABLE pc_agent_skill_targets_legacy_state_payload (value TEXT NOT NULL)",
+		"INSERT INTO pc_agent_skill_targets_legacy_state_payload (value) VALUES ('sentinel')",
+	} {
+		if _, err := database.SQLDB().ExecContext(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	closeRemoteSkillTargetDatabase(t, database)
+
+	if database, err := sqlstore.OpenSQLite(t.Context(), sqlstore.DefaultSQLiteConfig(path)); err == nil {
+		_ = database.Close(context.Background())
+		t.Fatal("OpenSQLite accepted a legacy migration temporary table conflict")
+	}
+
+	verify, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = verify.Close() })
+	var tableSQL string
+	if err := verify.QueryRowContext(t.Context(), `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pc_agent_skill_targets'`).Scan(&tableSQL); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(tableSQL, "installation_id IS NOT NULL") {
+		t.Fatal("temporary-table conflict replaced the original target table")
+	}
+	var sentinelRows int
+	if err := verify.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_agent_skill_targets_legacy_state_payload WHERE value = 'sentinel'").Scan(&sentinelRows); err != nil || sentinelRows != 1 {
+		t.Fatalf("temporary-table sentinel rows = %d, err=%v; want original row", sentinelRows, err)
+	}
+	var scopes int
+	if err := verify.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_scopes WHERE scope_id = ?", scopeID).Scan(&scopes); err != nil || scopes != 1 {
+		t.Fatalf("Scope rows = %d, err=%v; want original Scope", scopes, err)
+	}
+}
+
+func assertRemoteSkillTargetRequiredStateFieldsRejected(t *testing.T, database *sqlstore.Database, scopeID string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	expires := time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
+
+	tests := []struct {
+		name    string
+		columns string
+		values  string
+		args    []any
+	}{
+		{
+			name:    "pending enrollment code digest",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, enrollment_expires_at, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing pending digest', 'codex', 'project', 'agent_pull', 'pending', ?, 0, ?, ?",
+			args:    []any{scopeID, "pending-missing-digest", expires, now, now},
+		},
+		{
+			name:    "pending enrollment expiry",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, enrollment_code_digest, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing pending expiry', 'codex', 'project', 'agent_pull', 'pending', ?, 0, ?, ?",
+			args:    []any{scopeID, "pending-missing-expiry", remoteSkillTargetDigest, now, now},
+		},
+		{
+			name:    "active installation ID",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, credential_subject, credential_verifier, receiver_version, last_seen_at, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing active installation', 'codex', 'project', 'agent_pull', 'active', 'target-subject', ?, '0.1.0', ?, 0, ?, ?",
+			args:    []any{scopeID, "active-missing-installation", remoteSkillTargetDigest, now, now, now},
+		},
+		{
+			name:    "active credential subject",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, credential_verifier, receiver_version, last_seen_at, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing active subject', 'codex', 'project', 'agent_pull', 'active', 'project-installation', ?, '0.1.0', ?, 0, ?, ?",
+			args:    []any{scopeID, "active-missing-subject", remoteSkillTargetDigest, now, now, now},
+		},
+		{
+			name:    "active credential verifier",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, credential_subject, receiver_version, last_seen_at, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing active verifier', 'codex', 'project', 'agent_pull', 'active', 'project-installation', 'target-subject', '0.1.0', ?, 0, ?, ?",
+			args:    []any{scopeID, "active-missing-verifier", now, now, now},
+		},
+		{
+			name:    "active receiver version",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, credential_subject, credential_verifier, last_seen_at, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing active receiver', 'codex', 'project', 'agent_pull', 'active', 'project-installation', 'target-subject', ?, ?, 0, ?, ?",
+			args:    []any{scopeID, "active-missing-receiver", remoteSkillTargetDigest, now, now, now},
+		},
+		{
+			name:    "active last seen",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, credential_subject, credential_verifier, receiver_version, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing active last seen', 'codex', 'project', 'agent_pull', 'active', 'project-installation', 'target-subject', ?, '0.1.0', 0, ?, ?",
+			args:    []any{scopeID, "active-missing-last-seen", remoteSkillTargetDigest, now, now},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			query := "INSERT INTO pc_agent_skill_targets (" + test.columns + ") VALUES (" + test.values + ")"
+			_, err := database.SQLDB().ExecContext(t.Context(), query, test.args...)
+			var sqliteErr sqlite3.Error
+			if !errors.As(err, &sqliteErr) || sqliteErr.Code != sqlite3.ErrConstraint {
+				t.Fatalf("direct insert omitting %s = %T %v, want SQLite CHECK refusal", test.name, err, err)
+			}
+		})
+	}
+}
+
+func seedLegacyRemoteSkillTargetSchema(t *testing.T, path string) {
+	t.Helper()
+	legacy, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.ExecContext(t.Context(), preRequiredFieldsRemoteSkillTargetSchema); err != nil {
+		_ = legacy.Close()
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

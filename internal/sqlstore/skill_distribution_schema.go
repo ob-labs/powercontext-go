@@ -16,15 +16,77 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 )
 
-const remoteSkillTargetTable = "pc_agent_skill_targets"
+const (
+	remoteSkillTargetTable       = "pc_agent_skill_targets"
+	legacyRemoteSkillTargetTable = "pc_agent_skill_targets_legacy_state_payload"
+	remoteSkillTargetColumns     = `scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, enrollment_code_digest, enrollment_expires_at, credential_subject, credential_verifier, receiver_version, environment_fingerprint, machine_hostname, workspace_name, last_seen_at, generation, created_at, updated_at`
+)
+
+var remoteSkillTargetRequiredStateClauses = []string{
+	"enrollment_code_digest IS NOT NULL",
+	"enrollment_expires_at IS NOT NULL",
+	"installation_id IS NOT NULL",
+	"credential_subject IS NOT NULL",
+	"credential_verifier IS NOT NULL",
+	"receiver_version IS NOT NULL",
+	"last_seen_at IS NOT NULL",
+}
 
 // EnsureSQLiteSkillDistributionSchema creates the SQLite-only durable target
 // registry. It is intentionally outside the historical cross-dialect schema.
 func EnsureSQLiteSkillDistributionSchema(ctx context.Context, db DBTX) error {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS pc_agent_skill_targets (
+	objectType, schemaSQL, err := sqliteSchemaObject(ctx, db, remoteSkillTargetTable)
+	if errors.Is(err, sql.ErrNoRows) {
+		return createSQLiteSkillDistributionTable(ctx, db)
+	}
+	if err != nil {
+		return err
+	}
+	if objectType != "table" {
+		return fmt.Errorf("sqlstore: SQLite schema object %q must be a table", remoteSkillTargetTable)
+	}
+	if !remoteSkillTargetSchemaNeedsStatePayloadUpgrade(schemaSQL) {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, "ALTER TABLE "+remoteSkillTargetTable+" RENAME TO "+legacyRemoteSkillTargetTable); err != nil {
+		return err
+	}
+	if err := createSQLiteSkillDistributionTable(ctx, db); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO "+remoteSkillTargetTable+" ("+remoteSkillTargetColumns+") SELECT "+remoteSkillTargetColumns+" FROM "+legacyRemoteSkillTargetTable); err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, "DROP TABLE "+legacyRemoteSkillTargetTable)
+	return err
+}
+
+func sqliteSchemaObject(ctx context.Context, db DBTX, name string) (string, string, error) {
+	var objectType, schemaSQL string
+	err := db.QueryRowContext(ctx, "SELECT type, sql FROM sqlite_master WHERE name = ?", name).Scan(&objectType, &schemaSQL)
+	if err != nil {
+		return "", "", fmt.Errorf("sqlstore: find SQLite schema object %q: %w", name, err)
+	}
+	return objectType, schemaSQL, nil
+}
+
+func remoteSkillTargetSchemaNeedsStatePayloadUpgrade(schemaSQL string) bool {
+	for _, clause := range remoteSkillTargetRequiredStateClauses {
+		if !strings.Contains(schemaSQL, clause) {
+			return true
+		}
+	}
+	return false
+}
+
+func createSQLiteSkillDistributionTable(ctx context.Context, db DBTX) error {
+	if _, err := db.ExecContext(ctx, `CREATE TABLE pc_agent_skill_targets (
         scope_id VARCHAR(256) NOT NULL,
         target_id VARCHAR(64) NOT NULL,
         display_name VARCHAR(128) NOT NULL,
@@ -61,8 +123,10 @@ func EnsureSQLiteSkillDistributionSchema(ctx context.Context, db DBTX) error {
         CONSTRAINT ck_pc_agent_skill_targets_state_payload CHECK (
             (
                 state = 'pending'
+                AND enrollment_code_digest IS NOT NULL
                 AND length(enrollment_code_digest) = 64
                 AND enrollment_code_digest NOT GLOB '*[^0-9a-f]*'
+                AND enrollment_expires_at IS NOT NULL
                 AND length(enrollment_expires_at) > 0
                 AND installation_id IS NULL
                 AND credential_subject IS NULL
@@ -76,11 +140,16 @@ func EnsureSQLiteSkillDistributionSchema(ctx context.Context, db DBTX) error {
                 state = 'active'
                 AND enrollment_code_digest IS NULL
                 AND enrollment_expires_at IS NULL
+                AND installation_id IS NOT NULL
                 AND length(installation_id) > 0
+                AND credential_subject IS NOT NULL
                 AND length(credential_subject) > 0
+                AND credential_verifier IS NOT NULL
                 AND length(credential_verifier) = 64
                 AND credential_verifier NOT GLOB '*[^0-9a-f]*'
+                AND receiver_version IS NOT NULL
                 AND length(receiver_version) > 0
+                AND last_seen_at IS NOT NULL
                 AND length(last_seen_at) > 0
             ) OR (
                 state = 'revoked'
@@ -93,15 +162,8 @@ func EnsureSQLiteSkillDistributionSchema(ctx context.Context, db DBTX) error {
                 )
             )
         )
-    )`); err != nil {
+	    )`); err != nil {
 		return err
-	}
-	var objectType string
-	if err := db.QueryRowContext(ctx, "SELECT type FROM sqlite_master WHERE name = ?", remoteSkillTargetTable).Scan(&objectType); err != nil {
-		return fmt.Errorf("sqlstore: find SQLite schema object %q: %w", remoteSkillTargetTable, err)
-	}
-	if objectType != "table" {
-		return fmt.Errorf("sqlstore: SQLite schema object %q must be a table", remoteSkillTargetTable)
 	}
 	return nil
 }
