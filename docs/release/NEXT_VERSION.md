@@ -5,12 +5,12 @@
 This is a recommendation for the next unpublished PowerContext Go release. It
 does not create a tag, draft, GitHub Release, archive, image, or publication
 claim. This record covers the candidate
-`fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` against
-`powercontext-v0.1.0`. The source-surface analysis below was recorded at
-`e4cd0646c553a88a0d99b8422501d0a99c814ffd`; the candidate delta through
-`fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` was also checked. The final tag or
-PR Head remains a separate release-time input and must be re-evaluated
-immediately before publishing.
+`201f49b0fc383d538abc9d2b8d1f78d5d7f3d2fd` against
+`powercontext-v0.1.0` at `17a6f000c58ec5801e7341013a42211af97f6d0a`.
+That exact range contains 73 commits and 532 changed files. The final tag or PR
+Head remains a separate release-time input and must be re-evaluated immediately
+before publishing; this document update and the Windows release-inventory
+change are intentionally later than the recorded candidate input.
 
 ## Recommendation
 
@@ -29,12 +29,12 @@ through this candidate requires a breaking major-line decision.
 
 | Surface | Candidate evidence | Version and operator consequence |
 | --- | --- | --- |
-| Public CLI | The recorded source-surface analysis for `powercontext-v0.1.0..e4cd0646c553a88a0d99b8422501d0a99c814ffd` adds `powercontext hook workbuddy`. `setup workbuddy` validates a release archive and owns a hook that invokes its `bin/powercontext` binary. No CLI changes occur in `e4cd0646c553a88a0d99b8422501d0a99c814ffd..fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9`. | New observable capability supports a minor release recommendation. Re-run WorkBuddy setup from the extracted archive after upgrade. |
-| Public Go API | The recorded source-surface analysis finds no changes under Makefile `PUBLIC_API_PACKAGES`: `api/v1`, `artifact`, `artifact/experience`, `artifact/handoff`, `artifact/memory`, `artifact/skill`, `client`, `inference`, `server`, `source`, or `trigger`. The candidate delta through `fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` also has no changes there. The `v0.1.0` API baseline is renamed and bound to its release tag. | No public Go API migration is identified. `make api-compat` remains the release gate for incompatible exported changes. |
-| OpenAPI | The recorded source-surface analysis leaves `openapi/powercontext.yaml` unchanged, and the candidate delta through `fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` does not change it. | No HTTP wire-contract migration or regenerated-client change is identified. |
-| Server persistence | The recorded source-surface analysis leaves `internal/sqlstore` unchanged, and the candidate delta through `fe12b50a46c4d179a6bb9a2dafe14ba229ebddf9` adds no Server schema or persistence migration. | No database migration is required by this release decision. Preserve the existing SQLite upgrade and projection-safety procedure. |
-| Installation and adapters | Codex and WorkBuddy are the only supported integration roots. The WorkBuddy Go hook replaces the installed Python hook boundary; historical adapter source is not redistributed. | The archive must carry the reviewed two-root integration inventory and credential-free configuration boundary. |
-| Archive and release process | The candidate adds an explicit integration inventory and release-draft/review flow, separate Standard and Full runtime verification, and final archive evidence checks. | Standard and Full must expose identical Codex and WorkBuddy integrations; only their existing native inference assets differ. Publication remains a separate reviewed action. |
+| Public CLI | The exact range adds canonical Scope, Source, Artifact, managed-Skill, and statistics operations; a released Go WorkBuddy hook; and Windows `server install`, `status`, and `uninstall` lifecycle commands. | These observable additions support a minor release recommendation. Re-run WorkBuddy setup from the extracted archive after upgrade; use native Server lifecycle commands only on supported Windows x64 Standard archives. |
+| Public Go API | The exact range changes generated `api/v1` capability types and adds public Source observation/connector/definition/Skill-usage contracts plus managed Skill packaging behavior. | This is compatible-addition work, not an unchanged API surface. `make api-compat` remains the authority for rejecting an incompatible exported change before release. |
+| OpenAPI | `openapi/powercontext.yaml` adds required `supported_databases` and `supported_external_agents` fields to the capabilities response, constrained to SQLite, Codex, and WorkBuddy. Canonical sidecar contracts are generated separately and do not hand-edit legacy generated code. | Generated clients and capability consumers must use the candidate contracts; `make check-generated` and the compatibility gates remain required. |
+| Server persistence | The exact range adds durable Scope hierarchy/bindings/settings, Connector checkpoints, Definition manifests, accepted-observation markers, managed Skill packages and usage, and related SQLite authority/CAS paths. | This candidate has real SQLite schema evolution. Preserve a backup, use the supported startup upgrade path, and retain the projection-safety procedure; do not describe it as migration-free. |
+| Installation and adapters | Codex and WorkBuddy remain the only supported integration roots. The WorkBuddy Go hook replaces the installed Python hook boundary. Windows x64 Standard adds a per-user Task Scheduler service; retained systemd and LaunchAgent contract code does not enter the product matrix. | Archives must carry the reviewed two-root integration inventory and credential-free configuration boundary. Native service support is Windows Task Scheduler only; Linux systemd/user D-Bus/desktop lifecycle and macOS LaunchAgent remain out of scope. |
+| Archive and release process | The candidate already has explicit integration inventory, release-draft/review flow, signed provenance, and separate Linux/macOS Standard and Full verification. This change promotes the validated `windows-amd64` Standard archive into the official inventory and adds a published-asset Windows consumer. | Linux/macOS Standard and Full expose identical Codex and WorkBuddy integrations. Windows publishes Standard only, with no Full or native inference assets. Publication remains a separate reviewed action. |
 
 The two supported integrations are the Codex and WorkBuddy command hosts. Both
 must consume the extracted archive. WorkBuddy registration must invoke only

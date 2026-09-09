@@ -107,6 +107,8 @@ jobs:
             runner: macos-15-intel
           - target: darwin-arm64
             runner: macos-15
+          - target: windows-amd64
+            runner: windows-2025
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     permissions:
@@ -134,6 +136,7 @@ jobs:
           echo "target=$target" >> "$GITHUB_OUTPUT"
 
       - name: Acquire verified native release assets
+        if: matrix.target != 'windows-amd64'
         id: native
         uses: ./.github/actions/setup-native-assets
         with:
@@ -141,12 +144,42 @@ jobs:
           include-onnxruntime: "true"
 
       - name: Install the pinned SBOM generator
+        if: matrix.target != 'windows-amd64'
         run: |
           version="$(go run ./tools/release asset -component syft -field version)"
           mkdir -p "$RUNNER_TEMP/tools"
           GOBIN="$RUNNER_TEMP/tools" go install "github.com/anchore/syft/cmd/syft@v$version"
 
+      - name: Stage locked SQLite headers for the Windows release
+        if: matrix.target == 'windows-amd64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $moduleCache = (& go env GOMODCACHE).Trim()
+          $source = Join-Path $moduleCache 'github.com\mattn\go-sqlite3@v1.14.33\sqlite3-binding.h'
+          if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw 'locked go-sqlite3 header is unavailable'
+          }
+          $headers = Join-Path $env:RUNNER_TEMP 'powercontext-sqlite-header-v1.14.33'
+          New-Item -ItemType Directory -Force -Path $headers | Out-Null
+          Copy-Item -LiteralPath $source -Destination (Join-Path $headers 'sqlite3.h') -Force
+
+      - name: Install the pinned SBOM generator for the Windows release
+        if: matrix.target == 'windows-amd64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (& go run ./tools/release asset -component syft -field version).Trim()
+          $tools = Join-Path $env:RUNNER_TEMP 'tools'
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+          $env:GOBIN = $tools
+          & go install "github.com/anchore/syft/cmd/syft@v$version"
+          if ($LASTEXITCODE -ne 0) {
+            throw "install pinned Syft $version failed"
+          }
+
       - name: Build and package both editions
+        if: matrix.target != 'windows-amd64'
         env:
           BUILD_DATE: ${{ needs.prepare.outputs.build_date }}
           COMMIT: ${{ needs.prepare.outputs.commit }}
@@ -158,7 +191,34 @@ jobs:
           make package-standard
           make package-full
 
+      - name: Build and package Windows Standard archive
+        if: matrix.target == 'windows-amd64'
+        shell: pwsh
+        env:
+          BUILD_DATE: ${{ needs.prepare.outputs.build_date }}
+          CGO_CPPFLAGS: -I${{ runner.temp }}\powercontext-sqlite-header-v1.14.33
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          SYFT: ${{ runner.temp }}\tools\syft.exe
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path bin, dist | Out-Null
+          $env:CGO_ENABLED = '1'
+          & go build -tags sqlite_fts5 -trimpath `
+            -ldflags "-s -w -X main.version=$env:VERSION -X main.commit=$env:COMMIT -X main.date=$env:BUILD_DATE" `
+            -o bin\powercontext.exe ./cmd/powercontext
+          if ($LASTEXITCODE -ne 0) {
+            throw 'build Windows Standard release binary failed'
+          }
+          & go run ./tools/release package `
+            -binary bin\powercontext.exe -edition standard -version $env:VERSION `
+            -commit $env:COMMIT -build-date $env:BUILD_DATE -output dist -syft $env:SYFT
+          if ($LASTEXITCODE -ne 0) {
+            throw 'package Windows Standard release archive failed'
+          }
+
       - name: Smoke test both released process surfaces
+        if: matrix.target != 'windows-amd64'
         env:
           POWERCONTEXT_ONNXRUNTIME_LIBRARY_DIR: ${{ steps.native.outputs.onnxruntime-lib-dir }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -167,6 +227,7 @@ jobs:
           go run ./tools/process-smoke -binary bin/powercontext-full -env-file .env.example -version "$VERSION"
 
       - name: Build the platform checksum manifest
+        shell: bash
         run: |
           go run ./tools/release checksum \
             -output "dist/SHA256SUMS-${{ steps.platform.outputs.target }}" \
@@ -336,10 +397,10 @@ jobs:
         run: |
           go run ./tools/release checksum -output dist/SHA256SUMS \
             dist/*.tar.gz dist/*.spdx.json dist/SHA256SUMS-* dist/IMAGE-DIGESTS.json
-          test "$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')" = 8
-          test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 8
-          test "$(find dist -name 'SHA256SUMS-*' | wc -l | tr -d ' ')" = 4
-          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 21
+          test "$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')" = 9
+          test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 9
+          test "$(find dist -name 'SHA256SUMS-*' | wc -l | tr -d ' ')" = 5
+          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 24
 
       - name: Attest release metadata
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
