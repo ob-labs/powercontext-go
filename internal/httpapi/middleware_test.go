@@ -16,6 +16,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -582,6 +583,38 @@ func TestRemoteSkillEnrollmentRejectsForwardedLoopbackFromRemotePeer(t *testing.
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden || called {
 		t.Fatalf("response = %d called = %t, want remote plaintext refusal", response.Code, called)
+	}
+}
+
+func TestSafeUnauthenticatedTransportFailsClosedOutsideTLSOrDirectLoopback(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name, remoteAddr, host string
+		tls                    bool
+		forwarded              string
+		want                   bool
+	}{
+		{name: "TLS", remoteAddr: "malformed", tls: true, want: true},
+		{name: "IPv4 loopback", remoteAddr: "127.0.0.1:4321", want: true},
+		{name: "IPv6 loopback", remoteAddr: "[::1]:4321", want: true},
+		{name: "malformed peer", remoteAddr: "127.0.0.1", want: false},
+		{name: "remote peer spoofed host", remoteAddr: "203.0.113.7:4321", host: "127.0.0.1", want: false},
+		{name: "remote peer spoofed forwarded", remoteAddr: "203.0.113.7:4321", forwarded: "for=127.0.0.1;proto=https", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequest(http.MethodPost, "/v1/skill/remote/target/enroll", nil)
+			request.RemoteAddr = test.remoteAddr
+			request.Host = test.host
+			request.Header.Set("Forwarded", test.forwarded)
+			if test.tls {
+				request.TLS = &tls.ConnectionState{}
+			}
+			if got := safeUnauthenticatedTransport(request); got != test.want {
+				t.Fatalf("safeUnauthenticatedTransport = %t, want %t", got, test.want)
+			}
+		})
 	}
 }
 
