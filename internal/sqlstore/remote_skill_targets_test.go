@@ -424,6 +424,41 @@ func TestOpenSQLiteUpgradesPreRevokedPairRequiredTargetSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pre-revoked-pair-required-targets.db")
 	database := openRemoteSkillTargetDatabase(t, path)
 	const scopeID = "scope-target-upgrade-revoked-pair"
+	type legacyRevokedTarget struct {
+		targetID               string
+		displayName            string
+		agentKind              string
+		installationScope      string
+		deliveryMode           string
+		state                  string
+		installationID         sql.NullString
+		credentialSubject      sql.NullString
+		credentialVerifier     sql.NullString
+		environmentFingerprint sql.NullString
+		machineHostname        sql.NullString
+		workspaceName          sql.NullString
+		lastSeenAt             sql.NullString
+		generation             int
+		createdAt              string
+		updatedAt              string
+	}
+	wantTargets := []legacyRevokedTarget{
+		{
+			targetID: "legacy-revoked-empty-pair", displayName: "Legacy revoked without identity",
+			agentKind: "codex", installationScope: "project", deliveryMode: "agent_pull", state: "revoked",
+			generation: 3, createdAt: "2026-09-09T14:00:00Z", updatedAt: "2026-09-09T14:01:00Z",
+		},
+		{
+			targetID: "legacy-revoked-identity-pair", displayName: "Legacy revoked with identity",
+			agentKind: "codex", installationScope: "project", deliveryMode: "agent_pull", state: "revoked",
+			installationID:         sql.NullString{String: "legacy-installation", Valid: true},
+			credentialSubject:      sql.NullString{String: "legacy-subject", Valid: true},
+			environmentFingerprint: sql.NullString{String: "legacy-environment", Valid: true},
+			machineHostname:        sql.NullString{String: "legacy-host", Valid: true},
+			workspaceName:          sql.NullString{String: "legacy-workspace", Valid: true},
+			generation:             4, createdAt: "2026-09-09T14:02:00Z", updatedAt: "2026-09-09T14:03:00Z",
+		},
+	}
 	seedRemoteSkillTargetScope(t, database, scopeID)
 	legacySchema := preRevokedPairRequiredRemoteSkillTargetSchema()
 	for _, clause := range []string{
@@ -450,10 +485,57 @@ func TestOpenSQLiteUpgradesPreRevokedPairRequiredTargetSchema(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for _, target := range wantTargets {
+		if _, err := database.SQLDB().ExecContext(t.Context(), `INSERT INTO pc_agent_skill_targets (
+            scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state,
+            installation_id, enrollment_code_digest, enrollment_expires_at, credential_subject,
+            credential_verifier, receiver_version, environment_fingerprint, machine_hostname,
+            workspace_name, last_seen_at, generation, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, ?)`,
+			scopeID, target.targetID, target.displayName, target.agentKind, target.installationScope,
+			target.deliveryMode, target.state, target.installationID, target.credentialSubject,
+			target.environmentFingerprint, target.machineHostname, target.workspaceName, target.generation,
+			target.createdAt, target.updatedAt); err != nil {
+			t.Fatal(err)
+		}
+	}
 	closeRemoteSkillTargetDatabase(t, database)
 
 	upgraded := openRemoteSkillTargetDatabase(t, path)
 	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, upgraded) })
+	rows, err := upgraded.SQLDB().QueryContext(t.Context(), `SELECT
+        target_id, display_name, agent_kind, installation_scope, delivery_mode, state,
+        installation_id, credential_subject, credential_verifier, environment_fingerprint,
+        machine_hostname, workspace_name, last_seen_at, generation, created_at, updated_at
+        FROM pc_agent_skill_targets
+        WHERE scope_id = ? AND state = 'revoked'
+        ORDER BY target_id`, scopeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rows.Close() })
+	for _, want := range wantTargets {
+		if !rows.Next() {
+			t.Fatalf("upgraded revoked targets ended before %q: %v", want.targetID, rows.Err())
+		}
+		var got legacyRevokedTarget
+		if err := rows.Scan(
+			&got.targetID, &got.displayName, &got.agentKind, &got.installationScope, &got.deliveryMode, &got.state,
+			&got.installationID, &got.credentialSubject, &got.credentialVerifier, &got.environmentFingerprint,
+			&got.machineHostname, &got.workspaceName, &got.lastSeenAt, &got.generation, &got.createdAt, &got.updatedAt,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("upgraded revoked target = %#v, want %#v", got, want)
+		}
+	}
+	if rows.Next() {
+		t.Fatal("upgraded revoked targets contains an unexpected row")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	assertRemoteSkillTargetRevokedPairRejected(t, upgraded, scopeID)
 }
 
