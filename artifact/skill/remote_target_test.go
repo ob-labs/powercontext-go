@@ -176,6 +176,30 @@ func TestRemoteTargetValidatesIdentityGenerationAndTimestamps(t *testing.T) {
 	}
 }
 
+func TestRemoteTargetScopeIDPreservesOpaqueWhitespace(t *testing.T) {
+	t.Parallel()
+
+	input := remoteTargetInput(skill.RemoteTargetPending)
+	input.ScopeID = " project-a \t"
+	target, err := skill.NewRemoteTarget(input)
+	if err != nil {
+		t.Fatalf("NewRemoteTarget() error = %v", err)
+	}
+	if target.ScopeID() != input.ScopeID {
+		t.Fatalf("ScopeID() = %q, want unchanged %q", target.ScopeID(), input.ScopeID)
+	}
+}
+
+func TestRemoteTargetRejectsInvalidUTF8ScopeID(t *testing.T) {
+	t.Parallel()
+
+	input := remoteTargetInput(skill.RemoteTargetPending)
+	input.ScopeID = string([]byte{0xff})
+	if _, err := skill.NewRemoteTarget(input); err == nil {
+		t.Fatal("NewRemoteTarget() error = nil, want invalid UTF-8 scope ID refusal")
+	}
+}
+
 func TestRemoteTargetViewOmitsEveryDigest(t *testing.T) {
 	t.Parallel()
 

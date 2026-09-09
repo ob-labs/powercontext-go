@@ -182,8 +182,9 @@ func (*RemoteTargetGenerationConflictError) Error() string {
 }
 
 func validateRemoteTarget(input RemoteTargetInput) error {
-	if err := trimmedBounded("remote Skill target scope ID", input.ScopeID, 256); err != nil {
-		return err
+	if !utf8.ValidString(input.ScopeID) || trimPythonWhitespace(input.ScopeID) == "" ||
+		utf8.RuneCountInString(input.ScopeID) > 256 {
+		return fmt.Errorf("remote Skill target scope ID is invalid")
 	}
 	if len(input.TargetID) < 1 || len(input.TargetID) > 64 || !rootIDPattern.MatchString(input.TargetID) {
 		return fmt.Errorf("remote Skill target ID is invalid")
