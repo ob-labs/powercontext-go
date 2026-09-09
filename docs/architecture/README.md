@@ -37,6 +37,9 @@ powercontext-go/
 │   ├── mcpapi/                fixed 20 + optional 4 MCP tool surface
 │   ├── modelprovider/         concrete remote/local provider adapters
 │   ├── observability/         privacy-safe logging, metrics, and tracing
+│   ├── personalsvc/           portable native-service plans and lifecycle controller
+│   ├── personalsvchost/
+│   │   └── windows/            supported Windows Task Scheduler host boundary
 │   ├── review/                Candidate generation/revision/approval domain
 │   ├── runtime/               lifecycle, Scope gates, application orchestration
 │   ├── scheduler/             interval scheduler and bounded APScheduler Pickle
@@ -77,6 +80,15 @@ binary runtime dependencies or primary implementation languages.
 Codex, WorkBuddy, and SQLite are the only supported host/database scope. Other
 adapter and backend source is retained only for history and comparison; it has
 no active CI, release, installation, or runtime support contract.
+
+The supported native service boundary is narrower than the portable manager
+contracts retained under `internal/personalsvc`. Only the `windows-amd64`
+Standard archive composes a native host, and it owns a per-user Windows Task
+Scheduler task through `internal/personalsvchost/windows`. Windows Full and
+Windows native inference assets are not release surfaces. The Linux systemd
+adapter, user D-Bus and desktop lifecycle, and the macOS LaunchAgent adapter are
+not composed, packaged, installed, or claimed as supported native service
+paths.
 
 ## Dependency direction
 

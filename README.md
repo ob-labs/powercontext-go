@@ -34,6 +34,7 @@ binary release.
 | Go Server, SDK, CLI, and OpenAPI | Go-native implementation with `openapi/powercontext.yaml` as the authoritative HTTP contract. | SQLite is the only database accepted before WP6. |
 | Codex and WorkBuddy | Installed integrations call the running Go Server through HTTP or MCP; their service-chain evidence is a required `Pre-WP6 host adapters` check. | These are the only host integrations counted toward WP6 acceptance. |
 | Evaluation | The Codex/SQLite evaluation control plane is executable and independently checked. | It is evaluation evidence for the supported matrix. |
+| Native personal service | The `windows-amd64` Standard release archive installs, inspects, and removes the per-user Server through Windows Task Scheduler. | Task Scheduler is the only supported native service manager. Linux systemd/user D-Bus and desktop lifecycle, plus macOS LaunchAgent, remain outside this release boundary. |
 | Historical adapters and backends | Source may remain for comparison and migration history. | It is not active product, release, installation, or CI evidence. |
 
 See [`docs/release/INSTALL.md`](docs/release/INSTALL.md) for the exact release
@@ -42,8 +43,11 @@ identity, configuration, upgrade, transport, and host-operation contract.
 ## Supported integration archive
 
 The next unpublished release candidate has one explicit two-root integration
-inventory. Standard and Full archives contain exactly Codex and WorkBuddy;
-edition differences remain limited to their existing native inference assets.
+inventory. Linux and macOS Standard and Full archives contain exactly Codex and
+WorkBuddy; edition differences remain limited to their existing native
+inference assets. The official Windows inventory contains one
+`windows-amd64` Standard archive with the same two integration roots. It has no
+Windows Full edition or Windows native inference assets.
 
 | Consumer mode | Integrations | Required archive evidence |
 | --- | --- | --- |
@@ -54,6 +58,13 @@ files, and tracked executable bundles. It never carries an active credential,
 prompt, source or Memory content, raw scope ID, or local database path.
 Authorization remains a runtime environment reference. A checkout-local
 consumer result is not archive evidence.
+
+The release workflow signs the Windows archive, detached SPDX SBOM, and
+platform checksum manifest together with the existing Linux and macOS assets.
+After publication, a `windows-2025` verification job downloads those release
+assets, verifies checksums and signer identity before extraction, checks the
+archive build metadata, and runs the real Task Scheduler install/status/
+uninstall lifecycle from the downloaded binary.
 
 ## Repository shape
 

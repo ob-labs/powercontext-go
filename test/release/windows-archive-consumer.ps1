@@ -1,7 +1,20 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Build')]
 param(
-  [Parameter(Mandatory)]
-  [string]$Syft
+  [Parameter(Mandatory, ParameterSetName = 'Build')]
+  [string]$Syft,
+  [Parameter(Mandatory, ParameterSetName = 'Published')]
+  [string]$Archive,
+  [Parameter(Mandatory, ParameterSetName = 'Published')]
+  [string]$SBOM,
+  [Parameter(Mandatory, ParameterSetName = 'Published')]
+  [string]$ExpectedVersion,
+  [Parameter(Mandatory, ParameterSetName = 'Published')]
+  [string]$ExpectedCommit,
+  [Parameter(Mandatory, ParameterSetName = 'Published')]
+  [Parameter(Mandatory, ParameterSetName = 'Metadata')]
+  [string]$ExpectedBuildDate,
+  [Parameter(Mandatory, ParameterSetName = 'Metadata')]
+  [string]$BuildInfoJSON
 )
 
 Set-StrictMode -Version Latest
@@ -49,6 +62,69 @@ function Assert-Equal {
   if ($Actual -cne $Expected) {
     throw "$Name = $Actual, want $Expected"
   }
+}
+
+function Get-BuildDateText {
+  param([Parameter(Mandatory)][string]$JSON)
+
+  $document = $null
+  try {
+    $document = [Text.Json.JsonDocument]::Parse($JSON)
+    $date = $document.RootElement.GetProperty('build_date')
+    if ($date.ValueKind -ne [Text.Json.JsonValueKind]::String) {
+      throw 'not a string'
+    }
+    $value = $date.GetString()
+    if ([string]::IsNullOrEmpty($value)) {
+      throw 'blank string'
+    }
+    return $value
+  } catch {
+    throw 'build manifest date must be a nonblank JSON string'
+  } finally {
+    if ($null -ne $document) {
+      $document.Dispose()
+    }
+  }
+}
+
+function Assert-BuildDate {
+  param(
+    [Parameter(Mandatory)]
+    [string]$Actual,
+    [Parameter(Mandatory)]
+    [string]$Expected
+  )
+
+  if ($Actual -cne $Expected) {
+    throw 'build manifest date does not match the expected canonical UTC RFC3339 timestamp'
+  }
+  try {
+    $dateStyles = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+    $actualInstant = [DateTimeOffset]::ParseExact(
+      $Actual,
+      "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      [Globalization.CultureInfo]::InvariantCulture,
+      $dateStyles
+    )
+    $expectedInstant = [DateTimeOffset]::ParseExact(
+      $Expected,
+      "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      [Globalization.CultureInfo]::InvariantCulture,
+      $dateStyles
+    )
+  } catch {
+    throw 'build manifest date is not a valid UTC instant'
+  }
+  if ($actualInstant -ne $expectedInstant) {
+    throw 'build manifest date does not match the expected UTC instant'
+  }
+}
+
+if ($PSCmdlet.ParameterSetName -eq 'Metadata') {
+  $metadataBuildDate = Get-BuildDateText -JSON $BuildInfoJSON
+  Assert-BuildDate -Actual $metadataBuildDate -Expected $ExpectedBuildDate
+  return
 }
 
 function Wait-Live {
@@ -120,19 +196,45 @@ function Get-FreeLoopbackPort {
 }
 
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$syftPath = [IO.Path]::GetFullPath($Syft)
-if (!(Test-Path -LiteralPath $syftPath -PathType Leaf)) {
-  throw 'pinned Syft executable is unavailable'
+$published = $PSCmdlet.ParameterSetName -eq 'Published'
+if ($published) {
+  $archivePath = [IO.Path]::GetFullPath($Archive)
+  $sbomPath = [IO.Path]::GetFullPath($SBOM)
+  foreach ($inputPath in @($archivePath, $sbomPath)) {
+    if (!(Test-Path -LiteralPath $inputPath -PathType Leaf)) {
+      throw 'published Windows release input is unavailable'
+    }
+    $relative = [IO.Path]::GetRelativePath($repository, $inputPath)
+    if (![IO.Path]::IsPathRooted($relative) -and $relative -ne '..' -and !$relative.StartsWith("..$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::Ordinal)) {
+      throw 'published Windows release input must not come from the source checkout'
+    }
+  }
+  if ($ExpectedVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' -or $ExpectedVersion.Length -gt 80) {
+    throw 'expected release version is invalid'
+  }
+  if ($ExpectedCommit -notmatch '^[0-9a-f]{40}$') {
+    throw 'expected release commit is invalid'
+  }
+  if ($ExpectedBuildDate -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') {
+    throw 'expected release build date is invalid'
+  }
+  $version = $ExpectedVersion
+  $commit = $ExpectedCommit
+  $buildDate = $ExpectedBuildDate
+} else {
+  $syftPath = [IO.Path]::GetFullPath($Syft)
+  if (!(Test-Path -LiteralPath $syftPath -PathType Leaf)) {
+    throw 'pinned Syft executable is unavailable'
+  }
+  $commit = (Invoke-Native -Name 'read source commit' -Command { git -C $repository rev-parse HEAD }).Trim()
+  if ($commit -notmatch '^[0-9a-f]{40}$') {
+    throw 'source commit is invalid'
+  }
+  $epoch = [Int64]((Invoke-Native -Name 'read source timestamp' -Command { git -C $repository show -s --format=%ct $commit }).Trim())
+  $buildDate = [DateTimeOffset]::FromUnixTimeSeconds($epoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')
+  $runIdentity = if ($env:GITHUB_RUN_ID) { $env:GITHUB_RUN_ID } else { [DateTime]::UtcNow.Ticks }
+  $version = "0.0.0-windows.consumer.$runIdentity"
 }
-
-$commit = (Invoke-Native -Name 'read source commit' -Command { git -C $repository rev-parse HEAD }).Trim()
-if ($commit -notmatch '^[0-9a-f]{40}$') {
-  throw 'source commit is invalid'
-}
-$epoch = [Int64]((Invoke-Native -Name 'read source timestamp' -Command { git -C $repository show -s --format=%ct $commit }).Trim())
-$buildDate = [DateTimeOffset]::FromUnixTimeSeconds($epoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')
-$runIdentity = if ($env:GITHUB_RUN_ID) { $env:GITHUB_RUN_ID } else { [DateTime]::UtcNow.Ticks }
-$version = "0.0.0-windows.consumer.$runIdentity"
 $workRoot = Join-Path ([IO.Path]::GetTempPath()) ("powercontext-windows-release-consumer-" + [Guid]::NewGuid().ToString('N'))
 $taskName = '\PowerContext Personal Server'
 $archiveBinary = ''
@@ -157,29 +259,33 @@ try {
     'POWERCONTEXT_SERVER_RUNTIME_SOURCE_WINDOW_LIMIT=1'
   ) | Set-Content -LiteralPath $environmentFile -Encoding ascii
 
-  Push-Location $repository
-  try {
-    Invoke-Native -Name 'build Windows standard release binary' -Command {
-      $env:CGO_ENABLED = '1'
-      & go build -tags sqlite_fts5 -trimpath `
-        -ldflags "-s -w -X main.version=$version -X main.commit=$commit -X main.date=$buildDate" `
-        -o $builtBinary ./cmd/powercontext
-    } | Out-Null
-    Invoke-Native -Name 'package Windows standard release archive' -Command {
-      & go run ./tools/release package `
-        -binary $builtBinary -edition standard -version $version -commit $commit -build-date $buildDate `
-        -output $distribution -syft $syftPath
-    } | Out-Null
-  } finally {
-    Pop-Location
+  if (!$published) {
+    Push-Location $repository
+    try {
+      Invoke-Native -Name 'build Windows standard release binary' -Command {
+        $env:CGO_ENABLED = '1'
+        & go build -tags sqlite_fts5 -trimpath `
+          -ldflags "-s -w -X main.version=$version -X main.commit=$commit -X main.date=$buildDate" `
+          -o $builtBinary ./cmd/powercontext
+      } | Out-Null
+      Invoke-Native -Name 'package Windows standard release archive' -Command {
+        & go run ./tools/release package `
+          -binary $builtBinary -edition standard -version $version -commit $commit -build-date $buildDate `
+          -output $distribution -syft $syftPath
+      } | Out-Null
+    } finally {
+      Pop-Location
+    }
+
+    $archives = @(Get-ChildItem -LiteralPath $distribution -Filter '*.tar.gz' -File)
+    if ($archives.Count -ne 1) {
+      throw "standard release archive count = $($archives.Count), want 1"
+    }
+    $archivePath = $archives[0].FullName
   }
 
-  $archives = @(Get-ChildItem -LiteralPath $distribution -Filter '*.tar.gz' -File)
-  if ($archives.Count -ne 1) {
-    throw "standard release archive count = $($archives.Count), want 1"
-  }
   Invoke-Native -Name 'extract Windows standard release archive' -Command {
-    & tar.exe -xzf $archives[0].FullName -C $extractDirectory
+    & tar.exe -xzf $archivePath -C $extractDirectory
   } | Out-Null
   $releaseRoots = @(Get-ChildItem -LiteralPath $extractDirectory -Directory)
   if ($releaseRoots.Count -ne 1) {
@@ -193,9 +299,35 @@ try {
   if (Test-Path -LiteralPath (Join-Path $releaseRoot 'bin\powercontext')) {
     throw 'Windows release archive retained an extensionless binary'
   }
-  $buildInfo = Get-Content -Raw -LiteralPath (Join-Path $releaseRoot 'BUILD-INFO.json') | ConvertFrom-Json
-  Assert-Equal -Name 'build manifest binary path' -Actual $buildInfo.binary.path -Expected 'bin/powercontext.exe'
+  $buildInfoJSON = Get-Content -Raw -LiteralPath (Join-Path $releaseRoot 'BUILD-INFO.json')
+  $buildInfo = $buildInfoJSON | ConvertFrom-Json
+  $buildInfoDate = Get-BuildDateText -JSON $buildInfoJSON
+  foreach ($assertion in @(
+    @{ Name = 'build manifest product'; Actual = $buildInfo.product; Expected = 'PowerContext' },
+    @{ Name = 'build manifest edition'; Actual = $buildInfo.edition; Expected = 'standard' },
+    @{ Name = 'build manifest version'; Actual = $buildInfo.version; Expected = $version },
+    @{ Name = 'build manifest commit'; Actual = $buildInfo.commit; Expected = $commit },
+    @{ Name = 'build manifest target'; Actual = $buildInfo.target; Expected = 'windows-amd64' },
+    @{ Name = 'build manifest binary path'; Actual = $buildInfo.binary.path; Expected = 'bin/powercontext.exe' }
+  )) {
+    Assert-Equal -Name $assertion.Name -Actual $assertion.Actual -Expected $assertion.Expected
+  }
+  Assert-BuildDate -Actual $buildInfoDate -Expected $buildDate
+  if ($buildInfo.cgo_enabled -ne $true) {
+    throw 'build manifest does not record CGO-enabled Windows release bytes'
+  }
   Assert-Equal -Name 'archive binary hash' -Actual (Get-FileHash -Algorithm SHA256 -LiteralPath $archiveBinary).Hash.ToLowerInvariant() -Expected $buildInfo.binary.sha256
+
+  if ($published) {
+    Push-Location $repository
+    try {
+      Invoke-Native -Name 'verify published Windows release evidence' -Command {
+        & go run ./tools/release verify-evidence -root $releaseRoot -repository $repository -sbom $sbomPath
+      } | Out-Null
+    } finally {
+      Pop-Location
+    }
+  }
 
   $install = Invoke-Server -Binary $archiveBinary -Arguments @('server', 'install', '--env-file', $environmentFile, '--data-dir', $dataDirectory)
   Assert-Equal -Name 'install support' -Actual $install.support -Expected 'supported'

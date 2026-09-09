@@ -1480,7 +1480,7 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-contract.yml has no windows-contract job")
 	}
-	setupIndex, apiTestIndex, executorTestIndex, headerIndex, syftIndex, archiveConsumerIndex := -1, -1, -1, -1, -1, -1
+	setupIndex, apiTestIndex, executorTestIndex, metadataTestIndex, headerIndex, syftIndex, archiveConsumerIndex := -1, -1, -1, -1, -1, -1, -1
 	for index, step := range job.Steps {
 		switch step.Name {
 		case "Set up the Go environment":
@@ -1494,6 +1494,14 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 		case "Verify Windows Task Scheduler executor boundary":
 			if strings.TrimSpace(step.Run) == "go test -count=1 ./internal/personalsvchost/windows" {
 				executorTestIndex = index
+			}
+		case "Verify Windows archive build date normalization":
+			if strings.Contains(step.Run, "windows-archive-consumer.ps1") &&
+				strings.Contains(step.Run, "-BuildInfoJSON") && strings.Contains(step.Run, "-ExpectedBuildDate") &&
+				strings.Contains(step.Run, "accepted a noncanonical UTC instant") &&
+				strings.Contains(step.Run, "accepted a mismatched UTC instant") &&
+				strings.Contains(step.Run, "expected canonical UTC RFC3339 timestamp") {
+				metadataTestIndex = index
 			}
 		case "Stage locked SQLite headers for Windows archive consumption":
 			if strings.Contains(step.Run, "go-sqlite3@v1.14.33\\sqlite3-binding.h") {
@@ -1511,12 +1519,13 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 		}
 	}
 	if setupIndex < 0 || apiTestIndex <= setupIndex || executorTestIndex <= apiTestIndex ||
-		headerIndex <= executorTestIndex || syftIndex <= headerIndex || archiveConsumerIndex <= syftIndex {
+		metadataTestIndex <= executorTestIndex || headerIndex <= metadataTestIndex || syftIndex <= headerIndex || archiveConsumerIndex <= syftIndex {
 		t.Fatalf(
-			"Windows targeted steps = setup %d, API %d, executor %d, header %d, Syft %d, archive consumer %d, want ordered setup and regression tests",
+			"Windows targeted steps = setup %d, API %d, executor %d, metadata %d, header %d, Syft %d, archive consumer %d, want ordered setup and regression tests",
 			setupIndex,
 			apiTestIndex,
 			executorTestIndex,
+			metadataTestIndex,
 			headerIndex,
 			syftIndex,
 			archiveConsumerIndex,
@@ -1850,6 +1859,253 @@ func TestReleaseVerificationConsumesSignedProvenanceBeforeExecution(t *testing.T
 	}
 }
 
+func TestWindowsReleaseInventoryContractsRejectMutants(t *testing.T) {
+	repository := filepath.Clean(filepath.Join("..", ".."))
+	releasePayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verificationPayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release-verify.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateWindowsReleaseInventory(releasePayload, verificationPayload); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name            string
+		releaseOld      string
+		releaseNew      string
+		verificationOld string
+		verificationNew string
+	}{
+		{
+			name:       "missing Windows target",
+			releaseOld: "          - target: windows-amd64\n            runner: windows-2025\n",
+		},
+		{
+			name:       "Windows Full archive",
+			releaseOld: "-edition standard -version $env:VERSION",
+			releaseNew: "-edition full -version $env:VERSION",
+		},
+		{
+			name:       "archive inventory count",
+			releaseOld: `test "$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')" = 9`,
+			releaseNew: `test "$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')" = 8`,
+		},
+		{
+			name:       "SBOM inventory count",
+			releaseOld: `test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 9`,
+			releaseNew: `test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 8`,
+		},
+		{
+			name:       "platform checksum inventory count",
+			releaseOld: `test "$(find dist -name 'SHA256SUMS-*' | wc -l | tr -d ' ')" = 5`,
+			releaseNew: `test "$(find dist -name 'SHA256SUMS-*' | wc -l | tr -d ' ')" = 4`,
+		},
+		{
+			name:       "release checksum entry count",
+			releaseOld: `test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 24`,
+			releaseNew: `test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 23`,
+		},
+		{
+			name:            "missing Windows asset attestation",
+			verificationOld: `verify_subject "powercontext-${VERSION}-windows-amd64.tar.gz"`,
+		},
+		{
+			name:            "attestation subject count",
+			verificationOld: `test "$verified_subjects" = 25`,
+			verificationNew: `test "$verified_subjects" = 24`,
+		},
+		{
+			name:            "checkout-local Windows consumer",
+			verificationOld: `PUBLISHED_ARCHIVE: ${{ steps.windows_assets.outputs.archive }}`,
+			verificationNew: `PUBLISHED_ARCHIVE: ${{ github.workspace }}\dist\powercontext-windows-amd64.tar.gz`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			release := string(releasePayload)
+			verification := string(verificationPayload)
+			if test.releaseOld != "" {
+				release = strings.Replace(release, test.releaseOld, test.releaseNew, 1)
+			}
+			if test.verificationOld != "" {
+				verification = strings.Replace(verification, test.verificationOld, test.verificationNew, 1)
+			}
+			if release == string(releasePayload) && verification == string(verificationPayload) {
+				t.Fatal("mutant did not change a workflow")
+			}
+			if err := validateWindowsReleaseInventory([]byte(release), []byte(verification)); err == nil {
+				t.Fatal("Windows release inventory contract accepted mutant")
+			}
+		})
+	}
+}
+
+func validateWindowsReleaseInventory(releasePayload, verificationPayload []byte) error {
+	var releaseWorkflow, verificationWorkflow releaseIntegrationWorkflow
+	if err := yaml.Unmarshal(releasePayload, &releaseWorkflow); err != nil {
+		return err
+	}
+	if err := yaml.Unmarshal(verificationPayload, &verificationWorkflow); err != nil {
+		return err
+	}
+	if err := validateWindowsReleaseBuildInventory(releaseWorkflow); err != nil {
+		return err
+	}
+	return validateWindowsReleaseVerificationInventory(verificationWorkflow)
+}
+
+func validateWindowsReleaseBuildInventory(releaseWorkflow releaseIntegrationWorkflow) error {
+	binaries, ok := releaseWorkflow.Jobs["binaries"]
+	if !ok {
+		return errors.New("release.yml has no binaries job")
+	}
+	windowsTargets := 0
+	for _, target := range binaries.Strategy.Matrix.Include {
+		if !strings.HasPrefix(target.Target, "windows-") {
+			continue
+		}
+		windowsTargets++
+		if target.Target != "windows-amd64" || target.Runner != "windows-2025" {
+			return fmt.Errorf("release.yml Windows target = %#v, want windows-amd64 on windows-2025", target)
+		}
+	}
+	if windowsTargets != 1 {
+		return fmt.Errorf("release.yml Windows target count = %d, want 1", windowsTargets)
+	}
+
+	_, nativeAssets := findReleaseIntegrationWorkflowStep(binaries.Steps, "Acquire verified native release assets")
+	_, bothEditions := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build and package both editions")
+	_, windowsStandard := findReleaseIntegrationWorkflowStep(binaries.Steps, "Build and package Windows Standard archive")
+	if nativeAssets == nil || nativeAssets.If != "matrix.target != 'windows-amd64'" {
+		return fmt.Errorf("release.yml native release asset boundary = %#v", nativeAssets)
+	}
+	if bothEditions == nil || bothEditions.If != "matrix.target != 'windows-amd64'" ||
+		!strings.Contains(bothEditions.Run, "make package-standard") || !strings.Contains(bothEditions.Run, "make package-full") {
+		return fmt.Errorf("release.yml non-Windows package boundary = %#v", bothEditions)
+	}
+	if windowsStandard == nil || windowsStandard.If != "matrix.target == 'windows-amd64'" {
+		return fmt.Errorf("release.yml Windows Standard package boundary = %#v", windowsStandard)
+	}
+	for _, required := range []string{
+		"go build -tags sqlite_fts5", `-o bin\powercontext.exe`, "go run ./tools/release package",
+		`-binary bin\powercontext.exe`, "-edition standard", "-version $env:VERSION",
+	} {
+		if !strings.Contains(windowsStandard.Run, required) {
+			return fmt.Errorf("release.yml Windows Standard package operation is missing %q", required)
+		}
+	}
+	if strings.Contains(windowsStandard.Run, "package-full") || strings.Contains(windowsStandard.Run, "-edition full") ||
+		strings.Contains(windowsStandard.Run, "powercontext-full") {
+		return errors.New("release.yml attempts to create a Windows Full archive")
+	}
+
+	draft, ok := releaseWorkflow.Jobs["draft"]
+	if !ok {
+		return errors.New("release.yml has no draft job")
+	}
+	_, draftChecksum := findReleaseIntegrationWorkflowStep(draft.Steps, "Build the release-level checksum manifest")
+	if draftChecksum == nil {
+		return errors.New("release.yml has no release-level checksum inventory")
+	}
+	for _, required := range []string{
+		`test "$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')" = 9`,
+		`test "$(find dist -name '*.spdx.json' | wc -l | tr -d ' ')" = 9`,
+		`test "$(find dist -name 'SHA256SUMS-*' | wc -l | tr -d ' ')" = 5`,
+		`test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 24`,
+	} {
+		if !strings.Contains(draftChecksum.Run, required) {
+			return fmt.Errorf("release.yml release inventory is missing %q", required)
+		}
+	}
+	return nil
+}
+
+func validateWindowsReleaseVerificationInventory(verificationWorkflow releaseIntegrationWorkflow) error {
+	verify, ok := verificationWorkflow.Jobs["verify"]
+	if !ok {
+		return errors.New("release-verify.yml has no verify job")
+	}
+	_, assets := findReleaseIntegrationWorkflowStep(verify.Steps, "Download and verify the complete GitHub Release")
+	_, attest := findReleaseIntegrationWorkflowStep(verify.Steps, "Verify signed GitHub Release provenance")
+	if assets == nil || attest == nil {
+		return errors.New("release-verify.yml has no complete inventory and provenance verification")
+	}
+	for _, required := range []string{
+		"SHA256SUMS-windows-amd64", `powercontext-${VERSION}-windows-amd64.tar.gz`,
+		`powercontext-${VERSION}-windows-amd64.spdx.json`,
+		`test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 24`,
+	} {
+		if !strings.Contains(assets.Run, required) {
+			return fmt.Errorf("release-verify.yml complete inventory is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`verify_subject "SHA256SUMS-windows-amd64"`,
+		`verify_subject "powercontext-${VERSION}-windows-amd64.tar.gz"`,
+		`verify_subject "powercontext-${VERSION}-windows-amd64.spdx.json"`,
+		`test "$verified_subjects" = 25`,
+	} {
+		if !strings.Contains(attest.Run, required) {
+			return fmt.Errorf("release-verify.yml complete provenance is missing %q", required)
+		}
+	}
+	if strings.Contains(assets.Run, "powercontext-full-${VERSION}-windows-amd64") ||
+		strings.Contains(attest.Run, "powercontext-full-${VERSION}-windows-amd64") {
+		return errors.New("release-verify.yml accepts a Windows Full release asset")
+	}
+
+	windows, ok := verificationWorkflow.Jobs["windows"]
+	if !ok || windows.RunsOn != "windows-2025" {
+		return fmt.Errorf("release-verify.yml Windows job = %#v, want windows-2025", windows)
+	}
+	downloadIndex, download := findReleaseIntegrationWorkflowStep(windows.Steps, "Download and checksum published Windows Standard assets")
+	attestIndex, windowsAttest := findReleaseIntegrationWorkflowStep(windows.Steps, "Verify published Windows Standard provenance")
+	consumerIndex, consumer := findReleaseIntegrationWorkflowStep(windows.Steps, "Consume published Windows Standard archive")
+	if downloadIndex < 0 || attestIndex <= downloadIndex || consumerIndex <= attestIndex || download == nil || windowsAttest == nil || consumer == nil {
+		return errors.New("release-verify.yml does not download and attest Windows assets before consumption")
+	}
+	for _, required := range []string{
+		"gh release download", "powercontext-$version-windows-amd64.tar.gz",
+		"powercontext-$version-windows-amd64.spdx.json", "SHA256SUMS-windows-amd64", "Get-FileHash",
+	} {
+		if !strings.Contains(download.Run, required) {
+			return fmt.Errorf("release-verify.yml Windows download is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		"gh attestation verify", `--repo "$env:GITHUB_REPOSITORY"`,
+		`--signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml"`,
+		"SHA256SUMS-windows-amd64", "powercontext-$version-windows-amd64.tar.gz",
+		"powercontext-$version-windows-amd64.spdx.json",
+	} {
+		if !strings.Contains(windowsAttest.Run, required) {
+			return fmt.Errorf("release-verify.yml Windows provenance is missing %q", required)
+		}
+	}
+	if consumer.Env["PUBLISHED_ARCHIVE"] != "${{ steps.windows_assets.outputs.archive }}" ||
+		consumer.Env["PUBLISHED_SBOM"] != "${{ steps.windows_assets.outputs.sbom }}" {
+		return fmt.Errorf("release-verify.yml Windows consumer inputs = %#v", consumer.Env)
+	}
+	for _, required := range []string{
+		`.\test\release\windows-archive-consumer.ps1`, "-Archive $env:PUBLISHED_ARCHIVE",
+		"-SBOM $env:PUBLISHED_SBOM", "-ExpectedVersion", "-ExpectedCommit", "-ExpectedBuildDate",
+	} {
+		if !strings.Contains(consumer.Run, required) {
+			return fmt.Errorf("release-verify.yml Windows consumer is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"go build", "tools/release package", "package-standard", `bin\powercontext.exe`} {
+		if strings.Contains(consumer.Run, forbidden) {
+			return fmt.Errorf("release-verify.yml Windows consumer uses checkout-local artifact operation %q", forbidden)
+		}
+	}
+	return nil
+}
+
 func TestReleaseProvenanceContractsRejectMutants(t *testing.T) {
 	repository := filepath.Clean(filepath.Join("..", ".."))
 	releasePayload, err := os.ReadFile(filepath.Join(repository, ".github", "workflows", "release.yml"))
@@ -2047,7 +2303,7 @@ func validateReleaseProvenanceWorkflow(payload []byte) error {
 		return errors.New("release.yml does not attest final release metadata before publication")
 	}
 	if draftChecksum == nil || !strings.Contains(draftChecksum.Run, "dist/SHA256SUMS-*") ||
-		!strings.Contains(draftChecksum.Run, `test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 21`) ||
+		!strings.Contains(draftChecksum.Run, `test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 24`) ||
 		draftRelease == nil || !strings.Contains(draftRelease.Run, "dist/SHA256SUMS-*") {
 		return errors.New("release.yml does not publish and checksum all platform manifests")
 	}
@@ -2075,7 +2331,7 @@ func validateReleaseProvenanceVerification(payload []byte) error {
 		return errors.New("release-verify.yml does not verify artifact provenance before extraction")
 	}
 	if assets == nil || !strings.Contains(assets.Run, "SHA256SUMS-$target") ||
-		!strings.Contains(assets.Run, `test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 21`) {
+		!strings.Contains(assets.Run, `test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 24`) {
 		return errors.New("release-verify.yml does not require every platform checksum manifest")
 	}
 	if attest == nil {
@@ -2236,9 +2492,24 @@ type releaseIntegrationWorkflow struct {
 }
 
 type releaseIntegrationWorkflowJob struct {
-	Permissions     map[string]string                `yaml:"permissions"`
-	ContinueOnError any                              `yaml:"continue-on-error"`
-	Steps           []releaseIntegrationWorkflowStep `yaml:"steps"`
+	Permissions     map[string]string                  `yaml:"permissions"`
+	ContinueOnError any                                `yaml:"continue-on-error"`
+	RunsOn          string                             `yaml:"runs-on"`
+	Strategy        releaseIntegrationWorkflowStrategy `yaml:"strategy"`
+	Steps           []releaseIntegrationWorkflowStep   `yaml:"steps"`
+}
+
+type releaseIntegrationWorkflowStrategy struct {
+	Matrix releaseIntegrationWorkflowMatrix `yaml:"matrix"`
+}
+
+type releaseIntegrationWorkflowMatrix struct {
+	Include []releaseIntegrationWorkflowTarget `yaml:"include"`
+}
+
+type releaseIntegrationWorkflowTarget struct {
+	Runner string `yaml:"runner"`
+	Target string `yaml:"target"`
 }
 
 type releaseIntegrationWorkflowStep struct {

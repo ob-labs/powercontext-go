@@ -37,10 +37,14 @@ authoritative inventory for that candidate.
 The exact range-based version recommendation is recorded in
 [`NEXT_VERSION.md`](NEXT_VERSION.md); it is not a publication claim.
 
-The Standard and Full archives must contain the same two integration roots.
-Their only edition-specific difference is the existing native inference assets;
-an integration may not appear in only one edition. The archive verification
-lane exercises both supported command-host integrations from the extracted archive:
+Linux and macOS Standard and Full archives must contain the same two integration
+roots. Their only edition-specific difference is the existing native inference
+assets; an integration may not appear in only one edition. The Windows release
+inventory contains only `powercontext-<version>-windows-amd64.tar.gz` and its
+detached SPDX SBOM. This Standard archive contains the same two integration
+roots, but there is no Windows Full archive or Windows native inference asset.
+The archive verification lane exercises both supported command-host
+integrations from the extracted archive:
 
 | Command-host integration | Archive consumption |
 | --- | --- |
@@ -94,6 +98,14 @@ sha256sum --check SHA256SUMS
 On macOS, replace the release-level pipeline with
 `awk -v archive="$artifact.tar.gz" -v sbom="$artifact.spdx.json" '$2 == archive || $2 == sbom { print }' SHA256SUMS | shasum -a 256 -c - --strict`,
 then use `shasum -a 256 -c SHA256SUMS` after extracting the archive.
+
+For the next unpublished candidate on Windows x64, download the Standard
+archive, `powercontext-<version>-windows-amd64.spdx.json`,
+`SHA256SUMS-windows-amd64`, and `SHA256SUMS` from the GitHub Release. Verify the
+archive and SBOM in both checksum manifests and verify all four GitHub build
+provenance subjects against this repository's `.github/workflows/release.yml`
+signer before extraction. The release-verification workflow performs this on a
+`windows-2025` runner and rejects a checkout-local archive as consumer evidence.
 
 ## Configure the SQLite pre-WP6 installation
 
@@ -163,6 +175,15 @@ WorkBuddy with `./bin/powercontext setup workbuddy`, then run
 managed Skill, and Server health without exposing credentials or prompt data.
 Other adapter source is historical and is not covered by this installation
 contract or included in release archives.
+
+For the next unpublished candidate on Windows x64, the extracted Standard
+archive also supports the native personal Server lifecycle through
+`powercontext.exe server install`, `status`, and `uninstall`. Installation owns
+one per-user Windows Task Scheduler task and must reach the archive binary's
+loopback liveness endpoint before reporting success. This is the only supported
+native service lifecycle. Linux systemd, user D-Bus and desktop lifecycle, and
+macOS LaunchAgent are explicitly outside the installation and release matrix
+even though portable contract code may be retained in the repository.
 
 The binary itself does not require a Python runtime. This monorepo tracks
 Python and TypeScript assets for host-native integrations and the evaluation

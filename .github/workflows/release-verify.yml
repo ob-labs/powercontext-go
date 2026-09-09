@@ -104,12 +104,20 @@ jobs:
               checksum_has_exactly_once "$sbom"
             done
           done
-          test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 21
+          windows_checksums=SHA256SUMS-windows-amd64
+          windows_archive="powercontext-${VERSION}-windows-amd64.tar.gz"
+          windows_sbom="powercontext-${VERSION}-windows-amd64.spdx.json"
+          for subject in "$windows_checksums" "$windows_archive" "$windows_sbom"; do
+            test -f "$ASSET_DIR/$subject"
+            checksum_has_exactly_once "$subject"
+          done
+          test "$(wc -l < "$ASSET_DIR/SHA256SUMS" | tr -d ' ')" = 24
           cd "$ASSET_DIR"
           sha256sum --check --strict SHA256SUMS
           for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             sha256sum --check --strict "SHA256SUMS-$target"
           done
+          sha256sum --check --strict SHA256SUMS-windows-amd64
 
       - name: Verify signed GitHub Release provenance
         shell: bash
@@ -118,11 +126,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.release.outputs.version }}
         run: |
+          verified_subjects=0
           verify_subject() {
             subject="$1"
             gh attestation verify "$ASSET_DIR/$subject" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+            verified_subjects=$((verified_subjects + 1))
           }
           for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
             subject="SHA256SUMS-$target"
@@ -134,9 +144,13 @@ jobs:
               verify_subject "$subject"
             done
           done
+          verify_subject "SHA256SUMS-windows-amd64"
+          verify_subject "powercontext-${VERSION}-windows-amd64.tar.gz"
+          verify_subject "powercontext-${VERSION}-windows-amd64.spdx.json"
           for subject in SHA256SUMS IMAGE-DIGESTS.json; do
             verify_subject "$subject"
           done
+          test "$verified_subjects" = 25
 
       - name: Verify extracted Linux release contracts
         id: archives
@@ -348,3 +362,143 @@ jobs:
             echo "- Published standard image runtime: **$STANDARD_IMAGE_RUNTIME**"
             echo "- Published Full image runtime: **$FULL_IMAGE_RUNTIME**"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  windows:
+    name: Published Windows Standard archive
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Check out the released verification tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Set up the Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Resolve published Windows release identity
+        id: windows_release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_TAG -replace '^powercontext-v', '' -replace '^v', ''
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' -or $version.Length -gt 80) {
+            throw 'release_tag must use vX.Y.Z, powercontext-vX.Y.Z, or X.Y.Z semantic versioning'
+          }
+          $commit = (& git rev-parse "${env:RELEASE_TAG}^{commit}").Trim()
+          if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') {
+            throw 'release tag does not resolve to an immutable commit'
+          }
+          $epoch = [Int64]((& git show -s --format=%ct $commit).Trim())
+          if ($LASTEXITCODE -ne 0) {
+            throw 'release commit timestamp is unavailable'
+          }
+          $buildDate = [DateTimeOffset]::FromUnixTimeSeconds($epoch).UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')
+          @(
+            "version=$version"
+            "commit=$commit"
+            "build_date=$buildDate"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Download and checksum published Windows Standard assets
+        id: windows_assets
+        shell: pwsh
+        env:
+          ASSET_DIR: ${{ runner.temp }}\powercontext-windows-release-assets
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ steps.windows_release.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:VERSION
+          $archive = "powercontext-$version-windows-amd64.tar.gz"
+          $sbom = "powercontext-$version-windows-amd64.spdx.json"
+          $platformChecksums = 'SHA256SUMS-windows-amd64'
+          New-Item -ItemType Directory -Force -Path $env:ASSET_DIR | Out-Null
+          foreach ($asset in @($archive, $sbom, $platformChecksums, 'SHA256SUMS')) {
+            & gh release download $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY --dir $env:ASSET_DIR --pattern $asset
+            if ($LASTEXITCODE -ne 0) {
+              throw "download published Windows release asset failed: $asset"
+            }
+          }
+          $downloaded = @(Get-ChildItem -LiteralPath $env:ASSET_DIR -File)
+          if ($downloaded.Count -ne 4) {
+            throw "published Windows release asset count = $($downloaded.Count), want 4"
+          }
+
+          function Assert-ManifestHash {
+            param(
+              [Parameter(Mandatory)][string]$Manifest,
+              [Parameter(Mandatory)][string]$Subject
+            )
+            $hashes = @()
+            foreach ($line in Get-Content -LiteralPath $Manifest) {
+              if ($line -notmatch '^([0-9a-f]{64})  (.+)$') {
+                throw "checksum manifest contains an invalid record: $(Split-Path -Leaf $Manifest)"
+              }
+              if ([string]::Equals($Matches[2], $Subject, [StringComparison]::Ordinal)) {
+                $hashes += $Matches[1]
+              }
+            }
+            if ($hashes.Count -ne 1) {
+              throw "checksum subject count for $Subject = $($hashes.Count), want 1"
+            }
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $env:ASSET_DIR $Subject)).Hash.ToLowerInvariant()
+            if ($actual -cne $hashes[0]) {
+              throw "published Windows release checksum mismatch for $Subject"
+            }
+          }
+
+          $releaseChecksums = Join-Path $env:ASSET_DIR 'SHA256SUMS'
+          $platformManifest = Join-Path $env:ASSET_DIR $platformChecksums
+          foreach ($subject in @($archive, $sbom)) {
+            Assert-ManifestHash -Manifest $releaseChecksums -Subject $subject
+            Assert-ManifestHash -Manifest $platformManifest -Subject $subject
+          }
+          Assert-ManifestHash -Manifest $releaseChecksums -Subject $platformChecksums
+          @(
+            "archive=$(Join-Path $env:ASSET_DIR $archive)"
+            "sbom=$(Join-Path $env:ASSET_DIR $sbom)"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Verify published Windows Standard provenance
+        shell: pwsh
+        env:
+          ASSET_DIR: ${{ runner.temp }}\powercontext-windows-release-assets
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.windows_release.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:VERSION
+          foreach ($subject in @(
+            'SHA256SUMS',
+            'SHA256SUMS-windows-amd64',
+            "powercontext-$version-windows-amd64.tar.gz",
+            "powercontext-$version-windows-amd64.spdx.json"
+          )) {
+            & gh attestation verify (Join-Path $env:ASSET_DIR $subject) `
+              --repo "$env:GITHUB_REPOSITORY" `
+              --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml"
+            if ($LASTEXITCODE -ne 0) {
+              throw "verify published Windows release provenance failed: $subject"
+            }
+          }
+
+      - name: Consume published Windows Standard archive
+        shell: pwsh
+        env:
+          EXPECTED_BUILD_DATE: ${{ steps.windows_release.outputs.build_date }}
+          EXPECTED_COMMIT: ${{ steps.windows_release.outputs.commit }}
+          EXPECTED_VERSION: ${{ steps.windows_release.outputs.version }}
+          PUBLISHED_ARCHIVE: ${{ steps.windows_assets.outputs.archive }}
+          PUBLISHED_SBOM: ${{ steps.windows_assets.outputs.sbom }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\test\release\windows-archive-consumer.ps1 `
+            -Archive $env:PUBLISHED_ARCHIVE -SBOM $env:PUBLISHED_SBOM `
+            -ExpectedVersion $env:EXPECTED_VERSION -ExpectedCommit $env:EXPECTED_COMMIT `
+            -ExpectedBuildDate $env:EXPECTED_BUILD_DATE
