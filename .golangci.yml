@@ -76,6 +76,7 @@ linters:
       - ^api/canonical/sources/
       - ^api/canonical/artifacts/
       - ^api/canonical/managedskills/
+      - ^api/canonical/remoteskills/
       - ^api/canonical/stats/
       - ^client/invoker_gen\.go$
       - ^internal/mcpapi/schemas_gen\.go$
@@ -118,6 +119,7 @@ formatters:
       - ^api/canonical/sources/
       - ^api/canonical/artifacts/
       - ^api/canonical/managedskills/
+      - ^api/canonical/remoteskills/
       - ^api/canonical/stats/
       - ^client/invoker_gen\.go$
       - ^internal/mcpapi/schemas_gen\.go$
