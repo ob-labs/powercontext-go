@@ -115,6 +115,43 @@ func (repository RemoteSkillTargetRepository) FindByEnrollmentDigest(
 	return repository.find(ctx, db, `WHERE enrollment_code_digest = ?`, digest)
 }
 
+// ConsumePending activates target only when its durable pending enrollment is
+// still current. A false result deliberately does not disclose which condition
+// changed between the lookup and this short SQLite transaction.
+func (repository RemoteSkillTargetRepository) ConsumePending(
+	ctx context.Context,
+	db DBTX,
+	target skill.RemoteTarget,
+	digest string,
+	now time.Time,
+) (skill.RemoteTarget, bool, error) {
+	if target.State() != skill.RemoteTargetActive || target.Generation() < 1 {
+		return skill.RemoteTarget{}, false, &RemoteSkillTargetStorageError{}
+	}
+	arguments := remoteSkillTargetArguments(target)
+	arguments = append(arguments,
+		target.ScopeID(), target.ID(), target.Generation()-1, digest, now.UTC().Format(time.RFC3339Nano),
+	)
+	result, err := db.ExecContext(ctx, `UPDATE pc_agent_skill_targets SET
+        display_name = ?, agent_kind = ?, installation_scope = ?, delivery_mode = ?, state = ?,
+        installation_id = ?, enrollment_code_digest = ?, enrollment_expires_at = ?, credential_subject = ?,
+        credential_verifier = ?, receiver_version = ?, environment_fingerprint = ?, machine_hostname = ?,
+        workspace_name = ?, last_seen_at = ?, generation = ?, created_at = ?, updated_at = ?
+        WHERE scope_id = ? AND target_id = ? AND generation = ? AND state = 'pending'
+          AND enrollment_code_digest = ? AND enrollment_expires_at > ?`, arguments[2:]...)
+	if err != nil {
+		return skill.RemoteTarget{}, false, &RemoteSkillTargetStorageError{}
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return skill.RemoteTarget{}, false, &RemoteSkillTargetStorageError{}
+	}
+	if affected != 1 {
+		return skill.RemoteTarget{}, false, nil
+	}
+	return target, true, nil
+}
+
 // Replace atomically writes a next-generation target. A zero-row update is
 // re-read so a missing target cannot be misreported as a stale mutation.
 func (repository RemoteSkillTargetRepository) Replace(
