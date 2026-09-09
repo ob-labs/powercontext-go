@@ -95,6 +95,61 @@ func TestRuntimeRemoteSkillTargetEnrollTwoDatabasesHasOneWinner(t *testing.T) {
 	}
 }
 
+func TestRuntimeRemoteSkillTargetListUsesAdmittedScopeAndReturnsSafeOrderedViews(t *testing.T) {
+	database := openRuntimeRemoteTargetDatabase(t, filepath.Join(t.TempDir(), "remote-target-list.db"))
+	t.Cleanup(func() { _ = database.Close(context.Background()) })
+	seedRuntimeRemoteTargetScope(t, database, "scope-list")
+	seedRuntimeRemoteTargetScope(t, database, "scope-other")
+
+	createdAt := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
+	create := func(scopeID, targetID, enrollmentCode string) {
+		t.Helper()
+		application := newRuntimeRemoteTargetApplication(t, database, func() time.Time { return createdAt }, targetID, enrollmentCode, "unused")
+		if _, err := application.Create(t.Context(), pcruntime.RemoteSkillTargetCreateInput{
+			ScopeID: scopeID, DisplayName: targetID, AgentKind: skill.CodexAgent,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create("scope-list", "target-b", "scope-list-pending-code")
+	create("scope-list", "target-a", "scope-list-active-code")
+	create("scope-other", "target-other", "scope-other-code")
+
+	enroller := newRuntimeRemoteTargetApplication(t, database, func() time.Time { return createdAt }, "unused", "unused", "scope-list-active-credential")
+	if _, err := enroller.Enroll(t.Context(), pcruntime.RemoteSkillTargetEnrollInput{
+		EnrollmentCode: "scope-list-active-code", InstallationID: "installation", CredentialSubject: "subject", ReceiverVersion: "1.0.0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	application := newRuntimeRemoteTargetApplication(t, database, func() time.Time { return createdAt }, "unused", "unused", "unused")
+	targets, err := application.List(t.Context(), "scope-list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("List returned %d targets, want 2", len(targets))
+	}
+	for index, want := range []struct {
+		id    string
+		state skill.RemoteTargetState
+	}{
+		{id: "target-a", state: skill.RemoteTargetActive},
+		{id: "target-b", state: skill.RemoteTargetPending},
+	} {
+		var _ skill.RemoteTargetView = targets[index]
+		if targets[index].ScopeID() != "scope-list" || targets[index].TargetID() != want.id || targets[index].State() != want.state {
+			t.Fatalf("List target[%d] = %#v, want scope-list %s %s", index, targets[index], want.id, want.state)
+		}
+		assertRuntimeRemoteTargetDoesNotRender(t, targets[index],
+			"scope-list-pending-code", "scope-list-active-code", "scope-list-active-credential",
+			runtimeRemoteTargetDigest("scope-list-pending-code"),
+			runtimeRemoteTargetDigest("scope-list-active-code"),
+			runtimeRemoteTargetDigest("scope-list-active-credential"),
+		)
+	}
+}
+
 // This catches authorization from a stale lookup snapshot. The repository must
 // recheck the pending state, digest, generation, and expiry in its write.
 func TestRuntimeRemoteSkillTargetConsumePendingRequiresCurrentEnrollmentState(t *testing.T) {
