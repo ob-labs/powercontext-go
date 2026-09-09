@@ -840,7 +840,7 @@ func TestArchiveTreeIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestReleaseArchiveKeepsExecutablePathsAndModes(t *testing.T) {
+func TestReleaseArchiveKeepsStableExecutablePathAndMode(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "powercontext-1.2.3-linux-amd64")
 	bin := filepath.Join(root, "bin")
