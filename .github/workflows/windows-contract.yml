@@ -43,11 +43,21 @@ jobs:
             -ExpectedBuildDate '2026-09-09T15:24:41Z'
           try {
             .\test\release\windows-archive-consumer.ps1 `
+              -BuildInfoJSON '{"build_date":"2026-09-09T23:24:41+08:00"}' `
+              -ExpectedBuildDate '2026-09-09T15:24:41Z'
+            throw 'Windows archive metadata accepted a noncanonical UTC instant'
+          } catch {
+            if ($_.Exception.Message -notlike '*expected canonical UTC RFC3339 timestamp*') {
+              throw
+            }
+          }
+          try {
+            .\test\release\windows-archive-consumer.ps1 `
               -BuildInfoJSON '{"build_date":"2026-09-09T15:24:41Z"}' `
               -ExpectedBuildDate '2026-09-09T15:24:42Z'
             throw 'Windows archive metadata accepted a mismatched UTC instant'
           } catch {
-            if ($_.Exception.Message -notlike '*does not match the expected UTC instant*') {
+            if ($_.Exception.Message -notlike '*expected canonical UTC RFC3339 timestamp*') {
               throw
             }
           }

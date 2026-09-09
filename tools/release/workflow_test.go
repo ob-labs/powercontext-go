@@ -1498,7 +1498,9 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 		case "Verify Windows archive build date normalization":
 			if strings.Contains(step.Run, "windows-archive-consumer.ps1") &&
 				strings.Contains(step.Run, "-BuildInfoJSON") && strings.Contains(step.Run, "-ExpectedBuildDate") &&
-				strings.Contains(step.Run, "accepted a mismatched UTC instant") {
+				strings.Contains(step.Run, "accepted a noncanonical UTC instant") &&
+				strings.Contains(step.Run, "accepted a mismatched UTC instant") &&
+				strings.Contains(step.Run, "expected canonical UTC RFC3339 timestamp") {
 				metadataTestIndex = index
 			}
 		case "Stage locked SQLite headers for Windows archive consumption":

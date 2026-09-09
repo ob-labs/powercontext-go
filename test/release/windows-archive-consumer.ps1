@@ -64,17 +64,49 @@ function Assert-Equal {
   }
 }
 
+function Get-BuildDateText {
+  param([Parameter(Mandatory)][string]$JSON)
+
+  $document = $null
+  try {
+    $document = [Text.Json.JsonDocument]::Parse($JSON)
+    $date = $document.RootElement.GetProperty('build_date')
+    if ($date.ValueKind -ne [Text.Json.JsonValueKind]::String) {
+      throw 'not a string'
+    }
+    $value = $date.GetString()
+    if ([string]::IsNullOrEmpty($value)) {
+      throw 'blank string'
+    }
+    return $value
+  } catch {
+    throw 'build manifest date must be a nonblank JSON string'
+  } finally {
+    if ($null -ne $document) {
+      $document.Dispose()
+    }
+  }
+}
+
 function Assert-BuildDate {
   param(
     [Parameter(Mandatory)]
-    [object]$Actual,
+    [string]$Actual,
     [Parameter(Mandatory)]
     [string]$Expected
   )
 
+  if ($Actual -cne $Expected) {
+    throw 'build manifest date does not match the expected canonical UTC RFC3339 timestamp'
+  }
   try {
-    $actualInstant = ([DateTimeOffset]$Actual).ToUniversalTime()
     $dateStyles = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+    $actualInstant = [DateTimeOffset]::ParseExact(
+      $Actual,
+      "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      [Globalization.CultureInfo]::InvariantCulture,
+      $dateStyles
+    )
     $expectedInstant = [DateTimeOffset]::ParseExact(
       $Expected,
       "yyyy-MM-dd'T'HH:mm:ss'Z'",
@@ -90,8 +122,8 @@ function Assert-BuildDate {
 }
 
 if ($PSCmdlet.ParameterSetName -eq 'Metadata') {
-  $metadata = $BuildInfoJSON | ConvertFrom-Json
-  Assert-BuildDate -Actual $metadata.build_date -Expected $ExpectedBuildDate
+  $metadataBuildDate = Get-BuildDateText -JSON $BuildInfoJSON
+  Assert-BuildDate -Actual $metadataBuildDate -Expected $ExpectedBuildDate
   return
 }
 
@@ -267,7 +299,9 @@ try {
   if (Test-Path -LiteralPath (Join-Path $releaseRoot 'bin\powercontext')) {
     throw 'Windows release archive retained an extensionless binary'
   }
-  $buildInfo = Get-Content -Raw -LiteralPath (Join-Path $releaseRoot 'BUILD-INFO.json') | ConvertFrom-Json
+  $buildInfoJSON = Get-Content -Raw -LiteralPath (Join-Path $releaseRoot 'BUILD-INFO.json')
+  $buildInfo = $buildInfoJSON | ConvertFrom-Json
+  $buildInfoDate = Get-BuildDateText -JSON $buildInfoJSON
   foreach ($assertion in @(
     @{ Name = 'build manifest product'; Actual = $buildInfo.product; Expected = 'PowerContext' },
     @{ Name = 'build manifest edition'; Actual = $buildInfo.edition; Expected = 'standard' },
@@ -278,7 +312,7 @@ try {
   )) {
     Assert-Equal -Name $assertion.Name -Actual $assertion.Actual -Expected $assertion.Expected
   }
-  Assert-BuildDate -Actual $buildInfo.build_date -Expected $buildDate
+  Assert-BuildDate -Actual $buildInfoDate -Expected $buildDate
   if ($buildInfo.cgo_enabled -ne $true) {
     throw 'build manifest does not record CGO-enabled Windows release bytes'
   }
