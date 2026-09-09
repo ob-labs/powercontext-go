@@ -93,8 +93,8 @@ func projectRemoteSkillSidecar(source []byte, manifest remoteSkillSidecarManifes
 	if err != nil {
 		return nil, err
 	}
-	if err := applyRemoteSkillSidecarOverlays(components, manifest.Overlays.RemoteAgentKind.Enum); err != nil {
-		return nil, err
+	if applyOverlaysErr := applyRemoteSkillSidecarOverlays(components, manifest.Overlays.RemoteAgentKind.Enum); applyOverlaysErr != nil {
+		return nil, applyOverlaysErr
 	}
 	projected := map[string]any{
 		"openapi": document["openapi"], "info": document["info"], "paths": projectedPaths, "components": components,
@@ -161,8 +161,8 @@ func runRemoteSkillSidecar(sourcePath, manifestPath, target, packageName, client
 	if err != nil {
 		return err
 	}
-	if err := writeScopeSidecarDocument(filepath.Join(filepath.Dir(manifestPath), "remote-skills.json"), projected); err != nil {
-		return err
+	if writeSidecarErr := writeScopeSidecarDocument(filepath.Join(filepath.Dir(manifestPath), "remote-skills.json"), projected); writeSidecarErr != nil {
+		return writeSidecarErr
 	}
 	absolute, err := filepath.Abs(target)
 	if err != nil {

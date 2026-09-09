@@ -157,8 +157,8 @@ func TestRemoteSkillSidecarGenerationIsIsolatedAndConsumable(t *testing.T) {
 		}
 	}
 	before := readArtifacts(t, frozen)
-	if err := runRemoteSkillSidecar(source, manifest, target, "remoteskills", "", compatibility, legacy); err != nil {
-		t.Fatal(err)
+	if generateErr := runRemoteSkillSidecar(source, manifest, target, "remoteskills", "", compatibility, legacy); generateErr != nil {
+		t.Fatal(generateErr)
 	}
 	generated := readGeneratedScopePackage(t, target)
 	for _, expected := range []string{"ListRemoteSkillTargets", "CreateRemoteSkillTarget", "EnrollRemoteSkillTarget", "RenameRemoteSkillTarget", "RevokeRemoteSkillTarget", "RemoteAgentKindCodex", "RemoteAgentKindWorkbuddy"} {
@@ -287,12 +287,12 @@ func assertFreshRemoteSkillSidecarConsumerBuilds(t *testing.T, root string) {
 		t.Fatal(err)
 	}
 	for _, requirement := range locked.Require {
-		if err := consumerMod.AddRequire(requirement.Mod.Path, requirement.Mod.Version); err != nil {
-			t.Fatal(err)
+		if addRequireErr := consumerMod.AddRequire(requirement.Mod.Path, requirement.Mod.Version); addRequireErr != nil {
+			t.Fatal(addRequireErr)
 		}
 	}
-	if err := consumerMod.AddReplace("github.com/ob-labs/powercontext-go", "", filepath.ToSlash(root), ""); err != nil {
-		t.Fatal(err)
+	if addReplaceErr := consumerMod.AddReplace("github.com/ob-labs/powercontext-go", "", filepath.ToSlash(root), ""); addReplaceErr != nil {
+		t.Fatal(addReplaceErr)
 	}
 	encoded, err := consumerMod.Format()
 	if err != nil {

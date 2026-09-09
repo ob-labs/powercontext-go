@@ -55,14 +55,14 @@ func EnsureSQLiteSkillDistributionSchema(ctx context.Context, db DBTX) error {
 	if !remoteSkillTargetSchemaNeedsStatePayloadUpgrade(schemaSQL) {
 		return nil
 	}
-	if _, err := db.ExecContext(ctx, "ALTER TABLE "+remoteSkillTargetTable+" RENAME TO "+legacyRemoteSkillTargetTable); err != nil {
-		return err
+	if _, renameErr := db.ExecContext(ctx, "ALTER TABLE "+remoteSkillTargetTable+" RENAME TO "+legacyRemoteSkillTargetTable); renameErr != nil {
+		return renameErr
 	}
-	if err := createSQLiteSkillDistributionTable(ctx, db); err != nil {
-		return err
+	if createTableErr := createSQLiteSkillDistributionTable(ctx, db); createTableErr != nil {
+		return createTableErr
 	}
-	if _, err := db.ExecContext(ctx, "INSERT INTO "+remoteSkillTargetTable+" ("+remoteSkillTargetColumns+") SELECT "+remoteSkillTargetColumns+" FROM "+legacyRemoteSkillTargetTable); err != nil {
-		return err
+	if migrateRowsErr := db.ExecContext(ctx, "INSERT INTO "+remoteSkillTargetTable+" ("+remoteSkillTargetColumns+") SELECT "+remoteSkillTargetColumns+" FROM "+legacyRemoteSkillTargetTable); migrateRowsErr != nil {
+		return migrateRowsErr
 	}
 	_, err = db.ExecContext(ctx, "DROP TABLE "+legacyRemoteSkillTargetTable)
 	return err
