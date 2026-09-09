@@ -158,7 +158,8 @@ func createSQLiteSkillDistributionTable(ctx context.Context, db DBTX) error {
                 AND credential_verifier IS NULL
                 AND (
                     (installation_id IS NULL AND credential_subject IS NULL) OR
-                    (length(installation_id) > 0 AND length(credential_subject) > 0)
+                    (installation_id IS NOT NULL AND length(installation_id) > 0 AND
+                        credential_subject IS NOT NULL AND length(credential_subject) > 0)
                 )
             )
         )

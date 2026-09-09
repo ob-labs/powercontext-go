@@ -612,6 +612,18 @@ func assertRemoteSkillTargetRequiredStateFieldsRejected(t *testing.T, database *
 			values:  "?, ?, 'Missing active last seen', 'codex', 'project', 'agent_pull', 'active', 'project-installation', 'target-subject', ?, '0.1.0', 0, ?, ?",
 			args:    []any{scopeID, "active-missing-last-seen", remoteSkillTargetDigest, now, now},
 		},
+		{
+			name:    "revoked installation ID",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, credential_subject, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing revoked installation', 'codex', 'project', 'agent_pull', 'revoked', 'target-subject', 0, ?, ?",
+			args:    []any{scopeID, "revoked-missing-installation", now, now},
+		},
+		{
+			name:    "revoked credential subject",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing revoked subject', 'codex', 'project', 'agent_pull', 'revoked', 'project-installation', 0, ?, ?",
+			args:    []any{scopeID, "revoked-missing-subject", now, now},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
