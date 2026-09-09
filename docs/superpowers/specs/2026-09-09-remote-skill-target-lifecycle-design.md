@@ -36,7 +36,7 @@ One durable target is identified by `(scope_id, target_id)` and has one of:
 | --- | --- | --- |
 | `pending` | enrollment code digest and expiry | installation identity and credential verifier |
 | `active` | installation identity, credential subject, credential verifier, receiver metadata | enrollment code digest and expiry |
-| `revoked` | identity and historical non-secret metadata | enrollment code digest and credential verifier |
+| `revoked` | identity and historical non-secret metadata | enrollment code digest, expiry, and credential verifier |
 
 The target retains a non-negative `generation`. `rename` and `revoke` require
 an exact expected generation. A successful mutation increments generation;
@@ -71,6 +71,12 @@ SQLite enforces both the two-agent enum and the state-payload shape with
 `CHECK` constraints. Initial creation is a direct unique-key insert; updates
 use `WHERE scope_id = ? AND target_id = ? AND generation = ?`, then re-read a
 zero-row update to distinguish missing target from stale generation.
+
+The upstream Python handler currently maps a missing target to a conflict even
+though its OpenAPI contract declares not found. Go deliberately corrects that
+gap: a missing target maps to a typed not-found result, while an existing row
+with a different generation maps to a typed conflict. Tests must demonstrate
+both outcomes.
 
 ## Canonical HTTP Contract
 

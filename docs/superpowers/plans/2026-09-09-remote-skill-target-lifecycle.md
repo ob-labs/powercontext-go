@@ -49,7 +49,7 @@
 
 - [ ] Write failing SQLite tests for table creation, same-name-view refusal, restart persistence, no raw secret bytes, target-kind `CHECK`, duplicate insert, stale generation, and missing-target distinction.
 - [ ] Run `go test -count=1 ./internal/sqlstore -run '^(TestRemoteSkillTarget|TestSQLiteSkillDistribution)'` and confirm failure from missing schema/repository behavior.
-- [ ] Implement `pc_agent_skill_targets` with `(scope_id,target_id)` primary key, scope FK, unique digest identities, the two-agent `CHECK`, exact state-payload `CHECK`, and non-negative generation. Add direct-insert create and `UPDATE ... WHERE generation = ?` CAS with zero-row re-read.
+- [ ] Implement `pc_agent_skill_targets` with `(scope_id,target_id)` primary key, scope FK, unique digest identities, the two-agent `CHECK`, exact state-payload `CHECK`, and non-negative generation. Add direct-insert create and `UPDATE ... WHERE generation = ?` CAS with zero-row re-read. Map an absent row to not found and an existing generation mismatch to conflict.
 - [ ] Re-run the focused tests and commit `feat(sqlite): persist remote skill targets`.
 
 ### Task 3: Scoped Runtime Lifecycle
