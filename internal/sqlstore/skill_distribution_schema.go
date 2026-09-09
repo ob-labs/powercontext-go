@@ -36,6 +36,7 @@ var remoteSkillTargetRequiredStateClauses = []string{
 	"credential_verifier IS NOT NULL",
 	"receiver_version IS NOT NULL",
 	"last_seen_at IS NOT NULL",
+	"(installation_id IS NOT NULL AND length(installation_id) > 0 AND\n                        credential_subject IS NOT NULL AND length(credential_subject) > 0)",
 }
 
 // EnsureSQLiteSkillDistributionSchema creates the SQLite-only durable target

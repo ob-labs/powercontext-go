@@ -107,6 +107,16 @@ const preRequiredFieldsRemoteSkillTargetSchema = `CREATE TABLE pc_agent_skill_ta
     )
 )`
 
+func preRevokedPairRequiredRemoteSkillTargetSchema() string {
+	return strings.NewReplacer(
+		"state = 'pending'\n            AND length(enrollment_code_digest) = 64", "state = 'pending'\n            AND enrollment_code_digest IS NOT NULL\n            AND length(enrollment_code_digest) = 64",
+		"AND length(enrollment_expires_at) > 0\n            AND installation_id IS NULL", "AND enrollment_expires_at IS NOT NULL\n            AND length(enrollment_expires_at) > 0\n            AND installation_id IS NULL",
+		"AND length(installation_id) > 0\n            AND length(credential_subject) > 0\n            AND length(credential_verifier) = 64", "AND installation_id IS NOT NULL\n            AND length(installation_id) > 0\n            AND credential_subject IS NOT NULL\n            AND length(credential_subject) > 0\n            AND credential_verifier IS NOT NULL\n            AND length(credential_verifier) = 64",
+		"AND length(receiver_version) > 0", "AND receiver_version IS NOT NULL\n            AND length(receiver_version) > 0",
+		"AND length(last_seen_at) > 0", "AND last_seen_at IS NOT NULL\n            AND length(last_seen_at) > 0",
+	).Replace(preRequiredFieldsRemoteSkillTargetSchema)
+}
+
 func TestRemoteSkillTargetRepositoryPersistsAcrossRestartWithoutRawSecrets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "remote-targets.db")
 	first := openRemoteSkillTargetDatabase(t, path)
@@ -410,6 +420,43 @@ func TestOpenSQLiteUpgradesPreRequiredFieldsTargetSchema(t *testing.T) {
 	assertRemoteSkillTargetRequiredStateFieldsRejected(t, database, "scope-target-upgrade-required-state")
 }
 
+func TestOpenSQLiteUpgradesPreRevokedPairRequiredTargetSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pre-revoked-pair-required-targets.db")
+	database := openRemoteSkillTargetDatabase(t, path)
+	const scopeID = "scope-target-upgrade-revoked-pair"
+	seedRemoteSkillTargetScope(t, database, scopeID)
+	legacySchema := preRevokedPairRequiredRemoteSkillTargetSchema()
+	for _, clause := range []string{
+		"enrollment_code_digest IS NOT NULL",
+		"enrollment_expires_at IS NOT NULL",
+		"installation_id IS NOT NULL",
+		"credential_subject IS NOT NULL",
+		"credential_verifier IS NOT NULL",
+		"receiver_version IS NOT NULL",
+		"last_seen_at IS NOT NULL",
+	} {
+		if !strings.Contains(legacySchema, clause) {
+			t.Fatalf("legacy schema is missing strict clause %q", clause)
+		}
+	}
+	if strings.Contains(legacySchema, "(installation_id IS NOT NULL AND length(installation_id) > 0 AND\n                        credential_subject IS NOT NULL AND length(credential_subject) > 0)") {
+		t.Fatal("legacy schema unexpectedly has the strict revoked identity pair")
+	}
+	for _, statement := range []string{
+		"DROP TABLE pc_agent_skill_targets",
+		legacySchema,
+	} {
+		if _, err := database.SQLDB().ExecContext(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	closeRemoteSkillTargetDatabase(t, database)
+
+	upgraded := openRemoteSkillTargetDatabase(t, path)
+	t.Cleanup(func() { closeRemoteSkillTargetDatabase(t, upgraded) })
+	assertRemoteSkillTargetRevokedPairRejected(t, upgraded, scopeID)
+}
+
 func TestOpenSQLiteRejectsInvalidLegacyRemoteTargetWithoutPartialSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "invalid-pre-required-fields-targets.db")
 	database := openRemoteSkillTargetDatabase(t, path)
@@ -632,6 +679,41 @@ func assertRemoteSkillTargetRequiredStateFieldsRejected(t *testing.T, database *
 			var sqliteErr sqlite3.Error
 			if !errors.As(err, &sqliteErr) || sqliteErr.Code != sqlite3.ErrConstraint {
 				t.Fatalf("direct insert omitting %s = %T %v, want SQLite CHECK refusal", test.name, err, err)
+			}
+		})
+	}
+}
+
+func assertRemoteSkillTargetRevokedPairRejected(t *testing.T, database *sqlstore.Database, scopeID string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	tests := []struct {
+		name    string
+		columns string
+		values  string
+		args    []any
+	}{
+		{
+			name:    "missing installation ID",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, credential_subject, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing revoked installation', 'codex', 'project', 'agent_pull', 'revoked', 'target-subject', 0, ?, ?",
+			args:    []any{scopeID, "revoked-missing-installation", now, now},
+		},
+		{
+			name:    "missing credential subject",
+			columns: "scope_id, target_id, display_name, agent_kind, installation_scope, delivery_mode, state, installation_id, generation, created_at, updated_at",
+			values:  "?, ?, 'Missing revoked subject', 'codex', 'project', 'agent_pull', 'revoked', 'project-installation', 0, ?, ?",
+			args:    []any{scopeID, "revoked-missing-subject", now, now},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			query := "INSERT INTO pc_agent_skill_targets (" + test.columns + ") VALUES (" + test.values + ")"
+			_, err := database.SQLDB().ExecContext(t.Context(), query, test.args...)
+			sqliteErr, ok := errors.AsType[sqlite3.Error](err)
+			if !ok || sqliteErr.Code != sqlite3.ErrConstraint {
+				t.Fatalf("direct insert omitting revoked %s = %T %v, want SQLite CHECK refusal", test.name, err, err)
 			}
 		})
 	}
