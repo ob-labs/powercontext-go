@@ -6,7 +6,7 @@
 
 **Architecture:** A Skill domain model and SQLite repository hold remote target enrollment state. A Runtime application owns Scope admission, secret issuance, and generation CAS. A separately generated canonical sidecar exposes five lifecycle operations while preserving frozen legacy and existing managed-Skill sidecars.
 
-**Tech Stack:** Go 1.25, SQLite, existing Runtime scoped locks, Ogen canonical sidecars, SHA-256 digests, Go HTTP TLS/loopback policy.
+**Tech Stack:** Go 1.27, SQLite, existing Runtime scoped locks, Ogen canonical sidecars, SHA-256 digests, Go HTTP TLS/loopback policy.
 
 **Spec:** `docs/superpowers/specs/2026-09-09-remote-skill-target-lifecycle-design.md`
 
@@ -18,7 +18,7 @@
 - Add a separate canonical remote-Skill sidecar; do not extend existing managed-Skill sidecar or MCP tools.
 - Persist SHA-256 secret digests only. Do not log, trace, persist, or re-render raw enrollment codes or credentials.
 - `enroll` is the only exact static-bearer exemption. Require TLS or direct loopback HTTP.
-- Every new behavior starts with a failing test and follows Modern Go 1.25 guidance.
+- Every new behavior starts with a failing test and follows Modern Go 1.27 guidance.
 
 ---
 
