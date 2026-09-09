@@ -61,7 +61,7 @@ func EnsureSQLiteSkillDistributionSchema(ctx context.Context, db DBTX) error {
 	if createTableErr := createSQLiteSkillDistributionTable(ctx, db); createTableErr != nil {
 		return createTableErr
 	}
-	if migrateRowsErr := db.ExecContext(ctx, "INSERT INTO "+remoteSkillTargetTable+" ("+remoteSkillTargetColumns+") SELECT "+remoteSkillTargetColumns+" FROM "+legacyRemoteSkillTargetTable); migrateRowsErr != nil {
+	if _, migrateRowsErr := db.ExecContext(ctx, "INSERT INTO "+remoteSkillTargetTable+" ("+remoteSkillTargetColumns+") SELECT "+remoteSkillTargetColumns+" FROM "+legacyRemoteSkillTargetTable); migrateRowsErr != nil {
 		return migrateRowsErr
 	}
 	_, err = db.ExecContext(ctx, "DROP TABLE "+legacyRemoteSkillTargetTable)
