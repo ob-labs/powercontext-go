@@ -1480,7 +1480,7 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 	if !ok {
 		t.Fatal("windows-contract.yml has no windows-contract job")
 	}
-	setupIndex, apiTestIndex, executorTestIndex, headerIndex, syftIndex, archiveConsumerIndex := -1, -1, -1, -1, -1, -1
+	setupIndex, apiTestIndex, executorTestIndex, metadataTestIndex, headerIndex, syftIndex, archiveConsumerIndex := -1, -1, -1, -1, -1, -1, -1
 	for index, step := range job.Steps {
 		switch step.Name {
 		case "Set up the Go environment":
@@ -1494,6 +1494,12 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 		case "Verify Windows Task Scheduler executor boundary":
 			if strings.TrimSpace(step.Run) == "go test -count=1 ./internal/personalsvchost/windows" {
 				executorTestIndex = index
+			}
+		case "Verify Windows archive build date normalization":
+			if strings.Contains(step.Run, "windows-archive-consumer.ps1") &&
+				strings.Contains(step.Run, "-BuildInfoJSON") && strings.Contains(step.Run, "-ExpectedBuildDate") &&
+				strings.Contains(step.Run, "accepted a mismatched UTC instant") {
+				metadataTestIndex = index
 			}
 		case "Stage locked SQLite headers for Windows archive consumption":
 			if strings.Contains(step.Run, "go-sqlite3@v1.14.33\\sqlite3-binding.h") {
@@ -1511,12 +1517,13 @@ func TestWindowsContractExercisesTargetedGoRegressions(t *testing.T) {
 		}
 	}
 	if setupIndex < 0 || apiTestIndex <= setupIndex || executorTestIndex <= apiTestIndex ||
-		headerIndex <= executorTestIndex || syftIndex <= headerIndex || archiveConsumerIndex <= syftIndex {
+		metadataTestIndex <= executorTestIndex || headerIndex <= metadataTestIndex || syftIndex <= headerIndex || archiveConsumerIndex <= syftIndex {
 		t.Fatalf(
-			"Windows targeted steps = setup %d, API %d, executor %d, header %d, Syft %d, archive consumer %d, want ordered setup and regression tests",
+			"Windows targeted steps = setup %d, API %d, executor %d, metadata %d, header %d, Syft %d, archive consumer %d, want ordered setup and regression tests",
 			setupIndex,
 			apiTestIndex,
 			executorTestIndex,
+			metadataTestIndex,
 			headerIndex,
 			syftIndex,
 			archiveConsumerIndex,
@@ -1943,7 +1950,13 @@ func validateWindowsReleaseInventory(releasePayload, verificationPayload []byte)
 	if err := yaml.Unmarshal(verificationPayload, &verificationWorkflow); err != nil {
 		return err
 	}
+	if err := validateWindowsReleaseBuildInventory(releaseWorkflow); err != nil {
+		return err
+	}
+	return validateWindowsReleaseVerificationInventory(verificationWorkflow)
+}
 
+func validateWindowsReleaseBuildInventory(releaseWorkflow releaseIntegrationWorkflow) error {
 	binaries, ok := releaseWorkflow.Jobs["binaries"]
 	if !ok {
 		return errors.New("release.yml has no binaries job")
@@ -2006,7 +2019,10 @@ func validateWindowsReleaseInventory(releasePayload, verificationPayload []byte)
 			return fmt.Errorf("release.yml release inventory is missing %q", required)
 		}
 	}
+	return nil
+}
 
+func validateWindowsReleaseVerificationInventory(verificationWorkflow releaseIntegrationWorkflow) error {
 	verify, ok := verificationWorkflow.Jobs["verify"]
 	if !ok {
 		return errors.New("release-verify.yml has no verify job")

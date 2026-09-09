@@ -34,6 +34,24 @@ jobs:
       - name: Verify Windows Task Scheduler executor boundary
         run: go test -count=1 ./internal/personalsvchost/windows
 
+      - name: Verify Windows archive build date normalization
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\test\release\windows-archive-consumer.ps1 `
+            -BuildInfoJSON '{"build_date":"2026-09-09T15:24:41Z"}' `
+            -ExpectedBuildDate '2026-09-09T15:24:41Z'
+          try {
+            .\test\release\windows-archive-consumer.ps1 `
+              -BuildInfoJSON '{"build_date":"2026-09-09T15:24:41Z"}' `
+              -ExpectedBuildDate '2026-09-09T15:24:42Z'
+            throw 'Windows archive metadata accepted a mismatched UTC instant'
+          } catch {
+            if ($_.Exception.Message -notlike '*does not match the expected UTC instant*') {
+              throw
+            }
+          }
+
       - name: Stage locked SQLite headers for Windows archive consumption
         shell: pwsh
         run: |

@@ -11,7 +11,10 @@ param(
   [Parameter(Mandatory, ParameterSetName = 'Published')]
   [string]$ExpectedCommit,
   [Parameter(Mandatory, ParameterSetName = 'Published')]
-  [string]$ExpectedBuildDate
+  [Parameter(Mandatory, ParameterSetName = 'Metadata')]
+  [string]$ExpectedBuildDate,
+  [Parameter(Mandatory, ParameterSetName = 'Metadata')]
+  [string]$BuildInfoJSON
 )
 
 Set-StrictMode -Version Latest
@@ -59,6 +62,37 @@ function Assert-Equal {
   if ($Actual -cne $Expected) {
     throw "$Name = $Actual, want $Expected"
   }
+}
+
+function Assert-BuildDate {
+  param(
+    [Parameter(Mandatory)]
+    [object]$Actual,
+    [Parameter(Mandatory)]
+    [string]$Expected
+  )
+
+  try {
+    $actualInstant = ([DateTimeOffset]$Actual).ToUniversalTime()
+    $dateStyles = [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal
+    $expectedInstant = [DateTimeOffset]::ParseExact(
+      $Expected,
+      "yyyy-MM-dd'T'HH:mm:ss'Z'",
+      [Globalization.CultureInfo]::InvariantCulture,
+      $dateStyles
+    )
+  } catch {
+    throw 'build manifest date is not a valid UTC instant'
+  }
+  if ($actualInstant -ne $expectedInstant) {
+    throw 'build manifest date does not match the expected UTC instant'
+  }
+}
+
+if ($PSCmdlet.ParameterSetName -eq 'Metadata') {
+  $metadata = $BuildInfoJSON | ConvertFrom-Json
+  Assert-BuildDate -Actual $metadata.build_date -Expected $ExpectedBuildDate
+  return
 }
 
 function Wait-Live {
@@ -239,12 +273,12 @@ try {
     @{ Name = 'build manifest edition'; Actual = $buildInfo.edition; Expected = 'standard' },
     @{ Name = 'build manifest version'; Actual = $buildInfo.version; Expected = $version },
     @{ Name = 'build manifest commit'; Actual = $buildInfo.commit; Expected = $commit },
-    @{ Name = 'build manifest date'; Actual = $buildInfo.build_date; Expected = $buildDate },
     @{ Name = 'build manifest target'; Actual = $buildInfo.target; Expected = 'windows-amd64' },
     @{ Name = 'build manifest binary path'; Actual = $buildInfo.binary.path; Expected = 'bin/powercontext.exe' }
   )) {
     Assert-Equal -Name $assertion.Name -Actual $assertion.Actual -Expected $assertion.Expected
   }
+  Assert-BuildDate -Actual $buildInfo.build_date -Expected $buildDate
   if ($buildInfo.cgo_enabled -ne $true) {
     throw 'build manifest does not record CGO-enabled Windows release bytes'
   }

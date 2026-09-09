@@ -634,3 +634,11 @@ source / artifact / trigger / inference
   root, reject global load roots, and fail closed on missing or nonempty
   `DropInPaths`. Verify global paths, drop-ins, space-containing command
   arguments, and zero-value public operations cannot reach a native boundary.
+- When PowerShell deserializes timestamp-bearing JSON, do not pass the resulting
+  `DateTime` through a string-typed assertion. Convert both values to
+  `DateTimeOffset`, compare their UTC instants, and verify the path with a real
+  `ConvertFrom-Json` fixture under the Windows runner locale.
+- When a workflow contract validator spans independent build and verification
+  jobs, keep one parsing entry point but split job-specific checks before the
+  pinned complexity threshold. Verify every existing mutant and the exact
+  pinned lint command so the split cannot weaken the contract.
