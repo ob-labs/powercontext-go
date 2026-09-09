@@ -383,7 +383,10 @@ func EnsureBuiltinSchema(ctx context.Context, db DBTX) error {
 	if err := EnsureBuiltinSchemaForDialect(ctx, db, SQLiteDialect); err != nil {
 		return err
 	}
-	return EnsureSQLiteSkillPackageSchema(ctx, db)
+	if err := EnsureSQLiteSkillPackageSchema(ctx, db); err != nil {
+		return err
+	}
+	return EnsureSQLiteSkillDistributionSchema(ctx, db)
 }
 
 // EnsureBuiltinSchemaForDialect creates the same logical SQLAlchemy schema
