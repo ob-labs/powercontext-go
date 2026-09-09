@@ -21,10 +21,10 @@ name = "powercontext-eval"
 version = "0.1.0"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-  "fastapi>=0.116,<1",
-  "pydantic>=2.10,<3",
-  "typer>=0.16,<1",
-  "uvicorn>=0.35,<1",
+  "fastapi>=0.141.1,<1",
+  "pydantic>=2.13.5,<3",
+  "typer>=0.27.2,<1",
+  "uvicorn>=0.52.4,<1",
 ]
 
 [project.scripts]
@@ -34,8 +34,8 @@ powercontext-eval = "powercontext_eval.cli:main"
 dev = [
   "httpx>=0.28,<1",
   "pytest>=9.0.2",
-  "ruff>=0.15.7",
-  "ty>=0.0.24",
+  "ruff>=0.16.6",
+  "ty>=0.0.78",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -18,16 +18,16 @@ version = "0.0.0"
 description = "Locked documentation build environment for PowerContext Go."
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "click==8.4.2",
+    "click==8.5.0",
     "deepmerge==2.1.0",
     "jinja2==3.1.6",
-    "markdown==3.10.2",
+    "markdown==3.10.3",
     "markupsafe==3.0.3",
-    "pygments==2.20.0",
-    "pymdown-extensions==11.0.1",
+    "pygments==2.21.0",
+    "pymdown-extensions==11.0.2",
     "pyyaml==6.0.3",
     "tomli==2.4.1",
-    "zensical==0.0.47",
+    "zensical==0.0.59",
 ]
 
 [tool.uv]
