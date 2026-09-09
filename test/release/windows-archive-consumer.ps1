@@ -236,12 +236,12 @@ try {
   if (!(Test-Path -LiteralPath $database -PathType Leaf)) {
     throw 'personal service did not create its SQLite database'
   }
-  $header = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($database), 0, 16)
-  Assert-Equal -Name 'personal service SQLite header' -Actual $header -Expected "SQLite format 3$([char]0)"
 
   $uninstall = Invoke-Server -Binary $archiveBinary -Arguments @('server', 'uninstall', '--data-dir', $dataDirectory)
   Assert-Equal -Name 'uninstall registration' -Actual $uninstall.registration -Expected 'not_installed'
   Wait-ArchiveProcessExit -Binary $archiveBinary
+  $header = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($database), 0, 16)
+  Assert-Equal -Name 'personal service SQLite header' -Actual $header -Expected "SQLite format 3$([char]0)"
   Wait-Unreachable -Endpoint $endpoint
   $postUninstall = Invoke-Server -Binary $archiveBinary -Arguments @('server', 'status', '--data-dir', $dataDirectory)
   Assert-Equal -Name 'post-uninstall registration' -Actual $postUninstall.registration -Expected 'not_installed'
