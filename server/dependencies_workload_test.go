@@ -20,6 +20,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +30,67 @@ import (
 	"github.com/ob-labs/powercontext-go/artifact/memory"
 	"github.com/ob-labs/powercontext-go/inference"
 )
+
+func TestAssembleDependenciesRoutesAnthropicBaseURLToGenerationReadiness(t *testing.T) {
+	type requestDetails struct {
+		method        string
+		path          string
+		apiKey        string
+		authorization string
+	}
+	requests := make(chan requestDetails, 4)
+	provider := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		requests <- requestDetails{
+			method:        request.Method,
+			path:          request.URL.Path,
+			apiKey:        request.Header.Get("X-Api-Key"),
+			authorization: request.Header.Get("Authorization"),
+		}
+		response.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(response).Encode(map[string]any{
+			"id": "probe", "type": "message", "role": "assistant", "model": "claude-test",
+			"content":     []any{map[string]any{"type": "text", "text": "ok"}},
+			"stop_reason": "end_turn", "stop_sequence": nil,
+			"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+		}); err != nil {
+			t.Errorf("encode Anthropic response: %v", err)
+		}
+	}))
+	t.Cleanup(provider.Close)
+	t.Setenv("ANTHROPIC_API_KEY", "environment-key")
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:1")
+
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Inference.GenerationModel = "anthropic:claude-test"
+	config.Inference.Generation = &InferenceWorkloadConfig{BaseURL: provider.URL + "/custom-anthropic/"}
+	if validationErr := config.Validate(); validationErr != nil {
+		t.Fatal(validationErr)
+	}
+	assembled, err := assembleDependencies(
+		config, Dependencies{HTTPClient: provider.Client()}, noop.NewTracerProvider(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assembled.generationReadiness == nil {
+		t.Fatal("configured Anthropic generation model did not produce a readiness operation")
+	}
+	if err := assembled.generationReadiness(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	request := <-requests
+	if request.method != http.MethodPost || request.path != "/custom-anthropic/v1/messages" ||
+		request.apiKey != "environment-key" || request.authorization != "" {
+		t.Fatalf("Anthropic readiness request = %#v", request)
+	}
+	if len(requests) != 0 {
+		t.Fatalf("unexpected additional Anthropic readiness requests = %d", len(requests))
+	}
+}
 
 func TestAssembleDependenciesRoutesOpenAIWorkloadOverrides(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
