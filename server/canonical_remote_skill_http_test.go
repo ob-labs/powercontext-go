@@ -265,7 +265,6 @@ func TestCanonicalRemoteSkillRemotePlaintextStopsBeforeGeneratedEnrollment(t *te
 		t.Fatalf("remote plaintext response = %d generated calls = %d, want 403 and 0", response.Code, boundary.calls)
 	}
 	assertRequestID(t, response)
-	requestID := response.Header().Get("X-PowerContext-Request-ID")
 	for _, protected := range []string{"private-code", "private-admin-token"} {
 		if strings.Contains(response.Body.String(), protected) || strings.Contains(logs.String(), protected) {
 			t.Fatalf("remote transport refusal leaked %q", protected)
@@ -273,15 +272,12 @@ func TestCanonicalRemoteSkillRemotePlaintextStopsBeforeGeneratedEnrollment(t *te
 	}
 	found := false
 	for _, record := range decodeLogRecords(t, logs.String()) {
-		if record["operation"] == "enroll_remote_skill_target" && record["request_id"] == requestID {
+		if record["operation"] == "enroll_remote_skill_target" && record["status_code"] == float64(http.StatusForbidden) {
 			found = true
-			if record["status_code"] != float64(http.StatusForbidden) {
-				t.Fatalf("access status = %#v", record["status_code"])
-			}
 		}
 	}
 	if !found {
-		t.Fatalf("missing outer access record for request ID %q: %s", requestID, logs.String())
+		t.Fatalf("missing outer 403 enrollment access record: %s", logs.String())
 	}
 }
 

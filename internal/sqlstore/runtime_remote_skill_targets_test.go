@@ -331,6 +331,9 @@ func TestRuntimeRemoteSkillTargetLookupStorageFailureIsRedactedAndPropagated(t *
 	if _, ok := errors.AsType[*sqlstore.RemoteSkillTargetStorageError](err); !ok {
 		t.Fatalf("Enroll error = %T %v, want redacted storage error", err, err)
 	}
+	if _, ok := errors.AsType[*sqlstore.DatabaseClosedError](err); ok {
+		t.Fatalf("Enroll error = %T %v, unexpectedly exposes closed database detail", err, err)
+	}
 	assertRuntimeRemoteTargetDoesNotRender(t, err, "private-enrollment-code", "remote-target-storage.db")
 }
 

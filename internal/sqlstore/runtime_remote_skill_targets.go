@@ -46,7 +46,7 @@ func (s *RuntimeRemoteSkillTargetStore) Create(
 	if s == nil || s.database == nil {
 		return skill.RemoteTarget{}, &RemoteSkillTargetStorageError{}
 	}
-	return result, s.database.Transaction(ctx, func(tx DBTX) error {
+	return result, s.transaction(ctx, func(tx DBTX) error {
 		result, returnErr = s.repository.Create(ctx, tx, target)
 		return returnErr
 	})
@@ -59,7 +59,7 @@ func (s *RuntimeRemoteSkillTargetStore) List(
 	if s == nil || s.database == nil {
 		return nil, &RemoteSkillTargetStorageError{}
 	}
-	return result, s.database.Transaction(ctx, func(tx DBTX) error {
+	return result, s.transaction(ctx, func(tx DBTX) error {
 		result, returnErr = s.repository.List(ctx, tx, scopeID)
 		return returnErr
 	})
@@ -72,7 +72,7 @@ func (s *RuntimeRemoteSkillTargetStore) FindByEnrollmentDigest(
 	if s == nil || s.database == nil {
 		return skill.RemoteTarget{}, false, &RemoteSkillTargetStorageError{}
 	}
-	return result, found, s.database.Transaction(ctx, func(tx DBTX) error {
+	return result, found, s.transaction(ctx, func(tx DBTX) error {
 		result, found, returnErr = s.repository.FindByEnrollmentDigest(ctx, tx, digest)
 		return returnErr
 	})
@@ -87,7 +87,7 @@ func (s *RuntimeRemoteSkillTargetStore) ConsumePending(
 	if s == nil || s.database == nil {
 		return skill.RemoteTarget{}, false, &RemoteSkillTargetStorageError{}
 	}
-	return result, consumed, s.database.Transaction(ctx, func(tx DBTX) error {
+	return result, consumed, s.transaction(ctx, func(tx DBTX) error {
 		result, consumed, returnErr = s.repository.ConsumePending(ctx, tx, target, digest, now)
 		return returnErr
 	})
@@ -101,8 +101,36 @@ func (s *RuntimeRemoteSkillTargetStore) Replace(
 	if s == nil || s.database == nil {
 		return skill.RemoteTarget{}, &RemoteSkillTargetStorageError{}
 	}
-	return result, s.database.Transaction(ctx, func(tx DBTX) error {
+	return result, s.transaction(ctx, func(tx DBTX) error {
 		result, returnErr = s.repository.Replace(ctx, tx, target, expectedGeneration)
 		return returnErr
 	})
+}
+
+// transaction maps database admission, transaction, and commit failures to
+// the redacted storage contract while preserving repository domain outcomes.
+func (s *RuntimeRemoteSkillTargetStore) transaction(ctx context.Context, operation func(DBTX) error) error {
+	var operationErr error
+	transactionErr := s.database.Transaction(ctx, func(tx DBTX) error {
+		operationErr = operation(tx)
+		return operationErr
+	})
+	if transactionErr == nil {
+		return nil
+	}
+	if operationErr != nil && transactionErr == operationErr && remoteSkillTargetRepositoryError(operationErr) {
+		return operationErr
+	}
+	return &RemoteSkillTargetStorageError{}
+}
+
+func remoteSkillTargetRepositoryError(err error) bool {
+	if _, ok := errors.AsType[*RemoteSkillTargetStorageError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*skill.RemoteTargetNotFoundError](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[*skill.RemoteTargetGenerationConflictError](err)
+	return ok
 }
