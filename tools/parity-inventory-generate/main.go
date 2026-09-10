@@ -174,15 +174,16 @@ var (
 )
 
 const (
-	latestNodeManifestSchemaVersion = 1
-	latestNodeManifestCommit        = "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
-	modeGoPort                      = "go-port"
-	modeRetainedHost                = "retained-host"
-	modeCrossLayer                  = "cross-layer"
-	statusMapped                    = "mapped"
-	statusPending                   = "pending"
-	sourceOracle                    = "oracle-traceability"
-	sourceRules                     = "rules"
+	latestNodeManifestSchemaVersion          = 1
+	latestNodeManifestCommit                 = "e4ebdcdff64a9793aa30f5d087cc71cd7e9ba87c"
+	modeGoPort                               = "go-port"
+	modeRetainedHost                         = "retained-host"
+	modeCrossLayer                           = "cross-layer"
+	unsupportedPersonalServicePlatformReason = "unsupported-personal-service-platform"
+	statusMapped                             = "mapped"
+	statusPending                            = "pending"
+	sourceOracle                             = "oracle-traceability"
+	sourceRules                              = "rules"
 )
 
 func main() {
@@ -419,7 +420,7 @@ func validateParityScope(scope parityScope) error {
 	if err := requireExactSet("external_agents", scope.ExternalAgents, "codex", "workbuddy"); err != nil {
 		return err
 	}
-	if err := requireExactSet("out_of_scope_reasons", scope.OutOfScopeReasons, "unsupported-database", "unsupported-agent", "non-product"); err != nil {
+	if err := requireExactSet("out_of_scope_reasons", scope.OutOfScopeReasons, "unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason); err != nil {
 		return err
 	}
 	for caseID, rule := range scope.Cases {
@@ -428,6 +429,9 @@ func validateParityScope(scope parityScope) error {
 		}
 		if err := validateCaseScopeRule(caseID, rule); err != nil {
 			return err
+		}
+		if rule.OutOfScopeReason == unsupportedPersonalServicePlatformReason && !isUnsupportedPersonalServicePlatformCase(caseID) {
+			return fmt.Errorf("%s uses %q outside an unsupported personal-service platform case", caseID, unsupportedPersonalServicePlatformReason)
 		}
 	}
 	return nil
@@ -460,8 +464,31 @@ func validateLatestCaseScope(scope parityScope, discoveredCaseIDs []string) erro
 		if _, ok := discovered[caseID]; !ok {
 			return fmt.Errorf("scope classification names unknown latest case %s", caseID)
 		}
+		if isUnsupportedPersonalServicePlatformCase(caseID) {
+			rule := scope.Cases[caseID]
+			if rule.Classification != "out_of_scope" || rule.OutOfScopeReason != unsupportedPersonalServicePlatformReason {
+				return fmt.Errorf("%s must be out_of_scope with %q", caseID, unsupportedPersonalServicePlatformReason)
+			}
+		}
 	}
 	return nil
+}
+
+func isUnsupportedPersonalServicePlatformCase(caseID string) bool {
+	if strings.HasPrefix(caseID, "tests/client/test_receiver_service.py::test_systemd_user_service_") {
+		return true
+	}
+	name, found := strings.CutPrefix(caseID, "tests/test_service.py::")
+	if !found {
+		return false
+	}
+	if strings.HasPrefix(name, "test_systemd_") || strings.HasPrefix(name, "test_launchd_") {
+		return true
+	}
+	return strings.HasPrefix(name, "test_manager_query_failure_reports_unknown_ownership[systemd]") ||
+		strings.HasPrefix(name, "test_manager_query_failure_reports_unknown_ownership[launchd]") ||
+		strings.HasPrefix(name, "test_native_uninstall_recovery_uses_an_exact_scoped_command[systemd-") ||
+		strings.HasPrefix(name, "test_native_uninstall_recovery_uses_an_exact_scoped_command[launchd-")
 }
 
 func validateLatestScopeFile(scopePath, nodeManifestPath string) error {
@@ -654,6 +681,10 @@ func validateOutOfScopeCase(caseID string, rule caseScopeRule) error {
 	case "non-product":
 		if rule.Database != "" || rule.ExternalAgent != "" {
 			return fmt.Errorf("%s is non-product but names a database or external agent", caseID)
+		}
+	case unsupportedPersonalServicePlatformReason:
+		if rule.Database != "" || rule.ExternalAgent != "" {
+			return fmt.Errorf("%s excludes an unsupported personal-service platform but names a database or external agent", caseID)
 		}
 	default:
 		return fmt.Errorf("%s has unsupported out_of_scope_reason %q", caseID, rule.OutOfScopeReason)

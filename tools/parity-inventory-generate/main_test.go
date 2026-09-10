@@ -221,7 +221,7 @@ func TestLoadParityScopeValidatesMixedRules(t *testing.T) {
 }
 
 func mixedScopeDocument(rule string) string {
-	return fmt.Sprintf(`{"schema_version":1,"databases":["sqlite"],"external_agents":["codex","workbuddy"],"out_of_scope_reasons":["unsupported-database","unsupported-agent","non-product"],"cases":{"tests/test_mixed.py::test_case":%s}}`, rule)
+	return fmt.Sprintf(`{"schema_version":1,"databases":["sqlite"],"external_agents":["codex","workbuddy"],"out_of_scope_reasons":["unsupported-database","unsupported-agent","non-product","unsupported-personal-service-platform"],"cases":{"tests/test_mixed.py::test_case":%s}}`, rule)
 }
 
 func TestValidateParityScopeRequiresFactualOutOfScopeReason(t *testing.T) {
@@ -229,7 +229,7 @@ func TestValidateParityScopeRequiresFactualOutOfScopeReason(t *testing.T) {
 		SchemaVersion:     1,
 		Databases:         []string{"sqlite"},
 		ExternalAgents:    []string{"codex", "workbuddy"},
-		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product"},
+		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
 		Cases:             map[string]caseScopeRule{},
 	}
 	tests := []struct {
@@ -266,7 +266,7 @@ func TestValidateLatestScopeFileRequiresExactCaseCoverage(t *testing.T) {
   "schema_version": 1,
   "databases": ["sqlite"],
   "external_agents": ["codex", "workbuddy"],
-  "out_of_scope_reasons": ["unsupported-database", "unsupported-agent", "non-product"],
+  "out_of_scope_reasons": ["unsupported-database", "unsupported-agent", "non-product", "unsupported-personal-service-platform"],
   "cases": {
     "tests/test_sqlite.py::test_round_trip": {
       "classification": "in_scope",
@@ -296,7 +296,7 @@ func TestValidateParityScopeRejectsUnsupportedOrDuplicateValues(t *testing.T) {
 		SchemaVersion:     1,
 		Databases:         []string{"sqlite"},
 		ExternalAgents:    []string{"codex", "workbuddy"},
-		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product"},
+		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
 		Cases:             map[string]caseScopeRule{},
 	}
 	tests := []struct {
@@ -324,12 +324,81 @@ func TestValidateParityScopeRejectsUnsupportedOrDuplicateValues(t *testing.T) {
 	}
 }
 
+func TestValidateParityScopeAcceptsUnsupportedPersonalServicePlatformReason(t *testing.T) {
+	scope := parityScope{
+		SchemaVersion:     1,
+		Databases:         []string{"sqlite"},
+		ExternalAgents:    []string{"codex", "workbuddy"},
+		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", "unsupported-personal-service-platform"},
+		Cases: map[string]caseScopeRule{
+			"tests/test_service.py::test_systemd_definition_round_trips_and_detects_tampering": {
+				Classification:   "out_of_scope",
+				OutOfScopeReason: "unsupported-personal-service-platform",
+				Reason:           "Linux systemd user-service lifecycle is outside the supported personal-service platform boundary.",
+			},
+		},
+	}
+	if err := validateParityScope(scope); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateParityScopeRejectsUnsupportedPersonalServicePlatformReasonOutsidePersonalServiceCases(t *testing.T) {
+	for _, caseID := range []string{
+		"tests/test_sqlite.py::test_round_trip",
+		"tests/test_service.py::test_windows_task_scheduler_install_is_reversible",
+	} {
+		t.Run(caseID, func(t *testing.T) {
+			scope := parityScope{
+				SchemaVersion:     1,
+				Databases:         []string{"sqlite"},
+				ExternalAgents:    []string{"codex", "workbuddy"},
+				OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
+				Cases: map[string]caseScopeRule{
+					caseID: {
+						Classification:   "out_of_scope",
+						OutOfScopeReason: unsupportedPersonalServicePlatformReason,
+						Reason:           "The fixture incorrectly excludes a supported case.",
+					},
+				},
+			}
+			if err := validateParityScope(scope); err == nil {
+				t.Fatalf("validateParityScope() accepted unsupported-personal-service-platform for %s", caseID)
+			}
+		})
+	}
+}
+
+func TestValidateLatestCaseScopeRejectsSupportedPersonalServicePlatformCases(t *testing.T) {
+	caseID := "tests/test_service.py::test_systemd_definition_round_trips_and_detects_tampering"
+	for _, classification := range []string{"in_scope", "mixed"} {
+		t.Run(classification, func(t *testing.T) {
+			rule := caseScopeRule{Classification: classification}
+			if classification == "mixed" {
+				rule.SupportedSurfaces = []string{"core"}
+				rule.UnsupportedDatabases = []string{"seekdb"}
+				rule.Reason = "The case combines supported and unsupported coverage."
+			}
+			scope := parityScope{
+				SchemaVersion:     1,
+				Databases:         []string{"sqlite"},
+				ExternalAgents:    []string{"codex", "workbuddy"},
+				OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
+				Cases:             map[string]caseScopeRule{caseID: rule},
+			}
+			if err := validateLatestCaseScope(scope, []string{caseID}); err == nil {
+				t.Fatalf("validateLatestCaseScope() accepted %s personal-service case", classification)
+			}
+		})
+	}
+}
+
 func TestValidateParityScopeAcceptsInScopeAndExplicitExclusions(t *testing.T) {
 	scope := parityScope{
 		SchemaVersion:     1,
 		Databases:         []string{"sqlite"},
 		ExternalAgents:    []string{"codex", "workbuddy"},
-		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product"},
+		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
 		Cases: map[string]caseScopeRule{
 			"tests/test_sqlite.py::test_round_trip": {Classification: "in_scope", Database: "sqlite"},
 			"tests/test_codex.py::test_setup":       {Classification: "in_scope", ExternalAgent: "codex"},
@@ -348,7 +417,7 @@ func TestValidateParityScopeRejectsIncompleteOrInvalidCaseExclusions(t *testing.
 		SchemaVersion:     1,
 		Databases:         []string{"sqlite"},
 		ExternalAgents:    []string{"codex", "workbuddy"},
-		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product"},
+		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
 		Cases:             map[string]caseScopeRule{},
 	}
 	tests := []struct {
@@ -377,7 +446,7 @@ func TestValidateLatestCaseScopeRequiresExactDiscoveredCoverage(t *testing.T) {
 		SchemaVersion:     1,
 		Databases:         []string{"sqlite"},
 		ExternalAgents:    []string{"codex", "workbuddy"},
-		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product"},
+		OutOfScopeReasons: []string{"unsupported-database", "unsupported-agent", "non-product", unsupportedPersonalServicePlatformReason},
 		Cases: map[string]caseScopeRule{
 			"tests/test_sqlite.py::test_round_trip": {Classification: "in_scope", Database: "sqlite"},
 			"tests/test_seekdb.py::test_query":      {Classification: "out_of_scope", Database: "seekdb", OutOfScopeReason: "unsupported-database", Reason: "The upstream case requires seekDB."},
