@@ -37,6 +37,7 @@ func main() {
 	var sourceSidecarManifest string
 	var artifactSidecarManifest string
 	var managedSkillSidecarManifest string
+	var remoteSkillSidecarManifest string
 	var statsSidecarManifest string
 	var legacySpecification string
 	flag.StringVar(&specification, "spec", "powercontext.yaml", "canonical OpenAPI document")
@@ -48,18 +49,21 @@ func main() {
 	flag.StringVar(&sourceSidecarManifest, "source-sidecar-manifest", "", "optional Source sidecar projection manifest")
 	flag.StringVar(&artifactSidecarManifest, "artifact-sidecar-manifest", "", "optional Artifact sidecar projection manifest")
 	flag.StringVar(&managedSkillSidecarManifest, "managed-skill-sidecar-manifest", "", "optional managed Skill package read projection manifest")
+	flag.StringVar(&remoteSkillSidecarManifest, "remote-skill-sidecar-manifest", "", "optional remote Skill target lifecycle projection manifest")
 	flag.StringVar(&statsSidecarManifest, "stats-sidecar-manifest", "", "optional Stats sidecar projection manifest")
 	flag.StringVar(&legacySpecification, "legacy-spec", "", "legacy OpenAPI document required for Scope sidecar generation")
 	flag.Parse()
 	var err error
 	selectedSidecars := 0
-	for _, manifest := range []string{scopeSidecarManifest, sourceSidecarManifest, artifactSidecarManifest, managedSkillSidecarManifest, statsSidecarManifest} {
+	for _, manifest := range []string{scopeSidecarManifest, sourceSidecarManifest, artifactSidecarManifest, managedSkillSidecarManifest, remoteSkillSidecarManifest, statsSidecarManifest} {
 		if manifest != "" {
 			selectedSidecars++
 		}
 	}
 	if selectedSidecars > 1 {
 		err = errors.New("select exactly one sidecar manifest")
+	} else if remoteSkillSidecarManifest != "" {
+		err = runRemoteSkillSidecar(specification, remoteSkillSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
 	} else if managedSkillSidecarManifest != "" {
 		err = runManagedSkillSidecar(specification, managedSkillSidecarManifest, target, packageName, clientInvoker, compatibility, legacySpecification)
 	} else if statsSidecarManifest != "" {

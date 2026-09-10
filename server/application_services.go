@@ -34,6 +34,7 @@ import (
 
 type applicationServices struct {
 	scopes               *pcruntime.ScopeApplication
+	remoteSkillTargets   *pcruntime.RemoteSkillTargetApplication
 	sources              *pcruntime.SourceApplication
 	remoteIngestion      *pcruntime.RemoteIngestionApplication
 	connectorCheckpoints *pcruntime.ConnectorCheckpointApplication
@@ -63,6 +64,26 @@ func buildApplicationServices(
 	assembled := foundation.assembled
 
 	scopeStore, err := sqlstore.NewRuntimeScopeStore(database, sqlstore.ScopeRepository{})
+	if err != nil {
+		return applicationServices{}, err
+	}
+	remoteSkillTargetStore, err := sqlstore.NewRuntimeRemoteSkillTargetStore(database, sqlstore.RemoteSkillTargetRepository{})
+	if err != nil {
+		return applicationServices{}, err
+	}
+	remoteSkillTargetApplication, err := pcruntime.NewRemoteSkillTargetApplication(
+		lifecycle,
+		remoteSkillTargetStore,
+		pcruntime.RemoteSkillTargetApplicationOptions{
+			Clock: time.Now,
+			NewID: func() string {
+				return uuid.New().String()
+			},
+			NewSecret: func() string {
+				return uuid.New().String()
+			},
+		},
+	)
 	if err != nil {
 		return applicationServices{}, err
 	}
@@ -341,7 +362,8 @@ func buildApplicationServices(
 		return applicationServices{}, err
 	}
 	return applicationServices{
-		scopes: scopeApplication, sources: sourceApplication, remoteIngestion: remoteIngestion, connectorCheckpoints: connectorCheckpoints,
+		remoteSkillTargets: remoteSkillTargetApplication,
+		scopes:             scopeApplication, sources: sourceApplication, remoteIngestion: remoteIngestion, connectorCheckpoints: connectorCheckpoints,
 		artifacts: artifactApplication, skillPackages: skillPackageApplication, skillUsage: skillUsageApplication, memory: memoryApplication, context: contextApplication,
 		review: reviewApplication, generation: generationApplication, externalSkills: externalApplication,
 		handoff: handoffApplication, work: workApplication, handoffReport: handoffReportApplication,

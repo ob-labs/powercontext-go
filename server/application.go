@@ -53,6 +53,7 @@ type Application struct {
 	skillPackages        *pcruntime.SkillPackageResourceApplication
 	skillUsage           *pcruntime.SkillUsageApplication
 	statistics           *pcruntime.StatisticsApplication
+	remoteSkillTargets   *pcruntime.RemoteSkillTargetApplication
 	agentSkillTargets    []skill.AgentSkillTarget
 
 	readinessMu   sync.Mutex
@@ -100,7 +101,7 @@ func OpenApplication(ctx context.Context, config ProcessConfig, dependencies Dep
 		readiness: readiness, metrics: foundation.metrics, tracing: foundation.tracing, logger: dependencies.Logger,
 		review: services.review, externalSkills: services.externalSkills, scopes: services.scopes,
 		sources: services.sources, remoteIngestion: services.remoteIngestion, connectorCheckpoints: services.connectorCheckpoints,
-		artifacts: services.artifacts, skillPackages: services.skillPackages, skillUsage: services.skillUsage, statistics: services.statistics, agentSkillTargets: foundation.assembled.agentSkillTargets,
+		artifacts: services.artifacts, skillPackages: services.skillPackages, skillUsage: services.skillUsage, statistics: services.statistics, remoteSkillTargets: services.remoteSkillTargets, agentSkillTargets: foundation.assembled.agentSkillTargets,
 	}
 	application.endpoint = endpoint.NewHandler(endpoint.HandlerOptions{
 		Capabilities: application.getCapabilities,
@@ -152,7 +153,8 @@ func (a *Application) HTTPHandler() (http.Handler, error) {
 		canonicalSkills: endpoint.NewCanonicalManagedSkillHandler(managedSkillOperations{
 			packages: a.skillPackages, usage: a.skillUsage, review: a.review,
 		}),
-		canonicalStats: endpoint.NewCanonicalStatsHandler(a.statistics),
+		canonicalRemoteSkills: endpoint.NewCanonicalRemoteSkillHandler(a.remoteSkillTargets),
+		canonicalStats:        endpoint.NewCanonicalStatsHandler(a.statistics),
 	})
 }
 

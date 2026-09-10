@@ -181,6 +181,10 @@ source / artifact / trigger / inference
   include its exact method-and-path resolver in access-log operation lookup.
   Verify real handler requests log the generated operation ID and correlated
   request ID without exposing resource identifiers, content, or credentials.
+- When a generated sidecar route receives `*scope.NotFoundError` from Runtime
+  Scope admission, delegate it to the shared endpoint error mapper instead of
+  converting it to an internal error. Verify every affected route returns 404
+  `scope_not_found`, redacts protected values, and creates no durable side effects.
 - When a transport accepts a generic exact Artifact reference but a
   family-specific reader determines its available representation, validate the
   reference without prefiltering its family. Verify a persisted non-target
@@ -623,13 +627,7 @@ source / artifact / trigger / inference
   errors, `String`/`GoString`, and structured logs. Verify valid independent
   generation, embedding, and rerank settings; generation-backed rerank
   overrides; orphaned or malformed overrides; and redaction in every rendered
-  configuration representation. When a provider supports only selected
-  workload fields, gate each field independently instead of rejecting or
-  accepting the workload object as a whole. Verify the supported field through
-  the exact provider request and keep unsupported sibling fields in the typed,
-  redacted refusal path before transport. When native and gateway routes use
-  different credentials or capabilities, include route ownership and auth mode
-  in that field-support matrix.
+  configuration representation.
 - When an exported portable native-manager contract stores an injected
   boundary or validated plan, reject zero-value or manually formed invalid
   values with an existing typed redacted error before invoking the native

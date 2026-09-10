@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "oceanbase/powercontext",
+    "commit": "74b961fbb07165595314726715d412a3d0d90589",
+    "path": "openapi/powercontext.yaml",
+    "sha256": "aca2a9dedfc4733176df3f7e27861deedcc751e0042515e3014ee9c36a017ec3"
+  },
+  "operations": [
+    {"operation_id": "list_remote_skill_targets", "method": "post", "path": "/v1/skill/remote/targets"},
+    {"operation_id": "create_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/create"},
+    {"operation_id": "enroll_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/enroll"},
+    {"operation_id": "rename_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/rename"},
+    {"operation_id": "revoke_remote_skill_target", "method": "post", "path": "/v1/skill/remote/target/revoke"}
+  ],
+  "overlays": {
+    "remote_agent_kind": {
+      "enum": ["codex", "workbuddy"]
+    }
+  }
+}
