@@ -222,6 +222,7 @@ func TestRuntimeRemoteSkillTargetConsumePendingRequiresCurrentEnrollmentState(t 
 			next := runtimeRemoteTargetActive(t, pending, test.targetID+"-credential")
 			var consumed bool
 			err := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+				var consumeErr error
 				_, consumed, consumeErr = repository.ConsumePending(
 					t.Context(), tx, next, runtimeRemoteTargetDigest(test.suppliedCode), now,
 				)
@@ -452,11 +453,14 @@ func openRuntimeRemoteTargetDatabase(t *testing.T, path string) *sqlstore.Databa
 func seedRuntimeRemoteTargetScope(t *testing.T, database *sqlstore.Database, scopeID string) {
 	t.Helper()
 	repository := sqlstore.ScopeRepository{}
-	descriptor, err := scope.NewDescriptor(scopeID, "remote target scope", time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC))
+	draft, err := scope.NewDraft("remote target scope", "remote target scope", "", nil, nil, scopeID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error { return repository.Create(t.Context(), tx, descriptor) }); err != nil {
+	if err := database.Transaction(t.Context(), func(tx sqlstore.DBTX) error {
+		_, createErr := repository.Create(t.Context(), tx, scopeID, draft)
+		return createErr
+	}); err != nil {
 		t.Fatal(err)
 	}
 }

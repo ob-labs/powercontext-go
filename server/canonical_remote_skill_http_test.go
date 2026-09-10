@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	remoteskills "github.com/ob-labs/powercontext-go/api/canonical/remoteskills"
+	v1 "github.com/ob-labs/powercontext-go/api/v1"
 )
 
 type remoteSkillClientSecurity string
@@ -225,6 +226,10 @@ type remoteSkillEnrollmentBoundary struct {
 	calls int
 }
 
+type canonicalRemoteSkillHealthHandler struct {
+	v1.UnimplementedHandler
+}
+
 func (h *remoteSkillEnrollmentBoundary) EnrollRemoteSkillTarget(
 	ctx context.Context,
 	request *remoteskills.EnrollRemoteSkillTargetRequest,
@@ -236,7 +241,7 @@ func (h *remoteSkillEnrollmentBoundary) EnrollRemoteSkillTarget(
 func TestCanonicalRemoteSkillRemotePlaintextStopsBeforeGeneratedEnrollment(t *testing.T) {
 	var logs bytes.Buffer
 	boundary := &remoteSkillEnrollmentBoundary{}
-	handler, err := NewHTTPHandler(&healthHandler{}, HTTPOptions{
+	handler, err := NewHTTPHandler(&canonicalRemoteSkillHealthHandler{}, HTTPOptions{
 		BearerToken: "private-admin-token", AccessLog: true,
 		Logger:                slog.New(slog.NewJSONHandler(&logs, nil)),
 		canonicalRemoteSkills: boundary,
@@ -259,10 +264,8 @@ func TestCanonicalRemoteSkillRemotePlaintextStopsBeforeGeneratedEnrollment(t *te
 	if response.Code != http.StatusForbidden || boundary.calls != 0 {
 		t.Fatalf("remote plaintext response = %d generated calls = %d, want 403 and 0", response.Code, boundary.calls)
 	}
+	assertRequestID(t, response)
 	requestID := response.Header().Get("X-PowerContext-Request-ID")
-	if !requestIDPattern.MatchString(requestID) {
-		t.Fatalf("request ID = %q", requestID)
-	}
 	for _, protected := range []string{"private-code", "private-admin-token"} {
 		if strings.Contains(response.Body.String(), protected) || strings.Contains(logs.String(), protected) {
 			t.Fatalf("remote transport refusal leaked %q", protected)
