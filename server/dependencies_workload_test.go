@@ -66,8 +66,8 @@ func TestAssembleDependenciesRoutesAnthropicBaseURLToGenerationReadiness(t *test
 	}
 	config.Inference.GenerationModel = "anthropic:claude-test"
 	config.Inference.Generation = &InferenceWorkloadConfig{BaseURL: provider.URL + "/custom-anthropic/"}
-	if err := config.Validate(); err != nil {
-		t.Fatal(err)
+	if validationErr := config.Validate(); validationErr != nil {
+		t.Fatal(validationErr)
 	}
 	assembled, err := assembleDependencies(
 		config, Dependencies{HTTPClient: provider.Client()}, noop.NewTracerProvider(),
