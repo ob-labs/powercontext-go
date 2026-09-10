@@ -19,6 +19,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -139,6 +141,92 @@ func TestCanonicalRemoteSkillLifecycleUsesGeneratedClient(t *testing.T) {
 	revoked, ok := revokedResult.(*remoteskills.RemoteSkillTarget)
 	if !ok || revoked.State != remoteskills.RemoteSkillTargetStateRevoked || revoked.Generation != 3 {
 		t.Fatalf("revoke response = %#v", revokedResult)
+	}
+}
+
+// Regression for PR #279: an unregistered Scope must retain the standard
+// redacted 404 contract before any remote Skill target operation persists work.
+func TestCanonicalRemoteSkillUnknownScopeIsRedactedAndHasNoSideEffects(t *testing.T) {
+	const unknownScope = "private-unknown-remote-skill-scope"
+	config := applicationTestConfig(t)
+	config.Auth.Enabled = true
+	config.Auth.Token = "remote-skill-secret"
+	application, err := OpenApplication(t.Context(), config, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { closeScopeReaderApplication(t, application) })
+	handler, err := application.HTTPHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	databasePath, err := SQLiteDSN(config.Database.SQLite.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	database, err := sql.Open("sqlite3", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	for _, test := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{
+			name: "create",
+			path: "/v1/skill/remote/target/create",
+			body: `{"scope_id":"private-unknown-remote-skill-scope","display_name":"private-enrollment-code","agent_kind":"codex"}`,
+		},
+		{
+			name: "list",
+			path: "/v1/skill/remote/targets",
+			body: `{"scope_id":"private-unknown-remote-skill-scope"}`,
+		},
+		{
+			name: "rename",
+			path: "/v1/skill/remote/target/rename",
+			body: `{"scope_id":"private-unknown-remote-skill-scope","target_id":"private-target","display_name":"private-enrollment-code","expected_generation":1}`,
+		},
+		{
+			name: "revoke",
+			path: "/v1/skill/remote/target/revoke",
+			body: `{"scope_id":"private-unknown-remote-skill-scope","target_id":"private-target","expected_generation":1}`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+			request.Header.Set("Authorization", "Bearer "+config.Auth.Token)
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404: %s", response.Code, response.Body.String())
+			}
+			var envelope struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil || envelope.Error.Code != "scope_not_found" {
+				t.Fatalf("error response = %s, want scope_not_found (err=%v)", response.Body.String(), err)
+			}
+			for _, protected := range []string{unknownScope, "private-target", "private-enrollment-code", config.Auth.Token, "enrollment_code"} {
+				if strings.Contains(response.Body.String(), protected) {
+					t.Fatalf("response leaks %q: %s", protected, response.Body.String())
+				}
+			}
+		})
+	}
+
+	var count int
+	if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM pc_agent_skill_targets WHERE scope_id = ?", unknownScope).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("unknown Scope wrote %d remote Skill targets", count)
 	}
 }
 

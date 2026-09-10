@@ -22,6 +22,7 @@ import (
 	remoteskills "github.com/ob-labs/powercontext-go/api/canonical/remoteskills"
 	"github.com/ob-labs/powercontext-go/artifact/skill"
 	"github.com/ob-labs/powercontext-go/internal/runtime"
+	"github.com/ob-labs/powercontext-go/internal/scope"
 )
 
 // RemoteSkillTargetOperations is the Runtime-owned lifecycle surface exposed
@@ -59,6 +60,9 @@ func (h *CanonicalRemoteSkillHandler) CreateRemoteSkillTarget(
 		ScopeID: request.ScopeID, DisplayName: request.DisplayName, AgentKind: skill.AgentKind(request.AgentKind),
 	})
 	if err != nil {
+		if remoteSkillScopeNotFound(err) {
+			return nil, err
+		}
 		return remoteSkillCreateError(err), nil
 	}
 	target, err := canonicalRemoteSkillTarget(result.Target)
@@ -114,6 +118,9 @@ func (h *CanonicalRemoteSkillHandler) ListRemoteSkillTargets(
 	}
 	values, err := h.operations.List(ctx, request.ScopeID)
 	if err != nil {
+		if remoteSkillScopeNotFound(err) {
+			return nil, err
+		}
 		return remoteSkillInternalError(), nil
 	}
 	targetID := remoteSkillOptionalString(request.TargetID)
@@ -152,6 +159,9 @@ func (h *CanonicalRemoteSkillHandler) RenameRemoteSkillTarget(
 		ScopeID: request.ScopeID, TargetID: request.TargetID, DisplayName: request.DisplayName, ExpectedGeneration: request.ExpectedGeneration,
 	})
 	if err != nil {
+		if remoteSkillScopeNotFound(err) {
+			return nil, err
+		}
 		return remoteSkillMutationError(err), nil
 	}
 	target, err := canonicalRemoteSkillTarget(value)
@@ -175,6 +185,9 @@ func (h *CanonicalRemoteSkillHandler) RevokeRemoteSkillTarget(
 		ScopeID: request.ScopeID, TargetID: request.TargetID, ExpectedGeneration: request.ExpectedGeneration,
 	})
 	if err != nil {
+		if remoteSkillScopeNotFound(err) {
+			return nil, err
+		}
 		return remoteSkillMutationError(err), nil
 	}
 	target, err := canonicalRemoteSkillTarget(value)
@@ -232,6 +245,11 @@ func remoteSkillNilDateTime(value time.Time) remoteskills.NilDateTime {
 
 func remoteSkillCreateError(err error) remoteskills.CreateRemoteSkillTargetRes {
 	return remoteSkillInternalError()
+}
+
+func remoteSkillScopeNotFound(err error) bool {
+	_, missing := errors.AsType[*scope.NotFoundError](err)
+	return missing
 }
 
 type remoteSkillMutationResponse interface {
