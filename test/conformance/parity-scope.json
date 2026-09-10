@@ -10,7 +10,8 @@
   "out_of_scope_reasons": [
     "unsupported-database",
     "unsupported-agent",
-    "non-product"
+    "non-product",
+    "unsupported-personal-service-platform"
   ],
   "cases": {
     "tests/agent_plugin/test_contract.py::test_agent_plugin_docs_include_verified_host_loading_procedure": {
@@ -411,8 +412,13 @@
     },
     "tests/builtin/artifacts/skill/test_compatibility.py::test_compatibility_is_reasoned_per_agent_format_and_observed_environment": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The upstream case compares the core compatibility assessment for Codex with a Claude Code target that remains unsupported."
     },
     "tests/builtin/artifacts/skill/test_compatibility.py::test_declared_runtime_variant_matches_versions_and_host_requirements": {
@@ -444,8 +450,13 @@
     },
     "tests/builtin/artifacts/skill/test_external.py::test_agent_provider_discovers_codex_and_claude_code_targets": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The upstream case preserves Codex external-skill discovery while using Claude Code as an unsupported comparison target."
     },
     "tests/builtin/artifacts/skill/test_external.py::test_codex_provider_discovers_and_exactly_resolves_a_local_package": {
@@ -522,8 +533,14 @@
     },
     "tests/builtin/artifacts/skill/test_registry.py::test_agent_registry_removes_a_provider_when_its_targets_are_unconfigured": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The upstream case verifies SQLite registry reconciliation retains Codex after removing an unsupported Claude Code target."
     },
     "tests/builtin/artifacts/skill/test_registry.py::test_registry_is_scope_isolated": {
@@ -1484,13 +1501,19 @@
       "reason": "The upstream case exercises the Claude Code integration, which is outside the Codex and WorkBuddy product matrix."
     },
     "tests/client/test_receiver_service.py::test_systemd_user_service_is_secret_free_target_scoped_and_reversible": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/client/test_receiver_service.py::test_systemd_user_service_uninstall_does_not_claim_an_absent_unit_was_stopped": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/client/test_receiver_service.py::test_systemd_user_service_uses_the_invoked_venv_entrypoint_when_it_is_not_on_path": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/client/test_skill_receiver.py::test_receiver_allows_remote_cleartext_http_with_explicit_permission": {
       "classification": "in_scope"
@@ -2052,14 +2075,26 @@
     },
     "tests/e2e/test_claude_code_service_chain.py::test_claude_sessions_and_codex_share_one_project_memory[authenticated]": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The authenticated chain preserves shared SQLite project-memory and Codex assertions while Claude Code remains an unsupported comparison host."
     },
     "tests/e2e/test_claude_code_service_chain.py::test_claude_sessions_and_codex_share_one_project_memory[public]": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The public chain preserves shared SQLite project-memory and Codex assertions while Claude Code remains an unsupported comparison host."
     },
     "tests/e2e/test_codex_service_chain.py::test_codex_hook_http_sdk_and_mcp_share_one_composed_context[authenticated]": {
@@ -2220,8 +2255,14 @@
     },
     "tests/e2e/test_prompt_management_live.py::test_prompt_management_with_real_services[configured]": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite"],
-      "unsupported_databases": ["oceanbase", "seekdb"],
+      "supported_surfaces": [
+        "core",
+        "sqlite"
+      ],
+      "unsupported_databases": [
+        "oceanbase",
+        "seekdb"
+      ],
       "reason": "The configured real-provider Prompt case accepts SQLite, OceanBase, or seekDB through ServerSettings; only its core and SQLite behavior is in the product matrix."
     },
     "tests/e2e/test_prompt_management_live.py::test_prompt_management_with_real_services[sqlite]": {
@@ -2275,8 +2316,14 @@
     },
     "tests/e2e/test_remote_skill_distribution.py::test_https_remote_receiver_http_vertical_slice_is_exact_isolated_and_reversible": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The remote-skill slice verifies SQLite and Codex publication, receipt, recovery, and revocation while Claude Code is an unsupported authorization-isolation comparator."
     },
     "tests/e2e/test_remote_skill_distribution.py::test_remote_enrollment_allows_non_loopback_cleartext_http_only_after_server_opt_in": {
@@ -2356,8 +2403,14 @@
     },
     "tests/e2e/test_standard_skill_lifecycle.py::test_standard_skill_package_review_revision_usage_governance_and_publication": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The standard-skill lifecycle verifies SQLite revision and Codex publication behavior while Claude Code is an unsupported second target."
     },
     "tests/e2e/test_statistics_flow.py::test_statistics_survive_the_authenticated_http_business_flow_and_restart[oceanbase]": {
@@ -3713,8 +3766,14 @@
     },
     "tests/test_dashboard.py::test_review_publishes_an_approved_managed_skill_into_default_project_targets": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The dashboard review flow preserves SQLite and Codex managed-skill publication while Claude Code is an unsupported second target."
     },
     "tests/test_dashboard.py::test_skill_library_exposes_external_takeover_machine_through_later_revisions": {
@@ -3755,8 +3814,13 @@
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_fails_when_a_present_cli_cannot_list_plugins": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["dsh"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "dsh"
+      ],
       "reason": "The doctor flow verifies a failed Codex CLI listing while DSH is an unsupported missing-host comparison."
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_fails_when_a_present_opencode_skill_is_broken": {
@@ -3767,32 +3831,72 @@
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_fails_when_a_present_plugin_is_broken": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["dsh"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "dsh"
+      ],
       "reason": "The doctor flow verifies a failed Codex plugin while DSH is an unsupported missing-host comparison."
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_json_includes_every_first_class_host": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code",
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "pi"
+      ],
       "reason": "The diagnostic aggregation retains the Codex result while enumerating six unsupported agent hosts."
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_prints_a_human_matrix": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code",
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "pi"
+      ],
       "reason": "The human diagnostic matrix preserves the Codex result while printing six unsupported agent hosts."
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_succeeds_when_every_host_is_missing": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code",
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "pi"
+      ],
       "reason": "The missing-host diagnostic preserves the common and Codex status behavior while reporting six unsupported agent hosts."
     },
     "tests/test_doctor_integrations.py::test_doctor_integrations_treats_missing_clis_as_success": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["pi"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "pi"
+      ],
       "reason": "The doctor flow verifies the successful Codex probe while Pi is an unsupported missing-host comparison."
     },
     "tests/test_dsh_cli.py::test_doctor_dsh_reports_an_installed_plugin": {
@@ -4037,14 +4141,36 @@
     },
     "tests/test_integration_manifest.py::test_generated_capability_matrix_is_current[en]": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex", "workbuddy"],
-      "unsupported_external_agents": ["claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"],
+      "supported_surfaces": [
+        "core",
+        "codex",
+        "workbuddy"
+      ],
+      "unsupported_external_agents": [
+        "claude-code",
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "pi"
+      ],
       "reason": "The English capability reference preserves Codex and WorkBuddy declarations while rendering six unsupported agent hosts."
     },
     "tests/test_integration_manifest.py::test_generated_capability_matrix_is_current[zh]": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex", "workbuddy"],
-      "unsupported_external_agents": ["claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"],
+      "supported_surfaces": [
+        "core",
+        "codex",
+        "workbuddy"
+      ],
+      "unsupported_external_agents": [
+        "claude-code",
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "pi"
+      ],
       "reason": "The Chinese capability reference preserves Codex and WorkBuddy declarations while rendering six unsupported agent hosts."
     },
     "tests/test_integration_manifest.py::test_manifest_accepts_planned_capabilities_without_claiming_current_support": {
@@ -4058,8 +4184,19 @@
     },
     "tests/test_integration_manifest.py::test_manifest_matches_setup_catalog_evidence_and_actual_tool_surfaces": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex", "workbuddy"],
-      "unsupported_external_agents": ["claude-code", "dsh", "hermes", "openclaw", "opencode", "pi"],
+      "supported_surfaces": [
+        "core",
+        "codex",
+        "workbuddy"
+      ],
+      "unsupported_external_agents": [
+        "claude-code",
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode",
+        "pi"
+      ],
       "reason": "The integration catalog contract preserves Codex and WorkBuddy setup evidence while comparing six unsupported agent hosts."
     },
     "tests/test_integration_manifest.py::test_manifest_rejects_contradictory_implemented_declarations[<lambda>0]": {
@@ -4570,8 +4707,13 @@
     },
     "tests/test_server.py::test_server_settings_configure_default_project_skill_targets": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The server default-target configuration preserves the Codex project target while Claude Code is an unsupported second target."
     },
     "tests/test_server.py::test_server_settings_default_blank_embedded_seekdb_path[   ]": {
@@ -4633,8 +4775,13 @@
     },
     "tests/test_server.py::test_server_settings_use_configured_workspace_for_default_skill_targets": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The configured-workspace target behavior preserves the Codex path while Claude Code is an unsupported second target."
     },
     "tests/test_server.py::test_settings_load_bearer_authentication_without_exposing_token": {
@@ -4642,8 +4789,14 @@
     },
     "tests/test_server.py::test_settings_load_server_environment": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "sqlite", "codex"],
-      "unsupported_external_agents": ["claude-code"],
+      "supported_surfaces": [
+        "core",
+        "sqlite",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "claude-code"
+      ],
       "reason": "The server environment configuration preserves core, SQLite, and Codex settings while Claude Code is an unsupported second skill target."
     },
     "tests/test_server.py::test_stats_returns_inclusive_utc_periods_for_empty_scope": {
@@ -4767,88 +4920,142 @@
       "classification": "in_scope"
     },
     "tests/test_service.py::test_launchd_definition_round_trips_with_argument_array_and_logs": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_inspect_accepts_only_an_intact_legacy_owned_definition": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_launcher_stops_after_a_bounded_number_of_rapid_failures": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_loaded_registration_recognizes_an_intact_legacy_definition": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_loaded_registration_requires_matching_path_arguments_and_metadata[arguments]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_loaded_registration_requires_matching_path_arguments_and_metadata[marker]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_loaded_registration_requires_matching_path_arguments_and_metadata[metadata]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_loaded_registration_requires_matching_path_arguments_and_metadata[path]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_loaded_registration_requires_matching_path_arguments_and_metadata[program]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[-113-inactive]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = exited\\n-0-unknown]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = exited\\nlast exit code = 0\\n-0-inactive]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = exited\\nlast exit code = 1\\n-0-failed]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = exited\\nlast terminating signal = Terminated: 15\\n-0-failed]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = not running\\n-0-inactive]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = not running\\nlast exit code = 0\\n-0-inactive]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = not running\\nlast exit code = 1\\n-0-failed]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[state = running\\n-0-active]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_manager_state_uses_exit_status[unexpected output\\n-0-unknown]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_start_kickstarts_a_newly_bootstrapped_job": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_launchd_stop_waits_until_bootout_removes_the_loaded_job": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_manager_query_failure_reports_unknown_ownership[launchd]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_manager_query_failure_reports_unknown_ownership[systemd]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_missing_recorded_python_executable_is_reported": {
       "classification": "in_scope"
     },
     "tests/test_service.py::test_native_uninstall_recovery_uses_an_exact_scoped_command[launchd-disable]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_native_uninstall_recovery_uses_an_exact_scoped_command[launchd-stop]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "macOS LaunchAgent personal-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_native_uninstall_recovery_uses_an_exact_scoped_command[systemd-disable]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_native_uninstall_recovery_uses_an_exact_scoped_command[systemd-reload]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_recorded_virtualenv_python_can_import_service_launcher": {
       "classification": "in_scope"
@@ -4935,46 +5142,74 @@
       "classification": "in_scope"
     },
     "tests/test_service.py::test_systemd_definition_reload_restarts_a_transitional_loaded_unit": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_definition_round_trips_and_detects_tampering": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_ignores_non_absolute_xdg_config_home[]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_ignores_non_absolute_xdg_config_home[relative/config]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_inspect_accepts_only_an_intact_legacy_owned_definition": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_loaded_registration_recognizes_an_intact_legacy_definition": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_loaded_registration_requires_matching_fragment_command_and_metadata[arguments]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_loaded_registration_requires_matching_fragment_command_and_metadata[fragment]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_loaded_registration_requires_matching_fragment_command_and_metadata[marker]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_loaded_registration_requires_matching_fragment_command_and_metadata[metadata]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_loaded_registration_requires_matching_fragment_command_and_metadata[path]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_stop_does_not_skip_a_transitional_loaded_unit": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_transitional_manager_state_remains_unknown[activating]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_systemd_transitional_manager_state_remains_unknown[deactivating]": {
-      "classification": "in_scope"
+      "classification": "out_of_scope",
+      "out_of_scope_reason": "unsupported-personal-service-platform",
+      "reason": "Linux systemd user-service lifecycle is outside the supported platform boundary."
     },
     "tests/test_service.py::test_uninstall_partial_failure_reports_remaining_registration_and_recovery[disable-fail_disable-expected_events1]": {
       "classification": "in_scope"
@@ -5098,8 +5333,16 @@
     },
     "tests/test_setup_select.py::test_parse_host_selection_accepts_names_and_reorders_to_the_catalog": {
       "classification": "mixed",
-      "supported_surfaces": ["core", "codex"],
-      "unsupported_external_agents": ["dsh", "hermes", "openclaw", "opencode"],
+      "supported_surfaces": [
+        "core",
+        "codex"
+      ],
+      "unsupported_external_agents": [
+        "dsh",
+        "hermes",
+        "openclaw",
+        "opencode"
+      ],
       "reason": "The selection parser preserves the Codex ordering rule while accepting four unsupported host selectors as catalog comparisons."
     },
     "tests/test_setup_select.py::test_setup_dsh_still_fails_closed_when_the_cli_is_missing": {
