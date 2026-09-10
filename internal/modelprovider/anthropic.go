@@ -17,6 +17,8 @@ package modelprovider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -46,6 +48,30 @@ type AnthropicConfig struct {
 	HTTPClient *http.Client
 	Headers    http.Header
 	Query      url.Values
+}
+
+func (c AnthropicConfig) String() string   { return c.redactedString() }
+func (c AnthropicConfig) GoString() string { return c.redactedString() }
+
+func (c AnthropicConfig) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Bool("api_key_configured", strings.TrimSpace(c.APIKey) != ""),
+		slog.Bool("base_url_configured", strings.TrimSpace(c.BaseURL) != ""),
+		slog.Bool("auth_mode_configured", c.AuthMode != 0),
+		slog.Bool("http_client_configured", c.HTTPClient != nil),
+		slog.Bool("headers_configured", len(c.Headers) > 0),
+		slog.Int("header_count", len(c.Headers)),
+		slog.Bool("query_configured", len(c.Query) > 0),
+		slog.Int("query_count", len(c.Query)),
+	)
+}
+
+func (c AnthropicConfig) redactedString() string {
+	return fmt.Sprintf(
+		"{APIKeyConfigured:%t BaseURLConfigured:%t AuthModeConfigured:%t HTTPClientConfigured:%t HeadersConfigured:%t HeaderCount:%d QueryConfigured:%t QueryCount:%d}",
+		strings.TrimSpace(c.APIKey) != "", strings.TrimSpace(c.BaseURL) != "", c.AuthMode != 0,
+		c.HTTPClient != nil, len(c.Headers) > 0, len(c.Headers), len(c.Query) > 0, len(c.Query),
+	)
 }
 
 type AnthropicTextModel struct {
