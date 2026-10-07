@@ -17,7 +17,7 @@ name = "powercontext-codex-plugin-runtime"
 version = "0.2.0"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "pydantic-settings>=2.7,<3",
+    "pydantic-settings>=2.15.0,<3",
     "typing-extensions>=4.12,<5",
 ]
 
