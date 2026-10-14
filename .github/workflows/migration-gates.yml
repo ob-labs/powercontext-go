@@ -277,7 +277,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.10.12"
           enable-cache: true
@@ -413,7 +413,7 @@ jobs:
 
       - name: Upload frozen Oracle diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: frozen-oracle-diagnostics-${{ github.sha }}
           path: ${{ runner.temp }}/powercontext-oracle-diagnostics/summary.txt
@@ -503,7 +503,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.10.12"
           enable-cache: true
@@ -543,7 +543,7 @@ jobs:
       - name: Upload pre-WP6 host adapter diagnostics
         id: pre_wp6_adapter_upload
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pre-wp6-host-adapter-diagnostics-${{ github.sha }}
           path: ${{ runner.temp }}/powercontext-pre-wp6-host-adapter-diagnostics/summary.txt
@@ -564,7 +564,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.10.12"
           enable-cache: true
