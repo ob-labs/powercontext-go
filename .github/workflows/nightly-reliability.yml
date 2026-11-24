@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload failing fuzz corpus
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: fuzz-corpus-${{ matrix.target }}-${{ github.sha }}
           path: ${{ matrix.package }}/testdata/fuzz/${{ matrix.target }}
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload bounded stability summary
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: nightly-stability-summary-${{ github.sha }}
           path: ${{ runner.temp }}/nightly-stability.md
@@ -159,7 +159,7 @@ jobs:
 
       - name: Upload bounded failing test output
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: nightly-stability-failure-${{ github.sha }}
           path: ${{ runner.temp }}/nightly-stability-bounded.jsonl
